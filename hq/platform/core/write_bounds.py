@@ -51,11 +51,10 @@ class RowCap(Bound):
         return written[: self.rows].count() < self.rows
 
 
-def writes[T: Callable[..., Any] | type](*bounds: Bound) -> Callable[[T], T]:
+def writes[T: Callable[..., Any] | type](first: Bound, *rest: Bound) -> Callable[[T], T]:
     """Declare what the view, view class or middleware it decorates writes for a caller without a session."""
 
-    if not bounds or not all(isinstance(bound, Bound) for bound in bounds):
-        raise TypeError("writes() names NOTHING or at least one Bound.")
+    bounds = (first, *rest)
 
     def declare(target: T) -> T:
         setattr(target, _ATTRIBUTE, bounds)

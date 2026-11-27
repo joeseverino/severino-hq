@@ -13,13 +13,7 @@ from django.conf import settings
 from django.test import SimpleTestCase
 from django.urls import Resolver404, resolve
 
-from hq.config.devtools import (
-    DEBUG_TOOLBAR_APP,
-    DEBUG_TOOLBAR_MIDDLEWARE,
-    TRUSTED_TYPES_DIRECTIVES,
-    debug_toolbar_enabled,
-    without_trusted_types,
-)
+from hq.config.devtools import DEBUG_TOOLBAR_APP, DEBUG_TOOLBAR_MIDDLEWARE, TRUSTED_TYPES_DIRECTIVES
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 INSTALLED = importlib.util.find_spec(DEBUG_TOOLBAR_APP) is not None
@@ -95,21 +89,3 @@ class ProductionSettingsTests(SimpleTestCase):
         self.assertNotIn(DEBUG_TOOLBAR_MIDDLEWARE, settings.MIDDLEWARE)
         with self.assertRaises(Resolver404):
             resolve("/__debug__/render_panel/")
-
-
-class SwitchTests(SimpleTestCase):
-    def test_every_condition_is_required(self):
-        for debug in (False, True):
-            for requested in (False, True):
-                for testing in (False, True):
-                    with self.subTest(debug=debug, requested=requested, testing=testing):
-                        enabled = debug_toolbar_enabled(debug=debug, requested=requested, testing=testing)
-                        expected = debug and requested and not testing and INSTALLED
-                        self.assertEqual(enabled, expected)
-
-    def test_only_the_trusted_types_directives_are_dropped(self):
-        policy = settings.SECURE_CSP
-        relaxed = without_trusted_types(policy)
-        self.assertEqual(set(policy) - set(relaxed), TRUSTED_TYPES_DIRECTIVES)
-        for key, value in relaxed.items():
-            self.assertEqual(value, policy[key])

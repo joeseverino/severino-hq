@@ -13,7 +13,7 @@ from . import history
 from .answer_fields import PageUrl
 from .command_fields import Day, RequiredText
 from .describe import Describe, listed
-from .integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
+from .integration_specs import DetailRead, ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
 from .projection import day_span, guarded, iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -212,10 +212,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ),
                 counted=False,
             ),
-            detail_handler=get_event,
+            detail=DetailRead(get_event, AuditItem),
             identifier="id",
             identifier_type=RecordId,
-            record_type=AuditItem,
             search=SearchDefinition.of(
                 AuditLog,
                 "pk",

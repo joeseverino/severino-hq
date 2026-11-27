@@ -31,8 +31,12 @@ What the listing does not say:
   twin (`hk.pkl`), which fast hands those files; a change to what the
   extensions' contract check reads runs that check for each composed
   extension (`fast:extensions`).
-- A new test is proven to fail without the fix by `mise run test --at <base>
-  <labels>`, never by a base worktree, snapshot or checkout made by hand.
+- A fix is proven by the walk that holds its class: a Part's `example` or
+  `states`, a seed, the OpenAPI contract, a finding's or capability's
+  example. A test is written only where no walk reaches the class, proven to
+  fail without the fix by `mise run test --at <base> <labels>` (never a base
+  worktree, snapshot or checkout made by hand), and the change deletes every
+  test it makes redundant.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway
   server, never on `dev`, the main checkout's server on real data.
 
@@ -250,8 +254,8 @@ checks of the deploy host (`hq-host check`, [Deployment](docs/Deployment.md)). `
 exits 2, never 0, and so does a host whose release nothing verified; the check
 says how to verify it.
 
-- Tests cover success, denial, invalid input, and the regression class where
-  applicable, not only the happy path.
+- Each promise the change makes is held by a walk or a test: what it
+  accepts, what it refuses, and the class of the defect it fixes.
 - A change to templates or CSS is walked in a real browser through the
   workflow it serves, and the branch it lands on passes CI's browser suite.
 - Docs change when a supported contract changes.

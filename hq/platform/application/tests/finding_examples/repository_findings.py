@@ -1,7 +1,9 @@
+from dataclasses import replace
 from typing import Any
 
 from ...finding_steps import Do
 from ...github_posture import EXAMPLES as POSTURE
+from ...plugin_testing import installed, sibling
 from ...tone import Tone
 from . import NOW, Ago, Example, Examples, Raised, ago
 
@@ -33,6 +35,14 @@ def admission(*lapses: float) -> list[dict]:
     """The admission every run uploads under one name, lapsing in each of ``lapses`` days."""
 
     return [{"name": "admission-example.alpha", "expires_at": ago(days=-days, hours=-1)} for days in lapses]
+
+
+def composing(example: Example, *extensions: str) -> Example:
+    """``example`` read while only ``extensions`` are composed, each built from example/alpha."""
+
+    built = (sibling(identifier=identifier) for identifier in extensions)
+    alphas = tuple((replace(manifest, source_repository=ALPHA["repository"]), made) for manifest, made in built)
+    return replace(example, given=lambda: installed(*alphas, alone=True))
 
 
 def access(**changes) -> dict:
@@ -181,9 +191,30 @@ EXAMPLES = (
     ),
     Examples(
         "github-artifact",
-        # An admission uploaded by two runs lapses with the newer.
-        fires=(alpha(artifacts=admission(2, 6), raises=("alpha's admission lapses in 6 days",)),),
-        quiet=(QUIET,),
+        # An admission uploaded by two runs lapses with the newer, and leads to the workflow that makes it.
+        fires=(
+            composing(
+                alpha(
+                    artifacts=admission(2, 6),
+                    raises=(
+                        Raised(
+                            title="alpha's admission lapses in 6 days",
+                            primary=(
+                                "Open workflow",
+                                "https://github.com/example/alpha/actions/workflows/admit-plugin.yml",
+                            ),
+                        ),
+                    ),
+                ),
+                "example.alpha",
+            ),
+        ),
+        # Compose reads no admission of an extension it does not compose, from that repository or another.
+        quiet=(
+            QUIET,
+            composing(alpha(artifacts=admission(2)), "example.beta"),
+            composing(alpha(artifacts=admission(2))),
+        ),
     ),
     Examples(
         "github-posture",

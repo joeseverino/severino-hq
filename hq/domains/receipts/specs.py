@@ -10,7 +10,14 @@ from hq.platform.application.answer_fields import PageUrl, UpdatedAt
 from hq.platform.application.contracts import Effect
 from hq.platform.application.describe import Describe, listed
 from hq.platform.application.domains import records_of
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ListSort, ListToggle, ResourceSpec
+from hq.platform.application.integration_specs import (
+    CapabilitySpec,
+    DetailRead,
+    ListRead,
+    ListSort,
+    ListToggle,
+    ResourceSpec,
+)
 from hq.platform.application.labels import adding
 from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.records import KEPT
@@ -138,7 +145,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Receipt metadata without file contents, storage paths, or URLs.",
             Capability.READ,
             listing=ListRead(receipts.list_receipts, ReceiptQuery, ReceiptRow, sorts=SORTS, toggles=(UNLINKED,)),
-            detail_handler=receipts.get_receipt,
+            detail=DetailRead(receipts.get_receipt, ReceiptRecord),
             identifier="id",
             identifier_type=RecordId,
             search=SearchDefinition.of(
@@ -147,6 +154,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ("original_filename", "vendor", "notes"),
             ),
             web_route="receipts:list",
-            record_type=ReceiptRecord,
         ),
     )

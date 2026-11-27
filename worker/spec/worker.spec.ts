@@ -1,3 +1,4 @@
+import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import arrival from "../src/generated/arrival.json";
@@ -407,7 +408,15 @@ describe("a listener that reconnects", () => {
     const hub = env.HUB.getByName("example-counted");
     await broadcast(named("delivery-first"), hub);
     const { last_event_id: first } = (await listen(0, hub)).opening;
-    for (let sent = 1; sent <= LOG_EVENTS + 1; sent++) await broadcast(named(`delivery-${sent}`), hub);
+    await runInDurableObject(hub, (_, state) => {
+      state.storage.sql.exec(
+        `WITH RECURSIVE sent(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sent WHERE n < ?)
+         INSERT INTO log (arrival) SELECT ? FROM sent`,
+        LOG_EVENTS,
+        JSON.stringify(named("delivery-seeded")),
+      );
+    });
+    await broadcast(named("delivery-last"), hub);
 
     const { opening } = await listen(first, hub);
 

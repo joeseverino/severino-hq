@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any, Literal, NoReturn, TypedDict, final
+from typing import Annotated, Any, Final, Literal, NoReturn, TypedDict, final
 
 from django.db import transaction
 from pydantic import Field
@@ -28,7 +28,7 @@ from .answer_fields import CallMessage
 from .command_fields import Describe, Names, stored_in
 from .conditions import READY, stamped
 from .inventory import live_spec, record_identity, record_token, service_hostnames
-from .record_errors import PolicyError, RecordNotFound, Sentence
+from .record_errors import PolicyError, RecordNotFound, Sentence, worded
 from .sealing import Sealed, sealer
 from .security import Principal
 from .tone import Tone
@@ -52,12 +52,12 @@ ADOPT = "infrastructure.resource.adopt"
 ADOPT_SERVICE = "infrastructure.service.adopt"
 
 # What every adoption says of the live record, which it only reads.
-NOTHING_LIVE_CHANGED: Sentence = "Nothing live was changed."
+NOTHING_LIVE_CHANGED: Final = "Nothing live was changed."
 
-NO_CONNECTION: Sentence = (
+NO_CONNECTION: Final = (
     "No connection for this change has reported, so HQ cannot make it. The Connections page says how to set one up."
 )
-ONLY_READS: Sentence = (
+ONLY_READS: Final = (
     "The connection for this change only lets HQ read: its 1Password item allows no changes. "
     "The Connections page says how to allow them and which permissions a change needs."
 )
@@ -138,13 +138,13 @@ class _Management:
             named = f" named {connection_ref}" if connection_ref else ""
             said = [f"No {label} connection{named} has reported, so HQ cannot make this change."]
             needs = [f"a {label} connection"]
-            refusal = NO_CONNECTION
+            refusal = worded(NO_CONNECTION)
         else:
             reading = get_text_list(sorted(ref for _, ref, flag in found if not flag), "and")
             unset = f"its 1Password item does not let HQ make changes through it ({MANAGES_FIELD})."
             said = [f"HQ only reads through {label} connection {reading}: {unset}"]
             needs = [f"{MANAGES_FIELD}: 1"]
-            refusal = ONLY_READS
+            refusal = worded(ONLY_READS)
         permissions = CONNECTION_KINDS[provider].writes
         evidence = _write_evidence(kind, provider, permissions, connection_ref)
         if permissions and evidence not in PROVEN_EVIDENCE:

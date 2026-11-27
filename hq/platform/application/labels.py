@@ -1,8 +1,13 @@
 """Human labels for stable machine names: capabilities, providers, kinds."""
 
+from typing import TYPE_CHECKING, cast
+
 lazy from django.utils.html import conditional_escape
 lazy from django.utils.safestring import SafeString, mark_safe
 lazy from django.utils.text import capfirst
+
+if TYPE_CHECKING:
+    from .record_errors import Sentence
 
 _ACRONYMS = frozenset({"acl", "api", "dns", "hq", "id", "mcp", "npm", "nws", "ssh", "tls", "url", "vin", "vm"})
 
@@ -100,15 +105,16 @@ def plural(noun: str) -> str:
     return f"{noun}s"
 
 
-def human_bytes(value: int | float) -> str:
+def human_bytes(value: int | float) -> Sentence:
     """A byte count as people say it: ``512 B``, ``38 MB``, ``1.7 GB``."""
 
     amount = max(0.0, float(value or 0))
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if amount < 1024 or unit == "TB":
-            return f"{amount:.0f} {unit}" if unit in {"B", "KB", "MB"} else f"{amount:.1f} {unit}"
+            # A size's words are HQ's, whatever the size.
+            return cast("Sentence", f"{amount:.0f} {unit}" if unit in {"B", "KB", "MB"} else f"{amount:.1f} {unit}")
         amount /= 1024
-    return "0 B"
+    return cast("Sentence", "0 B")
 
 
 # The dot between two parts of one line, held to the part before it by a

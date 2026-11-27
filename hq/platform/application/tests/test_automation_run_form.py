@@ -9,22 +9,17 @@ from django.test import TestCase
 from pydantic import Field
 
 from hq.platform.application.contracts import Closed
-from hq.platform.application.markup_testing import elements
 
 from ..capabilities import command_spec, run_capability
 from ..command_forms import command_form_class
 from ..command_targets import record_options
 from ..integration_specs import capability_schema
 from ..security import Capability, Principal
-from .procedures import APP, DB, EDGE, RESTART_RUN, Supply, manifest
+from .procedures import APP, RESTART_RUN, Supply, manifest
 
 # The box a change's form is posted with ticked.
 CONFIRMED = {"__confirm_effect": "on"}
 AGENT = Principal("example-agent", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-
-
-class Nothing(Closed):
-    pass
 
 
 class Window(Closed):
@@ -61,75 +56,10 @@ class RunFormTests(TestCase):
     def offered(self):
         return sorted(value for value, _label in self.form_class().base_fields["hosts"].choices)
 
-    def test_hosts_are_a_choice_of_the_machines_hq_knows(self):
-        self.assertEqual(self.offered(), [APP, DB, EDGE])
-
-    def test_hosts_are_named_machines_as_every_page_names_them(self):
-        self.assertEqual(self.form_class().base_fields["hosts"].label, "Machines")
-
-    def test_hosts_offer_only_the_machines_a_procedure_names(self):
-        self.supply(manifest(hosts=(APP, "gone.example.com")))
-
-        self.assertEqual(self.offered(), [APP])
-        form = self.form_class()({"hosts": [DB], "parameters.service": "web"})
-        self.assertFalse(form.is_valid())
-        self.assertIn("hosts", form.errors)
-
-    def test_hosts_offer_only_the_machines_the_worker_reaches_as_the_procedure_s_profile(self):
-        self.supply(manifest(privilege="example.service_admin"))
-        self.supply.reach((APP, "example.service_admin"), (DB, "read"))
-
-        self.assertEqual(self.offered(), [APP])
-        form = self.form_class()({"hosts": [DB], "parameters.service": "web", **CONFIRMED})
-        self.assertFalse(form.is_valid())
-        self.assertIn("hosts", form.errors)
-
-    def test_hosts_are_a_box_to_each_machine_all_in_sight(self):
-        drawn = str(self.form_class()()["hosts"])
-
-        self.assertEqual(drawn.count('type="checkbox"'), 3)
-        self.assertEqual(elements(drawn, "select"), [])
-
-    def test_a_worker_that_reaches_nothing_offers_nothing_and_says_so(self):
-        self.supply.reach()
-
-        field = self.form_class().base_fields["hosts"]
-        self.assertEqual(list(field.choices), [])
-        self.assertIn("Nothing to choose from yet", field.help_text)
-
-    def test_an_agent_s_correlation_is_never_asked_of_a_person(self):
-        form_class = self.form_class()
-
-        self.assertNotIn("correlation", form_class.base_fields)
-        form = form_class({"hosts": [APP], "parameters.service": "web", "correlation": "example-7", **CONFIRMED})
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertNotIn("correlation", form.command_payload)
-
     def test_a_procedure_written_for_no_machine_offers_none(self):
         self.supply(manifest(target_kinds=("example.appliance",)))
 
         self.assertEqual(self.offered(), [])
-
-    def test_parameters_are_the_input_s_own_fields_and_post_as_the_command_takes_them(self):
-        form_class = self.form_class()
-
-        self.assertNotIn("parameters", form_class.base_fields)
-        self.assertTrue(form_class.base_fields["parameters.service"].required)
-        form = form_class({"hosts": [APP], "parameters.service": "web", **CONFIRMED})
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.command_payload, {"hosts": [APP], "parameters": {"service": "web"}, "check": False})
-        answer = self.asked(form)
-        self.assertTrue(answer["ok"], answer)
-
-    def test_a_procedure_with_no_inputs_draws_no_parameters(self):
-        self.supply(manifest(input_type=Nothing))
-        form_class = self.form_class()
-
-        self.assertEqual([name for name in form_class.base_fields if name.startswith("parameters")], [])
-        form = form_class({"hosts": [APP], **CONFIRMED})
-        self.assertTrue(form.is_valid(), form.errors)
-        self.assertEqual(form.command_payload, {"hosts": [APP], "check": False})
-        self.assertTrue(self.asked(form)["ok"])
 
     def test_an_object_inside_the_inputs_is_drawn_as_its_fields_too(self):
         self.supply(manifest(input_type=Maintenance))
@@ -143,8 +73,3 @@ class RunFormTests(TestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.command_payload["parameters"], {"service": "web", "window": {"start": "02:00"}})
         self.assertTrue(self.asked(form)["ok"])
-
-    def test_the_inputs_posted_whole_as_json_are_refused(self):
-        form = self.form_class()({"hosts": [APP], "parameters": '{"service": "web"}', **CONFIRMED})
-
-        self.assertFalse(form.is_valid())

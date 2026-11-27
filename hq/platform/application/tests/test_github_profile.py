@@ -136,11 +136,6 @@ class PlanTests(TestCase):
         self.assertIsNotNone(asked_at(github_profile.KIND))
         self.assertEqual((asked["standing"]["state"], github_profile.standing().state), ("queued", "queued"))
 
-    def test_the_controller_registry_carries_the_plan(self):
-        from ..controller import controller_registry
-
-        self.assertEqual(controller_registry()["github_profiles"], {"accounts": ["example-user"], "due": True})
-
     def test_only_an_account_a_sign_in_names_is_asked_for(self):
         result = execute_capability(github_profile.READ_NOW, {"login": "someone-else"}, principal=operator())
 

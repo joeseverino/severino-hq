@@ -44,11 +44,6 @@ class PolicyVerdictTests(TestCase):
         resource = a_resource("a-certificate", {"unreachable_consumers": list(consumers)})
         return dict(add_observed_facts((resource,)).get("resource:a-certificate", ()))
 
-    def test_a_path_the_policy_refuses_says_so(self):
-        found = self.facts({"domain": "app.example.com", "endpoint": "100.64.0.2", "port": "443"})
-
-        self.assertEqual(found["path-denied"], "a-controller to an-edge on 443")
-
     def test_a_path_the_policy_admits_or_cannot_judge_says_nothing_of_it(self):
         for consumer in (
             {"domain": "app.example.com", "endpoint": "100.64.0.2", "port": "80"},

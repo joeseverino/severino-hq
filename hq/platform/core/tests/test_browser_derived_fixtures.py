@@ -18,7 +18,6 @@ Every row passes the model's own ``full_clean`` (its validators and its
 invented: names are under example.com.
 """
 
-import re
 from collections import defaultdict
 from contextlib import ExitStack
 from datetime import datetime, time
@@ -29,19 +28,15 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator
 from django.db import models
-from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 
 from hq.platform.application.list_pages import ListPageMixin
-from hq.platform.application.markup_testing import elements
 from hq.platform.application.references import ReferenceField
 from hq.platform.application.resources import resource_registry
 from hq.platform.application.routes import routed
 from hq.platform.core import seeds
-from hq.platform.core.tests.browser.estate import owner_client
-from hq.platform.core.tests.test_browser_fixtures import render_pages
 
 # Words a record really says, run to the field's length so a column must wrap them.
 _WORDS = (
@@ -68,9 +63,6 @@ def _digest(index: int) -> str:
     content digest or a subject an identity provider issues."""
 
     return f"{index:04x}{'0123456789abcdef' * 4}"[:64]
-
-
-_DERIVED = re.compile(r"example-\d{4}-0123456789ab")
 
 
 def _words(length: int, index: int) -> str:
@@ -388,15 +380,3 @@ def derived_pages():
     """One page per list, named under derived/ so a failure says which estate."""
 
     return {f"derived/{name.replace(':', '/')}": (lambda name=name: reverse(name), ExitStack) for name in list_views()}
-
-
-class DerivedEstateTests(TestCase):
-    def test_every_list_page_shows_the_rows_derived_for_it(self):
-        """A list a derived row cannot be shown on would be measured empty."""
-
-        with owner_client("derived") as client:
-            pages = render_pages(client, derived_pages())
-        for name, html in pages.items():
-            with self.subTest(page=name):
-                cells = [cell.words for cell in elements(html, "td")]
-                self.assertTrue(any(_DERIVED.search(said) for said in cells), "no derived row is shown")

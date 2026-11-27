@@ -26,7 +26,7 @@ from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AG
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.capabilities import command_spec
-from hq.platform.application.card_items import ListRow
+from hq.platform.application.card_items import ListRow, RowTitle
 from hq.platform.application.command_center import command_center
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
@@ -241,7 +241,7 @@ def _set(
     """A row's control that sets one ``field`` of the record ``target``
     names, which travels in the body since its identifier may be any string."""
 
-    return PageAction.command(command, variant=state, field=field, value=value, fields=target, primary=primary)
+    return PageAction.post(command, sends={field: value, **target}, variant=state, primary=primary)
 
 
 def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
@@ -252,8 +252,8 @@ def access_action(paused: bool) -> PageAction | None:
     """The one control that pauses every agent, or resumes them while paused."""
 
     if paused:
-        return PageAction.command(SET_AGENT_ACCESS, variant="off", field="paused", value="0", primary=True)
-    return PageAction.command(SET_AGENT_ACCESS, variant="on", field="paused", value="1")
+        return PageAction.post(SET_AGENT_ACCESS, sends={"paused": "0"}, variant="off", primary=True)
+    return PageAction.post(SET_AGENT_ACCESS, sends={"paused": "1"}, variant="on")
 
 
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
@@ -519,8 +519,7 @@ class SearchView(PageMixin, TemplateView):
                 "label": label,
                 "rows": [
                     ListRow(
-                        title=item.label,
-                        url=item.url,
+                        RowTitle(item.label, item.url),
                         detail="" if key == "resources" else item.summary,
                         chips=tuple(badge for badge in item.badges if badge),
                     )
@@ -546,8 +545,7 @@ class SearchView(PageMixin, TemplateView):
                 "label": group["label"],
                 "rows": [
                     ListRow(
-                        title=item["title"],
-                        url=item["url"] or audit,
+                        RowTitle(item["title"], item["url"] or audit),
                         detail=item["badge"],
                         at=item["timestamp"],
                         snippet=tuple(item["snippet"]),
@@ -565,7 +563,7 @@ class SearchView(PageMixin, TemplateView):
                     "label": "Messages",
                     "rows": [
                         ListRow(
-                            link=entity_link(Kind.MESSAGE, str(item["id"]), label=item["name"]),
+                            entity_link(Kind.MESSAGE, str(item["id"]), label=item["name"]),
                             detail=capfirst(item.get("status") or ""),
                             at=moment(item.get("created_at")),
                         )
@@ -737,7 +735,7 @@ def lookup_action(address: str, reading: Any) -> dict[str, PageAction | None]:
     """The fragment's press that looks ``address`` up, or again beside its ``reading``."""
 
     mode = AGAIN if reading else FIRST
-    return {"lookup": PageAction.command(LOOK_UP_ADDRESS, variant=mode, field="address", value=address)}
+    return {"lookup": PageAction.post(LOOK_UP_ADDRESS, sends={"address": address}, variant=mode)}
 
 
 class PublicAddressView(View):

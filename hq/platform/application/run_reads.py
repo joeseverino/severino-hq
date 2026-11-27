@@ -19,7 +19,7 @@ from hq.domains.jobs.models import Job, JobState
 from .answer_fields import AsRead
 from .automation_runs import CORRELATION_CHARACTER, CORRELATION_LONGEST
 from .describe import Describe, listed
-from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
+from .integration_specs import DetailRead, ListFilter, ListRead, ListSort, ResourceSpec
 from .managed_records import AskedAt
 from .moments import moment
 from .projection import iso, page_of
@@ -345,10 +345,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ),
                 counted=False,
             ),
-            detail_handler=get_work,
+            detail=DetailRead(get_work, WorkItem),
             identifier="id",
             web_route="jobs:list",
-            record_type=WorkItem,
         ),
         ResourceSpec(
             RUNS,
@@ -356,9 +355,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every run of a playbook, and every scan of their source: its machines, who asked and approved it, "
             "its state and each task's outcome.",
             Capability.READ,
-            detail_handler=get_run,
+            detail=DetailRead(get_run, RunRecord),
             identifier="operation_id",
             web_route="jobs:list",
-            record_type=RunRecord,
         ),
     )

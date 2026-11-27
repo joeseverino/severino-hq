@@ -5,8 +5,8 @@ capability answers them as ``not_found`` and ``conflict``, in host-written
 words that carry nothing the request sent.
 """
 
-import ast
-import textwrap
+import re
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -17,12 +17,9 @@ from hq.domains.calendars.models import Entry
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 
-from .. import approvals
 from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import TARGET_KINDS, kept_by
-from ..record_errors import HostRefusal
 from ..security import Principal, operator_capabilities
-from .refusal_text import check, checked
 
 # Distinctive enough that finding it in a message can only mean it was echoed.
 SENT = "sent-by-the-caller-7f3a"
@@ -66,6 +63,11 @@ class RecordRefusalTests(TestCase):
         self.assertEqual(error["code"], "not_found")
         self.assertNotIn(SENT, error["message"])
         self.assertFalse(Asset.objects.exists())
+        # A field a record's own rule finds naming nothing is named beside its refusal.
+        paid = {"date": "2026-03-01", "vendor": "A", "item": "B", "paid_from": f"project:{SENT}"}
+        error = self.refused("expense.create", paid)
+        self.assertEqual((error["code"], error["details"]), ("not_found", {"paid_from": ["not_found"]}))
+        self.assertNotIn(SENT, error["message"])
 
     def test_a_stale_write_is_a_conflict_and_changes_nothing(self):
         Project.objects.create(name="Changed elsewhere", slug=SENT)
@@ -110,154 +112,80 @@ class RecordRefusalTests(TestCase):
 
 
 ROOT = Path(__file__).resolve().parents[4]
-
-
-def _subclasses(cls: type) -> set[type]:
-    found = set(cls.__subclasses__())
-    return found | {deeper for sub in found for deeper in _subclasses(sub)}
-
-
-@tag("source", "tree")
-class RefusalTextTests(SimpleTestCase):
-    """The checker lint:refusal-text runs reads every refusal under hq/ and every kind of refusal declared."""
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.checked = checked(ROOT)
-
-    def test_the_checker_reads_the_refusals_of_hq(self):
-        self.assertTrue(self.checked.refusals_built, "no refusal was found under hq/")
-        self.assertTrue(self.checked.carried, "no sentence was carried to a refusal under hq/")
-
-    def test_every_kind_of_refusal_is_read(self):
-        """Read from the source, so a kind is checked the day it is declared; here, every kind Python knows."""
-
-        declared = {
-            cls.__name__ for cls in _subclasses(HostRefusal) if not cls.__module__.rpartition(".")[0].endswith("tests")
-        }
-
-        self.assertIn(approvals.UnreadableSubject.__name__, declared)
-        self.assertLessEqual(declared, self.checked.refusals)
-
-
-# A stand-in for record_errors, and a module that refuses with every kind of
-# sentence and passes; each planted case is appended to it.
-ERRORS = """
-Sentence = str
-
-
-class HostRefusal(Exception):
-    def __init__(self, reason: Sentence) -> None:
-        super().__init__(reason)
-        self.reason = reason
-
-
-class PolicyError(HostRefusal, ValueError):
-    pass
-
-
-class InputError(HostRefusal, ValueError):
-    pass
-"""
+# A module that builds sentences every way HQ does, and refuses text every way
+# it could arrive; each line mypy must refuse ends in "# refused".
 REFUSING = """
 from dataclasses import dataclass, replace
+from typing import Final
 
-from pydantic import BaseModel, ConfigDict
-
-from hq.example.errors import InputError, PolicyError, Sentence
+from hq.platform.application.record_errors import InputError, PolicyError, Sentence, worded
+from hq.platform.application.record_errors import PolicyError as Renamed
 from hq.platform.application.ui import counted, ended
 
-LIMIT = 20
-OFF = "It is switched off."
+OFF: Final = "It is switched off."
+
+
+@dataclass(frozen=True)
+class Command:
+    name: str
+    days: int
+    parts: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class Held:
     missing: Sentence
 
-    def not_found(self):
-        return InputError(self.missing)
-
 
 def refuse(why: Sentence) -> None:
     raise PolicyError(why)
 
 
-def why() -> Sentence:
-    return "Because."
+def because() -> Sentence:
+    return worded(OFF)
 
 
-def allowed(left) -> tuple[bool, Sentence]:
-    return False, f"{counted(left, 'day')} left, of {LIMIT}."
+def told(command: Command) -> Sentence:
+    return command.name  # refused
 
 
-def handle(command, record, flag):
-    ok, explanation = allowed(command.days)
-    reason = OFF if flag else why()
+class Wordy(PolicyError):  # refused
+    def __init__(self, reason: Sentence) -> None:
+        super().__init__(reason)
+
+
+def handle(command: Command, flag: bool, untyped) -> None:  # type: ignore[no-untyped-def]
+    reason = worded(OFF if flag else "Not now.")
     refuse("Refused.")
     Held("That record was not found.")
-    refuse(ended(f"Refused: {why()}"))
-    raise PolicyError(f"{explanation} {reason} It is {record.get_state_display().lower()}.")
+    PolicyError(f"{counted(command.days, 'day')} left, {because()} {reason.lower()}")
+    PolicyError(str(command))  # refused
+    InputError(f"{command.name} is taken.")  # refused
+    InputError(untyped.name)  # refused
+    refuse(command.name)  # refused
+    Held(command.name)  # refused
+    replace(Held("Gone."), missing=command.name)  # refused
+    Renamed(ended(f"Taken by {command.name}"))  # refused
+    PolicyError(f"{counted(1, command.name)} left.")  # refused
+    PolicyError(*command.parts)  # refused
 """
-PLANTED = {
-    "a dependency's text": "raise PolicyError(str(command))",
-    "a request value in an f-string": 'raise InputError(f"{command.name} is taken.")',
-    "a kind of refusal declared anywhere": "class PlantedRefusal(InputError):\n    pass\n\nPlantedRefusal(command.name)",
-    "a sentence parameter given a value": "refuse(command.name)",
-    "a sentence field given a value": "Held(command.name)",
-    "a sentence field replaced by a value": 'replace(Held("Gone."), missing=command.name)',
-    "a sentence function returning a value": "def told() -> Sentence:\n    return command.name",
-    "a sentence tuple returning a value": "def pair() -> tuple[bool, Sentence]:\n    return True, command.name",
-    "a refusal renamed on import": "from hq.example.errors import PolicyError as Refused",
-    "a mutable class holding a sentence": "@dataclass\nclass Loose:\n    missing: Sentence",
-    "a pydantic sentence class built from data": (
-        "class Locked(BaseModel):\n    model_config = ConfigDict(frozen=True)\n    reason: Sentence = ''\n\n"
-        "Locked.model_validate(command)"
-    ),
-    "a formatter of HQ's name declared elsewhere": (
-        "def counted(n, word):\n    return str(n)\n\nraise PolicyError(f'{counted(command, \"day\")} left.')"
-    ),
-    "a value closed through ended": 'raise PolicyError(ended(f"Taken by {command.name}"))',
-    "a closer of HQ's name declared elsewhere": (
-        "def ended(text):\n    return text\n\nraise PolicyError(ended('Refused'))"
-    ),
-    "a formatter given its words as a value": "raise PolicyError(f'{counted(1, command.word)} left.')",
-    "a local name bound once to a value": (
-        "def bound(command):\n    reason = 'Refused.'\n    reason = command.name\n    raise PolicyError(reason)"
-    ),
-    "a refusal given more than its sentence": "raise PolicyError(*command.parts)",
-    "a refusal with a constructor of its own": (
-        "class Wordy(PolicyError):\n    def __init__(self, reason, extra):\n        super().__init__(reason)"
-    ),
-}
 
 
-def _planted(case: str) -> dict[str, ast.Module]:
-    body = REFUSING + "\n\n" + textwrap.dedent(case)
-    return {"hq/example/errors.py": ast.parse(ERRORS), "hq/example/refusing.py": ast.parse(body)}
+@tag("source")
+class SentenceTypeTests(SimpleTestCase):
+    """mypy, through tools/lint/mypy_sentence.py, refuses every way text HQ did not write could reach a refusal."""
 
+    def test_mypy_refuses_each_line_that_carries_text_hq_did_not_write(self):
+        from mypy import api
 
-class RefusalCheckerTests(SimpleTestCase):
-    """The checker finds each way a refusal could carry text HQ did not write."""
+        with tempfile.TemporaryDirectory() as scratch:
+            module = Path(scratch, "refusing.py")
+            module.write_text(REFUSING)
+            held = ["--enable-error-code", "return-value", "--enable-error-code", "assignment"]
+            config = ["--config-file", str(ROOT / "tools/lint/mypy-reach.toml"), "--cache-dir", scratch]
+            out, _, _ = api.run([*config, *held, "--no-error-summary", str(module)])
 
-    def test_a_module_built_from_sentences_passes(self):
-        checked = check(_planted(""))
-
-        self.assertEqual(checked.problems, [])
-        self.assertTrue(checked.carried)
-
-    def test_a_check_narrowed_to_a_changed_module_reads_each_module_that_imports_it(self):
-        from .refusal_text import importing
-
-        sources = _planted(next(iter(PLANTED.values())))
-
-        self.assertTrue(check(sources, importing(sources, ["hq/example/errors.py"])).problems)
-        self.assertEqual(check(sources, importing(sources, ["hq/example/unread.py"])).problems, [])
-
-    def test_each_planted_violation_is_found(self):
-        for name, case in PLANTED.items():
-            with self.subTest(name):
-                problems = check(_planted(case)).problems
-                self.assertTrue(problems, f"{name} passed")
-                self.assertTrue(all(p.startswith("hq/example/refusing.py:") for p in problems), problems)
+        lines = REFUSING.splitlines()
+        reported = {int(found) for found in re.findall(r"refusing\.py:(\d+): error", out)}
+        refused = {number for number, line in enumerate(lines, 1) if line.endswith("# refused")}
+        self.assertEqual(reported, refused, out)

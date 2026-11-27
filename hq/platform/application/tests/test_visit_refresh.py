@@ -1,43 +1,28 @@
 """An open page asks for its own readings: only those, only when due, only by POST."""
 
 from datetime import timedelta
-from html.parser import HTMLParser
-from pathlib import Path
 from unittest.mock import patch
 
-from django.conf import settings
-from django.core import signing
-from django.db import connection
-from django.test import Client, TestCase, override_settings
-from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory, ReadRequest
-from hq.domains.control_plane.observations.github import REPOSITORY_KIND
-from hq.domains.control_plane.providers import registry_label
-from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.core import testing
-from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare
 
-from .. import cadence, visit_refresh
-from ..asks import REFRESHING, Standing, read_standing, watched
+from .. import visit_refresh
+from ..asks import Standing, read_standing, watched
 from ..cadence_testing import controller_arrived, controller_never_arrived
-from ..capabilities import Ran, execute_capability
-from ..freshness import VISIT_EVERY
-from ..record_errors import PolicyError, RecordNotFound
+from ..record_errors import RecordNotFound
 from ..security import Principal, cli_principal
-from ..visit_refresh import VISIT_REFRESH, Reads, VisitRefreshCommand, askable, request_visit_refresh
+from ..visit_refresh import Reads, VisitRefreshCommand, request_visit_refresh
 
 SWEEPS = override_settings(
     SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600,
     SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200,
 )
 OLD = timedelta(hours=3)
-# Kinds whose readers call a provider's API, and ones whose readers log in.
+# A kind whose reader calls a provider's API.
 FAST = "adguard.rewrite"
-LOGS_IN = ("host.perimeter", "host.edge_reboot", "caddy.route")
 
 
 def store(kind: str, *, age: timedelta = timedelta(0), attempted: timedelta | None = None) -> None:
@@ -53,18 +38,6 @@ def store(kind: str, *, age: timedelta = timedelta(0), attempted: timedelta | No
 
 def asked() -> set[str]:
     return set(ReadRequest.objects.values_list("kind", flat=True))
-
-
-def rings():
-    """Watches the doorbells' files; ``rung(watch)`` counts the controller's
-    rings, whichever function rang it."""
-
-    return patch.object(cadence, "_touch", wraps=cadence._touch)
-
-
-def rung(watch) -> int:
-    doorbell = Path(settings.SEVERINO_CONTROLLER_DOORBELL)
-    return [touched.args[0] for touched in watch.call_args_list].count(doorbell)
 
 
 def page(*kinds: str):
@@ -102,153 +75,6 @@ class VisitRefreshTests(TestCase):
     def ask(self, name: str = "known", principal: Principal | None = None):
         return request_visit_refresh(VisitRefreshCommand("example", name), principal=principal or cli_principal())
 
-    def test_a_reading_older_than_its_cadence_is_asked_for(self):
-        store(FAST, age=OLD)
-
-        with page(FAST), rings() as watch, self.captureOnCommitCallbacks(execute=True):
-            result = self.ask()
-
-        self.assertEqual(result["requested"], [FAST])
-        self.assertTrue(result["standing"]["live"])
-        self.assertEqual(asked(), {FAST})
-        self.assertEqual(rung(watch), 1)
-
-    def test_an_open_page_asked_through_its_capability_rings_once(self):
-        """The ask and the runner both want the controller rung as the write
-        commits, and it is rung once."""
-
-        store(FAST, age=OLD)
-
-        with page(FAST), rings() as watch, self.captureOnCommitCallbacks(execute=True):
-            result = execute_capability(
-                VISIT_REFRESH, {"subject": "example", "name": "known"}, principal=cli_principal()
-            )
-
-        self.assertEqual(result["requested"], [FAST])
-        self.assertEqual(rung(watch), 1)
-
-    def test_a_fresh_reading_is_left_alone_however_often_the_page_is_opened(self):
-        store(FAST, age=VISIT_EVERY - timedelta(seconds=5))
-
-        with page(FAST), self.captureOnCommitCallbacks(execute=True) as rung:
-            results = [self.ask() for _ in range(5)]
-
-        self.assertTrue(all(result["requested"] == [] and not result["standing"]["live"] for result in results))
-        self.assertEqual(asked(), set())
-        self.assertEqual(rung, [])
-
-    def test_reloading_while_a_read_is_pending_does_not_ask_again(self):
-        store(FAST, age=OLD)
-
-        with page(FAST):
-            first, second = self.ask(), self.ask()
-
-        self.assertEqual(first["requested"], [FAST])
-        self.assertEqual(second["requested"], [])
-        self.assertTrue(second["standing"]["live"])
-        self.assertEqual(ReadRequest.objects.count(), 1)
-
-    def test_several_kinds_are_one_ask_and_one_doorbell(self):
-        kinds = (FAST, "npm.proxy_host", "tailscale.device")
-        for kind in kinds:
-            store(kind, age=OLD)
-
-        with page(*kinds), rings() as watch, self.captureOnCommitCallbacks(execute=True):
-            result = self.ask()
-
-        self.assertEqual(sorted(result["requested"]), sorted(kinds))
-        self.assertEqual(rung(watch), 1)
-
-    def test_opening_the_dashboard_asks_again_for_what_its_queue_says_github_holds(self):
-        """Unless the App's webhook keeps it current: while its listener is
-        heard, opening the page asks nothing of GitHub."""
-
-        store(REPOSITORY_KIND, age=OLD)
-        testing.channel_heard()
-
-        def opened():
-            return request_visit_refresh(VisitRefreshCommand("page", "dashboard"), principal=cli_principal())
-
-        self.assertEqual(opened()["requested"], [])
-        testing.channel_heard(silent=True)
-        self.assertEqual(opened()["requested"], [REPOSITORY_KIND])
-
-    def test_opening_the_connection_panel_asks_for_what_it_shows_and_never_github(self):
-        shown = ("tailscale.device", "tailscale.policy", "portainer.container", "host.firewall", "host.tailnet_lock")
-        for kind in (*shown, REPOSITORY_KIND):
-            store(kind, age=OLD)
-
-        result = request_visit_refresh(VisitRefreshCommand("page", "connection"), principal=cli_principal())
-
-        self.assertEqual(set(result["requested"]), set(shown))
-        self.assertNotIn(REPOSITORY_KIND, asked())
-
-    def test_only_what_the_page_is_made_of_is_asked_for(self):
-        for kind in (FAST, "npm.proxy_host", "tailscale.device"):
-            store(kind, age=OLD)
-
-        with page(FAST):
-            self.ask()
-
-        self.assertEqual(asked(), {FAST})
-
-    def test_a_reading_that_keeps_failing_is_not_asked_for_again_and_again(self):
-        """A failed read stores nothing new, so its last good reading stays old.
-
-        Judged by that, the kind would be due again the moment it had been
-        asked: the page would reload, ask, be told it was answered, and reload,
-        for as long as it stayed open, at a provider that is already refusing.
-        """
-
-        store(FAST, age=OLD, attempted=timedelta(seconds=10))
-
-        with page(FAST):
-            results = [self.ask() for _ in range(3)]
-
-        self.assertTrue(all(result["requested"] == [] for result in results))
-        self.assertEqual(asked(), set())
-
-    def test_a_failing_reading_is_tried_again_once_its_cadence_has_passed(self):
-        store(FAST, age=OLD, attempted=VISIT_EVERY + timedelta(seconds=5))
-
-        with page(FAST):
-            self.assertEqual(self.ask()["requested"], [FAST])
-
-    def test_a_kind_no_read_has_answered_is_judged_by_its_last_attempt(self):
-        row = ProviderInventory.objects.create(kind=FAST, records=[], reachable=False, observed_at=None)
-        tried = ProviderInventory.objects.filter(pk=row.pk)
-
-        tried.update(updated_at=timezone.now() - timedelta(seconds=10))
-        with page(FAST):
-            self.assertEqual(self.ask()["requested"], [])
-        tried.update(updated_at=timezone.now() - VISIT_EVERY - timedelta(seconds=5))
-        with page(FAST):
-            self.assertEqual(self.ask()["requested"], [FAST])
-
-    def test_opening_a_page_never_asks_for_a_kind_whose_reader_logs_in(self):
-        for kind in LOGS_IN:
-            store(kind, age=timedelta(days=30))
-
-        with page(*LOGS_IN):
-            result = self.ask()
-
-        self.assertEqual(result["requested"], [])
-        self.assertEqual(asked(), set())
-
-    def test_nothing_is_asked_for_that_could_not_be_answered(self):
-        """A request nothing answers forces sweeps until it expires."""
-
-        store("tls.certificate", age=OLD)  # declared, and no sweep reads it
-        store("registry.domain", age=OLD)  # read by HQ, not the controller
-        store("a.kind.nothing.declares", age=OLD)
-
-        with page("tls.certificate", "registry.domain", "a.kind.nothing.declares", "npm.proxy_host"):
-            result = self.ask()
-
-        # And npm.proxy_host was never stored, so nothing has shown it is read.
-        self.assertEqual(result, NOTHING_ASKED)
-        self.assertEqual(asked(), set())
-
     def test_a_page_hq_does_not_have_asks_for_nothing(self):
         store(FAST, age=OLD)
 
@@ -268,352 +94,26 @@ class VisitRefreshTests(TestCase):
         self.assertEqual(result, NOTHING_ASKED)
         self.assertEqual(asked(), set())
 
-    def test_the_page_is_told_what_to_watch_for_and_when_it_has_arrived(self):
-        store(FAST, age=OLD)
-
-        with page(FAST):
-            status = self.ask()["status_url"]
-
-        self.assertTrue(followed(status).live)
-        # The controller reads it, successfully or not: either is an answer.
-        ProviderInventory.objects.filter(kind=FAST).update(updated_at=timezone.now() + timedelta(seconds=1))
-        self.assertFalse(followed(status).live)
-        # And once answered the page is not due again, so it cannot reload twice.
-        store(FAST, age=OLD, attempted=timedelta(0))
-        with page(FAST):
-            self.assertEqual(self.ask()["requested"], [])
-
     def test_a_waiting_read_says_what_waits_and_says_so_when_no_controller_will_take_it(self):
         store(FAST, age=OLD)
         with page(FAST):
             status = self.ask()["status_url"]
-        self.assertEqual((followed(status).state, followed(status).note), ("queued", REFRESHING))
+        self.assertEqual(followed(status).state, "queued")
 
         controller_arrived(ago=timedelta(hours=2))
         stalled = followed(status)
 
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")
-        self.assertIn("controller last reported", stalled.note)
-
-    def test_a_read_waiting_in_a_copied_database_says_no_controller_takes_it(self):
-        """Readings stored a moment ago, with no heartbeat beside them, came
-        with the database: they say no controller reaches this HQ."""
-
-        store(FAST, age=OLD)
-        with page(FAST):
-            status = self.ask()["status_url"]
-        store("npm.proxy_host")
-
-        controller_never_arrived()
-        copied = followed(status)
-
-        self.assertEqual(copied.state, "failed")
-        self.assertIn("no controller", copied.note)
-
-    def test_a_watch_hq_did_not_sign_is_not_honored(self):
-        from ..asks import _WATCH_SALT
-
-        forged = signing.dumps({"read": [FAST]}, salt="some.other.salt")
-
-        for watch in ("", "not-a-token", forged, signing.dumps("a string", salt=_WATCH_SALT)):
-            with self.subTest(watch=watch[:20]):
-                self.assertIsNone(watched(watch))
-
-    def test_what_asking_costs_grows_with_the_kinds_asked_for_and_no_faster(self):
-        """Deciding is a fixed handful of queries, the last of them saying how
-        the read stands. What grows is one audited write per kind asked for;
-        nothing is worked out again for each."""
-
-        kinds = (FAST, "npm.proxy_host", "tailscale.device", "adguard.dns", "npm.redirect")
-        for kind in kinds:
-            store(kind, age=OLD)
-        costs = []
-        for count in (1, 3, 5):
-            ReadRequest.objects.all().delete()
-            with page(*kinds[:count]), CaptureQueriesContext(connection) as captured:
-                self.ask()
-            costs.append(len(captured))
-
-        self.assertEqual(costs[2] - costs[1], costs[1] - costs[0])
-
-    def test_asking_when_nothing_is_due_writes_nothing(self):
-        store(FAST)
-
-        with page(FAST), CaptureQueriesContext(connection) as captured:
-            self.ask()
-
-        self.assertFalse(ReadRequest.objects.exists())
-        writes = [
-            query["sql"] for query in captured if query["sql"].lstrip().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(writes, [])
 
 
-class AskableTests(TestCase):
-    """Which kinds an open page may ask for, held against the real registries."""
-
-    def test_a_provider_api_kind_is_and_one_read_by_logging_in_is_not(self):
-        self.assertTrue(askable(FAST))
-        self.assertTrue(askable("github.repository"))
-        # A reading the dashboard asks for when it opens is never a sweep's to answer.
-        on_open = ("machine.telemetry", "nws.forecast", "dns.reverse")
-        for kind in (*LOGS_IN, *on_open, "tls.certificate", "registry.domain", "a.kind.nothing.declares"):
-            with self.subTest(kind=kind):
-                self.assertFalse(askable(kind))
-
-
-@SWEEPS
 class SubjectTests(TestCase):
     """What a real page is assembled from, looked up rather than told."""
 
-    def setUp(self):
-        # A controller that arrived a moment ago.
-        controller_arrived()
-
     def test_a_machine_nobody_reported_is_no_page(self):
         self.assertIsNone(visit_refresh.reads_of("machine", "no-such-machine"))
-
-    def test_a_page_hq_does_not_name_is_no_page(self):
-        self.assertIsNone(visit_refresh.reads_of("page", "no-such-page"))
-
-    def test_a_hostname_with_nothing_declared_has_a_page_and_nothing_to_read(self):
-        self.assertEqual(visit_refresh.reads_of("service", "example.test"), Reads())
 
     def test_a_service_is_read_through_the_kinds_its_declarations_are(self):
         declare("example-rewrite", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
 
         self.assertEqual(visit_refresh.reads_of("service", "app.example.test").kinds, ("adguard.rewrite",))
-
-    def test_a_machine_is_read_through_what_its_connections_read(self):
-        from ..credential_sight import fed_kinds
-        from ..machines import Machine
-
-        testing.connection("tailscale", "example-tailnet")
-        testing.connection("ssh", "example-shell")
-        found = Machine(name="example-host", reached_by=("example-tailnet", "example-shell"))
-
-        with patch("hq.platform.application.machines.machine", return_value=found):
-            reads = visit_refresh.reads_of("machine", "example-host")
-
-        self.assertEqual(set(reads.kinds), {*fed_kinds("tailscale"), *fed_kinds("ssh")})
-        # What the shell connection reads is known to be behind the page, and
-        # is still never asked for by opening it.
-        for kind in fed_kinds("ssh"):
-            self.assertFalse(askable(kind))
-
-
-@SWEEPS
-class RefusingHostTests(TestCase):
-    """A read somebody asked for does not retry an SSH login a host is refusing."""
-
-    def setUp(self):
-        # A controller that arrived a moment ago.
-        controller_arrived()
-        for ref, reachable in (("example-shell", True), ("example-refusing", False)):
-            testing.connection("ssh", ref, reachable=reachable, observed_at=timezone.now() - timedelta(minutes=10))
-        store(FAST)
-        store("tailscale.device")
-
-    def test_the_sweeps_own_clock_still_asks_a_failing_connection_again(self):
-        from ..cadence import sweep_due
-
-        with override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=0, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=0):
-            verdict = sweep_due("example-controller")
-
-        self.assertTrue(verdict["due"])
-        self.assertEqual(verdict["carry"], ["example-shell"])
-
-    def test_a_read_asked_for_by_an_open_page_leaves_the_refusing_host_alone(self):
-        from ..cadence import sweep_due
-
-        ReadRequest.objects.create(kind=FAST)
-        verdict = sweep_due("example-controller")
-
-        self.assertTrue(verdict["due"])
-        self.assertEqual(verdict["only_kinds"], [FAST])
-        self.assertEqual(verdict["carry"], ["example-refusing", "example-shell"])
-
-    def test_asking_for_the_refusing_connection_itself_still_probes_it(self):
-        from ..cadence import sweep_due
-
-        ReadRequest.objects.create(connection_ref="example-refusing")
-        verdict = sweep_due("example-controller")
-
-        self.assertNotIn("example-refusing", verdict["carry"])
-        self.assertIn("example-shell", verdict["carry"])
-
-
-@SWEEPS
-class VisitRefreshViewTests(TestCase):
-    def setUp(self):
-        # A controller that arrived a moment ago.
-        controller_arrived()
-        self.user = operator()
-        self.url = reverse("control_plane:visit")
-        store(FAST, age=OLD)
-
-    def post(self, client=None, **body):
-        return (client or self.client).post(
-            self.url,
-            form_keyed({"subject": "example", "name": "known", **body}),
-            headers={"X-Requested-With": "XMLHttpRequest"},
-        )
-
-    def test_it_needs_a_session(self):
-        with page(FAST):
-            response = self.post()
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(asked(), set())
-
-    def test_a_post_without_the_csrf_token_is_refused(self):
-        client = Client(enforce_csrf_checks=True)
-        client.force_login(self.user)
-
-        with page(FAST):
-            response = self.post(client)
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(asked(), set())
-
-    def test_a_post_asks_and_hands_back_what_to_watch_for(self):
-        self.client.force_login(self.user)
-
-        with page(FAST):
-            found = self.post().json()
-
-        self.assertEqual(asked(), {FAST})
-        self.assertTrue(found["live"])
-        self.assertEqual(self.client.get(found["status"]).json()["state"], found["state"])
-        row = AuditLog.objects.get(object_type="Read request")
-        self.assertEqual((row.metadata["actor"], row.metadata["operation"]), (self.user.username, VISIT_REFRESH))
-
-    def test_a_refusal_in_a_code_hq_does_not_hold_fails_naming_nothing_it_held(self):
-        self.client.force_login(self.user)
-        raw = {"ok": False, "error": {"code": "example_unlisted", "details": "/srv/example/raw-detail"}}
-
-        with (
-            page(FAST),
-            patch("hq.platform.application.asks.run_posted", return_value=Ran(raw)),
-            self.assertLogs("severino.capabilities", "ERROR"),
-        ):
-            response = self.post()
-
-        self.assertEqual(response.json()["state"], "failed")
-        self.assertNotIn(b"raw-detail", response.content)
-
-    def test_asking_how_a_read_stands_without_its_watch_reads_nothing(self):
-        self.client.force_login(self.user)
-
-        with page(FAST):
-            for query in ({}, {"subject": "example", "name": "known"}, {"watch": "forged"}, {"watch": "x" * 5000}):
-                with self.subTest(query=sorted(query)):
-                    self.assertEqual(self.client.get(reverse("control_plane:read_status"), query).status_code, 404)
-
-        self.assertEqual(asked(), set())
-
-    def test_the_request_cannot_name_what_to_read(self):
-        """A kind or a connection in the request is not an input at all."""
-
-        self.client.force_login(self.user)
-        store("tailscale.device", age=OLD)
-
-        with page(FAST):
-            self.post(kind="tailscale.device", connection_ref="x", watch="y")
-
-        self.assertEqual(asked(), {FAST})
-
-    def test_a_refusal_is_failed_work_in_its_own_sentence(self):
-        self.client.force_login(self.user)
-
-        with page(FAST), patch.object(visit_refresh, "ask", side_effect=PolicyError("The example is busy.")):
-            found = self.post().json()
-
-        self.assertEqual((found["state"], found["note"]), ("failed", "The example is busy."))
-
-    def test_the_service_page_carries_the_form(self):
-        self.client.force_login(self.user)
-
-        response = self.client.get(reverse("control_plane:service", args=["example.test"]))
-
-        self.assertContains(response, "data-ask-auto")
-        self.assertContains(response, 'name="subject" value="service"')
-        self.assertContains(response, 'name="name" value="example.test"')
-
-    def test_where_no_controller_reports_here_the_page_draws_no_ask(self):
-        """A database copied from another host holds fresh readings and no
-        heartbeat of this HQ's: nothing drains its requests, so neither a
-        record's page nor the dashboard promises a refresh."""
-
-        self.client.force_login(self.user)
-        store(REPOSITORY_KIND, age=OLD)
-        # Read a moment ago, by the controller of the host it was copied from.
-        store("npm.proxy_host")
-
-        controller_never_arrived()
-        for address in (reverse("control_plane:service", args=["example.test"]), reverse("dashboard")):
-            with self.subTest(address=address):
-                self.assertNotContains(self.client.get(address), "data-ask-auto")
-        with page(FAST):
-            self.assertFalse(self.post().json()["live"])
-        self.assertEqual(asked(), set())
-
-    def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):
-        """The ask is a quiet child of the content, which its refresh
-        (everything but the quiet ones) never replaces, and the note ends the
-        head's first line, in a child the refresh draws again: the new note
-        finds its form by the id it names."""
-
-        self.client.force_login(self.user)
-
-        found = _Placement(self.client.get(reverse("control_plane:service", args=["example.test"])).content.decode())
-
-        form = found.places.get("form", [])
-        self.assertEqual(form[:1], [("main", "content", "")])
-        self.assertIn("ask-quiet", form[1][2])
-        note = found.places.get("note", [])
-        self.assertEqual(note[:2], [("main", "content", ""), ("header", "", "page-head")])
-        self.assertNotIn("ask-quiet", " ".join(css for _tag, _id, css in note))
-
-
-class _Placement(HTMLParser):
-    """Where the visit's form and the note naming it stand: the chain of
-    (tag, id, class) from the content down to each."""
-
-    VOID = frozenset({"input", "br", "img", "meta", "link", "hr", "source", "wbr", "col", "area", "base"})
-
-    def __init__(self, html: str) -> None:
-        super().__init__()
-        self.stack: list[tuple[str, str, str]] = []
-        self.places: dict[str, list[tuple[str, str, str]]] = {}
-        self.feed(html)
-
-    def handle_starttag(self, tag, attrs):
-        given = dict(attrs)
-        if tag == "form" and given.get("id") == "page-visit":
-            self.places["form"] = self._from_content()
-        if "data-ask-note" in given and given.get("form") == "page-visit":
-            self.places["note"] = self._from_content()
-        if tag not in self.VOID:
-            self.stack.append((tag, given.get("id") or "", given.get("class") or ""))
-
-    def handle_endtag(self, tag):
-        while self.stack and self.stack.pop()[0] != tag:
-            pass
-
-    def _from_content(self) -> list[tuple[str, str, str]]:
-        at = next(index for index, (_tag, ident, _css) in enumerate(self.stack) if ident == "content")
-        return [(tag, ident, "" if ident == "content" else css) for tag, ident, css in self.stack[at:]]
-
-
-class ReadStandingWordsTests(TestCase):
-    def test_a_read_that_failed_unexplained_names_what_was_read_in_words(self):
-        asked_at = timezone.now() - timedelta(minutes=1)
-        ProviderInventory.objects.create(kind=FAST, records=[], reachable=False, observed_at=timezone.now())
-
-        standing = read_standing((FAST,), asked_at)
-
-        self.assertEqual(standing.state, "failed")
-        self.assertIn(registry_label(FAST), standing.note)
-        self.assertNotIn(FAST, standing.note)

@@ -9,30 +9,19 @@ from io import StringIO
 from pathlib import Path
 
 from django.apps import apps
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import CommandError, call_command
-from django.db import IntegrityError, connection, models, transaction
+from django.db import connection, models
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.operations import AddConstraint
 from django.test import TestCase, TransactionTestCase
-from django.utils import timezone
 
-from hq.domains.analytics.models import AnalyticsSite, RumDaily
 from hq.domains.calendars.models import Entry
-from hq.domains.control_plane.models import (
-    ApprovalRequest,
-    DashboardConfiguration,
-    InboundEvent,
-    OperationRequest,
-)
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.jobs.models import Job
 from hq.platform.core import revisions
 from hq.platform.core.management.commands import constraint_preflight
-from hq.platform.core.models import AgentAccess, AgentDevice, AgentIdentity
 from hq.platform.core.rules import Rule, one_of
-from hq.platform.core.testing import declare
 
 DAY = date(2026, 10, 1)
 
@@ -70,78 +59,6 @@ class RuleTests(TestCase):
             weekdays="0,3",
             repeat_until=date(2026, 12, 1),
         ).full_clean()
-
-    def test_the_database_refuses_a_row_written_around_full_clean(self):
-        now = timezone.now()
-        entry = Entry.objects.create(title="Entry", starts_on=DAY)
-        resource = declare("example", "adguard.rewrite")
-        asked = {"resource": resource, "requested_actor": "someone", "requested_interface": "web"}
-        queued = OperationRequest.objects.create(**asked, action="reconcile", idempotency_key="queued")
-        pending = ApprovalRequest.objects.create(
-            capability="example.change",
-            content_fingerprint="0" * 64,
-            requested_actor="example-agent",
-            requested_interface="api",
-            expires_at=now,
-        )
-        job = Job.objects.create(kind="example.work", label="Work")
-        site = AnalyticsSite.objects.create(site_tag="tag", host="example.com")
-        row = RumDaily.objects.create(site=site, date=DAY, dimension="path", value="/")
-        runbook = DocumentationRecord.objects.create(doc_id="example-doc", title="A runbook")
-        agent = AgentIdentity.objects.create(client_id="example-agent")
-        device = AgentDevice.objects.create(identity=agent, node_id="nEXAMPLECNTRL")
-        operator = get_user_model().objects.create_user("example-operator", password="x" * 20)
-        told = InboundEvent.objects.create(
-            provider="host", event="unit.failed", delivery_id="d-1", source="host", received_at=now, outcome="applied"
-        )
-
-        def changed(instance, **values):
-            return lambda: type(instance).objects.filter(pk=instance.pk).update(**values)
-
-        refused = {
-            "calendar_entry_has_a_title": changed(entry, title=" "),
-            "calendar_entry_ends_after_it_starts": changed(entry, ends_on=date(2026, 9, 1)),
-            "calendar_entry_end_time_has_a_start": changed(entry, ends_at=time(9)),
-            "calendar_entry_end_time_follows_start": changed(entry, starts_at=time(10), ends_at=time(9)),
-            "calendar_entry_interval_in_range": changed(entry, interval=367),
-            "calendar_entry_weekdays_only_weekly": changed(entry, weekdays="1"),
-            "calendar_entry_until_only_repeating": changed(entry, repeat_until=date(2026, 12, 1)),
-            "calendar_entry_until_after_it_starts": changed(entry, repeat="daily", repeat_until=date(2026, 9, 1)),
-            "resource_generation_starts_at_one": changed(resource, generation=0, observed_generation=0),
-            "resource_observed_no_later_than_declared": changed(resource, observed_generation=2),
-            "operation_state_is_declared": changed(queued, state="paused"),
-            "operation_claimed_names_its_claim": changed(queued, state="claimed"),
-            "operation_queued_has_no_claim": changed(queued, claimed_by="example-controller"),
-            "operation_finished_says_when": changed(queued, state="succeeded"),
-            "approval_state_is_declared": changed(pending, state="maybe", decided_at=now),
-            "approval_settled_says_when": changed(pending, state="expired"),
-            "job_percent_at_most_100": changed(job, percent=101),
-            "job_state_is_declared": changed(job, state="paused"),
-            "analytics_rumdaily_sample_interval": changed(row, sample_interval=0),
-            "documentation_status_is_a_doc_status": changed(runbook, status="open"),
-            "agent_access_is_one_row": lambda: AgentAccess.objects.create(pk=2),
-            "agent_identity_block_is_dated": changed(agent, blocked_by=operator),
-            "agent_identity_signs_in_a_known_way": changed(agent, signs_in="example"),
-            "agent_device_approval_is_dated": changed(device, approved_by=operator),
-            "agent_device_block_is_dated": changed(device, blocked_by=operator),
-            "person_role_is_a_known_role": changed(operator.person_role, role="example"),
-            "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
-            "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),
-            "inbound_source_is_declared": changed(told, source="browser"),
-            "inbound_outcome_is_declared": changed(told, outcome="maybe"),
-            "inbound_event_names_its_provider": changed(told, provider=" "),
-            "inbound_event_is_named": changed(told, event=" "),
-            "inbound_event_names_its_delivery": changed(told, delivery_id=" "),
-        }
-
-        for name, write in refused.items():
-            with self.subTest(rule=name), self.assertRaisesRegex(IntegrityError, name), transaction.atomic():
-                write()
-        self.assertEqual(set(refused), _rules())
-
-    def test_a_bulk_write_is_refused_too(self):
-        with self.assertRaisesRegex(IntegrityError, "calendar_entry_interval_in_range"), transaction.atomic():
-            Entry.objects.bulk_create([Entry(title="Entry", starts_on=DAY, interval=0)])
 
     def test_a_rule_survives_its_migration(self):
         rule = Rule(

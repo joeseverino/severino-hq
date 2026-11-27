@@ -39,7 +39,7 @@ from .connection_setup import guide_url
 from .contracts import Effect
 from .describe import Describe, listed
 from .entity_links import entity_link, record_names
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
+from .integration_specs import CapabilitySpec, DetailRead, ListRead, ResourceSpec, typed_keys
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .moments import when
@@ -651,10 +651,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Each type of reading, when it was last read, and the records it holds.",
             Capability.READ,
             listing=ListRead(derived_reads.list_readings, ReadingQuery, ReadingItem, fields=typed_keys(ReadingRow)),
-            detail_handler=derived_reads.get_reading,
+            detail=DetailRead(derived_reads.get_reading, ReadingRecord),
             identifier="kind",
             web_route="control_plane:connections",
-            record_type=ReadingRecord,
         ),
         ResourceSpec(
             "reading.records",
@@ -672,10 +671,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             listing=ListRead(
                 derived_reads.list_credentials, EmptyQuery, CredentialRecord, fields=typed_keys(CredentialRow)
             ),
-            detail_handler=derived_reads.get_credential,
+            detail=DetailRead(derived_reads.get_credential, CredentialRecord),
             identifier="provider",
             web_route="control_plane:connections",
-            record_type=CredentialRecord,
         ),
         ResourceSpec(
             "connections",
@@ -689,10 +687,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ConnectionStandingRecord,
                 fields=typed_keys(ConnectionStandingRow),
             ),
-            detail_handler=connection_context.get_connection_standing,
+            detail=DetailRead(connection_context.get_connection_standing, ConnectionStandingRecord),
             identifier="connection_ref",
             web_route="control_plane:connections",
             pass_principal=True,
-            record_type=ConnectionStandingRecord,
         ),
     )

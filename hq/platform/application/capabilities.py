@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import date, time
 from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any, Literal, NamedTuple, TypeAliasType, TypedDict, final, get_type_hints
+from typing import Annotated, Any, Final, Literal, NamedTuple, TypeAliasType, TypedDict, final, get_type_hints
 from uuid import UUID
 
 from jsonschema import Draft202012Validator, validators
@@ -639,7 +639,9 @@ def _wrong_type(error: JSONSchemaError) -> tuple[Any, JSONSchemaError] | None:
 
 
 # What a declaration write the consent does not admit is refused with.
-NEEDS_APPROVAL = "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."
+NEEDS_APPROVAL: Final = (
+    "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."
+)
 
 
 @final

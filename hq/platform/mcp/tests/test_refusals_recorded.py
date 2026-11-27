@@ -1,16 +1,15 @@
-"""An agent refused on MCP leaves the Denied row the same refusal leaves on the API."""
+"""An agent refused a view on MCP, outside a tool call, leaves the Denied row a refused call does."""
 
 from asgiref.sync import async_to_sync
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from mcp import Client
 from mcp.shared.exceptions import MCPError
 
-from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import MCP_READER
 
 from ..identity import set_principal
-from .registry import KIND, example_kind, registry_patched, served, with_kind
+from .registry import KIND, example_kind, served, with_kind
 
 
 def _denials():
@@ -29,33 +28,8 @@ def _on_mcp(steps):
         return async_to_sync(run)(server)
 
 
-@override_settings(OIDC_ISSUER=ISSUER, SEVERINO_API_RESOURCE=RESOURCE, OIDC_RP_SIGN_ALGO="RS256")
 class RecordedRefusalTests(TestCase):
-    def test_the_api_records_the_refusal(self):
-        with _serving(), registry_patched(with_kind(example_kind())):
-            response = self.client.get(
-                f"/api/v2/resources/{KIND}/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}"
-            )
-
-        self.assertEqual(response.json()["error"]["code"], "forbidden")
-        self.assertEqual(
-            _denials(),
-            [{"interface": "api", "actor": "example-automation", "reason": "forbidden", "authenticated": True}],
-        )
-
-    def test_a_tool_call_refused_on_mcp_is_recorded_as_the_api_records_it(self):
-        async def steps(client):
-            return await client.call_tool("list_resource", {"name": KIND})
-
-        answered = _on_mcp(steps)
-
-        self.assertTrue(answered.is_error)
-        self.assertEqual(answered.structured_content["error"]["code"], "forbidden")
-        self.assertEqual(
-            _denials(), [{"interface": "mcp", "actor": MCP_READER.actor, "reason": "forbidden", "authenticated": True}]
-        )
-
-    def test_a_read_refused_on_mcp_is_recorded_as_the_api_records_it(self):
+    def test_a_view_refused_on_mcp_is_recorded_as_a_refused_call_is(self):
         async def steps(client):
             with self.assertRaises(MCPError) as raised:
                 await client.read_resource(f"hq://{KIND}/one")

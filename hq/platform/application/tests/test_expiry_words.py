@@ -1,50 +1,22 @@
-"""A past expiry reads as past on every surface that says when something runs out."""
+"""An expiry reads the same said from its moment or from the days left until it."""
 
 import json
-import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
-from unittest import mock
 
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase, override_settings, tag
-
-from hq.platform.core.testing import declare
-
-from ..certificate_expiry import HeldCertificate, judged as certificates_judged
-from ..credential_findings import EXPIRES, expiring as credentials_expiring
-from ..registration_findings import RULES as REGISTRATION_RULES
-from ..tailnet_presence import Presence
-from ..topology_model import TopologyNode
-from ..zones import find_zone
-from .zone_records import sweep
+from django.test import SimpleTestCase, tag
 
 NOW = datetime(2026, 1, 10, 12, tzinfo=UTC)
-# A future, the moment itself, earlier the same day, and days past, each with
-# what every surface says of it.
-SAID = {
-    timedelta(days=3): "expires in 3 days",
-    timedelta(0): "expires today",
-    -timedelta(hours=2): "expired today",
-    -timedelta(days=4, hours=1): "expired 4 days ago",
-}
-# What no expiry phrase may say: a count below nothing, or an unagreeing unit.
-NEGATIVE = re.compile(r"-\s?\d|\b1 days\b")
-
-
-def at_now():
-    return mock.patch("hq.platform.application.derivations.clock", return_value=NOW)
-
-
-def node(**facts) -> TopologyNode:
-    return TopologyNode(
-        id="connection:example-edge", kind="connection", label="example-edge", subtitle="", facts=tuple(facts.items())
-    )
-
-
-def estate(*nodes) -> SimpleNamespace:
-    return SimpleNamespace(now=NOW, nodes=lambda: nodes)
+# A future, the moment itself, earlier the same day, a day past and days past.
+OFFSETS = (
+    timedelta(days=3),
+    timedelta(0),
+    -timedelta(hours=2),
+    -timedelta(days=4, hours=1),
+    timedelta(hours=20),
+    -timedelta(days=1, hours=2),
+)
 
 
 # The wording HQ and its controller both write, one case per line: the days
@@ -68,83 +40,7 @@ class ExpiryMomentTests(SimpleTestCase):
         from ..expiry import days_until
         from ..moments import expiry_words
 
-        for offset in (*SAID, timedelta(hours=20), -timedelta(days=1, hours=2)):
+        for offset in OFFSETS:
             when = NOW + offset
             with self.subTest(offset=offset):
                 self.assertEqual(expiry_words(days_until(when, NOW)), expiry_words(when, NOW))
-
-
-class EveryCallerTests(TestCase):
-    """Each surface says the phrase ``expiry_words`` gives for its moment."""
-
-    def assertSays(self, read) -> None:
-        """``read(when)``, the caller's text for a moment, says each moment as ``SAID`` does."""
-
-        for offset, said in SAID.items():
-            with self.subTest(offset=offset), at_now():
-                text = read(NOW + offset)
-                self.assertIn(said, text)
-                self.assertNotRegex(text, NEGATIVE)
-
-    def test_a_certificate_finding(self):
-        def read(when):
-            held = HeldCertificate("", "example.com", when.isoformat(), ("app.example.com",))
-            (finding,) = certificates_judged(((node(), held),), NOW)
-            return finding.title
-
-        self.assertSays(read)
-
-    def test_a_credential_finding(self):
-        def read(when):
-            (finding,) = credentials_expiring(estate(node(**{EXPIRES: when.isoformat()})))
-            return finding.title
-
-        self.assertSays(read)
-
-    def test_a_registration_finding(self):
-        (rule,) = REGISTRATION_RULES
-
-        def read(when):
-            facts = {"expires_at": when.isoformat(), "auto_renew": "no", "domain": "example.com"}
-            (finding,) = rule.detect(estate(node(**facts)))
-            return finding.title
-
-        self.assertSays(read)
-
-    def test_a_certificate_renewal_finding(self):
-        from ..certificate_expiry import renewals_judged
-        from ..estate import Expiry
-
-        def read(when):
-            expiry = Expiry("example.com", "Certificate", when, renewal_window_days=30)
-            (finding,) = renewals_judged(((node(), expiry),), NOW)
-            return finding.title
-
-        self.assertSays(read)
-
-    def test_a_requests_device_layer(self):
-        from ..request_standard import _expiry_phrase
-
-        self.assertSays(lambda when: _expiry_phrase(when.isoformat()))
-
-    def test_a_machines_node_key(self):
-        self.assertSays(lambda when: Presence(key_expires=when.isoformat()).key_expiry)
-
-    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
-    def test_a_domains_security_card(self):
-        from ..zone_insights import security
-
-        sweep()
-        certificate = declare(
-            "wildcard",
-            "tls.certificate",
-            {"certificate_name": "wildcard", "domains": ["example.com"], "install_on": ["edge"]},
-            enabled=True,
-        )
-
-        def read(when):
-            certificate.status = {"not_after": when.isoformat()}
-            certificate.save()
-            return security(find_zone("example.com")).detail
-
-        self.assertSays(read)

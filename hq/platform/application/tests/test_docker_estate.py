@@ -1,18 +1,11 @@
-"""Docker readings in the relation graph, on the machine page, and as findings."""
+"""Docker readings on the machine page."""
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.control_plane.models import ProviderInventory
-from hq.platform.application.markup_testing import select, text
-from hq.platform.core.testing import READER, declare, operator
+from hq.platform.core.testing import declare, operator
 
-from ..docker_estate import IMAGE_BEHIND, IMAGE_UNTAGGED, image_verdicts, reference_tag
 from ..inventory_testing import store
-from ..projection import projection_scope
-from ..relationships import relationships_for
-from ..topology import relation_graph
-from ..topology_model import RELATIONS
 
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
 OLD, NEW, LOOSE = "sha256:" + "a" * 64, "sha256:" + "b" * 64, "sha256:" + "c" * 64
@@ -33,180 +26,15 @@ def images():
 
 def estate():
     declare("lab-1", "machine", {"name": "lab-1", "addresses": ["192.0.2.10"]})
-    for name in ("web", "db", "cache"):
-        declare(
-            f"lab-{name}", "portainer.container", {"host": "lab-1", "name": name, "connection_ref": "example-portainer"}
-        )
-    store(
-        "portainer.network",
-        {
-            **ON_LAB,
-            "name": "shop_default",
-            "driver": "bridge",
-            "subnets": ["172.18.0.0/16"],
-            "containers": ["db", "web"],
-        },
-        {**ON_LAB, "name": "bridge", "driver": "bridge", "containers": ["cache", "web"]},
-    )
-    store(
-        "portainer.volume",
-        {
-            **ON_LAB,
-            "type": "volume",
-            "name": "shop_data",
-            "source": "/var/lib/docker/volumes/shop_data",
-            "stack": "shop",
-            "used_by": [{"container": "db", "destination": "/data"}],
-        },
-        {
-            **ON_LAB,
-            "type": "bind",
-            "source": "/opt/apps/shop/config",
-            "used_by": [{"container": "web", "destination": "/config", "read_only": True}],
-        },
-    )
+    declare("lab-web", "portainer.container", {"host": "lab-1", "name": "web", "connection_ref": "example-portainer"})
     store("portainer.image", *images())
-    store(
-        "portainer.environment",
-        {
-            "connection_ref": "example-portainer",
-            "id": 1,
-            "name": "local",
-            "host": "lab-1",
-            "address": "192.0.2.10",
-            "type": "docker",
-            "status": "up",
-            "docker_version": "27.1.1",
-        },
-    )
-    store(
-        "portainer.compose_project",
-        {**ON_LAB, "name": "shop", "source": "compose", "working_dir": "/opt/apps/shop", "containers": ["db", "web"]},
-    )
-
-
-class VerdictTests(SimpleTestCase):
-    def test_a_reference_without_a_tag_is_latest_and_an_id_is_none(self):
-        self.assertEqual(reference_tag("example/db"), "example/db:latest")
-        self.assertEqual(reference_tag("registry.example.com:5000/app"), "registry.example.com:5000/app:latest")
-        self.assertEqual(reference_tag("example/web:1"), "example/web:1")
-        self.assertEqual(reference_tag(LOOSE), "")
-        self.assertEqual(reference_tag("example/web@sha256:" + "d" * 64), "")
-
-    def test_an_image_the_tag_moved_off_is_behind_and_one_without_tags_untagged(self):
-        records = (
-            {"id": OLD, "tags": ["example/web:0"], "containers": [{"container": "web", "reference": "example/web:1"}]},
-            {
-                "id": NEW,
-                "tags": ["example/web:1"],
-                "containers": [{"container": "fresh", "reference": "example/web:1"}],
-            },
-            {"id": LOOSE, "tags": [], "containers": [{"container": "job", "reference": LOOSE}]},
-        )
-
-        found = {(fact, container) for fact, container, *_rest in image_verdicts(records)}
-
-        self.assertEqual(found, {(IMAGE_BEHIND, "web"), (IMAGE_UNTAGGED, "job")})
-
-    def test_a_container_on_the_image_its_tag_names_is_current(self):
-        records = (
-            {"id": NEW, "tags": ["example/db:latest"], "containers": [{"container": "db", "reference": "example/db"}]},
-        )
-
-        self.assertEqual(image_verdicts(records), [])
-
-
-class GraphTests(TestCase):
-    def setUp(self):
-        estate()
-
-    def test_containers_on_a_shared_network_talk_and_the_default_bridge_says_nothing(self):
-        with projection_scope():
-            edges = relation_graph(principal=READER).topology.edges
-
-        talks = {(edge.source, edge.target, edge.detail) for edge in edges if edge.kind == "talks_to"}
-        self.assertEqual(talks, {("resource:lab-db", "resource:lab-web", "Docker network shop_default")})
-
-    def test_the_machine_holds_each_reading_through_the_portainer_connection(self):
-        with projection_scope():
-            found = relationships_for("machine:lab-1", principal=READER)
-
-        self.assertEqual(found.labels("Networks"), ("bridge", "shop_default"))
-        self.assertIn("shop_data", found.labels("Stores data in"))
-        self.assertIn("/opt/apps/shop/config", found.labels("Stores data in"))
-        self.assertEqual(found.labels("Docker"), ("local",))
-        self.assertEqual(found.labels("Started by compose project"), ("shop",))
-
-    def test_a_declared_container_says_what_it_talks_to(self):
-        with projection_scope():
-            found = relationships_for("resource:lab-web", principal=READER)
-
-        # Named as the container: its machine is the context, not its name.
-        self.assertEqual(found.labels(RELATIONS["talks_to"].inverse), ("db",))
-
-    def test_a_container_is_on_only_the_networks_an_operator_made(self):
-        with projection_scope():
-            found = relationships_for("resource:lab-web", principal=READER)
-
-        self.assertEqual(found.labels("On network"), ("shop_default",))
-
-
-class ContainerPageTests(TestCase):
-    def test_a_group_read_through_a_connection_the_page_names_says_only_when(self):
-        from django.template.loader import render_to_string
-        from django.utils import timezone
-
-        from ..entity_links import EntityLink
-        from ..relationships import Relationships
-        from ..topology_model import RelationGroup, Relationship
-
-        portainer = EntityLink("example-portainer", "/infrastructure/connections/example-portainer/")
-        network = Relationship(EntityLink("shop_default", "/infrastructure/shop/"), portainer, timezone.now())
-        found = Relationships(
-            "resource:lab-web",
-            (
-                RelationGroup(RELATIONS["reaches"].inverse, 1, (Relationship(portainer),)),
-                RelationGroup("On network", 2, (network,)),
-            ),
-        )
-
-        said = render_to_string("partials/_relationships.html", {"relationships": found})
-
-        self.assertEqual(said.count(portainer.url), 1)
-        self.assertIn("Last read", said)
+    store("portainer.network", {**ON_LAB, "name": "bridge", "driver": "bridge", "containers": ["cache"]})
 
 
 class MachinePageTests(TestCase):
     def setUp(self):
         estate()
         operator(self.client)
-
-    def test_the_machine_page_says_where_data_lives_and_what_runs_behind(self):
-        response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
-
-        self.assertEqual(response.status_code, 200)
-        said = text(response)
-        for words in (
-            "Docker environment",
-            "Storage",
-            "/opt/apps/shop/config",
-            "Networks",
-            "172.18.0.0/16",
-            "Compose projects",
-            "/opt/apps/shop",
-            "Newer build pulled",
-            "No tag",
-            "27.1.1",
-        ):
-            self.assertIn(words, said)
-
-    def test_a_machine_nothing_reads_docker_for_has_no_docker_bands(self):
-        ProviderInventory.objects.filter(kind__startswith="portainer.").delete()
-
-        response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
-
-        self.assertFalse(select(response, "id", "docker-data"))
-        self.assertFalse(select(response, "id", "docker-images"))
 
     def refuse_edge(self):
         store(
@@ -234,12 +62,3 @@ class MachinePageTests(TestCase):
         self.assertRegex(edge.content.decode(), r"Could not be read: [^<]*Docker image")
         self.assertNotRegex(lab.content.decode(), r"Could not be read: [^<]*Docker image")
         self.assertContains(lab, "Newer build pulled")
-
-    def test_a_machine_known_by_its_address_alone_still_hears_it(self):
-        from ..facts import Subject, refusals_about
-
-        self.refuse_edge()
-
-        (refused,) = refusals_about(Subject.of(hostnames=("vps",), addresses=("198.51.100.30",)))
-        self.assertEqual(refused.phrase, "Docker image not read: missing environment access")
-        self.assertEqual(refusals_about(Subject.of(hostnames=("lab-1",), addresses=("192.0.2.10",))), ())

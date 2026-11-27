@@ -237,8 +237,9 @@ jobs:
           - { gate: webkit, shard: 5/7 }
           - { gate: webkit, shard: 6/7 }
           - { gate: webkit, shard: 7/7 }
-          - { gate: chromium, shard: 1/2 }
-          - { gate: chromium, shard: 2/2 }
+          - { gate: chromium, shard: 1/3 }
+          - { gate: chromium, shard: 2/3 }
+          - { gate: chromium, shard: 3/3 }
           - { gate: demo }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -273,12 +274,13 @@ jobs:
           path: var/browser-failures/
           if-no-files-found: ignore
 
-  # The catalog in macOS's own fonts, in both engines: its monospace face is
-  # wider than Linux's, so a part that fits in the Browser job can wrap in
-  # Safari. A job of its own, since only an Ubuntu runner takes a container:
-  # here the toolchain installs the browsers. Each engine's gate is split into
-  # shares as the Browser job's are. Its findings join the Browser job's in
-  # Browser verdict, each naming its engine and system.
+  # The catalog in macOS's own fonts, in WebKit, as Safari draws it: its
+  # monospace face is wider than Linux's, so a part that fits in the Browser
+  # job can wrap in Safari. Chromium walks the catalog in the Browser job. A
+  # job of its own, since only an Ubuntu runner takes a container: here the
+  # toolchain installs the browser. The gate is split into shares as the
+  # Browser job's are. Its findings join the Browser job's in Browser
+  # verdict, each naming its engine and system.
   browser-macos:
     name: Browser on macOS
     needs: [proven, legs]
@@ -290,15 +292,14 @@ jobs:
       matrix:
         # GateReferenceTests holds these with the Browser job's to the gates
         # mise-tasks/browser.toml declares, and each engine's shares to 1/n
-        # through n/n. An account runs five macOS jobs at once, so the sixth
-        # starts as the first ends.
+        # through n/n. An account runs five macOS jobs at once, so five
+        # shares all start together.
         include:
-          - { gate: catalog, engine: webkit, shard: 1/4 }
-          - { gate: catalog, engine: webkit, shard: 2/4 }
-          - { gate: catalog, engine: webkit, shard: 3/4 }
-          - { gate: catalog, engine: webkit, shard: 4/4 }
-          - { gate: catalog, engine: chromium, shard: 1/2 }
-          - { gate: catalog, engine: chromium, shard: 2/2 }
+          - { gate: catalog, shard: 1/5 }
+          - { gate: catalog, shard: 2/5 }
+          - { gate: catalog, shard: 3/5 }
+          - { gate: catalog, shard: 4/5 }
+          - { gate: catalog, shard: 5/5 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -309,7 +310,6 @@ jobs:
       - name: Browser
         env:
           GATE: browser:${{ matrix.gate }}
-          HQ_BROWSER_ENGINE: ${{ matrix.engine }}
           HQ_BROWSER_SHARD: ${{ matrix.shard }}
           HQ_BROWSER_FINDINGS: var/browser-findings
         run: mise run "$GATE"
@@ -317,14 +317,14 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-findings-macos-${{ matrix.engine }}-${{ strategy.job-index }}
+          name: browser-findings-macos-${{ strategy.job-index }}
           path: var/browser-findings/
           if-no-files-found: ignore
       - name: Failure screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: browser-failures-macos-${{ matrix.engine }}-${{ strategy.job-index }}
+          name: browser-failures-macos-${{ strategy.job-index }}
           path: var/browser-failures/
           if-no-files-found: ignore
 

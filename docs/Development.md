@@ -50,7 +50,9 @@ the rest live, so no doc copies it:
 
 `mise run test --at <ref> <label>...` runs this tree's test files,
 uncommitted work included, on `<ref>`'s code. Reach for it to show that a new
-test fails on the old code, or that a failure was already there. The ref is
+test, written where no walk (a Part's example, a seed, the OpenAPI contract, a
+finding's or capability's example) reaches the class it holds, fails on the
+old code, or that a failure was already there. The ref is
 the code before the fix, so a fix's test is proven with `--at <fix>^`.
 `mise tasks info test` says what `--at`, `--keep` and `--go` take, and how a
 shell suite's path is run.
@@ -490,14 +492,12 @@ changed, and so does `lint:imports`, which reads the import graph in about a
 second whenever a Python file changes.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
-`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:refusal-text`, `lint:file-rules`,
+`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`,
 `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
-the Lint job runs it, it reads the whole tree. A check that reads the whole
-tree to judge part of it is a step too: `lint:refusal-text` indexes every
-module and holds those it is handed and the modules that import one.
+the Lint job runs it, it reads the whole tree.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the
@@ -663,9 +663,9 @@ one is its writer and that gate; everything else reads the declaration:
 - `.gitattributes` marks each declared file `linguist-generated`, written by
   `lint:drift-gitattributes` (a hand-written attribute goes in a
   `.gitattributes` in its own directory);
-- `tools/tests/test_drift_gates.py` deletes a gate's files, runs the command
-  its failure names and then its fix mode, and fails on a file the fix writes
-  that its declaration leaves out, or one it declares and does not write.
+- `tools/tests/test_drift_gates.py` fails on a drift gate that neither
+  declares its files nor records itself, and on a declared file that is not
+  in the checkout.
 
 `mise run fix` then formats as the lint gates read. It also lowers each count
 in `tools/lint/eslint-suppressions.json` that has fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
@@ -1168,23 +1168,24 @@ host name outside the reserved and shared ranges it names.
 | To run | Command |
 | --- | --- |
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
-| the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
+| the legs named | `mise run browser <leg>...` (`webkit`, `catalog`, `demo`) |
 | one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
 | one browser test | `mise run test <label>`, which installs the engine first |
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
-`browser:webkit` runs every browser test in WebKit, which judges, since HQ is
-read in Safari. Chromium is a second opinion, `browser:chromium`, which `mise
-run browser` leaves to CI: the catalog of shared parts, the example estate at
-a phone and a laptop, and the layout shifts only Chromium records. Every
-test it runs is also run in WebKit.
+`browser:webkit` runs every browser test but the catalog walk in WebKit,
+which judges, since HQ is read in Safari. Chromium is a second opinion,
+`browser:chromium`, which `mise run browser` leaves to CI: the catalog of
+shared parts, the example estate at a phone and a laptop, and the layout
+shifts only Chromium records. Every test it runs is also run in WebKit.
 
 An engine draws in its system's fonts, and macOS's monospace face is wider
-than Linux's, so a part can fit in CI's Linux legs and wrap in Safari.
-`browser:catalog` runs the catalog's layout tests in the engine
-`HQ_BROWSER_ENGINE` names, and CI runs it on a macOS runner in both engines,
-its findings joining the other legs' in Browser verdict. `mise run browser`
-leaves it out: on a Mac, `browser:webkit` already runs those tests.
+than Linux's, so a part can fit in CI's Linux legs and wrap in Safari. So the
+catalog walk (the classes tagged `catalog`) runs once per engine: in WebKit
+on a macOS runner (`browser:catalog`, WebKit unless `HQ_BROWSER_ENGINE` names
+another), its findings joining the other legs' in Browser verdict, and in
+Chromium on Linux (`browser:chromium`). On a Mac, `mise run browser` runs
+`browser:catalog` in the Mac's own fonts.
 
 CI splits each engine's gate into shares that run side by side, `i/n` in
 the browser jobs' matrices. A sweep marked `@sweep` runs in every share and reads

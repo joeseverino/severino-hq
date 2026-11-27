@@ -68,7 +68,7 @@ def triage(item=None, *, sorts=True, family="", url=""):
         shown = dict(parse_qsl(urlsplit(url).query))
         return PageAction.command(action_items.SET_ASIDE, query={**shown, "family": family})
     command = action_items.RESTORE if item.get("aside") else action_items.SET_ASIDE
-    return PageAction.command(command, field="key", value=action_items.row_value(item))
+    return PageAction.post(command, sends={"key": action_items.row_value(item)})
 
 
 @answers(register, takes_context=True)
@@ -181,32 +181,38 @@ def offer_markup(offer, *, look=""):
 def _posting(label, offer, *, classes, title="", disabled=False, pressed=None, hit=False, context=None):
     """The one way HQ writes a button that posts: what ``offer`` sends, to
     where it sends it, through the shared form, or as a form of its own where
-    it sends ``fields`` besides its own field. The shared form carries only
-    the button's field; a form of its own returns to the page it was pressed
-    on unless its fields name a ``next``."""
+    it sends more than one value. The shared form carries the one value its
+    button sends; each returns to the page it was pressed on unless what it
+    sends names a ``next``."""
 
     if not isinstance(offer, PageAction) or offer.method != "post":
         raise template.TemplateSyntaxError(
-            "A button posts only what an offer sends: PageAction.command, or a RowOrder's or RowMark's press."
+            "A button posts only what an offer sends: PageAction.post or command, or a RowOrder's or RowMark's press."
         )
+    # The button sends the first value, and a form of its own the rest; the
+    # shared form sends its own ``next``.
+    (name, value), *rest = offer.sends.items() or [("", "")]
+    if name == "next":
+        (name, value), rest = ("", ""), [(name, value), *rest]
+    shared = not rest
     button = _post_button(
         label,
         offer.url,
-        name=offer.field,
-        value=offer.value,
+        name=name,
+        value=value,
         css=classes,
         title=title or offer.title,
         disabled=disabled or offer.disabled,
         pressed=pressed,
         hit=hit,
-        shared=not offer.fields,
+        shared=shared,
     )
-    if not offer.fields:
+    if shared:
         return button
     if context is None:
         raise ValueError(f"{offer.label} sends fields of its own, so it is drawn in a template, as a form.")
     request = _request(context)
-    sent = {"next": request.get_full_path(), **offer.fields}
+    sent = {"next": request.get_full_path(), **dict(rest)}
     with context.push(csrf_token=get_token(request)):
         token = write_token(context)
     return (
@@ -536,7 +542,7 @@ slotted(
         is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
         may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
         press its reader would be refused. `_page_action.html` draws one; a confirmation's is
-        `PageAction.command(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
+        `PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
         with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
         (`partials/_calendar_sources.html`).
 

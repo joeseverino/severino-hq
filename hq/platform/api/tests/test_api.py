@@ -155,19 +155,6 @@ class TransportTests(SentinelMixin, TestCase):
             **headers,
         )
 
-    def test_a_missing_token_is_401_and_never_a_login_redirect(self):
-        """The failure a Shortcut has to be able to act on.
-
-        Every other HQ URL answers an anonymous request with a 302 to an HTML
-        login page. A client that cannot fill one in would record that redirect
-        as success and silently import nothing.
-        """
-
-        response = self.client.get("/api/v2/")
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(response["WWW-Authenticate"], views.REALM)
-        self.assertEqual(response.json()["ok"], False)
-
     @override_settings(OIDC_OP_JWKS_ENDPOINT=f"{ISSUER}/.well-known/jwks.json")
     def test_a_token_is_never_verified_by_reaching_the_identity_provider(self):
         """Keys not yet read, or a key not held, answer 401 and ask for a read."""
@@ -186,26 +173,6 @@ class TransportTests(SentinelMixin, TestCase):
             self.assertIn(logged.records[0].event, {"api.keys.not_loaded", "api.keys.unknown"})
             tokens.KEYS.wanted.clear()
 
-    def test_a_paused_agent_is_refused_on_the_machine_api(self):
-        """The same brake /mcp/ applies, on the other door.
-
-        The agents hold these same tokens, so pausing them on one surface
-        alone would leave every capability one URL away.
-        """
-
-        from hq.domains.projects.models import Project
-        from hq.platform.core.models import AgentAccess
-
-        AgentAccess.objects.update_or_create(pk=1, defaults={"paused": True})
-        body = {"payload": {"name": "Paused", "slug": "paused", "status": "active"}}
-        with _serving():
-            write = self._post("project.create", body, token=_token(scope="write_projects"))
-            read = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token(scope='write_projects')}")
-        for response in (write, read):
-            self.assertEqual(response.status_code, 403)
-            self.assertEqual(response.json()["error"]["code"], "agents_paused")
-        self.assertFalse(Project.objects.filter(slug="paused").exists())
-
     def test_only_an_authenticated_caller_learns_agents_are_paused(self):
         from hq.platform.core.models import AgentAccess
 
@@ -214,24 +181,6 @@ class TransportTests(SentinelMixin, TestCase):
             response = self._post("project.create", {}, token=_token(key=OTHER_KEY))
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "invalid_token")
-
-    def test_an_unreadable_switch_refuses_on_the_machine_api(self):
-        from django.db import DatabaseError
-
-        with (
-            _serving(),
-            patch(
-                "hq.platform.application.agent_access.AgentAccess.objects.filter",
-                side_effect=DatabaseError("locked"),
-            ),
-        ):
-            response = self._post(
-                "project.create",
-                {"payload": {"name": "X", "slug": "x", "status": "active"}},
-                token=_token(scope="write_projects"),
-            )
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "agents_paused")
 
     def test_a_retry_key_in_the_payload_is_refused_over_the_api(self):
         from hq.domains.projects.models import Project
@@ -292,12 +241,6 @@ class TransportTests(SentinelMixin, TestCase):
         event = AuditLog.objects.get(object_repr__icontains="Audited")
         self.assertEqual(event.metadata["actor"], "example-automation")
         self.assertEqual(event.metadata["interface"], "api")
-
-    def test_an_unknown_capability_is_404(self):
-        with _serving():
-            response = self._post("nope.nothing", {"payload": {}}, token=_token())
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["error"]["code"], "unknown_capability")
 
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():

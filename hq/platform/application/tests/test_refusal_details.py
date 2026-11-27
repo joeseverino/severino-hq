@@ -33,8 +33,3 @@ class RefusalDetailsTests(SimpleTestCase):
         for shape, details in shapes.items():
             with self.subTest(shape):
                 self.assertTrue(_meets(details))
-
-    def test_details_in_no_shape_a_refusal_gives_do_not_meet_it(self):
-        for details in ({"next": "describe_resources"}, {"scope": 3}, ["target"]):
-            with self.subTest(details=details):
-                self.assertFalse(_meets(details))

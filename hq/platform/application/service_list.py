@@ -12,7 +12,7 @@ from hq.domains.control_plane.names import is_hostname, normalized_hostname
 
 from .adoption import ADOPT, AdoptCommand, adopt
 from .contracts import Effect
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
+from .integration_specs import CapabilitySpec, DetailRead, ListRead, ResourceSpec, typed_keys
 from .path_records import PathRecord
 from .projection import page_of, projection_scope, read_once
 from .record_errors import RecordNotFound
@@ -198,19 +198,17 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every service name and the state of its DNS, proxy and certificate.",
             Capability.READ,
             listing=ListRead(list_services, EmptyQuery, ServiceItem, fields=typed_keys(ServiceRow)),
-            detail_handler=get_service,
+            detail=DetailRead(get_service, ServiceRecord),
             identifier="hostname",
             web_route="control_plane:services",
-            record_type=ServiceRecord,
         ),
         ResourceSpec(
             "service.paths",
             "Service paths",
             "The path a request for a service's hostname takes, hop by hop, with each hop's reading and certificate.",
             Capability.READ,
-            detail_handler=get_path,
+            detail=DetailRead(get_path, PathRecord),
             identifier="hostname",
             web_route="control_plane:services",
-            record_type=PathRecord,
         ),
     )

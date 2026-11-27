@@ -763,7 +763,7 @@ declarations, each a query field the API document says.
 | Field | Set it |
 | --- | --- |
 | `listing` | to its `ListRead` |
-| `record_type` | to the TypedDict a read of one record answers |
+| `detail` | to its `DetailRead`: the handler that reads one record and the TypedDict it answers |
 | `pass_principal=True` | when the answer depends on what the caller may see; both handlers then also receive `principal=` |
 | `web_route` | to the resource's list route, which must reverse without arguments, to link it from the Command Center |
 
@@ -1091,11 +1091,6 @@ rules, accessibility states and visual change. A class, partial or hook an
 extension needs and this contract lacks belongs in HQ first; copying host CSS
 or markup into an extension is a contract failure. The rules the classes follow are
 each part's, in [Shared UI](Shared-UI.md#each-parts-rules), and those across parts are in [Design](Design.md).
-
-What the host writes for a value is pinned by example in
-`hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,
-`counted`, `measured`, `money`, `signed_number` and `ended`, so a change
-of wording is reviewed in that test's diff.
 
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,

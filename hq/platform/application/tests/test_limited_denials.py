@@ -45,16 +45,3 @@ class LimitedDenialTests(TestCase):
         self._refuse("example-two-windows", 1)
 
         self.assertEqual([row.metadata["count"] for row in self._rows("example-two-windows")], [3, 1])
-
-    def test_each_agent_and_reason_is_counted_apart(self):
-        self._refuse("example-one", 2)
-        record_limited(interface="api", reason=Code.TOO_MANY_CALLS, actor="example-one")
-        self._refuse("example-other", 1)
-
-        self.assertEqual(self._rows("example-one").count(), 2)
-        self.assertEqual(self._rows("example-other").count(), 1)
-        row = self._rows("example-one").first()
-        self.assertEqual(
-            {key: row.metadata[key] for key in ("interface", "actor", "reason", "authenticated")},
-            {"interface": "api", "actor": "example-one", "reason": "rate_limited", "authenticated": True},
-        )

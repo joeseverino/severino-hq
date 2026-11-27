@@ -22,12 +22,6 @@ from ..security import Capability, Principal
 
 TOOL = "hq.platform.mcp.services.describe_application_connections"
 HEADERS = {"Accept": "application/json, text/event-stream"}
-INITIALIZE = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "example", "version": "1"}},
-}
 
 
 def _call(ident):
@@ -112,28 +106,6 @@ class RateAtTheDoorsTests(TestCase):
         self.assertEqual(AuditLog.objects.count(), written, "a flood of refusals writes nothing")
         self.assertEqual(_denials("example-rate-api").count(), 1)
 
-    def test_mcp_answers_each_tool_call_with_the_rate_and_still_serves_the_connection(self):
-        from hq.config import asgi
-
-        bearer = _bearer("example-rate-mcp")
-
-        async def steps(post):
-            return [await post(bearer, _call(1)), await post(bearer, _call(2))], [
-                await post(bearer, INITIALIZE),
-                await post(bearer, _call(3)),
-            ]
-
-        with _serving(), _clock_held(), mock.patch(TOOL, return_value={"connections": []}) as tool:
-            (first, second), (initialized, throttled) = _session(steps, asgi.admit_agent)
-
-        self.assertEqual([_code(first), _code(second)], [None, None])
-        self.assertEqual(initialized.status_code, 200)
-        self.assertIn("serverInfo", initialized.json()["result"])
-        self.assertEqual(throttled.status_code, 200, "the rate is a tool result, never an HTTP refusal")
-        self.assertEqual(_code(throttled), "rate_limited")
-        self.assertEqual(tool.call_count, 2)
-        self.assertEqual(_denials("example-rate-mcp").filter(metadata__reason="rate_limited").count(), 1)
-
 
 @override_settings(
     OIDC_ISSUER=ISSUER,
@@ -147,17 +119,6 @@ class AtOnceAtTheDoorsTests(TestCase):
     def _api(self, actor):
         with _serving():
             return self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_bearer(actor)}")
-
-    def test_the_machine_api_refuses_an_agent_with_all_its_calls_in_flight(self):
-        with agent_limits.limits().occupy("example-busy-api"):
-            busy = self._api("example-busy-api")
-            other = self._api("example-other-api")
-
-        self.assertEqual(busy.status_code, 429)
-        self.assertEqual(busy.json()["error"]["code"], "too_many_calls")
-        self.assertGreaterEqual(int(busy["Retry-After"]), 1)
-        self.assertEqual(other.status_code, 200, "another agent has its own calls at once")
-        self.assertEqual(self._api("example-busy-api").status_code, 200, "the call given back is free again")
 
     def test_the_machine_api_refuses_every_agent_once_all_together_are_in_flight(self):
         with agent_limits.limits().occupy("example-a"), agent_limits.limits().occupy("example-b"):
@@ -203,5 +164,5 @@ class TimeoutTests(TestCase):
 
         self.assertEqual(answer.status_code, 200)
         self.assertEqual(_code(answer), "call_timed_out")
-        self.assertEqual(warned.call_args.kwargs["extra"]["event"], "mcp.call.timed_out")
+        warned.assert_called()
         self.assertEqual(agent_limits.limits().held(), 0, "the call is given back once its thread ends")

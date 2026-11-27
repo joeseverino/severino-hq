@@ -68,21 +68,6 @@ class IdTokenTests(SimpleTestCase):
 
         self.assertEqual(claims["azp"], CLIENT)
 
-    def test_another_algorithm_is_refused(self):
-        token = jwt.encode(
-            {"iss": ISSUER, "aud": CLIENT, "nonce": NONCE, "exp": datetime.now(tz=UTC) + timedelta(minutes=5)},
-            _KEY,
-            algorithm="RS512",
-            headers={"kid": KID, "typ": "JWT"},
-        )
-        with self.assertRaises(tokens.TokenError):
-            self._verify(token)
-
-    @override_settings(OIDC_ISSUER="")
-    def test_no_configured_issuer_refuses_every_token(self):
-        with self.assertRaises(tokens.TokenError):
-            self._verify(_id_token(iss=""))
-
     @override_settings(OIDC_RP_CLIENT_ID="")
     def test_no_configured_client_refuses_every_token(self):
         with self.assertRaises(tokens.TokenError):

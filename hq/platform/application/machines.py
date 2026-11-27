@@ -22,7 +22,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from .container_state import ContainerCount
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
-from .integration_specs import ListRead, ResourceSpec, typed_keys
+from .integration_specs import DetailRead, ListRead, ResourceSpec, typed_keys
 from .locate import Machines, host_of, index_of, observed_answers, points_at_host
 from .machine_aliases import same_machine
 from .resources import BoundedQuery
@@ -107,19 +107,6 @@ class Machine:
     @property
     def on_show(self) -> tuple[Running, ...]:
         return tuple(item for item in self.containers if not item.hidden)
-
-    @property
-    def other_declarations(self) -> tuple[str, ...]:
-        """Declarations on this machine that the container table does not show.
-
-        Every watched container is already a row below, named and linked, so
-        listing its key again in a summary card says the same thing twice and
-        makes that card the tallest thing on the page. What is left over is
-        worth a line: anything else that names this host.
-        """
-
-        watched = {item.watcher for item in self.containers if item.watcher}
-        return tuple(key for key in self.resources if key not in watched)
 
     @property
     def folded(self) -> tuple[Running, ...]:
@@ -703,9 +690,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every machine anything reported, its roles, addresses and what runs on it.",
             Capability.READ,
             listing=ListRead(derived_reads.list_machines, BoundedQuery, MachineRecord, fields=typed_keys(MachineRow)),
-            detail_handler=derived_reads.get_machine,
+            detail=DetailRead(derived_reads.get_machine, MachineRecord),
             identifier="name",
             web_route="control_plane:machines",
-            record_type=MachineRecord,
         ),
     )

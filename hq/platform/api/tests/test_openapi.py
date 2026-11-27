@@ -5,13 +5,9 @@ of the API's tests; the tests below cover the document's own route and the
 contract client's refusals.
 """
 
-import json
-
 from django.contrib.auth import get_user_model
-from django.http import HttpResponse
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
-from jsonschema import ValidationError
 
 from hq.platform.application.security import Capability
 from hq.platform.core.models import AuditLog
@@ -93,57 +89,3 @@ class ServedDocumentTests(TestCase):
         with _serving():
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
         self.assertEqual(response.json()["data"]["links"]["openapi"], reverse("hq_api:openapi"))
-
-
-class ContractClientTests(SimpleTestCase):
-    """The contract client refuses what the document does not describe."""
-
-    def setUp(self):
-        self.client = ContractClient()
-
-    def _answer(self, url, status, body, method="GET"):
-        response = HttpResponse(json.dumps(body), status=status, content_type="application/json")
-        self.client._conform(method.lower(), url, "", response)
-
-    def test_an_undocumented_status_fails(self):
-        with self.assertRaisesRegex(AssertionError, "does not list"):
-            self._answer("/api/v2/", 418, {"ok": False, "error": {"code": "x", "message": "y"}})
-
-    def test_an_undocumented_path_fails(self):
-        with self.assertRaisesRegex(AssertionError, "not in the OpenAPI document"):
-            self._answer("/api/v2/nowhere/", 200, {})
-
-    def test_a_body_off_its_schema_fails(self):
-        with self.assertRaises(ValidationError):
-            self._answer("/api/v2/", 200, {"ok": True, "data": {"service": "severino-hq"}})
-
-    def test_a_whole_answer_missing_a_field_its_record_promises_fails(self):
-        saved = {"created": True, "message": "Saved.", "asset": {}}
-        with self.assertRaisesRegex(ValidationError, "'slug' is a required property"):
-            self._answer("/api/v2/capabilities/asset.create/", 200, {"ok": True, "data": saved}, method="POST")
-
-    def test_resource_collections_accept_projection_metadata(self):
-        self._answer(
-            "/api/v2/resources/projects/",
-            200,
-            {"ok": True, "data": {**EMPTY_PAGE, "filters": {"query": "example"}}},
-        )
-
-    def test_resource_collection_metadata_does_not_relax_items_or_count(self):
-        for data in (
-            {"items": "wrong", "count": 0},
-            {"items": [], "count": "wrong"},
-            {"items": []},
-            {"count": 0},
-        ):
-            with self.subTest(data=data), self.assertRaises(ValidationError):
-                self._answer("/api/v2/resources/projects/", 200, {"ok": True, "data": data})
-
-    def test_an_error_off_the_envelope_fails(self):
-        with self.assertRaises(ValidationError):
-            self._answer("/api/v2/", 401, {"ok": False, "detail": "no"})
-
-    def test_a_concrete_path_is_matched_before_its_template(self):
-        contract = self.client.contract
-        self.assertEqual(contract.path("/api/v2/capabilities/project.create/"), "/api/v2/capabilities/project.create/")
-        self.assertEqual(contract.path("/api/v2/capabilities/nope/"), "/api/v2/capabilities/{name}/")

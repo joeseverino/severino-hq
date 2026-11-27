@@ -17,7 +17,14 @@ from hq.platform.application.answer_fields import (
     UpdatedAt,
 )
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
+from hq.platform.application.integration_specs import (
+    DetailRead,
+    ListFilter,
+    ListRead,
+    ListSort,
+    ListToggle,
+    ResourceSpec,
+)
 from hq.platform.application.record_fields import Notes, PublishedAt, PublishedUrl
 from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
@@ -108,7 +115,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 filters=FILTERS,
                 toggles=(NO_DOCS,),
             ),
-            detail_handler=content.get_content,
+            detail=DetailRead(content.get_content, ContentRecord),
             identifier="slug",
             search=SearchDefinition.of(
                 ContentItem,
@@ -117,6 +124,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="title",
             ),
             web_route="content:list",
-            record_type=ContentRecord,
         ),
     )

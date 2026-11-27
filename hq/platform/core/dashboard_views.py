@@ -17,7 +17,7 @@ from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
 from hq.platform.application.capabilities import command_spec
-from hq.platform.application.card_items import ListRow
+from hq.platform.application.card_items import ListRow, RowTitle
 from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.command_targets import CommandTargetOption
 from hq.platform.application.connection_setup import docs_url
@@ -168,7 +168,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         # MCP payload, and a transport contract must not carry a UI shape.
         content_rows = [
             ListRow(
-                link=entity_link(Kind.WRITEUP, item["slug"], label=item["title"]),
+                entity_link(Kind.WRITEUP, item["slug"], label=item["title"]),
                 meta=item["content_type_label"],
                 at=item["updated_at"],
             )
@@ -176,7 +176,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         ]
         project_rows = [
             ListRow(
-                link=entity_link("project", project["slug"], label=project["name"]),
+                entity_link("project", project["slug"], label=project["name"]),
                 detail=project["category_label"],
                 category=project["category"],
                 at=project["last_active_at"],
@@ -185,10 +185,12 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         ]
         published_rows = [
             ListRow(
-                title=item["title"],
+                RowTitle(
+                    item["title"],
+                    item["published_url"] or page_url(Kind.WRITEUP, item["slug"]),
+                    external=bool(item["published_url"]),
+                ),
                 at=item["published_at"] or item["updated_at"],
-                url=item["published_url"] or page_url(Kind.WRITEUP, item["slug"]),
-                external=bool(item["published_url"]),
             )
             for item in snapshot["recent_published"]
         ]
@@ -209,7 +211,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             # the card is drawn with the page.
             recent_contacts=[
                 ListRow(
-                    link=entity_link(Kind.MESSAGE, str(submission["id"]), label=submission.get("name", "")),
+                    entity_link(Kind.MESSAGE, str(submission["id"]), label=submission.get("name", "")),
                     detail=submission.get("status", ""),
                     at=moment(submission.get("created_at")),
                 )

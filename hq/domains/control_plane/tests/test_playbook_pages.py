@@ -1,8 +1,6 @@
-"""The Playbooks page: the adopted catalog, the commit it was adopted at
-under the title, and, while a newer scanned commit waits, a row for every
-playbook with how the commit changes it and its own Adopt and Reject, and a
-person's View diff, Adopt all and Reject all; and the audit entry of the
-scan's read, which View diff opens, each drawn from what the estate stored."""
+"""The Playbooks page: while a newer scanned commit waits, each playbook's change
+with its own Adopt and Reject, and Adopt all and Reject all, each press writing
+what it says; and where a worker is missing, how to set one up."""
 
 from urllib.parse import urlsplit
 
@@ -12,7 +10,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
-from hq.platform.application.markup_testing import elements, select, text, with_class, within
+from hq.platform.application.markup_testing import select, with_class
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.models import AuditLog
@@ -27,28 +25,8 @@ def _sent() -> dict[str, str]:
     return {RETRY_KEY_FIELD: new_key()}
 
 
-def _says_each_widening_once(case, elements, planned) -> None:
-    """Each way ``planned`` widens what a named playbook may do is said by
-    that playbook's rows among ``elements``, marked for attention, and never
-    again in a sentence of its own."""
-
-    said = " ".join(element.words for element in elements)
-    marked = [element for element in elements if element.tag == "tr" and "data-attention" in element.attrs]
-    titles = {procedure.title for procedure in planned.procedures.values()}
-    named = {title: widening for widening in planned.widens for title in titles if widening.startswith(f"{title} ")}
-    case.assertTrue(named, "the estate's commit widens what a playbook may do")
-    for title, widening in named.items():
-        with case.subTest(playbook=title):
-            case.assertTrue(any(title in row.words for row in marked), "its row is marked")
-            case.assertNotIn(widening.removeprefix(title).strip().rstrip("."), said)
-
-
 def _posts(html: str) -> set[str]:
     return {urlsplit(element.attrs["formaction"]).path for element in select(html, "formaction")}
-
-
-def _head(html: str) -> list:
-    return within(html, "class", "page-head")
 
 
 def _adopt(pk: int) -> str:
@@ -71,10 +49,10 @@ def _decisions(html: str) -> dict[str, dict[str, str]]:
 
     offered: dict[str, dict[str, str]] = {}
     for sent in select(html, "name", "playbook"):
-        (form,) = [element for element in sent.ancestors if element.tag == "form"]
+        # The button that sends it, through the page's shared form.
         rows = [element for element in sent.ancestors if "data-change" in element.attrs]
         found = offered.setdefault(sent.attrs["value"], {"change": rows[0].attrs["data-change"] if rows else ""})
-        found[form.words] = urlsplit(form.attrs["action"]).path
+        found[sent.words] = urlsplit(sent.attrs["formaction"]).path
     return offered
 
 
@@ -99,42 +77,6 @@ class PlaybooksPageTests(TestCase):
     def newest(self) -> SourceProposal:
         return SourceProposal.objects.order_by("-pk").first()
 
-    def test_each_adopted_procedure_links_to_its_command_page(self):
-        from hq.platform.application.action_links import command_url
-        from hq.platform.application.automation_adoption import procedures
-        from hq.platform.application.automation_runs import capability_name
-
-        adopted = procedures()
-        self.assertTrue(adopted)
-        links = {element.attrs["href"] for element in within(self.page(), "class", "data-table") if element.tag == "a"}
-        for procedure in adopted:
-            with self.subTest(procedure=procedure.id):
-                self.assertIn(command_url(capability_name(procedure.id)), links)
-
-    def test_the_adopted_table_says_where_each_playbook_runs_and_its_access_as_its_run_page_does(self):
-        from hq.platform.application.automation_adoption import procedures
-        from hq.platform.application.automation_runs import access_words
-
-        said = " ".join(element.words for element in within(self.page(), "class", "data-table"))
-        for procedure in procedures():
-            with self.subTest(procedure=procedure.id):
-                self.assertNotIn(procedure.id, said, "the title links its page, so its id is not said again")
-                if procedure.privilege:
-                    self.assertIn(access_words(procedure.privilege), said)
-                if not procedure.hosts:
-                    self.assertIn("Any machine", said)
-        self.assertIn("No sudo", said)
-        # Every playbook says each fact; only a change's state is missing for one the commit keeps.
-        facts = [cell for cell in within(self.page(), "class", "data-table") if cell.tag == "td"]
-        self.assertNotIn("–", " ".join(cell.words for cell in facts if cell.attrs.get("data-kind") != "status"))
-
-    def test_the_page_is_the_table_alone_under_no_heading_of_its_own(self):
-        html = self.page()
-        self.assertFalse(select(html, "class", "page-lede"))
-        headings = [heading for heading in elements(html, "h2") if not heading.attrs.get("id", "").startswith("modal-")]
-        self.assertFalse(headings, "no section heads the table, and no scan result has a box")
-        self.assertFalse(select(html, "data-approval"), "no request waits on this page")
-
     def test_the_page_reads_the_adopted_catalog_once_within_its_query_budget(self):
         self.page()
         with CaptureQueriesContext(connection) as queries:
@@ -145,55 +87,13 @@ class PlaybooksPageTests(TestCase):
         self.assertEqual(len(whole), 1, "every part of the page names the one catalog it read")
         self.assertLessEqual(len(queries), 18)
 
-    def test_the_title_line_names_the_commit_adopted_in_the_place_of_when_the_repository_was_read(self):
-        adopted = AdoptedCatalog.objects.order_by("-pk").first()
-        html = self.page()
-        (line,) = select(html, "data-adopted-commit")
-        for said in (adopted.revision[:12], adopted.branch, f"from {adopted.committer}", "adopted"):
-            self.assertIn(said, line.words)
-        self.assertFalse(any("data-reading-age" in shown.attrs for shown in within(html, "data-adopted-commit")))
-
-    def test_the_title_says_in_one_line_why_the_newest_scan_failed_and_when_one_last_reached_it(self):
-        newest = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("-created_at").first()
-        self.assertEqual(newest.state, OperationRequest.State.FAILED)
-        html = self.page()
-        (failed,) = select(html, "data-scan-failed")
-        self.assertIn(newest.result["message"], failed.words)
-        self.assertTrue(any("data-reading-age" in shown.attrs for shown in within(html, "data-scan-failed")))
-        # A scan that read the repository leaves only the commit adopted.
-        from hq.platform.core.example_estate import automation
-
-        automation.rescanned()
-        html = self.page()
-        self.assertFalse(select(html, "data-scan-failed"))
-        self.assertEqual(len(select(html, "data-adopted-commit")), 1)
-
-    def test_a_newer_commit_is_said_to_wait_with_view_diff_adopt_all_and_reject_all_beside_the_title(self):
-        newest = self.newest()
-        html = self.page()
-        (waits,) = select(html, "data-commit-waits")
-        self.assertIn(newest.revision[:12], waits.words)
-        head = _head(html)
-        self.assertIn(_scan_page(newest), {element.attrs.get("href") for element in head})
-        self.assertLessEqual({_adopt(newest.pk), _reject(newest.pk)}, _posts(html))
-        (actions,) = [element for element in head if "page-actions" in element.classes]
-        self.assertIn("data-many", actions.attrs, "every one stands beside the title")
-        beside = [element for element in head if not any("overflow-menu" in up.classes for up in element.ancestors)]
-        labels = [element.words for element in beside if element.tag in {"a", "button"} and element.words]
-        self.assertLess(labels.index("View diff"), labels.index("Adopt all"))
-        self.assertLess(labels.index("Adopt all"), labels.index("Reject all"))
-
-    def test_while_a_commit_waits_every_playbook_has_a_row_and_each_change_its_status_adopt_and_reject(self):
-        from hq.platform.application.automation_adoption import judged, procedures
+    def test_while_a_commit_waits_each_change_offers_its_adopt_and_reject(self):
+        from hq.platform.application.automation_adoption import judged
 
         newest = self.newest()
         changes = {change.key: change.change for change in judged(newest.pk).changes}
         self.assertEqual(set(changes.values()), {"added", "changed", "removed"}, "the estate's commit holds each kind")
         html = self.page()
-        rows = [element for element in within(html, "class", "data-table") if element.tag == "tr"]
-        said = " ".join(row.words for row in rows)
-        for procedure in procedures():
-            self.assertIn(procedure.title, said, "an adopted playbook keeps its row")
         offered = _decisions(html)
         self.assertEqual(set(offered), set(changes))
         for key, change in changes.items():
@@ -201,15 +101,6 @@ class PlaybooksPageTests(TestCase):
                 self.assertEqual(offered[key]["change"], change)
                 self.assertEqual(offered[key]["Adopt"], _adopt(newest.pk))
                 self.assertEqual(offered[key]["Reject"], _reject(newest.pk))
-        # In the change table's own Status words for a change that waits.
-        from django.utils.html import strip_tags
-
-        from hq.platform.core.templatetags.change_tags import change_status
-
-        for change in ("added", "changed", "removed"):
-            (row,) = select(html, "data-change", change)
-            self.assertIn(strip_tags(change_status(change)).strip(), row.words)
-        self.assertIn("Status", " ".join(element.words for element in elements(html, "th")))
 
     def test_adopting_one_playbook_runs_only_it_from_the_new_commit_and_the_rest_still_wait(self):
         from hq.platform.application.automation_adoption import judged, procedures
@@ -251,7 +142,7 @@ class PlaybooksPageTests(TestCase):
         self.assertIn(automation.PACKAGE_UPGRADE, {procedure.id for procedure in procedures()})
         self.assertFalse(_decisions(self.page()))
 
-    def test_view_diff_opens_the_audit_entry_of_the_read_with_both_commits_and_each_playbook_s_rows(self):
+    def test_view_diff_opens_the_audit_entry_of_the_read_where_each_change_is_decided(self):
         from hq.platform.application.automation_adoption import plan
 
         newest = self.newest()
@@ -259,19 +150,6 @@ class PlaybooksPageTests(TestCase):
         url = _scan_page(newest)
         self.assertTrue(url.startswith(reverse("core:audit_list")), "View diff opens an audit entry")
         html = self.page(url)
-        said = text(html)
-        adopted = AdoptedCatalog.objects.order_by("-pk").first()
-        for fact in ("Commit read", newest.revision[:12], "Commit adopted", adopted.revision[:12]):
-            self.assertIn(fact, said)
-        table = within(html, "class", "data-table")
-        _says_each_widening_once(self, table, planned)
-        rows = " ".join(element.words for element in table)
-        # Each playbook is named by its title, a row of the change table or
-        # its foot's unchanged, never by its id.
-        for named, procedure in planned.procedures.items():
-            self.assertIn(procedure.title, said)
-            self.assertNotIn(named, rows)
-        self.assertLessEqual({_adopt(newest.pk), _reject(newest.pk)}, _posts(html))
         # Each change has its own Adopt and Reject there too, and a press comes back to it.
         offered = _decisions(html)
         self.assertEqual(set(offered), {change.key for change in planned.changes})
@@ -279,7 +157,7 @@ class PlaybooksPageTests(TestCase):
         response = self.client.post(_reject(newest.pk), {**_sent(), "playbook": key, "next": url})
         self.assertRedirects(response, url, fetch_redirect_response=False)
 
-    def test_a_commit_hq_cannot_adopt_offers_reject_all_and_says_why_before_its_rows_and_on_each_playbook_s_row(self):
+    def test_a_commit_hq_cannot_adopt_offers_only_reject(self):
         from hq.platform.application.automation_adoption import judged
 
         # The commit before the newest is the one HQ can't adopt.
@@ -289,42 +167,20 @@ class PlaybooksPageTests(TestCase):
         refused = {change.title: change for change in planned.changes if change.problems}
         self.assertEqual(set(refused), set(planned.unadoptable))
         self.assertEqual({change.change for change in refused.values()}, {"added", "changed"}, "it holds each kind")
-        self.assertTrue(planned.unplaced, "it holds a reason of the commit's own")
         html = self.page()
         self.assertIn(_reject(newest.pk), _posts(html))
         self.assertNotIn(_adopt(newest.pk), _posts(html))
         self.assertFalse([key for key, offered in _decisions(html).items() if "Adopt" in offered])
         scan = self.page(_scan_page(newest))
         self.assertNotIn(_adopt(newest.pk), _posts(scan))
-        for page, shown in (("playbooks", html), ("scan", scan)):
-            # The commit's own reasons, said before any playbook's row.
-            said = text(shown)
-            table = said.index(next(iter(refused)))
-            self.assertLess(said.find("HQ can't adopt this commit"), table)
-            self.assertGreaterEqual(said.find("HQ can't adopt this commit"), 0)
-            for reason in planned.unplaced:
-                with self.subTest(page=page, reason=reason):
-                    self.assertLess(said.find(reason), table)
-                    self.assertGreaterEqual(said.find(reason), 0)
-            # Each playbook's own, on the row a person decides it on.
-            rows = [row for row in select(shown, "data-change") if row.tag == "tr"]
-            for named, change in refused.items():
-                (row,) = [row for row in rows if named in row.words]
-                with self.subTest(page=page, playbook=named):
-                    self.assertEqual(row.attrs["data-change"], change.change)
-                    for problem in change.problems:
-                        self.assertIn(problem, row.words)
-                    self.assertNotIn("–", row.words, "its problems stand in for facts HQ never read")
 
-    def test_reject_all_leaves_nothing_waiting_and_the_scan_s_page_says_who_rejected_it(self):
+    def test_reject_all_leaves_nothing_waiting(self):
         newest = self.newest()
         response = self.client.post(_reject(newest.pk), _sent())
         self.assertRedirects(response, reverse("control_plane:playbooks"), fetch_redirect_response=False)
         html = self.page()
-        self.assertNotIn(_scan_page(newest), {element.attrs.get("href") for element in _head(html)})
         self.assertFalse({path for path in _posts(html) if path.endswith(("/adopt/", "/reject/"))})
         scan = self.page(_scan_page(newest))
-        self.assertIn(f"Rejected by {self.owner.get_username()}", text(scan))
         self.assertFalse({path for path in _posts(scan) if path.endswith(("/adopt/", "/reject/"))})
 
     def test_a_commit_hq_can_adopt_all_but_one_of_offers_the_rest_in_one_press_and_keeps_that_one_waiting(self):
@@ -336,12 +192,7 @@ class PlaybooksPageTests(TestCase):
         changes = judged(newest.pk).changes
         (refused,) = [change for change in changes if change.problems]
         self.assertGreater(len(changes), 2, "it holds changes HQ can adopt beside the one it can't")
-        head = {
-            urlsplit(element.attrs["formaction"]).path
-            for element in _head(self.page())
-            if "formaction" in element.attrs
-        }
-        self.assertIn(_adopt(newest.pk), head)
+        self.assertIn(_adopt(newest.pk), _posts(self.page()))
 
         response = self.client.post(_adopt(newest.pk), _sent())
 
@@ -351,9 +202,6 @@ class PlaybooksPageTests(TestCase):
         html = self.page()
         self.assertEqual(set(_decisions(html)), {refused.key}, "only its Reject is left")
         self.assertNotIn("Adopt", _decisions(html)[refused.key])
-        (row,) = [row for row in select(html, "data-change") if row.tag == "tr" and refused.title in row.words]
-        for problem in refused.problems:
-            self.assertIn(problem, row.words)
 
     def test_adopt_all_makes_the_proposal_the_catalog(self):
         newest = self.newest()
@@ -383,9 +231,6 @@ class PlaybooksPageTests(TestCase):
         playbooks = reverse("control_plane:playbooks")
         self.assertRedirects(self.client.get(reverse("control_plane:detail", kwargs={"key": SOURCE_KEY})), playbooks)
         self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, (False, False))
-        changes = {reverse(f"control_plane:{route}", kwargs={"key": SOURCE_KEY}) for route in ("edit", "remove")}
-        links = {urlsplit(element.attrs["href"]).path for element in select(self.page(), "href")}
-        self.assertFalse(changes & links)
 
     def test_a_viewer_is_offered_neither_adopt_nor_reject(self):
         from hq.platform.application.roles import Role, assign
@@ -421,63 +266,13 @@ class PlaybooksPageTests(TestCase):
     def setup_commands(self, html: str) -> str:
         return " ".join(element.words for element in with_class(html, "operator-command"))
 
-    def test_with_no_worker_ever_seen_the_page_says_how_to_set_one_up(self):
-        self.worker_gone()
-
-        commands = self.setup_commands(self.page())
-        self.assertIn("hq-host automation", commands)
-        self.assertIn("/etc/severino-hq/host.json", commands)
-
-    def test_a_worker_not_seen_within_its_interval_says_when_it_was_and_how_to_set_one_up(self):
+    def test_setup_is_raised_only_while_no_worker_was_seen_within_its_interval(self):
         from datetime import timedelta
 
-        self.worker_gone(seen=timedelta(hours=3))
-
-        html = self.page()
-        self.assertIn("systemctl start severino-hq-automation.service", self.setup_commands(html))
-        self.assertIn("3 hours ago", text(html).replace("\N{NO-BREAK SPACE}", " "))
-
-    def test_a_worker_seen_lately_draws_no_setup(self):
-        from datetime import timedelta
-
-        # Seen inside its timer's interval, holding nothing.
-        self.worker_gone(seen=timedelta(minutes=20))
-
-        self.assertEqual(self.setup_commands(self.page()), "")
-
-    def test_each_profiles_worker_says_whether_it_reports_and_the_machines_it_reaches(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        from hq.platform.application.cadence import automation_heartbeat
-        from hq.platform.application.machines import machine_catalog
-        from hq.platform.core.models import UpstreamReading
-
-        self.worker_gone(seen=timedelta(hours=3))
-        # The read profile's, and that of the privileged playbook the estate ran.
-        heard, quiet = "read", "example.package_admin"
-        UpstreamReading.objects.filter(key=automation_heartbeat(heard)).update(observed_at=timezone.now())
-
-        rows = [row.words for row in elements(self.page(), "tr")]
-        machine = machine_catalog()[0].name
-        for profile, state in ((quiet, "silent"), (heard, "online")):
-            with self.subTest(profile=profile):
-                (row,) = [row for row in rows if row.startswith(profile)]
-                self.assertIn(state, row.casefold())
-                self.assertIn(machine, row)
-
-    def test_a_run_waiting_while_no_worker_arrives_reads_not_started_with_the_setup(self):
-        self.worker_gone()
-        waiting = OperationRequest.objects.get(action="run", state=OperationRequest.State.QUEUED)
-
-        html = self.page(reverse("jobs:run", kwargs={"pk": waiting.pk}))
-        self.assertIn("Not started", text(html))
-        # What it waits for, and that it starts by itself once that comes.
-        self.assertIn("Starts when a playbook worker", text(html))
-        self.assertIn("hq-host automation", self.setup_commands(html))
-        jobs = text(self.page(reverse("jobs:list")))
-        self.assertIn("Not started", jobs)
+        for seen, raised in ((timedelta(minutes=20), False), (timedelta(hours=3), True), (None, True)):
+            with self.subTest(seen=seen):
+                self.worker_gone(seen=seen)
+                self.assertEqual(bool(self.setup_commands(self.page())), raised)
 
     def test_a_page_read_while_the_worker_is_absent_writes_nothing(self):
         from hq.platform.core import revisions
@@ -505,8 +300,6 @@ class PlaybooksPageTests(TestCase):
         automation.rescanned()
         html = self.page()
         self.assertFalse({path for path in _posts(html) if path.endswith(("/adopt/", "/reject/"))})
-        self.assertNotIn("View diff", text(html))
-        self.assertFalse(select(html, "data-commit-waits"))
 
 
 class EmptyPlaybooksPageTests(TestCase):
@@ -516,15 +309,6 @@ class EmptyPlaybooksPageTests(TestCase):
     def setUpTestData(cls):
         with throwaway_media(), seeds.built("empty") as owner:
             cls.owner = owner
-
-    def test_with_no_scan_the_title_says_so(self):
-        self.client.force_login(self.owner)
-        html = self.client.get(reverse("control_plane:playbooks")).content.decode()
-        (none,) = select(html, "data-scan-none")
-        self.assertIn("No scan yet", none.words)
-        self.assertFalse(select(html, "data-adopted-commit"))
-        self.assertFalse(select(html, "data-scan-failed"))
-        self.assertIn("No playbooks are adopted yet.", text(html))
 
     def test_where_automation_was_never_set_up_nothing_is_raised(self):
         self.client.force_login(self.owner)

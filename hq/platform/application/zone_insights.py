@@ -24,7 +24,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from hq.platform.application.labels import dotted, lower_first, sentence
 from hq.platform.application.routes import reverse
 
-from .card_items import ListRow
+from .card_items import Badge, ListRow, RowTitle
 from .entity_links import entity_link
 from .expiry import days_until
 from .facts import Subject, inventory_about, inventory_records, readings as stored_readings, refusals_about
@@ -98,10 +98,8 @@ def services(zone) -> ZoneInsight | None:
         url=reverse("control_plane:services"),
         rows=tuple(
             ListRow(
-                title=member.hostname,
-                url=member.url,
-                status=member.status,
-                badge=member.status_label,
+                RowTitle(member.hostname, member.url),
+                state=Badge(member.status_label, member.status) if member.status_label else None,
             )
             for member in members
         ),

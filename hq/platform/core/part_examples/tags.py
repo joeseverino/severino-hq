@@ -518,8 +518,7 @@ CHANGE_TABLE_STATES = {
 
 CONTROL_LABEL_STATES = {
     # A control label ({% control_label %}) with no control, naming the answer
-    # that follows it; the filter bar above draws it for its controls
-    # (CatalogTests in test_part_tags).
+    # that follows it; the filter bar above draws it for its controls.
     "states": Example(
         '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
         "<p><strong>Example provider</strong></p>{% endcard %}"
@@ -656,7 +655,7 @@ ROW_ACTIONS = Example(
                     (Cell("example-01"),),
                     actions=(
                         PageAction._built(
-                            label="Read", url="/example/1/status/", method="post", value="read", field="status"
+                            label="Read", url="/example/1/status/", method="post", sends={"status": "read"}
                         ),
                         PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
                     ),
@@ -867,6 +866,19 @@ DATA_TABLE_STATES = {
 
 
 DOT = Example("{{ count }}{% dot %}{{ age }}", context={"count": "3 example hosts", "age": "2 days ago"})
+# A mark written after a space, in a line as narrow as its longest word, so
+# every place it may break, breaks: the mark stays on its part's line.
+DOT_STATES = {
+    "after-a-space": Example(
+        '<p style="inline-size: min-content">{{ count }}\n  {% dot %}{{ age }}</p>',
+        context={"count": "12 examples", "age": "2 days ago"},
+    ),
+}
+ARROW_STATES = {
+    "after-a-space": Example(
+        '<p style="inline-size: min-content">Each example host: <a href="/example/">all of them {% arrow %}</a></p>'
+    ),
+}
 
 
 ENTITY = Example('{% entity "machine"|entity_of:name %}', context={"name": "example-host-01"})
@@ -884,6 +896,11 @@ ENTITY_STATES = {
 PRESENT = Example(
     "{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}", context={"repo": {"release": "v1.4.2"}}
 )
+PRESENT_STATES = {
+    # A value that is not there is the one missing mark; a zero is a value.
+    "missing": Example(PRESENT.template, context={"repo": {"release": ""}}),
+    "zero": Example(PRESENT.template, context={"repo": {"release": 0}}),
+}
 
 
 REFERENCE = Example(

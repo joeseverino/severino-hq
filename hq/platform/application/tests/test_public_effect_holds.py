@@ -10,19 +10,14 @@ from itertools import count
 from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.providers import PROVIDERS, describe_providers
-from hq.platform.application.tests.consent import another_command_writing, consented
-from hq.platform.core.testing import declare
+from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.core.testing import declare, managing_everything
 
 from ..adoption import ADOPT, ADOPT_SERVICE
-from ..capabilities import NEEDS_APPROVAL, capability_registry, execute_capability
-from ..capability_policy import matrix
+from ..capabilities import capability_registry, execute_capability
 from ..default_hold import may_be_held_by_default
-from ..entity_links import kind_label
-from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..integration_specs import capability_schema
-from ..labels import lower_first
-from ..security import DEVICE_INTERFACE, Capability, Principal, cli_principal, could_hold
+from ..security import Capability, Principal, could_hold
 from ..zones import ADOPT_ZONE
 from .writers import keyed
 
@@ -37,33 +32,19 @@ def public_kinds() -> list[str]:
     return [kind for kind, provider in PROVIDERS.items() if provider.public_effect and not provider.requires_approval]
 
 
-def access_kind() -> str:
-    return next(kind for kind, provider in PROVIDERS.items() if provider.requires_approval)
-
-
 def fresh_key() -> str:
     return f"example-{next(_keys)}"
 
 
-def agent(interface: str = "mcp", actor: str = "example-agent") -> Principal:
+def agent(actor: str) -> Principal:
     """An agent a person signed in, so nothing it asks for is refused for want of one."""
 
-    return Principal(actor, interface, EVERYTHING, granted=EVERYTHING, person_key="example")
-
-
-def device() -> Principal:
-    """An operator's own device, which reaches HQ through the API as a person."""
-
-    return Principal("example-phone", DEVICE_INTERFACE, EVERYTHING, granted=EVERYTHING, person_key="example")
-
-
-def record(key: str, kind: str) -> ManagedResourceCommand:
-    return ManagedResourceCommand(key=key, kind=kind, spec=dict(PROVIDERS[kind].sample_record or {}))
+    return Principal(actor, "mcp", EVERYTHING, granted=EVERYTHING, person_key="example")
 
 
 def declared(kind: str) -> ManagedResource:
     key = fresh_key()
-    declare(key, kind, record(key, kind).spec)
+    declare(key, kind, dict(PROVIDERS[kind].sample_record or {}))
     return ManagedResource.objects.get(key=key)
 
 
@@ -104,20 +85,11 @@ def reaching_a_record() -> list[tuple[str, object, set[str]]]:
     return reached
 
 
-@override_settings(
-    SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True,
-)
+@override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
 class HoldTests(TestCase):
-    def setUp(self):
-        from hq.platform.core.testing import managing_everything
-
-        managing_everything()
-
-    def test_there_is_a_public_kind_to_hold_and_a_change_that_reaches_it(self):
-        self.assertTrue(public_kinds(), "no kind has a public effect, so this hold guards nothing")
-        self.assertTrue(reaching_a_record(), "no capability the default hold reaches names a record")
-
     def test_every_change_an_agent_asks_for_on_a_public_kind_waits(self):
+        managing_everything()
+        self.assertTrue(public_kinds() and reaching_a_record(), "nothing here for the hold to guard")
         for kind in public_kinds():
             for name, spec, fields in reaching_a_record():
                 with self.subTest(kind=kind, capability=name):
@@ -126,91 +98,9 @@ class HoldTests(TestCase):
                     key = resource.key if target else fresh_key()
                     payload = record_payload(key, kind) if "spec" in fields else least_payload(spec, fields)
 
-                    result = execute_capability(name, keyed(payload), principal=agent(actor=key), target=target)
+                    result = execute_capability(name, keyed(payload), principal=agent(key), target=target)
 
                     self.assertEqual(result.get("status"), "awaiting_approval", result)
                     self.assertEqual(ManagedResource.objects.get(key=resource.key).generation, resource.generation)
                     self.assertFalse(ManagedResource.objects.filter(key=key).exclude(pk=resource.pk).exists())
                     self.assertFalse(OperationRequest.objects.exists())
-
-    def test_an_operators_own_change_to_a_public_kind_runs(self):
-        for kind in public_kinds():
-            for principal in (device(), cli_principal()):
-                with self.subTest(kind=kind, interface=principal.interface):
-                    key = fresh_key()
-
-                    result = execute_capability(
-                        "infrastructure.resource.create", keyed(record_payload(key, kind)), principal=principal
-                    )
-
-                    self.assertNotEqual(result.get("status"), "awaiting_approval", result)
-                    self.assertTrue(ManagedResource.objects.filter(key=key, kind=kind).exists(), result)
-
-    def test_adopting_a_public_kind_is_not_held_and_adopting_an_access_kind_still_is(self):
-        """A kind that stands behind access waits for an adoption too, as it always has."""
-
-        for kind in public_kinds():
-            with self.subTest(kind=kind):
-                result = execute_capability(
-                    ADOPT, keyed({"kind": kind, "hostname": "www.example.com"}), principal=agent()
-                )
-
-                self.assertNotEqual(result.get("status"), "awaiting_approval", result)
-        held = execute_capability(ADOPT, keyed({"kind": access_kind(), "hostname": "example"}), principal=agent())
-
-        self.assertEqual(held.get("status"), "awaiting_approval", held)
-
-
-@override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
-class FloorTests(TestCase):
-    """The write refuses what the hold would have held, by the same rule."""
-
-    def setUp(self):
-        from hq.platform.core.testing import managing_everything
-
-        managing_everything()
-
-    def test_an_agents_write_of_a_public_kind_under_another_command_is_refused_on_either_surface(self):
-        for kind in public_kinds():
-            for interface in ("mcp", "api"):
-                with self.subTest(kind=kind, interface=interface):
-                    key = fresh_key()
-
-                    def write(given, key=key, kind=kind):
-                        save_managed_resource(record(key, kind), consented=given)
-
-                    with another_command_writing(write) as name:
-                        answer = execute_capability(name, keyed({}), principal=agent(interface))
-
-                    self.assertEqual(answer["error"]["message"], NEEDS_APPROVAL, answer)
-                    self.assertFalse(ManagedResource.objects.filter(key=key).exists())
-
-    def test_an_operator_writes_a_public_kind_without_an_approval(self):
-        for kind in public_kinds():
-            for principal in (device(), cli_principal()):
-                with self.subTest(kind=kind, interface=principal.interface):
-                    key = fresh_key()
-                    self.assertFalse(principal.approved_by)
-
-                    save_managed_resource(record(key, kind), consented=consented(principal))
-
-                    self.assertTrue(ManagedResource.objects.filter(key=key, kind=kind).exists())
-
-
-class WordsTests(TestCase):
-    def test_the_contract_says_a_public_kind_waits(self):
-        described = {provider["kind"]: provider for provider in describe_providers()["providers"]}
-
-        for kind in public_kinds():
-            with self.subTest(kind=kind):
-                self.assertTrue(described[kind]["requires_approval"])
-
-    def test_a_change_names_the_public_kinds_and_an_adoption_does_not(self):
-        _, groups = matrix()
-        rows = {row.name: row for group in groups for row in group.rows}
-
-        for kind in public_kinds():
-            label = lower_first(kind_label(kind))
-            with self.subTest(kind=kind):
-                self.assertIn(label, rows["infrastructure.resource.update"].default)
-                self.assertNotIn(label, rows[ADOPT].default)

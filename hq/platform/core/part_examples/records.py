@@ -13,7 +13,7 @@ lazy from hq.platform.application.approvals import DECISIONS, _decision_link
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.cadence import CONTROLLER_REFRESH
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
-lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
+lazy from hq.platform.application.card_items import Badge, Insight, ListRow, RowTitle, Timeline, TimelineItem
 lazy from hq.platform.application.connection_context import Read
 lazy from hq.platform.application.credential_sight import Sight
 lazy from hq.platform.application.dashboard import finding_rows
@@ -218,8 +218,8 @@ PROBLEMS_STATES = {
 RECORD_LIST = Example(
     context=lambda: {
         "rows": [
-            ListRow("example-one", url="/example/one/", detail="Example access, read only"),
-            ListRow("example-two", url="/example/two/", detail="Example access, read only"),
+            ListRow(RowTitle("example-one", "/example/one/"), detail="Example access, read only"),
+            ListRow(RowTitle("example-two", "/example/two/"), detail="Example access, read only"),
         ]
     },
 )
@@ -234,29 +234,36 @@ RECORD_LIST_STATES = {
         lambda: {
             "rows": [
                 ListRow(
-                    "Example savings",
+                    RowTitle("Example savings"),
                     detail="3 example accounts",
                     actions=(
                         PageAction._built(
-                            label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                            label="↑",
+                            url="/example/group/",
+                            method="post",
+                            sends={"action": "up"},
+                            title="Move up",
+                            disabled=True,
                         ),
                         PageAction._built(
-                            label="↓", url="/example/group/", method="post", value="down", title="Move down"
+                            label="↓", url="/example/group/", method="post", sends={"action": "down"}, title="Move down"
                         ),
                         PageAction._built(
-                            label="Remove", url="/example/group/", method="post", value="delete", danger=True
+                            label="Remove",
+                            url="/example/group/",
+                            method="post",
+                            sends={"action": "delete"},
+                            danger=True,
                         ),
                     ),
                 ),
                 ListRow(
-                    "Example checking",
-                    url="/example/checking/",
-                    status=Tone.ATTENTION,
-                    badge="Needs review",
+                    RowTitle("Example checking", "/example/checking/"),
                     meta="2 example accounts",
                     at=date(2026, 11, 2),
+                    state=Badge("Needs review", Tone.ATTENTION),
                 ),
-                ListRow("Example docs", url="https://example.com/", external=True),
+                ListRow(RowTitle("Example docs", "https://example.com/", external=True)),
             ]
         },
     ),
@@ -268,11 +275,11 @@ RECORD_LIST_STATES = {
         lambda: {
             "rows": [
                 ListRow(
-                    link=EntityLink("example-host-one", "/example/host/", kind="machine", kind_label="machine"),
+                    EntityLink("example-host-one", "/example/host/", kind="machine", kind_label="machine"),
                     meta="An example note",
                 ),
                 ListRow(
-                    link=EntityLink(
+                    EntityLink(
                         "An example document with a title long enough to wrap",
                         "/example/document/",
                         kind="document",
@@ -282,7 +289,7 @@ RECORD_LIST_STATES = {
                     at=date(2026, 11, 2),
                 ),
                 ListRow(
-                    link=EntityLink("Example project", "/example/project/", kind="project", kind_label="project"),
+                    EntityLink("Example project", "/example/project/", kind="project", kind_label="project"),
                     detail="Homelab",
                     category="homelab",
                     at=date(2026, 11, 3),
@@ -298,14 +305,13 @@ RECORD_LIST_STATES = {
         '{% include "partials/_record_list.html" with whole_rows=True %}{% endsection %}',
         lambda: {
             "rows": [
-                ListRow("Example host one", url="/example/host/", detail="Example machine", chips=("Running",)),
+                ListRow(RowTitle("Example host one", "/example/host/"), detail="Example machine", chips=("Running",)),
                 ListRow(
-                    "Example connection",
-                    url="/example/connection/",
+                    RowTitle("Example connection", "/example/connection/"),
                     detail="Reads the example store's accounts, balances and the transactions under them",
                     chips=("Reads accounts", "Reads balances", "Reads transactions"),
                 ),
-                ListRow("Example check", detail="An example check with no page"),
+                ListRow(RowTitle("Example check"), detail="An example check with no page"),
             ]
         },
     ),
@@ -317,15 +323,13 @@ RECORD_LIST_STATES = {
         lambda: {
             "rows": [
                 ListRow(
-                    "Example backup host",
-                    url="/example/host/",
+                    RowTitle("Example backup host", "/example/host/"),
                     detail="Machine",
                     at=date(2026, 11, 2),
                     snippet=(("Runs the nightly ", False), ("backup", True), ("s for example-host-one.", False)),
                 ),
                 ListRow(
-                    "An example note with a long title that wraps on a phone",
-                    url="/example/note/",
+                    RowTitle("An example note with a long title that wraps on a phone", "/example/note/"),
                     detail="Note",
                     snippet=(
                         ("The example ", False),
@@ -341,8 +345,7 @@ RECORD_LIST_STATES = {
                     ),
                 ),
                 ListRow(
-                    "Example audit entry",
-                    url="/example/audit/",
+                    RowTitle("Example audit entry", "/example/audit/"),
                     snippet=(("enabled: False to True at 2026-11-02 09:30, ", False), ("backup", True)),
                 ),
             ]
@@ -445,8 +448,7 @@ MONTH_GRID_STATES = {
             "calendar": _month_gone_by(date(2026, 5, 1)),
             "rows": [
                 ListRow(
-                    f"Example project {number}",
-                    url=f"/example/project-{number}/",
+                    RowTitle(f"Example project {number}", f"/example/project-{number}/"),
                     detail="Software",
                     at=date(2026, 1, 20 - number),
                 )

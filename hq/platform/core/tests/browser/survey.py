@@ -24,11 +24,15 @@ from hq.platform.core.tests.browser.reading import _probe
 
 def _declared() -> dict[str, Check]:
     """Every probe module's checks, in the order of its name and then its
-    declarations, so every run collects one order."""
+    declarations, so every run collects one order. A name two modules
+    declare is refused, since the later would silently replace the earlier."""
 
     found: dict[str, Check] = {}
     for module in sorted(info.name for info in pkgutil.iter_modules(probes.__path__)):
-        found |= getattr(importlib.import_module(f"{probes.__name__}.{module}"), "CHECKS", {})
+        declared = getattr(importlib.import_module(f"{probes.__name__}.{module}"), "CHECKS", {})
+        if twice := sorted(found.keys() & declared.keys()):
+            raise ValueError(f"{module} declares checks another probe module does: {twice}")
+        found |= declared
     return found
 
 

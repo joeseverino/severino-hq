@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
-from typing import Annotated, Any, Literal, TypedDict, cast
+from typing import Annotated, Any, Final, Literal, TypedDict, cast
 
 from django.db import transaction
 from django.db.models import QuerySet
@@ -58,7 +58,7 @@ from .managed_records import (
     RequestedInterface,
 )
 from .projection import iso
-from .record_errors import PolicyError, RecordNotFound, Sentence
+from .record_errors import PolicyError, RecordNotFound, Sentence, worded
 from .record_saves import Created, row
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
@@ -612,7 +612,7 @@ def request_lifecycle(
 
 # Why a container its unit runs is not stopped, started or restarted from HQ:
 # the controller asks a unit only through root's socket on its own machine.
-UNIT_OUT_OF_REACH: Sentence = "A systemd unit runs this container, and HQ asks a unit only on the machine HQ runs on."
+UNIT_OUT_OF_REACH: Final = "A systemd unit runs this container, and HQ asks a unit only on the machine HQ runs on."
 
 
 @dataclass(frozen=True, slots=True)
@@ -640,7 +640,7 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     """Why a lifecycle verb cannot be asked of this container, or ""."""
 
     found = supervision(resource)
-    return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
+    return worded(UNIT_OUT_OF_REACH if found is not None and not found.reachable else "")
 
 
 # The variant of reconcile that a record only reporting on itself offers: reading it again.
@@ -760,28 +760,28 @@ def request_removal(
 
 def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Sentence]:
     if resource.kind != CERTIFICATE_KIND:
-        return False, "Only a certificate HQ issues can be renewed."
+        return False, worded("Only a certificate HQ issues can be renewed.")
     if not resource.enabled:
-        return False, "The certificate is switched off in HQ."
+        return False, worded("The certificate is switched off in HQ.")
     allowed, explanation = controller_action_policy(resource.kind, OperationRequest.Action.RENEW)
     if not allowed:
         return False, explanation
     if holding(resource.conditions, *PROBLEMS):
-        return True, "A place it is installed is serving a different certificate or has a problem."
+        return True, worded("A place it is installed is serving a different certificate or has a problem.")
 
     if not resource.status.get("not_after"):
-        return True, "HQ has not read when it expires."
+        return True, worded("HQ has not read when it expires.")
     expiry = certificate_expiry(resource.status)
     if expiry is None:
-        return True, "The expiry HQ read is not a date."
+        return True, worded("The expiry HQ read is not a date.")
     window = renewal_window(resource.spec)
     left = max(0, days_until(expiry))
     if datetime.now(UTC) >= renewal_opens_at(expiry, window):
-        return True, f"{counted(left, 'day')} remaining."
+        return True, worded(f"{counted(left, 'day')} remaining.")
 
     return (
         False,
-        (
+        worded(
             f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
             f"({counted(window, 'day')} before it expires)."
         ),

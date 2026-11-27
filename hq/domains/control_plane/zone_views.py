@@ -300,7 +300,7 @@ class ZoneDetailView(RecordPageMixin, TemplateView):
                     for each in sorted(every, key=lambda each: (each["name"] not in self.pins, each["name"]))
                 ],
                 "adopt": (
-                    PageAction.command(ADOPT_ZONE, name, field="token", value=domain["adoption"], primary=True)
+                    PageAction.post(ADOPT_ZONE, name, sends={"token": domain["adoption"]}, primary=True)
                     if domain["adoption"]
                     else None
                 ),

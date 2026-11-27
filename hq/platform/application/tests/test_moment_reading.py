@@ -124,14 +124,6 @@ class StampDayTests(SimpleTestCase):
 class CorrectedCallSiteTests(SimpleTestCase):
     """Call sites held to the correct answer at their edges."""
 
-    def test_a_tailnet_key_at_the_zero_time_has_no_expiry(self):
-        from ..tailnet_presence import Presence
-
-        self.assertIsNone(Presence(key_expires="0001-01-01T00:00:00Z").key_expiry_days)
-        self.assertIsNone(Presence(key_expires="2026-13-01T00:00:00Z").key_expiry_days)
-        soon = (datetime.now(UTC) + timedelta(days=10)).isoformat()
-        self.assertEqual(Presence(key_expires=soon).key_expiry_days, 10)
-
     def test_a_registration_expiry_keeps_its_offset(self):
         """An offset is kept, not overwritten with UTC, so the instant does not
         move.

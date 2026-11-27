@@ -12,7 +12,6 @@ from unittest import mock
 from django.test import SimpleTestCase
 
 from hq.platform.application import composed_providers, plugins
-from hq.platform.application.process_caches import Kept
 
 # Only a bound on a thread that never arrives; nothing waits it out.
 BOUND = 30.0
@@ -81,16 +80,6 @@ class _Race:
 
 
 class BuiltOnceTests(SimpleTestCase):
-    def test_a_kept_answer_is_computed_once(self):
-        race = _Race()
-        cached = Kept(race.building_with(object))
-
-        with mock.patch.object(cached, "lock", race.at(threading.RLock()), create=True):
-            answers, errors = race.run(cached)
-
-        self.assertEqual(errors, [])
-        self.assertIs(answers[0], answers[1])
-
     def test_a_new_provider_is_declared_once(self):
         race = _Race()
         lock = race.at(threading.Lock())

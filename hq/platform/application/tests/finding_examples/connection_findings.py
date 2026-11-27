@@ -1,6 +1,7 @@
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
 from hq.platform.core.testing import connection, declare
 
+from ...finding_steps import Do
 from ...report_testing import report_connections
 from . import Example, Examples, Raised, stored
 
@@ -20,16 +21,15 @@ RECONCILE = "infrastructure.resource.reconcile"
 
 
 def ssh(*, reachable: bool, raises: tuple[Raised | str, ...] = ()) -> Example:
+    failed = {} if reachable else {"detail": "Timed out", "failure": "network"}
     return Example(
-        given=lambda: connection(
-            "ssh", "example-ssh", endpoint="192.0.2.9:22", reachable=reachable, detail="" if reachable else "Timed out"
-        ),
+        given=lambda: connection("ssh", "example-ssh", endpoint="192.0.2.9:22", reachable=reachable, **failed),
         raises=raises,
     )
 
 
-def signed_in() -> None:
-    """A connection whose address answered with a sign-in page, not the API."""
+def npm(detail: str, failure: str) -> None:
+    """A Nginx Proxy Manager connection whose last probe failed for ``failure``."""
 
     report_connections(
         [
@@ -38,12 +38,18 @@ def signed_in() -> None:
                 "provider": "npm",
                 "endpoint": "https://proxy.example.com",
                 "ok": False,
-                "detail": "The address answered with a sign-in page at sso.example.com, not the API.",
-                "failure": "address",
+                "detail": detail,
+                "failure": failure,
             }
         ],
         controller_id="example-controller",
     )
+
+
+def signed_in() -> None:
+    """A connection whose address answered with a sign-in page, not the API."""
+
+    npm("The address answered with a sign-in page at sso.example.com, not the API.", "address")
 
 
 def certificate(*consumers: dict, title: str = "", presses=(RECONCILE,), readings=None) -> Example:
@@ -60,8 +66,25 @@ EXAMPLES = (
     Examples(
         "connection-not-answering",
         fires=(
-            # A probe that got no answer.
-            ssh(reachable=False, raises=("example-ssh is not answering",)),
+            # A probe that got no answer asks to check the machine it named.
+            ssh(
+                reachable=False,
+                raises=(
+                    Raised(
+                        title="example-ssh is not answering",
+                        steps=(Do("Check that 192.0.2.9 is up and the controller can reach it"),),
+                    ),
+                ),
+            ),
+            Example(
+                given=lambda: npm("Provider request failed: URLError.", "network"),
+                raises=(
+                    Raised(
+                        title="example-npm is not answering",
+                        steps=(Do("Check that proxy.example.com is up and the controller can reach it"),),
+                    ),
+                ),
+            ),
             # A credential refused says refused, in the provider's words.
             Example(
                 readings={"cloudflare.pages_project": stored(reachable=False, refusal=CREDENTIAL_REFUSAL, error="x")},

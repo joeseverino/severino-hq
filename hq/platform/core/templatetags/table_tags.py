@@ -222,7 +222,7 @@ ROW_ACTIONS = Part(
     row's value, so a column holding one never leaves, and in a cell it fills its cell and gives way
     with its column. The reader's way to set a row aside (`Row(put_away=)`, the queue's Dismiss) is the
     last of its buttons, drawn quiet; alone on a row's line its words start at the name's edge.
-    *Gates:* the survey's `row actions beside squeezed words`, and `test_row_controls.py`.
+    *Gate:* the survey's `row actions beside squeezed words`.
 
     A row's own arrangement (a favorite's star, the pair that moves it) is no part of the cell that
     names the row: `Row(mark=)` and `Row(order=)` draw it first in the row's controls column, the star last of
@@ -378,9 +378,8 @@ DATA_TABLE = Part(
     shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
     held back holds no control, which a copy would draw twice: the region refuses one, so a button
     stands in place or moves whole (`row-below`). A row's open line a script adds is
-    `{% open_line %}`. *Gates:*
-    `test_table_once.py`: `test_a_row_writes_each_cell_once`, `test_a_cell_held_back_holds_no_control`,
-    and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
+    `{% open_line %}`. *Gates:* the byte budgets `ROW_BYTES` and `CHROME_BYTES`
+    (`test_table_once.py`), and `test_a_cell_held_back_holds_no_control` (`test_part_refusals.py`).
 
     - A `row-below` block, which the row's line never shows, and the row's editor are moved into a
       line the server draws after the row (`tr.row-detail`, `drawn_tables`), shown while the

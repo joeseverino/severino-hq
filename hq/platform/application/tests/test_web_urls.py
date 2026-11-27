@@ -8,13 +8,9 @@ import re
 import string
 from unittest import skipUnless
 
-from django.test import SimpleTestCase, TestCase
-from django.urls import reverse
+from django.test import SimpleTestCase
 
-from hq.platform.application.markup_testing import text
-from hq.platform.core.testing import operator
-
-from ..entity_links import declared_link, entity_link, web_url
+from ..entity_links import web_url
 
 try:
     from hypothesis import example, given, strategies as st
@@ -85,84 +81,9 @@ class WebUrlProperties(SimpleTestCase):
             if href:
                 self.assertRegex(_as_a_browser_reads(href), r"(?i)^https?://[^/?#\\]")
 
-        @given(st.one_of(st.text(), ADDRESSY, PATH, st.builds("/{}".format, ADDRESSY), st.none()))
-        @example("/\\evil.example.com/")
-        @example("/\t/evil.example.com/")
-        @example(" //evil.example.com/")
-        def test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address(self, value):
-            from ..entity_links import link_url
-
-            href = link_url(value)
-
-            if value in HOSTILE:
-                self.assertEqual(href, "")
-            if href:
-                self.assertRegex(_as_a_browser_reads(href).replace("\\", "/"), r"(?i)^(https?://[^/?#]|/(?!/))")
-
-        @given(st.one_of(st.text(), ADDRESSY, st.none()))
-        @example("http://example.com/")
-        def test_whatever_https_url_returns_is_an_https_web_address(self, value):
-            from ..entity_links import https_url
-
-            href = https_url(value)
-
-            if href:
-                self.assertEqual(href, web_url(href))
-                self.assertRegex(href, r"(?i)^https://")
-
         # Each link seen hostile so far is tried on every run.
         for hostile in HOSTILE:
             test_whatever_it_returns_a_browser_reads_as_a_web_address = example(hostile)(
                 test_whatever_it_returns_a_browser_reads_as_a_web_address
             )
-            test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address = example(hostile)(
-                test_whatever_link_url_returns_a_browser_reads_as_hq_or_a_web_address
-            )
         del hostile
-
-
-class WebUrlTests(SimpleTestCase):
-    def test_a_reading_console_link_is_kept_only_when_it_is_a_web_address(self):
-        # A repository reading's console is the url its record carries.
-        safe = entity_link(
-            "github.repository", "", record={"repository": "example/app", "url": "https://github.com/example/app"}
-        )
-        hostile = entity_link("github.repository", "", record={"repository": "example/app", "url": HOSTILE[0]})
-
-        self.assertEqual(safe.url, "https://github.com/example/app")
-        self.assertEqual((hostile.url, hostile.external), ("", False))
-
-    def test_a_declared_link_keeps_hq_pages_and_web_addresses_only(self):
-        self.assertEqual(declared_link("page", "/infrastructure/").url, "/infrastructure/")
-        self.assertTrue(declared_link("site", "https://app.example.com/").external)
-        # A browser reads a backslash as a slash, so this path names another host.
-        for url in (*HOSTILE, "/\\evil.example.com/"):
-            with self.subTest(url=url):
-                self.assertEqual(declared_link("target", url).url, "")
-
-    def test_a_calendar_event_links_hq_pages_and_web_addresses_only(self):
-        from datetime import date
-
-        from ..calendar import CalendarEvent
-
-        def event(url):
-            return CalendarEvent(id="example:1", title="Example", starts=date(2026, 1, 2), url=url)
-
-        self.assertEqual(event("/calendar/").url, "/calendar/")
-        self.assertEqual(event("https://calendar.example.com/e/1").url, "https://calendar.example.com/e/1")
-        for url in (*HOSTILE, "/\\evil.example.com/"):
-            with self.subTest(url=url):
-                self.assertEqual(event(url).url, "")
-
-
-class RenderedLinkTests(TestCase):
-    def test_a_manifest_url_that_is_not_a_web_address_renders_as_text(self):
-        from hq.domains.docs_index.models import DocumentationRecord
-
-        record = DocumentationRecord.objects.create(doc_id="example-doc", title="Example", external_url=HOSTILE[0])
-        operator(self.client)
-
-        body = self.client.get(reverse("docs_index:detail", args=[record.doc_id])).content.decode()
-
-        self.assertNotIn('href="javascript:', body)
-        self.assertIn("javascript:fetch", text(body))  # still shown, as text

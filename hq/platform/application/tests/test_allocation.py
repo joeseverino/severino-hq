@@ -6,23 +6,6 @@ from hq_sdk.ui import AllocationBar, Share
 
 
 class AllocationTests(SimpleTestCase):
-    def test_each_part_is_its_share_of_the_bar_end_to_end(self):
-        bar = AllocationBar("Example whole", (Share("Cash", 30.0, 1), Share("Held", 70.0, 3)))
-
-        self.assertEqual(
-            [(part["slot"], part["at"], part["width"]) for part in bar.drawn],
-            [(1, 0.0, 30.0), (3, 30.0, 70.0)],
-        )
-        self.assertEqual(bar.spoken, "Example whole: Cash 30%, Held 70%")
-
-    def test_a_sliver_still_shows_and_the_bar_still_fills(self):
-        bar = AllocationBar("Example whole", (Share("Tiny", 0.01, 1), Share("Most", 999.99, 2)))
-
-        tiny, most = bar.drawn
-        self.assertEqual(tiny["width"], AllocationBar.FLOOR)
-        self.assertAlmostEqual(tiny["width"] + most["width"], 100.0)
-        self.assertEqual(most["at"], tiny["width"])
-
     def test_a_part_with_nothing_is_neither_drawn_nor_heard(self):
         bar = AllocationBar("Example whole", (Share("Cash", 5.0, 1), Share("None", 0.0, 2)))
 

@@ -16,7 +16,14 @@ from hq.platform.application.answer_fields import (
 )
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
+from hq.platform.application.integration_specs import (
+    DetailRead,
+    ListFilter,
+    ListRead,
+    ListSort,
+    ListToggle,
+    ResourceSpec,
+)
 from hq.platform.application.record_fields import Notes
 from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
@@ -118,7 +125,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 toggles=(UNPRICED,),
                 totals=expenses.list_totals,
             ),
-            detail_handler=assets.get_asset,
+            detail=DetailRead(assets.get_asset, AssetRecord),
             identifier="slug",
             search=SearchDefinition.of(
                 Asset,
@@ -127,6 +134,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="item_name",
             ),
             web_route="assets:list",
-            record_type=AssetRecord,
         ),
     )

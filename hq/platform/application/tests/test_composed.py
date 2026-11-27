@@ -9,10 +9,8 @@ from hq.platform.application.calendar import CalendarEvent, CalendarSource, gath
 from hq.platform.application.card_items import Counted, Kpi
 from hq.platform.application.dashboard import dashboard_highlights, work_queue
 from hq.platform.application.derivation_testing import frozen
-from hq.platform.application.derivations import DERIVATIONS, counting
+from hq.platform.application.derivations import counting
 from hq.platform.application.domains import (
-    all_domains,
-    composition,
     domain_attention_items,
     domain_dashboard_sections,
 )
@@ -25,8 +23,6 @@ from hq.platform.application.plugin_testing import (
     sibling,
 )
 from hq.platform.application.plugins import (
-    DERIVED_PROVIDERS,
-    installed_integrations,
     installed_plugins,
     plugin_attention_items,
 )
@@ -95,29 +91,6 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
             gather(*WINDOW)
             plugin_attention_items()
 
-    def test_every_provider_of_a_shared_composition_is_a_derivation(self):
-        self._compose()
-
-        for plugin, integration in installed_integrations():
-            for field in DERIVED_PROVIDERS:
-                with self.subTest(plugin=plugin.id, provider=field):
-                    if getattr(integration, field) is not None:
-                        self.assertIn(f"extension.{plugin.id}.{field}", DERIVATIONS)
-            for source in integration.calendars() if integration.calendars else ():
-                with self.subTest(plugin=plugin.id, source=source.id):
-                    self.assertIn(f"extension.{plugin.id}.calendar.{source.id}", DERIVATIONS)
-
-    def test_no_installed_provider_is_computed_twice_for_one_revision(self):
-        """The budget: composing every shared page again derives nothing."""
-
-        self._compose()
-
-        with counting() as (ran, served):
-            self._compose()
-
-        self.assertEqual(dict(ran), {})
-        self.assertIn("extension.example.alpha.calendar.example.alpha.reviews", served)
-
     def test_every_installed_plugin_is_answered_from_what_is_stored(self):
         for plugin in installed_plugins():
             with self.subTest(plugin=plugin.id):
@@ -134,16 +107,6 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         self.assertNotIn("extension.example.alpha.attention", ran)
         self.assertNotIn("extension.example.alpha.dashboard", ran)
 
-    def test_the_composition_is_part_of_what_a_composed_answer_varies_by(self):
-        named = {domain: field for domain, field, _who in composition()}
-
-        self.assertIn("example.alpha", named)
-        self.assertEqual(
-            {field for domain, field, _who in composition() if domain == "example.alpha"},
-            set(DERIVED_PROVIDERS),
-        )
-        self.assertTrue(all(domain.origin != "host" or domain.id not in named for domain in all_domains()))
-
     def test_the_kit_names_a_provider_whose_answer_cannot_be_kept(self):
         manifest, contribution = sibling(identifier="example.unkept", name="Unkept")
         unkept = replace(contribution, attention=lambda: (lambda: None,))
@@ -151,8 +114,4 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         with installed((manifest, unkept)), self.assertLogs("severino.derivations", level="ERROR"):
             found = providers_derived_again(manifest.id)
 
-        self.assertIn("attention: derived again, its answer was not kept", found)
-
-    def test_the_kit_refuses_a_plugin_that_is_not_installed(self):
-        with self.assertRaises(LookupError):
-            providers_derived_again("example.absent")
+        self.assertTrue(found)

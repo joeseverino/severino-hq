@@ -230,9 +230,7 @@ allowed_importers = [
   "hq.platform.application.capabilities",
   "hq.platform.application.integrations",
   "hq.platform.application.integration_testing",
-  "hq.platform.application.tests.test_domain_declaration",
   "hq.platform.application.tests.test_integrations",
-  "hq.platform.core.tests.test_isolation_testing",
 ]
 broken_contract_guidance = "Read one command with capability_spec or command_spec, every command with capability_registry, and resources, connections or search from integrations.held_graph()."
 
@@ -462,8 +460,11 @@ check-typed-exception = true
 combine-as-imports = true
 
 [tool.ruff.lint.flake8-bugbear]
-# A frozen dataclass: sharing the one default instance is safe.
-extend-immutable-calls = ["hq.platform.application.plugins.PluginIntegration"]
+# A frozen dataclass, and the str a sentence is: sharing the one default is safe.
+extend-immutable-calls = [
+    "hq.platform.application.plugins.PluginIntegration",
+    "hq.platform.application.record_errors.worded",
+]
 
 [tool.pyright]
 # The editor's language server, for navigation and for an import that is
@@ -522,7 +523,7 @@ files = [
 exclude = "(^|/)(tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 # django-stubs' plugin, with its cache keyed on what it adds (its docstring).
-plugins = ["tools/lint/mypy_django.py"]
+plugins = ["tools/lint/mypy_django.py", "tools/lint/mypy_sentence.py"]
 warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true

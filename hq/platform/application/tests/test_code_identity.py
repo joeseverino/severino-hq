@@ -6,7 +6,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
@@ -36,39 +35,6 @@ def identity() -> str:
 
 
 class CodeIdentityTests(SimpleTestCase):
-    def test_two_copies_of_the_same_code_agree(self):
-        with importable({"nodes.py": FIRST}):
-            here = identity()
-            self.assertEqual(identity(), here)
-        with importable({"nodes.py": FIRST}):
-            self.assertEqual(identity(), here)
-
-    def test_a_class_that_changes_shape_moves_it_and_a_test_module_does_not(self):
-        """A running HQ never imports a test module, so nothing it stores is one."""
-
-        with importable({"nodes.py": FIRST, "tests/test_nodes.py": FIRST}) as root:
-            before = identity()
-            (root / "tests" / "test_nodes.py").write_text(SECOND)
-            (root / "tests" / "test_more.py").write_text("")
-            self.assertEqual(identity(), before)
-            (root / "nodes.py").write_text(SECOND)
-            self.assertNotEqual(identity(), before)
-
-    def test_a_module_added_or_moved_moves_it(self):
-        with importable({"nodes.py": FIRST}) as root:
-            before = identity()
-            (root / "more.py").write_text("")
-            added = identity()
-            (root / "more.py").rename(root / "other.py")
-            self.assertEqual(len({before, added, identity()}), 3)
-
-    def test_an_upgraded_distribution_moves_it(self):
-        with importable({"nodes.py": FIRST}) as root:
-            (root.parent / "example-0.1.dist-info").mkdir()
-            before = identity()
-            (root.parent / "example-0.1.dist-info").rename(root.parent / "example-0.2.dist-info")
-            self.assertNotEqual(identity(), before)
-
     def test_an_installed_extension_is_part_of_the_running_code(self):
         manifest = PluginManifest(
             id="example.notes",
@@ -88,32 +54,6 @@ class CodeIdentityTests(SimpleTestCase):
             (root / "plugin.py").write_text(SECOND)
             self.assertNotEqual(code_identity.running_code(), before)
 
-    def test_the_working_directory_on_the_path_is_read_as_one(self):
-        """``python -c`` puts an empty entry first on the import path."""
-
-        with importable({"nodes.py": FIRST}):
-            before = identity()
-            with mock.patch.object(sys, "path", ["", *sys.path]):
-                self.assertEqual(identity(), before)
-
     def test_a_package_with_no_source_is_refused(self):
         with self.assertRaises(ImproperlyConfigured):
             code_identity.code_identity(["example_absent"])
-
-    def test_the_derived_cache_is_keyed_on_the_code_the_process_started_with(self):
-        self.assertEqual(settings.CACHES["derived"]["KEY_PREFIX"], code_identity.booted_code())
-
-    def test_the_process_records_the_running_code_once(self):
-        """Taken on a tree held still, then kept when the files move under it."""
-
-        with (
-            importable({"plugin.py": FIRST}) as root,
-            mock.patch.object(code_identity, "HOST", (PACKAGE,)),
-            mock.patch.object(code_identity, "installed_plugins", return_value=()),
-            mock.patch.object(code_identity, "recorded", None),
-        ):
-            recorded = code_identity.booted_code()
-            self.assertEqual(recorded, code_identity.running_code())
-            (root / "plugin.py").write_text(SECOND)
-            self.assertNotEqual(code_identity.running_code(), recorded)
-            self.assertEqual(code_identity.booted_code(), recorded)

@@ -60,6 +60,7 @@ FILTERS = (
     "counted",
     "measured",
     "money",
+    "money_whole",
     "or_empty",
     "outside",
     "queue_entries",

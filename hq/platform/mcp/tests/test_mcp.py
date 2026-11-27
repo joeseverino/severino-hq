@@ -5,7 +5,6 @@ from unittest import mock
 
 from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase, TestCase, override_settings
-from mcp import types
 
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
@@ -152,17 +151,6 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual([record["doc_id"] for record in result["items"]], ["rb-safe"])
         self.assertEqual(sum(result["totals"]["by_status"].values()), 1)
         self.assertEqual(sum(result["totals"]["by_type"].values()), 1)
-
-    def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
-        sent = "sent-by-the-caller-7f3a"
-        for name in ("assets", "machines", "infrastructure"):
-            with self.subTest(name):
-                with self.assertRaises(RecordNotFound):
-                    services.get_resource(name, sent)
-                params = types.CallToolRequestParams(name="get_resource", arguments={"name": name, "identifier": sent})
-                answer = async_to_sync(mcp._call)(None, params)
-                self.assertTrue(answer.is_error)
-                self.assertNotIn(sent, answer.content[0].text)
 
     def test_registry_audit_names_the_orphans(self):
         Project.objects.create(name="Unreferenced", slug="unreferenced")

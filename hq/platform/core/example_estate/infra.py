@@ -12,11 +12,13 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderInventory,
 )
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.glance import MACHINE_KIND as MACHINE_TELEMETRY, WEATHER_KIND
 from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 from hq.platform.application import cadence
 from hq.platform.application.conditions import READY
 from hq.platform.application.inventory import keep
+from hq.platform.application.outbound_work import reader_of
 from hq.platform.application.report_testing import report_connections
 
 from . import doors, network, work
@@ -394,6 +396,15 @@ def glance_asked():
     ProviderInventory.objects.filter(kind=WEATHER_KIND).delete()
     machine = ManagedResource.objects.get(key=MACHINE)
     cadence.ask(panels={f"machine-{machine.pk}": "Asked for a due reading", "weather": "Asked for a due reading"})
+
+
+def refreshes_asked():
+    """A refresh of a connection and of twenty kinds asked of the controller
+    and not yet answered, as a burst of events leaves them."""
+
+    kinds = [kind for kind, spec in OBSERVATIONS.items() if spec.provider and not reader_of(kind)][:20]
+    cadence.ask(connection=PORTAINER)
+    cadence.ask(reads=kinds, spaced=True)
 
 
 def glance_unanswered():

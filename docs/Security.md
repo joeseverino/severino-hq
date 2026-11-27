@@ -241,8 +241,8 @@ is refused the audit log (`read_audit_log`) and the calendar
   `SET_NULL`, and a coalesced refusal's count, which only grows, and its last
   time, which only moves forward. The triggers are installed after every
   migrate, so a migration that rebuilds the table gets them back, and
-  `test_append_only` holds that the database's triggers match what the code
-  generates. A test's flush lifts them, and a production flush is refused.
+  `test_append_only` holds that no write path changes or removes a row. A
+  test's flush lifts them, and a production flush is refused.
 - Each row says who acted in its own text (`actor`, `interface`, stored
   columns over its metadata), and a signed-in user's row names them there
   too, so a deleted account's rows still say who it was.
@@ -485,8 +485,7 @@ is refused the audit log (`read_audit_log`) and the calendar
   `NEEDS_A_PERSON` capabilities in `security.py`) is that person's, found by
   the token's subject as `person_of` finds a device's, and its every act names
   its client. It is still an agent, so it is held where a hold applies and
-  never approves or governs agents (`test_delegated_tokens.py`,
-  `test_person_bound_agent.py`).
+  never approves or governs agents (`test_delegated_tokens.py`).
 - A machine's own token has no person, so it is refused those three whatever
   Pocket ID granted it, and the catalog lists no command needing one to it.
   `arrange_dashboard`, the dashboard's shared settings (its weather point,

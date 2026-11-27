@@ -13,28 +13,6 @@ from django.test import SimpleTestCase, tag
 from .source import template_files
 
 
-class RouteOwnerTests(SimpleTestCase):
-    """Routes are resolved in one place, so the answer can be remembered."""
-
-    def test_a_remembered_route_is_djangos_and_follows_the_url_configuration(self):
-        from django.urls import reverse as django_reverse
-
-        from hq.platform.application.routes import reverse
-
-        for name, kwargs in (("dashboard", None), ("control_plane:detail", {"key": "example"})):
-            self.assertEqual(reverse(name, kwargs=kwargs), django_reverse(name, kwargs=kwargs))
-            self.assertEqual(reverse(name, kwargs=kwargs), django_reverse(name, kwargs=kwargs))
-        with self.settings(FORCE_SCRIPT_NAME="/under"):
-            from django.urls import set_script_prefix
-
-            set_script_prefix("/under/")
-            try:
-                self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))
-            finally:
-                set_script_prefix("/")
-        self.assertEqual(reverse("dashboard"), django_reverse("dashboard"))
-
-
 @tag("source", "tree")
 class FragmentPrimitiveTests(SimpleTestCase):
     """Reads are one component: `static/js/fragment.js` and the part it asks for.

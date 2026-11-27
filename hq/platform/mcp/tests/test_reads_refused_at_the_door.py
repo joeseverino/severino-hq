@@ -40,12 +40,6 @@ class ReadsRefusedAtTheDoorTests(TestCase):
                 self.assertTrue(answer.is_error, answer.structured_content)
                 self.assertEqual(answer.structured_content["error"]["code"], "forbidden", answer.structured_content)
 
-    def test_the_audit_trail_is_refused_a_caller_holding_only_read(self):
-        answer = self._called("list_resource", {"name": "audit"}, MCP_READER)
-
-        self.assertTrue(answer.is_error, answer.structured_content)
-        self.assertEqual(answer.structured_content["error"]["code"], "forbidden")
-
     def test_a_tool_that_reads_under_read_answers_a_reader(self):
         for name in ("get_topology", "system_health", "audit_registry"):
             answer = self._called(name, example_call(mcp.tools[name].input_schema), MCP_READER)

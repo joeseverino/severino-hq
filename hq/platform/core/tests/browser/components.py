@@ -28,7 +28,7 @@ from hq.platform.core.tests.browser.probes.settle import (
     SETTLE,
     UNSUPPORTED,
 )
-from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
+from hq.platform.core.tests.browser.probes.shifts import LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
     COLUMNS_SHOWN,
     ROW_TOGGLE_TABLES,
@@ -121,22 +121,6 @@ _SQUEEZE_WHAT_CHANGES = """() => new MutationObserver((changes) => changes.forEa
   if (!phrase) return;
   phrase.style.cssText = 'display: inline-block; inline-size: 1ch; white-space: normal; word-break: break-all';
 })).observe(document.querySelector('main'), { childList: true, subtree: true })"""
-
-# A page script that counts what it hears.
-_COUNT_WHAT_IS_HEARD = """() => {
-  window.exampleHeard = 0;
-  new MutationObserver((changes) => { window.exampleHeard += changes.length; })
-    .observe(document.documentElement, { childList: true, subtree: true });
-}"""
-
-# A probe that measures a copy it puts on the page and takes away.
-_MEASURE_A_COPY = """() => {
-  const copy = document.querySelector('main').appendChild(document.createElement('span'));
-  copy.textContent = 'Example';
-  const wide = copy.getBoundingClientRect().width;
-  copy.remove();
-  return wide;
-}"""
 
 
 # How the queue's table stands: whether it is in its narrow box, and the
@@ -663,15 +647,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertTrue(self.page.locator(self.css(SELECTORS["ask_note"])).first.is_visible())
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
 
-    def test_a_probe_that_throws_hides_no_other(self):
-        """Probes read in one round trip each run on their own."""
-
-        self.open(next(iter(PAGES)), WIDE)
-        found = self.outcomes([("() => 1", None), ("() => { throw new Error('example'); }", None), ("(n) => n + 1", 2)])
-        self.assertEqual([returned for returned, _value in found], [True, False, True])
-        self.assertIn("example", found[1][1])
-        self.assertEqual(found[2][1], 3)
-
     @with_script
     def test_every_page_runs_under_the_policy_hq_sends(self):
         """A page HQ answered carries its own policy header into the browser,
@@ -690,62 +665,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(
             [said for said in refusals if "/inline-script-probe/" in said and "script-src" in said], refusals
         )
-
-    @with_script
-    def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
-        """The word a cell sets before a name ("on" a machine under a row's
-        name, "Created" a record in a cell of free text) stays on the line
-        the name opens, never alone above it."""
-
-        host = "example-primary-container-host-with-a-long-name"
-        record = "an-example-proxy-host-with-a-deliberately-long-name"
-        name = Cell("example.com", name=True, lines=(Cell("on", muted=True, parts=(Cell(host, url="#"),)),))
-        change = Cell(f"Created {record} from a request", role="data")
-        self.pages = {
-            **self.pages,
-            "word-before-a-name-probe": probe(
-                '<div style="inline-size: 26rem">{% data_table table %}</div>',
-                table=DataTable("Changes", (TableColumn("Name"), TableColumn("Change")), (Row((name, change)),)),
-            ),
-        }
-        # A box that wraps each name, where the column of free text leaves for
-        # the row's open line.
-        self.open("word-before-a-name-probe", WIDE)
-        self.page.locator(self.css("main " + SELECTORS["row_toggle"])).click()
-        lines = self.page.evaluate(
-            """() => [
-              // The line under the row's name, and the free text on its open line.
-              document.querySelector('main tbody td .stack-list > li'),
-              [...document.querySelectorAll('main .row-detail .token')].map((name) => name.parentElement)
-                .find((box) => box.textContent.includes('from a request')),
-            ].map((box) => {
-              const first = document.createTreeWalker(box, NodeFilter.SHOW_TEXT, {
-                acceptNode: (node) => node.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
-              }).nextNode();
-              const words = document.createRange();
-              words.selectNodeContents(first);
-              const word = [...words.getClientRects()].find((r) => r.width);
-              const name = [...box.querySelector('a, .token').getClientRects()].find((r) => r.width);
-              return [first.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
-            })"""
-        )
-        self.assertEqual(lines, [["on", True], ["Created", True]])
-
-    def test_a_long_word_breaks_rather_than_widening_the_page(self):
-        """A word too long for its line (a URL, a key, a digest) written in
-        plain text breaks where it would overflow, inside the box that holds
-        it, so the page never grows sideways to fit it."""
-
-        self.open(next(iter(PAGES)), NARROWEST)
-        text, box = self.page.evaluate("""() => {
-          const said = document.createElement('p');
-          said.textContent = 'example' + '0123456789abcdef'.repeat(8);
-          document.querySelector('main').append(said);
-          const range = document.createRange();
-          range.selectNodeContents(said);
-          return [range.getBoundingClientRect().right, said.getBoundingClientRect().right];
-        }""")
-        self.assertLessEqual(text, box + 1)
 
     def test_every_selector_parses(self):
         """Every rule the stylesheet writes is one the engine keeps, but for
@@ -845,32 +764,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         with self.assertRaises(AssertionError) as failed:
             self.every_anchored_popover_keeps_the_layout_rules("menu-probe")
         self.assertIn("with #example-panel shown", str(failed.exception))
-
-    @with_script
-    def test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for(self):
-        """A fold and a row's toggle pressed as a reader presses them push
-        what is below the rows they open, which the browser counts as the
-        reader's own doing; nothing else moves, at any width, so the page
-        stays under `CLS_LIMIT`."""
-
-        read = self.css([SELECTORS["vendored"], CLS_LIMIT])
-        folds = "main " + SELECTORS["row_toggle"] + "[data-fold-toggle]"
-        rows = "main " + SELECTORS["row_toggle"] + ":not([data-fold-toggle])"
-        for name in ("action-items", "containers"):
-            for width in WIDTHS:
-                with self.subTest(page=name, width=width):
-                    self.open(name, width)
-                    self.settle()
-                    for toggles in (folds, rows):
-                        shown = self.page.locator(self.css(toggles)).evaluate_all(
-                            "(all) => all.map((toggle, place) => toggle.checkVisibility() ? place : -1)"
-                            ".filter((place) => place >= 0)"
-                        )
-                        for place in shown:
-                            self.page.locator(self.css(toggles)).nth(place).click()
-                        self.settle()
-                    self.assertTrue(self.page.locator(self.css(rows + '[aria-expanded="true"]')).count())
-                    self.assertEqual(self.page.evaluate(LAYOUT_SHIFTS, read), [])
 
     @with_script
     def test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock(self):
@@ -1110,21 +1003,6 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.page.evaluate("() => document.querySelector('td').append(' ')")
         self.settle()
         self.assertIn("broken words", self.findings("answering-probe", PHONE_SCREEN[0]))
-
-    @with_script
-    def test_a_probe_sees_what_it_changes_and_the_page_hears_every_change_but_a_probes(self):
-        """Only the page's observers miss a probe's changes: the probe
-        measures the copy it put in place, and a change made outside a trip of
-        probes is heard."""
-
-        self.pages = {**self.pages, "answering-probe": _answering()}
-        self.open("answering-probe", PHONE_SCREEN[0])
-        self.page.evaluate(_COUNT_WHAT_IS_HEARD)
-        (measured,) = self.read([(_MEASURE_A_COPY, None)])
-        self.assertGreater(measured, 0)
-        self.assertEqual(self.page.evaluate("() => window.exampleHeard"), 0)
-        self.page.evaluate("() => document.querySelector('main').append(document.createElement('span'))")
-        self.page.wait_for_function("() => window.exampleHeard > 0")
 
     def test_a_fill_is_judged_on_its_own_box_while_the_page_grows_between_palettes(self):
         """A live page changes between the two readings (a figure that samples

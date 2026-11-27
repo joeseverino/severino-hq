@@ -70,7 +70,7 @@ ENTRIES = {
     # one with no fields, which is its closing row alone, and a form that asks
     # (partials/_form.html method="get"), one question on its button's line,
     # once more with its help and an error under them; a new option of either
-    # comes with an entry here (test_form_page).
+    # comes with an entry here.
     "form/page": Example(
         '{% include "form_page.html#form_card" %}',
         {
@@ -126,7 +126,7 @@ ENTRIES = {
     # count and a fact about what shows; holding a part back, with the one
     # link that shows it, its choices folded under the id it is given; with one choice and nothing narrowed; and with
     # labeled choices asking another page, its verb its own. A new option of
-    # the tag comes with an entry here (test_filter_tags).
+    # the tag comes with an entry here (test_part_catalog).
     "form/filter-bar": Example(
         '{% filter_bar search="Filter example records" query="example" keep=kept autofocus=True filtered=True '
         'clear="#" shown=3 total=12 %}'

@@ -37,13 +37,19 @@ CHOICES = (
     ("get_topology", {"focus": FOCUS, "direction": "sideways"}),
     ("get_findings", {"rule": "example-unknown"}),
     ("get_findings", {"severity": "critical"}),
+    ("get_topology", {"lens": ""}),
+    ("get_findings", {"severity": ""}),
 )
 SECRET = "example-secret-not-for-logs"
-# A refused value in each place a call carries one: a field of the wrong type,
-# a choice none declares, a stamp a validator of HQ's own refuses, a read's
-# count and a filter no list has.
+# Resources each found by an identifier of its own kind: a slug, a machine's name, a declaration's key.
+RECORDS = ("projects", "assets", "machines", "infrastructure")
+# A refused value in each place a call carries one, with the code it is refused
+# by: a field of the wrong type, a choice none declares, a stamp a validator of
+# HQ's own refuses, a read's count, a filter no list has, and an identifier
+# naming no record.
 SECRETS = (
     (
+        "invalid_input",
         WRITER,
         "execute_capability",
         {
@@ -52,6 +58,7 @@ SECRETS = (
         },
     ),
     (
+        "invalid_input",
         WRITER,
         "execute_capability",
         {
@@ -60,6 +67,7 @@ SECRETS = (
         },
     ),
     (
+        "invalid_input",
         WRITER,
         "execute_capability",
         {
@@ -69,8 +77,9 @@ SECRETS = (
             "expected_updated_at": SECRET,
         },
     ),
-    (READER, "list_resource", {"name": "projects", "limit": SECRET}),
-    (READER, "list_resource", {"name": "projects", "filters": {"example_unknown": SECRET}}),
+    ("invalid_input", READER, "list_resource", {"name": "projects", "limit": SECRET}),
+    ("invalid_input", READER, "list_resource", {"name": "projects", "filters": {"example_unknown": SECRET}}),
+    *(("not_found", READER, "get_resource", {"name": name, "identifier": SECRET}) for name in RECORDS),
 )
 
 
@@ -128,13 +137,13 @@ class OneRefusalEachDoorTests(TestCase):
         """Neither message nor details carry a refused value: a payload can hold a
         secret, and a refusal travels further than the request did."""
 
-        for caller, tool, arguments in SECRETS:
+        for code, caller, tool, arguments in SECRETS:
             for asker in (caller, OPERATOR):
                 for door in each_door(self, asker, tool):
                     with door:
                         answer = door(tool, **arguments)
 
-                        self.assertEqual(answer["error"]["code"], "invalid_input", answer)
+                        self.assertEqual(answer["error"]["code"], code, answer)
                         self.assertNotIn(SECRET, json.dumps(answer))
 
     def _api(self, query):

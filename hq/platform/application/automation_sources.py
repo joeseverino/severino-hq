@@ -500,9 +500,9 @@ def _row(
     if change is not None and review is not None:
         sent = {"playbook": change.key}
         if adopts and not change.problems and not review.unplaced:
-            actions.append(pages.PageAction.command(automation_adoption.ADOPT, review.proposal.pk, fields=sent))
+            actions.append(pages.PageAction.post(automation_adoption.ADOPT, review.proposal.pk, sends=sent))
         if rejects:
-            actions.append(pages.PageAction.command(automation_adoption.REJECT, review.proposal.pk, fields=sent))
+            actions.append(pages.PageAction.post(automation_adoption.REJECT, review.proposal.pk, sends=sent))
     kind = change.change if change is not None else ""
     state = Cell(status=change_mark(kind)) if change_mark(kind) else Cell()
     shown = tuple(filter(None, actions))

@@ -115,3 +115,85 @@ class ProviderReadsTests(SimpleTestCase):
                 if part.provider and part.provider not in spec.connection_providers:
                     with self.subTest(kind=kind, part=part.name):
                         self.assertLessEqual(set(part.requires), set(listed[(part.provider, kind, "part")].permissions))
+
+
+def _sample(*, minute=0, cpu=0, started="2026-10-31T11:00:00+00:00", **fields):
+    """One runtime sample of a container, ``minute`` minutes into its sweeps."""
+
+    return {
+        "host": "example-box",
+        "container": "web",
+        "started_at": started,
+        "cpu_time": cpu,
+        "usage_read_at": f"2026-10-31T12:{minute:02}:00+00:00",
+        **fields,
+    }
+
+
+def _hour(*, minute=0, used, spent=40, resets="2030-01-02T17:50:00+00:00", **fields):
+    """One sweep's record of the GitHub App's hourly allowance."""
+
+    return {
+        "connection_ref": "example-app",
+        "installation": 7,
+        "limit": 5000,
+        "used": used,
+        "remaining": 5000 - used,
+        "resets_at": resets,
+        "started_at": f"2030-01-02T17:{minute:02}:00+00:00",
+        "spent": spent,
+        **fields,
+    }
+
+
+class FromLastTests(SimpleTestCase):
+    """A reading HQ derives from the one it last stored, never from what a controller sends."""
+
+    def test_every_reading_derived_from_the_last_is_shown_at_work(self):
+        from hq.domains.control_plane.observations.github import carry_held, with_others_spent
+        from hq.domains.control_plane.observations.portainer import with_cpu_share
+
+        held = {"repository": "example/app", "number": 1}
+        # Each derivation: the records last stored, the one sent now, and what HQ keeps of it.
+        examples = {
+            with_cpu_share: (
+                # Half a core across a minute of one run.
+                ([_sample(cpu=900_000_000_000)], _sample(minute=1, cpu=930_000_000_000), {"cpu_percent": 50.0}),
+                # One sample is everything since the start, never current use.
+                ([], _sample(cpu=86_400_000_000_000), {"cpu_percent": None}),
+                (
+                    [_sample(cpu=900)],
+                    _sample(minute=1, cpu=1, started="2026-10-31T12:00:30+00:00"),
+                    {"cpu_percent": None},
+                ),
+                ([], _sample(cpu_percent=99.0), {"cpu_percent": None}),
+            ),
+            with_others_spent: (
+                # What GitHub counted beyond the last sweep's own spend.
+                ([_hour(used=100)], _hour(minute=5, used=165), {"others_spent": 25}),
+                ([], _hour(used=3000), {"others_spent": None}),
+                (
+                    [_hour(used=100)],
+                    _hour(minute=5, used=4000, resets="2030-01-02T18:50:00+00:00"),
+                    {"others_spent": None},
+                ),
+                ([_hour(used=500)], _hour(minute=5, used=300), {"others_spent": 0}),
+                ([], _hour(used=100, others_spent=5000), {"others_spent": None}),
+            ),
+            carry_held: (
+                ([held], {"repository": "example/app", "carried": True}, held),
+                ([held], {"repository": "example/other", "carried": True}, None),
+                ([held], {"repository": "example/app", "number": 2}, {"number": 2}),
+            ),
+        }
+
+        self.assertEqual(set(examples), {spec.from_last for spec in OBSERVATIONS.values() if spec.from_last})
+        for derive, cases in examples.items():
+            for last, sent, kept in cases:
+                with self.subTest(derive=derive.__name__, sent=sent):
+                    derived = derive(last, [dict(sent)])
+                    self.assertEqual(
+                        [{key: record.get(key) for key in kept} for record in derived], [kept] if kept else []
+                    )
+        (counted,) = with_others_spent([_hour(used=100)], [_hour(minute=5, used=165, spent=12)])
+        self.assertIn("others 25", OBSERVATIONS["github.allowance"].describe(counted))

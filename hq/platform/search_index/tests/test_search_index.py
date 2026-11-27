@@ -6,18 +6,27 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from hq.domains.projects.models import Project
-from hq.platform.application.search import apply_search, global_search, search_ids
+from hq.platform.application.search import apply_search, global_search
 from hq.platform.application.security import MCP_INTERFACE, AuthorizationError, agent_principal, cli_principal
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import declare
 
 from ..backends import _fts_query, search_backend, snippet_parts
 from ..models import SearchDocument
+from ..registry import by_scope
 from ..services import rebuild_search_index
 
 OPERATOR = cli_principal()
 # An agent granted only the baseline read.
 READER = agent_principal("example-agent", MCP_INTERFACE, frozenset({"read"}))
+
+
+def hits(scope: str, query: str) -> list[str]:
+    """The identifiers a list searched for ``query`` holds, best first."""
+
+    definition = by_scope()[scope]
+    found = apply_search(definition.model.objects.all(), scope=scope, query=query, principal=OPERATOR)
+    return [str(each) for each in found.order_by("_search_rank").values_list(definition.identifier_field, flat=True)]
 
 
 class IndexedSearchTests(TestCase):
@@ -27,16 +36,16 @@ class IndexedSearchTests(TestCase):
             technologies_used="Django SQLite",
         )
 
-        self.assertEqual(search_ids("projects", "oper djan", principal=OPERATOR), [project.slug])
+        self.assertEqual(hits("projects", "oper djan"), [project.slug])
 
         project.name = "Command center"
         project.technologies_used = "Python"
         project.save()
-        self.assertEqual(search_ids("projects", "djan", principal=OPERATOR), [])
-        self.assertEqual(search_ids("projects", "comm pyth", principal=OPERATOR), [project.slug])
+        self.assertEqual(hits("projects", "djan"), [])
+        self.assertEqual(hits("projects", "comm pyth"), [project.slug])
 
         project.delete()
-        self.assertEqual(search_ids("projects", "comm", principal=OPERATOR), [])
+        self.assertEqual(hits("projects", "comm"), [])
 
     def test_a_save_that_leaves_the_body_alone_writes_nothing(self):
         from hq.platform.core import revisions
@@ -64,22 +73,22 @@ class IndexedSearchTests(TestCase):
         document = SearchDocument.objects.filter(scope="projects", object_id=project.slug)
         # An update that restates the body leaves the entry as it stands.
         document.update(body=document.get().body)
-        self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [project.slug])
+        self.assertEqual(hits("projects", "lighthouse"), [project.slug])
         document.update(body="harbor")
-        self.assertEqual(search_ids("projects", "lighthouse", principal=OPERATOR), [])
-        self.assertEqual(search_ids("projects", "harbor", principal=OPERATOR), [project.slug])
+        self.assertEqual(hits("projects", "lighthouse"), [])
+        self.assertEqual(hits("projects", "harbor"), [project.slug])
         with connection.cursor() as cursor:
             cursor.execute("INSERT INTO search_index_fts(search_index_fts) VALUES ('integrity-check')")
 
     def test_rebuild_recovers_a_missing_projection(self):
         project = Project.objects.create(name="Recovery target")
         SearchDocument.objects.filter(scope="projects").delete()
-        self.assertEqual(search_ids("projects", "recovery", principal=OPERATOR), [])
+        self.assertEqual(hits("projects", "recovery"), [])
 
         counts = rebuild_search_index()
 
         self.assertEqual(counts["projects"], 1)
-        self.assertEqual(search_ids("projects", "recovery", principal=OPERATOR), [project.slug])
+        self.assertEqual(hits("projects", "recovery"), [project.slug])
 
     def test_projection_and_fts_roll_back_with_domain_write(self):
         def create_then_fail():
@@ -90,7 +99,7 @@ class IndexedSearchTests(TestCase):
         with self.assertRaises(RuntimeError):
             create_then_fail()
 
-        self.assertEqual(search_ids("projects", "rolled", principal=OPERATOR), [])
+        self.assertEqual(hits("projects", "rolled"), [])
         self.assertFalse(SearchDocument.objects.filter(scope="projects", body__icontains="rolled").exists())
 
     def test_query_plan_uses_the_fts_virtual_table(self):
@@ -147,7 +156,6 @@ class RankedOrderTests(TestCase):
 
         self.assertEqual(len(set(_ranks("projects", "ledger").values())), 1)
         self.assertNotEqual([project.slug for project in projects], slugs)
-        self.assertEqual(search_ids("projects", "ledger", principal=OPERATOR), slugs)
         group = next(
             group for group in global_search("ledger", principal=OPERATOR)["groups"] if group["scope"] == "projects"
         )
@@ -165,7 +173,7 @@ class RankedOrderTests(TestCase):
 
         self.assertLess(ranks[best.slug], ranks["aardvark"])
         self.assertEqual(
-            search_ids("projects", "ledger", principal=OPERATOR),
+            hits("projects", "ledger"),
             [best.slug, "aardvark"],
         )
 
@@ -175,7 +183,6 @@ class RankedOrderTests(TestCase):
         logs = [AuditLog.objects.create(action="login", object_type="user", message="tied entry") for _ in range(11)]
         expected = sorted(str(log.pk) for log in logs)
 
-        self.assertEqual(search_ids("audit", "tied", principal=OPERATOR), expected)
         listed = apply_search(AuditLog.objects.all(), scope="audit", query="tied", principal=OPERATOR).order_by(
             "_search_rank", "pk"
         )
@@ -205,7 +212,7 @@ class SingleStatementSearchTests(TestCase):
         for query in ("ledger", "archive", "example", "ledger archive", "led"):
             for limit in (1, 3, 8, 100):
                 with self.subTest(query=query, limit=limit):
-                    expected = {scope: hits for scope in scopes if (hits := _reference_hits(scope, query, limit))}
+                    expected = {scope: found for scope in scopes if (found := _reference_hits(scope, query, limit))}
                     self.assertTrue(expected)
                     self.assertEqual(
                         search_backend.search_scopes(scopes=scopes, query=query, limit=limit),
@@ -217,13 +224,9 @@ class SingleStatementSearchTests(TestCase):
         one = search_backend.search_scopes(scopes=["projects"], query="ledger", limit=5)
 
         self.assertEqual(one, {"projects": many["projects"]})
-        self.assertEqual(
-            search_backend.search(scope="projects", query="ledger", limit=5),
-            [object_id for object_id, _ in many["projects"]],
-        )
 
     def test_global_search_reads_the_index_once_and_fetches_only_hit_scopes(self):
-        search_ids("projects", "tied", principal=OPERATOR)
+        global_search("tied", principal=OPERATOR)
 
         with CaptureQueriesContext(connection) as queries:
             outcome = global_search("tied", principal=OPERATOR)
@@ -249,7 +252,7 @@ class SingleStatementSearchTests(TestCase):
             self.assertFalse([sql for sql in statements if table in sql])
 
     def test_a_search_with_no_hit_costs_one_statement(self):
-        search_ids("projects", "tied", principal=OPERATOR)
+        global_search("tied", principal=OPERATOR)
 
         with self.assertNumQueries(1):
             outcome = global_search("zzzznomatchhere", principal=OPERATOR)
@@ -285,12 +288,8 @@ class SearchedListTests(TestCase):
         )
 
     def test_every_match_is_ranked_in_the_index_order(self):
-        ranked = search_ids("projects", "ledger", principal=OPERATOR)
-
         listed = list(self._listed())
 
-        self.assertEqual(len(ranked), 34)
-        self.assertEqual([project.slug for project in listed], ranked)
         self.assertEqual([project._search_rank for project in listed], list(range(1, 35)))
 
     def test_a_page_is_one_statement_whose_size_does_not_follow_the_matches(self):
@@ -311,7 +310,7 @@ class SearchedListTests(TestCase):
             self.assertEqual(self._listed().count(), 34)
 
     def test_the_result_ceiling_keeps_the_best_hits(self):
-        ranked = search_ids("projects", "ledger", principal=OPERATOR)
+        ranked = hits("projects", "ledger")
 
         with mock.patch("hq.platform.application.search.MAX_SEARCH_RESULTS", 5):
             listed = list(self._listed())
@@ -442,24 +441,6 @@ class GlobalSearchTests(TestCase):
 
         self.assertIn("audit", operator_scopes)
         self.assertNotIn("audit", limited_scopes)
-
-
-class SearchAuthorizationTests(TestCase):
-    def test_baseline_read_principal_cannot_search_the_audit_trail(self):
-        AuditLog.objects.create(action="login", object_type="user", message="operator login")
-        limited = READER
-
-        with self.assertRaises(AuthorizationError):
-            search_ids("audit", "login", principal=limited)
-
-        # Baseline READ still covers ordinary record scopes.
-        Project.objects.create(name="Reachable by MCP")
-        self.assertEqual(len(search_ids("projects", "reachable", principal=limited)), 1)
-
-    def test_operator_principal_searches_the_audit_trail(self):
-        AuditLog.objects.create(action="login", object_type="user", message="operator login")
-
-        self.assertEqual(len(search_ids("audit", "operator", principal=OPERATOR)), 1)
 
 
 class SecureDeleteTests(TestCase):

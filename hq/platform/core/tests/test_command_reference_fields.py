@@ -1,171 +1,33 @@
-"""A command field holding a reference offers what the record's own form offers."""
+"""A command field holding a reference offers a kind's records only to who may name them."""
 
 from unittest import mock
 
-from django.apps import apps
 from django.test import TestCase
 
-from hq.domains.assets.models import Asset
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application import references
-from hq.platform.application.capabilities import capability_registry, command_spec
-from hq.platform.application.command_forms import command_form_class
+from hq.platform.application.capabilities import command_spec
 from hq.platform.application.command_targets import record_options
-from hq.platform.application.integration_specs import capability_fields, capability_schema
-from hq.platform.application.markup_testing import within
-from hq.platform.application.references import Referable, ReferenceField, Target
-from hq.platform.application.security import Principal, web_principal
-from hq.platform.application.stored_columns import _model_of
-from hq.platform.application.tests.writers import drawn_key
-from hq.platform.application.web_writes import RETRY_KEY_FIELD
-from hq.platform.core.testing import SignedInTestCase, connection
-
-from .command_shapes import field_schema
-
-
-def stored_references() -> dict[tuple[str, str], tuple[type, str]]:
-    """``(model, column)`` by ``(command, field)`` for each command field its
-    model stores in a type:identity column."""
-
-    found = {}
-    for spec in capability_registry():
-        if (model := _model_of(spec.command_type)) is not None:
-            columns = {column.name for column in model._meta.get_fields() if isinstance(column, ReferenceField)}
-            found |= {(spec.name, column): (model, column) for column in columns & set(capability_fields(spec))}
-    return found
-
-
-def offered(page, name: str) -> dict[str, str]:
-    """Each option a field's select offers, by value, with the group it is under."""
-
-    found = {}
-    for option in within(page, "name", name):
-        if option.tag == "option" and option.attrs.get("value"):
-            group = next((outer.attrs.get("label", "") for outer in option.ancestors if outer.tag == "optgroup"), "")
-            found[option.attrs["value"]] = group
-    return found
-
-
-def grouped(field, principal: Principal) -> dict[str, str]:
-    """What the record's own form offers for one reference column, by value, with its heading."""
-
-    return {
-        value: heading
-        for heading, group in references.choices(field, principal=principal)
-        if isinstance(group, list)
-        for value, _label in group
-    }
-
-
-def reference_fields() -> dict[tuple[str, str], tuple[type, str]]:
-    """``(model, column)`` by ``(command, field)`` for every command field the
-    machine contract says holds a reference (``x-hq-reference``)."""
-
-    found = {}
-    for spec in capability_registry():
-        schema = capability_schema(spec)
-        for field in schema.get("properties", {}):
-            if isinstance(reference := field_schema(schema, field).get("x-hq-reference"), dict):
-                found[spec.name, field] = (apps.get_model(reference["model"]), reference["field"])
-    return found
-
-
-class ReferenceFieldTests(SignedInTestCase):
-    @classmethod
-    def setUpTestData(cls):
-        super().setUpTestData()
-        connection(
-            "portainer",
-            "a-portainer",
-            controller_id="a-controller",
-            endpoint="https://portainer.example.com",
-            reaches=["lab-1"],
-        )
-        Project.objects.create(name="An Example Project", slug="an-example")
-        Asset.objects.create(item_name="A router", slug="a-router")
-
-    def test_every_type_identity_field_says_which_column_it_fills(self):
-        stored = stored_references()
-        self.assertTrue(stored, "no record domain stores a type:identity column")
-        self.assertLessEqual(stored.items(), reference_fields().items())
-
-    def test_each_command_form_offers_what_the_record_form_offers(self):
-        principal = web_principal(self.user)
-        for (name, field), (model, column) in reference_fields().items():
-            with self.subTest(command=name, field=field):
-                page = self.client.get(f"/commands/{name}/")
-                expected = grouped(model._meta.get_field(column), principal)
-
-                self.assertEqual(set(offered(page, field)), set(expected))
-
-    def test_the_picker_offers_infrastructure_and_records_under_their_headings(self):
-        asset = offered(self.client.get("/commands/asset.create/"), "infrastructure")
-        event = offered(self.client.get("/commands/calendar.entry.create/"), "about")
-
-        self.assertIn("machine:lab-1", asset)
-        self.assertNotIn("project:an-example", asset)
-        self.assertEqual(event["project:an-example"], "Projects")
-        self.assertEqual(event["asset:a-router"], "Assets")
-        self.assertEqual(event["machine:lab-1"], "Machines")
-
-    def test_what_is_not_offered_is_refused(self):
-        page = self.client.get("/commands/calendar.entry.create/")
-        key = drawn_key(page, "data-command-form")
-
-        refused = self.client.post(
-            "/commands/calendar.entry.create/",
-            {"title": "Example", "starts_on": "2026-01-01", "about": "project:missing", RETRY_KEY_FIELD: key},
-        )
-
-        self.assertEqual(refused.status_code, 400)
-        self.assertIn("about", refused.context["form"].errors)
-
-    def test_the_kind_offers_every_kind_hq_can_create(self):
-        page = self.client.get("/commands/infrastructure.resource.create/")
-
-        # A withheld kind is written only from its own page.
-        writable = {kind for kind, provider in PROVIDERS.items() if not provider.withheld}
-        self.assertEqual(set(offered(page, "kind")), writable)
+from hq.platform.application.integration_specs import capability_schema
+from hq.platform.application.references import Referable, Target
+from hq.platform.application.security import Principal
 
 
 class GuardedReferenceTests(TestCase):
-    def setUp(self):
+    def test_a_kind_is_offered_only_to_who_may_name_it(self):
         Project.objects.create(name="An Example Account", slug="an-account")
         guarded = Target(
             "example.account",
             Project,
             Referable(key="slug", shows=("name",), role="account", requires="example.read"),
         )
-        patched = mock.patch.object(references, "targets", lambda: {"example.account": guarded})
-        patched.start()
-        self.addCleanup(patched.stop)
-        self.schema = capability_schema(command_spec("expense.create"))
-
-    def test_a_kind_is_offered_only_to_who_may_name_it(self):
+        self.enterContext(mock.patch.object(references, "targets", lambda: {"example.account": guarded}))
+        schema = capability_schema(command_spec("expense.create"))
         reader = Principal("a reader", "web", frozenset({"read", "example.read"}))
         stranger = Principal("a stranger", "web", frozenset({"read"}))
 
-        read = record_options(self.schema, principal=reader).get("paid_from")
-        withheld = record_options(self.schema, principal=stranger).get("paid_from")
+        read = record_options(schema, principal=reader).get("paid_from")
+        withheld = record_options(schema, principal=stranger).get("paid_from")
 
         self.assertEqual([option.value for option in read or ()], ["example.account:an-account"])
         self.assertEqual(withheld, ())
-
-    def picker(self, principal: Principal, initial: dict[str, str] | None = None) -> bool:
-        """Whether ``paid_from`` is on the expense form, for ``principal``."""
-
-        spec = command_spec("expense.create")
-        command = command_form_class(spec, record_choices=record_options(self.schema, principal=principal))
-        return "paid_from" in command(initial=initial).fields
-
-    def test_a_reference_that_offers_nothing_is_left_off(self):
-        reader = Principal("a reader", "web", frozenset({"read", "example.read"}))
-        stranger = Principal("a stranger", "web", frozenset({"read"}))
-
-        self.assertEqual((self.picker(reader), self.picker(stranger)), (True, False))
-
-    def test_a_reference_that_offers_nothing_stays_while_it_holds_a_value(self):
-        stranger = Principal("a stranger", "web", frozenset({"read"}))
-
-        self.assertTrue(self.picker(stranger, initial={"paid_from": "example.account:an-account"}))

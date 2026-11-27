@@ -13,17 +13,22 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
+from django.utils.text import get_text_list
 
 from hq.domains.control_plane.models import InboundSource, OperationRequest
+from hq.domains.jobs.models import JobState
 
 from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due
 from .credential_sight import Standing
+from .entity_links import EntityLink, entity_link, kind_label
 from .freshness import freshness
 from .moments import duration
 from .read_requests import ForcedRead, forced_reads
 from .references import Kind
 from .tone import Tone
+from .ui import counted
 lazy from . import inbound_findings
+lazy from .capabilities import capability_words
 lazy from .findings import estate_findings, finding_key
 lazy from .hq_context.sight_part import sight
 lazy from .problems import About, problems_of
@@ -32,7 +37,9 @@ lazy from .security import Principal
 
 @dataclass(frozen=True, slots=True)
 class QueuedWork:
-    resource: str
+    """One thing waiting for the controller: a change to a record, or a refresh someone asked for."""
+
+    record: EntityLink
     action: str
     state: str
     created_at: datetime
@@ -54,7 +61,18 @@ class ControllerPage:
     # sweeps are not landing.
     overdue: bool
     queue: tuple[QueuedWork, ...]
-    asked: tuple[ForcedRead, ...]
+    asked: tuple[QueuedWork, ...]
+
+    @property
+    def waiting(self) -> tuple[QueuedWork, ...]:
+        return self.queue + self.asked
+
+    @property
+    def waiting_said(self) -> str:
+        """What waits, counted in words, or "" when nothing does."""
+
+        counts = ((len(self.queue), "change"), (len(self.asked), "refresh"))
+        return get_text_list([counted(count, noun) for count, noun in counts if count], "and")
 
     @property
     def overdue_tone(self) -> str:
@@ -75,7 +93,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
     due = bool(verdict.get("due"))
     queue = tuple(
         QueuedWork(
-            resource=operation.resource.key,
+            record=entity_link("resource", operation.resource.key),
             action=operation.get_action_display(),
             state=operation.get_state_display(),
             created_at=operation.created_at,
@@ -99,7 +117,24 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         oldest=oldest[0] if oldest else None,
         overdue=oldest is not None and freshness(oldest[0].sight.kind, oldest[1], now).stale,
         queue=queue,
-        asked=forced_reads(),
+        asked=tuple(map(_refresh, forced_reads())),
+    )
+
+
+def _refresh(read: ForcedRead) -> QueuedWork:
+    """An asked refresh as the work it waits as: what it reads, by name."""
+
+    if read.connection_ref:
+        record = entity_link("connection", read.connection_ref)
+    elif read.kind:
+        record = EntityLink(label=kind_label(read.kind), kind=read.kind, title=read.kind)
+    else:
+        record = EntityLink(label="Every connection")
+    return QueuedWork(
+        record=record,
+        action=capability_words("infrastructure.controller.refresh"),
+        state=JobState.QUEUED.label,
+        created_at=read.requested_at,
     )
 
 

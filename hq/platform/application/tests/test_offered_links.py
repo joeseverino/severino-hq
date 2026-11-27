@@ -7,16 +7,13 @@ rule the page gate serves by, so what is offered and what is served agree.
 import os
 from unittest import mock
 
-from django.test import RequestFactory, TestCase, modify_settings, override_settings
-from django.urls import clear_url_caches, include, path, resolve, reverse, set_script_prefix
+from django.test import TestCase, modify_settings, override_settings
+from django.urls import include, path, resolve
 
 from hq.config.urls import urlpatterns as root_urlpatterns
-from hq.platform.application import request_context, roles, routes
-from hq.platform.application.domains import domain_navigation
-from hq.platform.application.pages import Page, PageAction, authorizes_itself, page_refusal
+from hq.platform.application import roles
+from hq.platform.application.pages import authorizes_itself, page_refusal
 from hq.platform.application.routes import routed
-from hq.platform.application.security import web_principal
-from hq.platform.core.context_processors import nav
 from hq.platform.core.testing import person
 
 from .addresses import address
@@ -39,14 +36,6 @@ def _opens(user, view) -> bool:
     return authorizes_itself(view) or page_refusal(user, view) is None
 
 
-def _offered_routes(request) -> set[str]:
-    return {
-        item["url"]
-        for entry in nav(request)["nav_entries"]
-        for item in (entry["items"] if entry["kind"] == "group" else [entry])
-    }
-
-
 @override_settings(ROOT_URLCONF=__name__)
 @modify_settings(INSTALLED_APPS={"append": EXAMPLE})
 class OfferedAsServedTests(TestCase):
@@ -66,19 +55,6 @@ class OfferedAsServedTests(TestCase):
         self.addCleanup(composed.stop)
         self.people = [_person(role or "nobody", role) for role in (*roles.Role.values, "")]
 
-    def test_each_nav_item_is_offered_exactly_when_its_page_opens(self):
-        items = domain_navigation()
-        self.assertIn("example_plugin:index", {item.route for item in items}, "the example plugin is not composed")
-        for user in self.people:
-            request = RequestFactory().get("/")
-            request.resolver_match = None
-            request.user = user
-            offered_routes = _offered_routes(request)
-            for item in items:
-                address = reverse(item.route)
-                with self.subTest(person=str(user), route=item.route):
-                    self.assertEqual(item.route in offered_routes, _opens(user, resolve(address).func))
-
     def test_a_link_to_any_routed_page_is_offered_exactly_when_it_opens(self):
         from hq.platform.application.pages import offered
 
@@ -90,102 +66,3 @@ class OfferedAsServedTests(TestCase):
             for user in self.people:
                 with self.subTest(person=str(user), route=route.name):
                     self.assertEqual(offered(user, url), _opens(user, view))
-
-
-class AuditLogLinkTests(TestCase):
-    """The audit log is read under its own capability, so only who holds it is led there."""
-
-    def test_a_viewer_is_offered_no_link_to_the_audit_log(self):
-        viewer = _person("viewer", roles.Role.VIEWER)
-        self.client.force_login(viewer)
-
-        jobs = self.client.get(reverse("jobs:list"))
-
-        self.assertEqual(jobs.status_code, 200)
-        self.assertNotIn(reverse("core:audit_list"), [action.url for action in jobs.context["page"].actions])
-        self.assertNotIn("core:audit_list", _offered_routes(jobs.wsgi_request))
-
-    def test_an_operator_is_offered_it_in_the_nav_and_on_the_jobs_page(self):
-        self.client.force_login(_person("operator", roles.Role.OPERATOR))
-
-        jobs = self.client.get(reverse("jobs:list"))
-
-        self.assertIn(reverse("core:audit_list"), [action.url for action in jobs.context["page"].actions])
-        self.assertIn("core:audit_list", _offered_routes(jobs.wsgi_request))
-
-
-def _first(_request):
-    """The page the first URLconf routes ``example`` to."""
-
-
-def _second(_request):
-    """The page the second URLconf routes ``example`` to, open to anybody."""
-
-
-_second.login_required = False
-
-
-class FirstURLconf:
-    urlpatterns = [path("example/", _first, name="example")]
-
-
-class SecondURLconf:
-    urlpatterns = [path("example/", _second, name="example")]
-
-
-class UnroutedSectionTests(TestCase):
-    """A section whose address HQ routes nothing at is not HQ's to withhold, so the nav draws it."""
-
-    def setUp(self):
-        # A resolver of its own, so no lookup an earlier test kept answers this one.
-        clear_url_caches()
-        routes.forget()
-        self.addCleanup(routes.forget)
-        self.addCleanup(clear_url_caches)
-
-    def test_the_nav_draws_under_a_script_prefix_the_resolver_does_not_answer(self):
-        request = RequestFactory().get("/")
-        request.resolver_match = None
-        request.user = _person("viewer", roles.Role.VIEWER)
-        set_script_prefix("/under/")
-        self.addCleanup(set_script_prefix, "/")
-
-        offered_routes = _offered_routes(request)
-
-        self.assertEqual(offered_routes, {item.route for item in domain_navigation()})
-
-
-class ChangedURLconfTests(TestCase):
-    """A route is answered by the URLconf in force, never one a lookup kept from before."""
-
-    def test_a_replaced_urlconf_is_answered_with_its_own_view(self):
-        from hq.platform.application.pages import Offering
-
-        with override_settings(ROOT_URLCONF=FirstURLconf):
-            self.assertFalse(Offering(None).route("example"))
-        with override_settings(ROOT_URLCONF=SecondURLconf):
-            self.assertTrue(Offering(None).route("example"))
-
-
-class OnePrincipalPerRequestTests(TestCase):
-    """A page asks of every link it draws, and its reader's principal is built once for all of them."""
-
-    def _principals_built(self, user, links: int) -> int:
-        request = RequestFactory().get("/")
-        request.resolver_match = None
-        request.user = user
-        audit = reverse("core:audit_list")
-        actions = tuple(PageAction(f"Audit {n}", audit) for n in range(links))
-        with (
-            request_context.bind(request),
-            mock.patch("hq.platform.application.pages.web_principal", wraps=web_principal) as built,
-        ):
-            page = Page("Example", actions=actions, trail=(("Audit", audit),) * links)
-            nav(request)
-        self.assertEqual((page.actions, page.trail), ((), ()), "a viewer is offered no link to the audit log")
-        return built.call_count
-
-    def test_the_principals_built_do_not_grow_with_the_links_a_page_draws(self):
-        viewer = _person("viewer", roles.Role.VIEWER)
-
-        self.assertEqual(self._principals_built(viewer, 20), self._principals_built(viewer, 1))

@@ -37,7 +37,7 @@ def _typed_marks(source: Source) -> Iterator[int]:
 
 
 # What prints a figure: a filter that writes one, a count's or a total's name.
-_FIGURE_FILTERS = frozenset(("money", "counted", "length", "floatformat", "bytes"))
+_FIGURE_FILTERS = frozenset(("money", "money_whole", "counted", "length", "floatformat", "bytes"))
 _COUNT_NAME = re.compile(r"(?:^|[._])(?:count|total)$")
 
 
@@ -116,6 +116,7 @@ WORDED_FIGURES = {
     "expiry": "a date and a count of days",
     "measured": "a figure and its unit",
     "money": "an amount",
+    "money_whole": "an amount in whole dollars",
     "seconds": "a run time",
     "signed_in": "an age in words",
     "span": "a length of time",

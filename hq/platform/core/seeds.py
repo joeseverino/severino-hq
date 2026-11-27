@@ -223,6 +223,14 @@ def _glance_asked(owner) -> None:
     example_estate.infra.glance_asked()
 
 
+def _refreshes_asked(owner) -> None:
+    """The example estate with refreshes asked of the controller and not
+    yet answered beside the changes queued for it."""
+
+    _estate(owner)
+    example_estate.infra.refreshes_asked()
+
+
 def _policy_change(owner) -> None:
     """The example estate with an agent's change to the tailnet policy held,
     one that opens a port and drops the test that kept it shut, so the
@@ -331,6 +339,7 @@ SEEDS: dict[str, Seed] = {
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
+    "refreshes-asked": Seed(_refreshes_asked, _SET_UP),
     **{
         f"update-{ended}": Seed(_approved(ended), _SET_UP)
         for ended in ("queued", "preview-failed", "not-applied", "held", "applied")

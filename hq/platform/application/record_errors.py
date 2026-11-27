@@ -1,21 +1,31 @@
 """The ways a use case refuses: not there, a clash, forbidden by policy or
 state, unusable material, or a value HQ cannot act on.
 
-An adapter answers each one way, by its ``code``. A ``reason`` is written by
-the host, never taken from a request or a dependency, since it is the only text
-an adapter answers with (``RefusalTextTests``).
+An adapter answers each one way, by its ``code``. A ``reason`` is a
+``Sentence``, written by the host and never taken from a request or a
+dependency, since it is the only text an adapter answers with.
 """
 
 from collections.abc import Callable, Iterable
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .refusal_codes import Code
 lazy from .refusal_status import RefusalDetails
 
-# A sentence HQ wrote. To the type checker a ``str``; to the refusal test a
-# promise: every value passed, defaulted or returned where it is annotated is
-# held to be one, so a refusal may be built from it.
+# A sentence HQ wrote: a ``str``, which HQ's mypy reads as ``Written`` and
+# holds every value passed for one to (tools/lint/mypy_sentence.py).
 Sentence = str
+
+if TYPE_CHECKING:
+
+    class Written(str):
+        """What HQ's mypy reads ``Sentence`` as."""
+
+
+def worded(text: Sentence) -> Sentence:
+    """``text``, as the sentence HQ's mypy holds it to be, for a value built in a function's body."""
+
+    return text
 
 
 class HostRefusal(Exception):

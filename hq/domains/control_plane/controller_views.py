@@ -7,7 +7,6 @@ from django.views.generic import TemplateView
 from hq.domains.control_plane.models import InboundSource
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.controller_page import controller_page, controller_problems
-from hq.platform.application.entity_links import entity_link
 from hq.platform.application.hq_context.sight_part import sight
 from hq.platform.application.inbound_events import channel_standing, setup_guide
 from hq.platform.application.moments import when
@@ -17,7 +16,7 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Cell, DataTable, TableColumn
 
 PENDING = (
-    TableColumn("Record", kind="identifier", cell=lambda work: Cell.of(entity_link("resource", work.resource))),
+    TableColumn("Record", kind="identifier", cell=lambda work: Cell.of(work.record)),
     TableColumn("Change", drop=2, cell=lambda work: Cell(work.action)),
     TableColumn("State", kind="status", css="key-col", cell=lambda work: Cell(work.state)),
     TableColumn("Asked", kind="status", drop=1, cell=lambda work: Cell(when(work.created_at))),
@@ -54,6 +53,6 @@ class ControllerView(PageMixin, TemplateView):
         context["sight"] = sight()
         listener = context["listener"] = channel_standing(InboundSource.WORKER)
         context["listener_guide"] = setup_guide(listener)
-        context["pending"] = DataTable.of("Pending changes", PENDING, controller.queue)
+        context["pending"] = DataTable.of("Pending", PENDING, controller.waiting)
         context["start_guide"] = docs_url("Install.md", "11-the-controllers-first-reading")
         return context

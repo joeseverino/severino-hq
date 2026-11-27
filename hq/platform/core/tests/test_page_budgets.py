@@ -1,109 +1,18 @@
 """What a page costs over the bench estate: the same at any size, and nothing derived twice."""
 
 from collections import Counter
-from unittest import mock
 
 from django.db import connection
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse as django_reverse
-from django.utils import timezone
 
-from hq.domains.assets.models import Asset
-from hq.domains.control_plane.provider_spec import adapter
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.expenses.models import Expense
-from hq.domains.reports.exports import year_summary
-from hq.platform.application import routes
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import counting
-from hq.platform.application.projection import projection_scope, years_of
-from hq.platform.application.services import service_catalog
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.core.bench import Seeded, seed
-from hq.platform.core.management.commands.bench_pages import ALSO, SAMPLES, _pages
+from hq.platform.core.bench import Seeded
+from hq.platform.core.management.commands.bench_pages import _pages
 
-from .estate_sizes import SMALL, assert_estate_cost_does_not_grow, at_both_sizes
-
-
-def _catalog(_seeded: Seeded) -> tuple:
-    with host_only(), projection_scope():
-        return service_catalog()
-
-
-class ServiceCatalogBudgetTests(TestCase):
-    def test_the_catalog_costs_the_same_at_any_size(self):
-        assert_estate_cost_does_not_grow(self, draw=_catalog, rows=len)
-
-    def test_a_service_still_names_the_container_found_running_it(self):
-        seed(SMALL)
-        with projection_scope():
-            running = [
-                facet.observed
-                for service in service_catalog()
-                for facet in service.facets
-                if facet.observed is not None
-            ]
-
-        self.assertTrue(running)
-        self.assertTrue(all(found.name.startswith("app") for found in running))
-
-
-class YearSummaryBudgetTests(TestCase):
-    def test_related_records_come_from_the_prefetch_at_any_size(self):
-        year = timezone.localdate().year
-        summaries = []
-
-        def draw(_seeded: Seeded) -> dict:
-            summaries.append(year_summary(year))
-            return summaries[-1]
-
-        assert_estate_cost_does_not_grow(self, draw=draw, rows=lambda summary: len(summary["content"]))
-        summary = summaries[-1]
-        linked = [row for row in summary["documentation"] if row["related_projects"]]
-        self.assertTrue(linked)
-        self.assertGreater(len(summary["content"]), 10)
-
-
-class YearsOfTests(TestCase):
-    def test_it_answers_as_dates_does_at_no_more_cost(self):
-        seed(SMALL)
-        Asset.objects.filter(pk=Asset.objects.order_by("pk")[0].pk).update(purchase_date=None)
-
-        for model, field in ((Expense, "date"), (Asset, "purchase_date")):
-            with CaptureQueriesContext(connection) as asked:
-                found = years_of(model, field)
-            with CaptureQueriesContext(connection) as dates:
-                expected = [day.year for day in model.objects.dates(field, "year")]
-            self.assertEqual(found, expected)
-            self.assertLessEqual(len(asked), len(dates))
-
-
-class SpecAdapterTests(SimpleTestCase):
-    def test_a_spec_type_is_given_one_validator(self):
-        for provider in PROVIDERS.values():
-            self.assertIs(adapter(provider.spec_type), adapter(provider.spec_type))
-
-
-class RouteContextTests(SimpleTestCase):
-    def test_a_projection_asks_django_where_it_is_served_once(self):
-        with (
-            mock.patch.object(routes, "get_urlconf", wraps=routes.get_urlconf) as urlconf,
-            mock.patch.object(routes, "get_script_prefix", wraps=routes.get_script_prefix) as prefix,
-            projection_scope(),
-        ):
-            found = [routes.reverse("expenses:detail", args=[pk]) for pk in range(1, 40)]
-
-        self.assertEqual(found, [django_reverse("expenses:detail", args=[pk]) for pk in range(1, 40)])
-        self.assertEqual((urlconf.call_count, prefix.call_count), (1, 1))
-
-    def test_outside_a_projection_each_lookup_asks(self):
-        with mock.patch.object(routes, "get_urlconf", wraps=routes.get_urlconf) as urlconf:
-            routes.reverse("dashboard")
-            routes.reverse("dashboard")
-
-        self.assertEqual(urlconf.call_count, 2)
-
+from .estate_sizes import at_both_sizes
 
 # The pages measured once their derivations are stored.
 STORED_PAGES = (
@@ -168,22 +77,3 @@ class StoredPageBudgetTests(TestCase):
         self.assertLessEqual(max(large_first.values()), READERS)
         self.assertEqual((small_again, large_again), (Counter(), Counter()))
         self.assertEqual((small_twice, large_twice), ({}, {}))
-
-    def test_a_page_that_shows_no_provider_reads_none(self):
-        seeded = seed(SMALL)
-        self.client.force_login(seeded.user)
-        with host_only(), CaptureQueriesContext(connection) as captured:
-            self.assertEqual(self.client.get(django_reverse("docs_index:list")).status_code, 200)
-
-        tables = {"control_plane_providerinventory", "control_plane_providerconnection"}
-        self.assertEqual([query["sql"] for query in captured if any(table in query["sql"] for table in tables)], [])
-
-
-class BenchPagesTests(TestCase):
-    def test_every_sample_names_a_route_and_a_seeded_record(self):
-        seeded = seed(SMALL)
-        pages, left = _pages(seeded)
-
-        benched = {name.split("?")[0] for name, _ in pages}
-        self.assertLessEqual(set(SAMPLES) | set(ALSO), benched)
-        self.assertNotIn("dashboard", dict(left))

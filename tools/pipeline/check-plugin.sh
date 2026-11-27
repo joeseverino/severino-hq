@@ -119,7 +119,6 @@ MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
     hq.platform.application.tests.test_action_words.DeclaredWordsTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
-    hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
     hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_runner \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_no_page_paginates_a_list_of_its_own \

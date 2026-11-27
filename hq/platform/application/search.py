@@ -11,7 +11,7 @@ from hq.platform.search_index.backends import SnippetParts, search_backend
 from hq.platform.search_index.registry import by_scope
 
 from .integration_specs import ListRead, ResourceSpec
-from .projection import MAX_PAGE_SIZE, page_size, projection_scope
+from .projection import MAX_PAGE_SIZE, projection_scope
 from .resources import TopQuery, resource_search_capabilities
 from .security import Capability, Principal
 lazy from . import derived_reads
@@ -36,20 +36,11 @@ def _required(scope: str) -> tuple[Capability | str, ...]:
     return resource_search_capabilities().get(scope, (Capability.READ,))
 
 
-def search_ids(scope: str, query: str, *, principal: Principal, limit: int = 100) -> list[str]:
-    """Return relevance-ordered stable identifiers from the configured backend."""
-    _authorize(scope, principal)
-    # Its own ceiling, the shared rule. Search caps lower than a listing does
-    # because relevance past a hundred hits is noise, but "a page must be at
-    # least one row" is not a different rule here than anywhere else.
-    return search_backend.search(scope=scope, query=query, limit=page_size(limit, maximum=MAX_SEARCH_RESULTS))
-
-
 def apply_search(queryset: QuerySet, *, scope: str, query: str, principal: Principal) -> QuerySet:
     """Filter a domain queryset while retaining relevance as its default order.
 
     ``_search_rank`` is the row's position among the index's ranked hits, the
-    same order ``search_ids`` and ``global_search`` return, so ordering by it
+    same order ``global_search`` returns, so ordering by it
     is total and a page boundary never moves. The index states it in SQL: the
     statement carries the same few parameters however many rows match.
     """

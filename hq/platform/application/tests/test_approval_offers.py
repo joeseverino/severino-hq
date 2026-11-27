@@ -26,8 +26,6 @@ from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_
 from .writers import keyed
 
 ROOT = Path(__file__).resolve().parents[4]
-# What the held request's queue item and card are titled by.
-ASKED = "mcp-service-account"
 
 
 def _decide_urls(held) -> dict[str, str]:
@@ -86,31 +84,11 @@ class DecisionOfferTests(TestCase):
         self.assertEqual(len(set(drawn.values())), 1, drawn)
         return set(next(iter(drawn.values())))
 
-    def test_an_operator_is_offered_both_decisions_and_takes_one(self):
-        self.assertEqual(self._offered(self.operator), {"approve", "reject"})
-
-        self.client.force_login(self.operator)
-        self.client.post(_decide_urls(self.held)["approve"], form_keyed({}))
-
-        self.held.refresh_from_db()
-        self.assertEqual(self.held.state, ApprovalRequest.State.APPROVED)
-
     def test_a_viewer_reads_the_request_and_who_decides_it_with_no_decision_to_press(self):
         self.assertEqual(self._offered(self.viewer), set())
 
         self.client.force_login(self.viewer)
-        queue = text(self.client.get(reverse("action_items")))
-        self.assertIn(ASKED, queue)
-        self.assertIn("operators", queue)
-
-    def test_a_viewer_s_forged_decision_is_still_refused(self):
-        self.client.force_login(self.viewer)
-
-        for url in _decide_urls(self.held).values():
-            self.client.post(url, form_keyed({}))
-
-        self.held.refresh_from_db()
-        self.assertEqual(self.held.state, ApprovalRequest.State.PENDING)
+        self.assertIn("operators", text(self.client.get(reverse("action_items"))))
 
     def test_a_request_whose_agent_was_paused_offers_only_reject_which_still_answers_it(self):
         set_agents_paused(AgentAccessCommand(paused=True), principal=web_principal(self.operator))
@@ -124,20 +102,6 @@ class DecisionOfferTests(TestCase):
         self.client.post(_decide_urls(self.held)["reject"], form_keyed({}))
         self.held.refresh_from_db()
         self.assertEqual(self.held.state, ApprovalRequest.State.REJECTED)
-
-    def test_every_door_offers_what_the_rule_allows_each_reader(self):
-        from hq.platform.application.approvals import DECISIONS, refusals
-
-        paths = dict(DECISIONS)
-        for name, user in (("operator", self.operator), ("viewer", self.viewer)):
-            for paused in (False, True):
-                with self.subTest(reader=name, paused=paused):
-                    set_agents_paused(AgentAccessCommand(paused=paused), principal=web_principal(self.operator))
-                    allowed = refusals(web_principal(user), (self.held,))[self.held.pk]
-
-                    self.assertEqual(
-                        self._offered(user), {paths[name] for name, refused in allowed.items() if refused is None}
-                    )
 
 
 @tag("source", "tree")

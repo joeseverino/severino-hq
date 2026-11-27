@@ -887,7 +887,7 @@ CHECKS = {
             # ends a line.
             Plant(
                 "{% load value_tags %}"
-                '<p class="example-written" style="{{ box }}">{{ owed|money }} {{ five|money:"whole" }}</p>'
+                '<p class="example-written" style="{{ box }}">{{ owed|money }} {{ five|money_whole }}</p>'
                 '<p class="example-loose" style="{{ box }}">\u2212$1,243.52</p>',
                 values={
                     "owed": Decimal("-1243.52"),

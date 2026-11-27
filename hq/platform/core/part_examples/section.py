@@ -4,7 +4,7 @@ lazy from datetime import date
 
 from hq.platform.core.part_examples import table
 from hq.platform.core.template_parts import Example
-lazy from hq.platform.application.card_items import ListRow
+lazy from hq.platform.application.card_items import Badge, ListRow, RowTitle
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.tables import TableColumn
 
@@ -141,8 +141,8 @@ SECTION_STATES = {
         "{% endsection %}",
         lambda: {
             "rows": [
-                ListRow("Example change", url="/example/41/", detail="#41"),
-                ListRow("Another example change", url="/example/42/", detail="#42", badge="Draft"),
+                ListRow(RowTitle("Example change", "/example/41/"), detail="#41"),
+                ListRow(RowTitle("Another example change", "/example/42/"), detail="#42", state=Badge("Draft")),
             ]
         },
     ),

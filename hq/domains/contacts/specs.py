@@ -15,7 +15,7 @@ from hq.platform.application.contact_submissions import (
 from hq.platform.application.contracts import Effect
 from hq.platform.application.deletion import DeleteCommand
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from hq.platform.application.integration_specs import CapabilitySpec, DetailRead, ListRead, ResourceSpec
 from hq.platform.application.record_fields import RecordId
 from hq.platform.application.records import DELETE
 from hq.platform.application.resources import STATUS_FILTER, TEXT_FILTER, BoundedQuery, one_of
@@ -134,10 +134,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             listing=ListRead(
                 contact_submissions.list_contact_submissions, ContactSubmissionQuery, ContactSubmissionRow
             ),
-            detail_handler=contact_submissions.get_contact_submission,
+            detail=DetailRead(contact_submissions.get_contact_submission, ContactSubmissionRow),
             identifier="id",
             identifier_type=RecordId,
             web_route="contacts:list",
-            record_type=ContactSubmissionRow,
         ),
     )

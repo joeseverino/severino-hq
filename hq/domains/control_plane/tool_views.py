@@ -70,8 +70,8 @@ class ToolsView(PageMixin, TemplateView):
         # A stored answer is read again by a POST of its own, beside the moment it was read.
         address = context["results"].get(LOOK_UP_ADDRESS)
         if isinstance(address, dict) and address.get("observed_at"):
-            context["reread"] = PageAction.command(
-                LOOK_UP_ADDRESS, fields={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]}
+            context["reread"] = PageAction.post(
+                LOOK_UP_ADDRESS, sends={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]}
             )
         return context
 

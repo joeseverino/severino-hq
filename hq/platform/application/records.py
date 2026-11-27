@@ -35,22 +35,19 @@ DELETE = "Delete"
 def deleter(resource: str) -> Callable[..., RecordDeleted]:
     """The confirmed delete for one record domain, in the host call contract."""
 
+    records = records_of(resource)
+
     def delete(
         command: DeleteCommand,
         *,
         principal: Principal,
         expected_updated_at: str | None = None,
-        **target: Any,
+        current: Any,
     ) -> RecordDeleted:
-        records = records_of(resource)
-        keyword = TARGET_KINDS[records.target].keyword
-        if set(target) != {keyword}:
-            raise TypeError(f"{records.noun}.delete takes {keyword}.")
-        value = target[keyword]
         return delete_record(
             load(records.model),
-            lookup={records.lookup: value},
-            target=str(value),
+            lookup={records.lookup: current},
+            target=str(current),
             command=command,
             type_name=records.noun,
             called=records.called,
@@ -59,6 +56,7 @@ def deleter(resource: str) -> Callable[..., RecordDeleted]:
         )
 
     delete.__name__ = f"delete_{resource}"
+    TARGET_KINDS[records.target].binds(delete)
     return delete
 
 

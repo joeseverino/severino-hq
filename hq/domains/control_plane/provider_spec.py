@@ -29,7 +29,7 @@ from hq.platform.application.contracts import Closed
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import span, when_day
-from hq.platform.application.record_errors import Sentence
+from hq.platform.application.record_errors import Sentence, worded
 from hq.platform.application.routes import reverse
 lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.expiry import days_until
@@ -355,13 +355,13 @@ class ControllerVerification(ProviderModel):
 class ControllerActionPolicy(ProviderModel):
     mode: Literal["apply", "locked"]
     automatic: bool = False
-    reason: Sentence = ""
+    reason: Sentence = worded("")
     verification: ControllerVerification | None = None
 
     def why_locked(self) -> Sentence:
         """Why the controller may not run this, as a refusal says it."""
 
-        return self.reason or "HQ cannot run this action."
+        return self.reason or worded("HQ cannot run this action.")
 
     @model_validator(mode="after")
     @checked
@@ -593,7 +593,7 @@ class ProviderSpec:
     # For a kind whose found records belong to something HQ reads and does not
     # write. They are shown as observed, and neither a sweep nor a person
     # adopts one.
-    adoption_gap: Sentence = ""
+    adoption_gap: Sentence = worded("")
     # The page a resource of this kind lives on, when it has one of its own.
     home: Callable[[Any], str] | None = None
     # Whether the source HQ derives this kind's records from names this one

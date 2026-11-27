@@ -110,10 +110,8 @@ Tests that hold these promises:
 | An agent's delete waits, and happens only once approved; a rule binds its own agent alone, on every surface, and never past the identity provider's grant; nothing governed by policy may set it | `hq/platform/application/tests/test_capability_policy.py` |
 | No token approves its own request, even one holding every capability | `hq/platform/application/tests/test_approvals.py` |
 | The pause switch fails closed, and no credential can change it | `hq/platform/application/tests/test_agent_access.py` |
-| Pausing agents refuses an agent on every surface through one helper, and never pauses a person | `hq/platform/application/tests/test_one_pause.py` |
-| Pausing agents or blocking one holds what it already asked for until the brake lifts: its held request stays rejectable, and its queued work is not claimed | `hq/platform/application/tests/test_brakes_hold_asked_work.py` |
+| Pausing agents refuses an agent on every surface through one helper, holds what it already asked for, and never pauses a person | `hq/platform/application/tests/test_one_pause.py` |
 | A held request is its asker's: a second agent asking the same change holds its own, the change applies once, and an agent reads only its own held requests | `hq/platform/application/tests/test_holds_belong_to_their_asker.py` |
-| An agent a person signed in keeps that person's own settings, pins and set-asides, and a machine's own token keeps none | `hq/platform/application/tests/test_person_bound_agent.py` |
 | A write the token does not grant is refused on MCP and the machine API alike, and one it grants runs on both with nothing set in HQ | `hq/platform/api/tests/test_agent_grant.py` |
 
 ### How much an agent may ask

@@ -47,13 +47,13 @@ and those that hold across parts in [Design](Design.md).
 
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |
-| `{% arrow %}` | nothing | The arrow that ends a link onward, written straight after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
+| `{% arrow %}` | nothing | The arrow that ends a link onward, written after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
 | `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button restart.label offer=restart look="primary" %}` |
 | `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
 | `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
 | `{% cell_line %}` | `detail` | A fact in a table cell as a line of its own, and the words said quietly on the line under it: given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, its second line after `{% detail %}`. A second line that is a status, code or a link is a `{% list %}` item. | `{% cell_line %}{% entity "machine"\|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}` |
 | `{% data_table %}` | nothing | A table drawn whole from its declaration: its columns' headings and a row of cells for each record. | `{% data_table table %}` |
-| `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
+| `{% dot %}` | nothing | The middle dot between two parts of one line, written after the first. | `{{ count }}{% dot %}{{ age }}` |
 | `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
 | `{% entity %}` | nothing | One thing named, as the link builder answered for it: a link to its page, or its name. | `{% entity "machine"\|entity_of:name %}` |
 | `{% fact %}` | `detail`, `heading`, `panel`, `foot` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`, and a panel its value opens in place after `{% heading %}`, `{% panel %}` and `{% foot %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
@@ -230,7 +230,7 @@ and those that hold across parts in [Design](Design.md).
 | `words` | `capability`, first and unnamed | required |  | The command, by name. |
 | `words` | `variant` |  |  | Which of its words, where it has more than one. |
 
-Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money`, `|money_whole`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
@@ -305,7 +305,7 @@ a glyph or no words is named aloud by its `heard`, else its title. A `<button>` 
 is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
 may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
 press its reader would be refused. `_page_action.html` draws one; a confirmation's is
-`PageAction.command(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
+`PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
 with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
 (`partials/_calendar_sources.html`).
 
@@ -561,9 +561,8 @@ part only the open line shows (`row-more`, `line-rest`), shown always, what the 
 shows of it only once its column has left (`data-row-shows`). A copy draws no id twice. A cell
 held back holds no control, which a copy would draw twice: the region refuses one, so a button
 stands in place or moves whole (`row-below`). A row's open line a script adds is
-`{% open_line %}`. *Gates:*
-`test_table_once.py`: `test_a_row_writes_each_cell_once`, `test_a_cell_held_back_holds_no_control`,
-and the byte budgets `ROW_BYTES` and `CHROME_BYTES`.
+`{% open_line %}`. *Gates:* the byte budgets `ROW_BYTES` and `CHROME_BYTES`
+(`test_table_once.py`), and `test_a_cell_held_back_holds_no_control` (`test_part_refusals.py`).
 
 - A `row-below` block, which the row's line never shows, and the row's editor are moved into a
   line the server draws after the row (`tr.row-detail`, `drawn_tables`), shown while the
@@ -694,13 +693,12 @@ through the form's own loop, so no page writes its markup.
 ### dot
 
 A dot between two parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
-written straight after its part. A no-break space joins the mark to that part and a reader never
-hears it, so no line starts with a mark or holds one alone. A run of whole parts is `{% list
-kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
-joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
-`breakable` draws that dot as this tag does; markup built in Python joins with
-`dotted_html(...)`. *Gate:* `test_template_separators`, which follows every branch and include
-before each held mark, over the host's templates and an extension's.
+written after its part. A no-break space joins the mark to that part, the loader takes out any
+space written before the tag (`held_values`), and a reader never hears it, so no line starts with
+a mark or holds one alone. A run of whole parts is `{% list kind="dots" %}`; any other mark is
+the text of an `aria-hidden` element. Text built in Python joins its parts with `dotted(...)`
+(`hq_sdk.ui`), which holds each dot to the part before it, and `breakable` draws that dot as this
+tag does; markup built in Python joins with `dotted_html(...)`.
 
 ### fact
 
@@ -935,8 +933,8 @@ A run of short parts in a cell (a project's technologies, what a connection read
 `{% line_list values as value %}…{% endline_list %}`, with `kind=` one of the list's kinds where
 the body draws each `li`. No count decides how many show. Its first three size the column and
 wrap with it. The rest ask the column for nothing and show as many as the line they end has room
-for, each whole, and the row opens only when one is cut. A list folded at a fixed number behind
-`row-more` is refused (`test_template_line_lists`).
+for, each whole, and the row opens only when one is cut. No list is folded at a fixed number
+behind `row-more`.
 
 ### list
 
@@ -1114,7 +1112,7 @@ it, and `search` offers the search field.
 connection includes this part. On a live HQ it renders nothing; on a saved copy
 (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
 marks the line as an example connection, not the reader's. *Gate:*
-`hq/platform/core/tests/test_example_connection.py`, and `demo/check.py` on the built demo.
+`demo/check.py` on the built demo.
 
 ### partials/_form.html
 
@@ -1142,8 +1140,7 @@ connection can't make the change passes `gap`; the closing row draws the verb un
 needs beside it. A form a script or test finds names its `data-` attributes as `hooks`. A form
 answered in another region's place gives that region's id as `in_place`. *Catalog:*
 `form/write-gap`. *Gate:* the `form` shape of `hand_drawn.SHAPES`, which holds every form that
-writes to the form part, and `test_form_page.py`, which holds every routed create and edit view to
-the frame and the card to it alone.
+writes to the form part.
 
 A form that asks one question is one visible field of a line (words, a number, a date, one
 choice) closed by its verb alone. It draws its button on the field's line where the field keeps
@@ -1295,8 +1292,9 @@ A row of a record list (`.list-rows`) reads as one line: its meta follows its na
 never at the row's far side across an empty middle. What can be done to the record ends its line:
 `ListRow.actions`, each a `PageAction`, drawn as compact controls, a POST through `{% button %}`,
 a glyph named aloud by its `title`, and one that cannot be pressed as `disabled`. A row that names
-a thing HQ links (a related record, a project) is given its `link`, an `EntityLink`, in place of a
-`title` and a `url`, and draws it as every mention of a thing is drawn. A project's row gives its
+a thing HQ links (a related record, a project) is named by its `EntityLink`, in place of a
+`RowTitle`, and draws it as every mention of a thing is drawn. Its `state` is a `Badge`, words in
+their tone, so state is never color alone. A project's row gives its
 `category`, drawn as that category's color (`--cat-*`) before the title, its name in `detail`. A
 search hit gives its `snippet`, where the record matched, as runs of the record's own text each
 with whether it is the match: a line of its own under the row, two lines at most, the match
@@ -1327,7 +1325,7 @@ line, all one size. A label keeps one line, uncut. A field a reader fills in (a 
 row's value, so a column holding one never leaves, and in a cell it fills its cell and gives way
 with its column. The reader's way to set a row aside (`Row(put_away=)`, the queue's Dismiss) is the
 last of its buttons, drawn quiet; alone on a row's line its words start at the name's edge.
-*Gates:* the survey's `row actions beside squeezed words`, and `test_row_controls.py`.
+*Gate:* the survey's `row actions beside squeezed words`.
 
 A row's own arrangement (a favorite's star, the pair that moves it) is no part of the cell that
 names the row: `Row(mark=)` and `Row(order=)` draw it first in the row's controls column, the star last of
@@ -1591,8 +1589,8 @@ table, drawn for the open row alone. It holds the values the cell gives by field
 was sent when it is bound. Its ids carry the row's key, so none is drawn twice. A region that
 holds an editor's link is a region of the page (`data-fragment`, its id from its label). So with
 script the link, the form and its Cancel are answered there through `fragment.js`'s own paths.
-The form posts `next`, the page with the editor closed. *Gate:*
-`hq/platform/core/tests/test_row_editor.py`.
+The form posts `next`, the page with the editor closed. *Gate:* `part/row-editor-open`, and
+`test_part_refusals.py` for a value its form lacks.
 
 ### run_evidence (host only)
 

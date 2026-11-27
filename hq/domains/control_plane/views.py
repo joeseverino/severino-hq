@@ -205,7 +205,7 @@ class ResourceRemoveView(View):
         resource = get_object_or_404(ManagedResource, key=key)
         capabilities = resource_capabilities(resource)
         forget = capabilities.removal == "forget"
-        removal = PageAction.command(REMOVAL_CAPABILITY, key, variant=capabilities.removal_variant, confirms=True)
+        removal = PageAction.post(REMOVAL_CAPABILITY, key, confirms=True, variant=capabilities.removal_variant)
         return render(
             request,
             self.template_name,
@@ -616,8 +616,8 @@ class OperationView(View):
                 # The unit that runs it, which the verb goes through.
                 "supervision": supervision(resource),
                 "confirm": {
-                    "action": PageAction.command(
-                        ACTION_CAPABILITY[self.action], key, query=request.GET.dict(), confirms=True
+                    "action": PageAction.post(
+                        ACTION_CAPABILITY[self.action], key, confirms=True, query=request.GET.dict()
                     ),
                     "cancel_url": safe_next(request, fallback=resource.get_absolute_url()),
                 },

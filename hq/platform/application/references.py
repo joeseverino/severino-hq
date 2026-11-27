@@ -674,7 +674,7 @@ class Mentions:
     def rows(self) -> tuple[ListRow, ...]:
         """The items as the record list part draws them."""
 
-        return tuple(ListRow(link=item.link, meta=item.note) for item in self.items)
+        return tuple(ListRow(item.link, meta=item.note) for item in self.items)
 
 
 def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Mentions, ...]:

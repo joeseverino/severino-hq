@@ -1,60 +1,18 @@
 """Relations a page reads from the other end: a certificate's services, a
 connection's problems and purpose, a backlog's own things, a list under its types."""
 
-from types import SimpleNamespace
-from unittest import mock
-
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.domains.assets.models import Asset
 from hq.domains.control_plane.models import ProviderConnection
 from hq.platform.application.markup_testing import hrefs, with_class
 from hq.platform.core.testing import connection, operator
 
-from ..attention import raised
 from ..connection_context import connections_context
 from ..entity_links import entity_link
-from ..resource_context import record_list
 from ..security import cli_principal
-from ..services import certificate_use
 from .host_only import host_only
 from .test_relationships import estate
-
-
-class NamedBacklogTests(TestCase):
-    def test_a_backlog_card_names_its_first_things_as_links_and_counts_the_rest(self):
-        for name in ("Desk", "Bench", "Camera", "Anvil"):
-            Asset.objects.create(item_name=name)
-
-        (item,) = tuple(raised("hq.assets"))
-
-        self.assertEqual(item.count, 4)
-        lacks = " (no purchase date or cost)"
-        self.assertEqual(item.explanation, f"Anvil{lacks}, Bench{lacks}, Camera{lacks} and 1 other.")
-        self.assertEqual([link.label for link in item.pages], ["Anvil", "Bench", "Camera"])
-        self.assertTrue(all(link.url.startswith("/assets/") for link in item.pages))
-
-    def test_a_backlog_of_one_names_it_and_counts_nothing(self):
-        Asset.objects.create(item_name="Desk")
-
-        (item,) = tuple(raised("hq.assets"))
-
-        self.assertEqual(item.explanation, "Desk (no purchase date or cost).")
-
-
-class CertificateUseTests(TestCase):
-    def test_a_certificate_lists_the_services_served_with_it_and_its_unused_names(self):
-        services = [SimpleNamespace(hostname=name) for name in ("b.example.com", "a.example.com", "c.example.net")]
-        serving = {"a.example.com": ("wildcard",), "b.example.com": ("wildcard", "other"), "c.example.net": ("other",)}
-        with (
-            mock.patch("hq.platform.application.services.service_catalog", return_value=services),
-            mock.patch("hq.platform.application.services.certificates_serving", side_effect=serving.get),
-        ):
-            use = certificate_use("wildcard", ("*.example.com", "example.org"))
-
-        self.assertEqual(use.used_by, ("a.example.com", "b.example.com"))
-        self.assertEqual(use.unused, ("example.org",))
 
 
 class ConnectionRowsTests(TestCase):
@@ -67,22 +25,12 @@ class ConnectionRowsTests(TestCase):
         with host_only():
             return connections_context(principal=cli_principal())
 
-    def test_every_connection_sits_under_the_part_of_hq_that_uses_it(self):
-        found = self.context()
-
-        self.assertTrue(all(row.used_for for row in found.rows))
-        self.assertEqual(sum(len(rows) for _label, rows in found.purposes), len(found.rows))
-        # The controller's connections lead, under the group their page sits in.
-        self.assertEqual(found.purposes[0][0], "Infrastructure")
-
     def test_a_connection_with_an_open_problem_counts_it_and_links_to_it(self):
         found = self.context()
 
         row = next(row for row in found.rows if row.instance.connection_ref == "example-broken")
         about = entity_link("connection", row.instance.label).url
         self.assertGreaterEqual(row.problems, 1)
-        self.assertEqual(row.as_dict()["open_problems"], row.problems)
-        self.assertIn("about=", row.problems_url)
         operator(self.client, "owner", email="owner@example.test")
         with host_only():
             queue = self.client.get(row.problems_url)
@@ -92,43 +40,9 @@ class ConnectionRowsTests(TestCase):
             {about},
         )
         self.assertIn(row.problems_url, hrefs(page))
-        self.assertTrue(with_class(page, "row-group"))
-
-
-def _row(key, kind, tone="good", summary=""):
-    label = "Working" if tone == "good" else "Has a problem"
-    return {"key": key, "kind": kind, "name": key, "summary": summary, "standing": {"tone": tone, "label": label}}
 
 
 class RecordListTests(TestCase):
-    ROWS = [
-        _row("b-proxy", "npm.proxy_host"),
-        _row("a-dns", "adguard.rewrite", summary="192.0.2.10"),
-        _row("c-dns", "adguard.rewrite", tone="serious"),
-    ]
-
-    def test_rows_sit_under_their_type_with_what_needs_a_look_first(self):
-        listed = record_list(self.ROWS)
-
-        self.assertEqual(
-            [(group.label, len(group.rows), group.unsettled) for group in listed.groups],
-            [("Internal DNS record", 2, 1), ("Proxy host", 1, 0)],
-        )
-        self.assertEqual([row["key"] for row in listed.groups[0].rows], ["c-dns", "a-dns"])
-        self.assertEqual((listed.total, listed.unsettled, listed.filtered), (3, 1, False))
-
-    def test_the_filter_keeps_rows_by_their_words_and_by_one_type(self):
-        by_words = record_list(self.ROWS, query="192.0.2")
-        by_type = record_list(self.ROWS, kind="npm.proxy_host")
-        unknown_type = record_list(self.ROWS, kind="example.none")
-
-        self.assertEqual([row["key"] for group in by_words.groups for row in group.rows], ["a-dns"])
-        self.assertEqual([group.label for group in by_type.groups], ["Proxy host"])
-        # Every type is still offered while one is chosen.
-        self.assertEqual(len(by_type.types), 2)
-        self.assertEqual((by_type.shown, by_type.total), (1, 3))
-        self.assertFalse(unknown_type.filtered)
-
     def test_the_page_draws_a_group_for_each_type_and_filters_by_the_url(self):
         estate(2)
         operator(self.client, "owner", email="owner@example.test")

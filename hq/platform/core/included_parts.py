@@ -485,7 +485,7 @@ PARTS = (
         connection includes this part. On a live HQ it renders nothing; on a saved copy
         (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
         marks the line as an example connection, not the reader's. *Gate:*
-        `hq/platform/core/tests/test_example_connection.py`, and `demo/check.py` on the built demo.
+        `demo/check.py` on the built demo.
         """,
         example=connection.EXAMPLE_CONNECTION,
         states=connection.EXAMPLE_CONNECTION_STATES,
@@ -521,8 +521,7 @@ PARTS = (
         needs beside it. A form a script or test finds names its `data-` attributes as `hooks`. A form
         answered in another region's place gives that region's id as `in_place`. *Catalog:*
         `form/write-gap`. *Gate:* the `form` shape of `hand_drawn.SHAPES`, which holds every form that
-        writes to the form part, and `test_form_page.py`, which holds every routed create and edit view to
-        the frame and the card to it alone.
+        writes to the form part.
 
         A form that asks one question is one visible field of a line (words, a number, a date, one
         choice) closed by its verb alone. It draws its button on the field's line where the field keeps
@@ -658,8 +657,9 @@ PARTS = (
         never at the row's far side across an empty middle. What can be done to the record ends its line:
         `ListRow.actions`, each a `PageAction`, drawn as compact controls, a POST through `{% button %}`,
         a glyph named aloud by its `title`, and one that cannot be pressed as `disabled`. A row that names
-        a thing HQ links (a related record, a project) is given its `link`, an `EntityLink`, in place of a
-        `title` and a `url`, and draws it as every mention of a thing is drawn. A project's row gives its
+        a thing HQ links (a related record, a project) is named by its `EntityLink`, in place of a
+        `RowTitle`, and draws it as every mention of a thing is drawn. Its `state` is a `Badge`, words in
+        their tone, so state is never color alone. A project's row gives its
         `category`, drawn as that category's color (`--cat-*`) before the title, its name in `detail`. A
         search hit gives its `snippet`, where the record matched, as runs of the record's own text each
         with whether it is the match: a line of its own under the row, two lines at most, the match

@@ -179,7 +179,7 @@ def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
 _TOOL_READS: dict[str, Callable[[ResourceSpec], UnsupportedResourceOperation | None]] = {
     "describe_resources": lambda _spec: None,
     "list_resource": lambda spec: None if spec.listing else unlisted(spec),
-    "get_resource": lambda spec: None if spec.detail_handler and spec.identifier else undetailed(spec),
+    "get_resource": lambda spec: None if spec.detail and spec.identifier else undetailed(spec),
 }
 
 
@@ -479,7 +479,7 @@ def masked_kind(spec: ResourceSpec, *, listed: bool) -> type | None:
 
     if listed:
         return spec.listing.item if spec.listing else None
-    return spec.record_type
+    return spec.detail.record if spec.detail else None
 
 
 def mask_paths(spec: ResourceSpec, *, listed: bool) -> tuple[str, ...]:
@@ -514,7 +514,7 @@ def get_resource(
 
     spec = _resource(name)
     spec.authorize(principal)
-    if not spec.detail_handler or not spec.identifier:
+    if not spec.detail or not spec.identifier:
         raise undetailed(spec)
     try:
         # Read as JSON, the form every caller sends it in and a record lists it
@@ -523,7 +523,7 @@ def get_resource(
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     try:
-        result = spec.detail_handler(parsed, **_caller(spec, principal))
+        result = spec.detail.reader(parsed, **_caller(spec, principal))
     except RecordNotFound as exc:
         # The host's own sentence, with what finds the record beside it.
         raise missed(exc, spec, parsed, _held(spec, principal)) from None

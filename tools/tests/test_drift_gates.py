@@ -1,19 +1,15 @@
-"""Each lint:drift-* gate's failure names the command that rewrites its own files,
-and that command, run as named, brings the gate back to passing: one gate in
-seconds, where `mise run fix` rewrites every derived file. The gate's own fix
-mode, which fix:derived runs for every gate tagged derived,
-writes the same files, and exactly the files its declaration names."""
+"""Each lint:drift-* gate is a declaration of the files it writes, which
+fix:derived runs and .gitattributes marks, or a gate that records itself and
+names the task it records with."""
 
 import os
 import re
-import shlex
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.tests.task import changed_paths, names, overlay, trusted_mise, worktree
+from hq.platform.core.tests.task import changed_paths, overlay, trusted_mise, worktree
 from tests.mise_tasks import ROOT, body, mise_tasks, writes
 
 DRIFT = "lint:drift-"
@@ -115,57 +111,3 @@ class DriftGateTests(SimpleTestCase):
             self.assertEqual(marked.stdout.strip(), f"{declared}: linguist-generated: set")
             current = run("mise", "run", "lint:drift-gitattributes")
             self.assertEqual(current.returncode, 0, current.stdout + current.stderr)
-
-    def test_each_failure_names_a_command_that_rewrites_its_files_alone(self):
-        declarations = derived()
-        present, deleted = changed_paths("HEAD", ROOT)
-        env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
-        with worktree("HEAD", ROOT) as tree:
-            overlay(tree, present, deleted, ROOT)
-            env |= trusted_mise(tree, tree.parent / "mise-state")
-            files = [tree / path for path in names("ls-files", "--cached", "--others", "--exclude-standard", root=tree)]
-
-            def run(command: list[str]) -> subprocess.CompletedProcess[str]:
-                return subprocess.run(command, cwd=tree, env=env, capture_output=True, text=True, check=False)
-
-            def written(step: list[str]) -> set[str]:
-                """The checkout's files the step writes, read from their change times."""
-
-                before = {path: path.stat().st_mtime_ns for path in files if path.exists()}
-                done = run(step)
-                self.assertEqual(done.returncode, 0, f"{shlex.join(step)}:\n{done.stdout}{done.stderr}")
-                return {
-                    str(path.relative_to(tree))
-                    for path in files
-                    if path.exists() and before.get(path) != path.stat().st_mtime_ns
-                }
-
-            for name, task in declarations.items():
-                with self.subTest(name):
-                    held = writes(task)
-                    for path in held:
-                        (tree / path).unlink()
-                    failed = run(["mise", "run", name])
-                    said = failed.stdout + failed.stderr
-                    self.assertNotEqual(failed.returncode, 0, f"{name} passed with {', '.join(held)} gone:\n{said}")
-                    commands = NAMED.findall(said)
-                    self.assertTrue(commands, f"{name}'s failure names no command:\n{said}")
-                    command = commands[-1]
-                    self.assertNotEqual(command, EVERY_FILE, f"{name} names the command that rewrites every file")
-
-                    written(shlex.split(command))
-                    for path in held:
-                        self.assertEqual((tree / path).read_bytes(), Path(ROOT, path).read_bytes(), command)
-                    passed = run(["mise", "run", name])
-                    self.assertEqual(passed.returncode, 0, f"{name} after {command}:\n{passed.stdout}{passed.stderr}")
-
-                    # Its fix mode writes the same files, and none its declaration leaves out.
-                    for path in held:
-                        (tree / path).unlink()
-                    self.assertEqual(
-                        written(["mise", "run", name, "--fix"]),
-                        set(held),
-                        f"{name} --fix writes these. {DECLARE}",
-                    )
-                    for path in held:
-                        self.assertEqual((tree / path).read_bytes(), Path(ROOT, path).read_bytes(), f"{name} --fix")

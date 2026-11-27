@@ -13,7 +13,7 @@ from . import automation_adoption, automation_runs, playbook_about
 from .automation_manifest import OperationManifest, PlaybookEffect
 from .automation_sources import PLAYBOOKS as PAGE, Reviewed, standing
 from .describe import Describe
-from .integration_specs import CommandFact, ListRead, ResourceSpec
+from .integration_specs import CommandFact, DetailRead, ListRead, ResourceSpec
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -195,11 +195,10 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every adopted playbook: the command that runs it, what it does, and the machines it can run on now.",
             Capability.READ,
             listing=ListRead(list_playbooks, EmptyQuery, PlaybookRow),
-            detail_handler=get_playbook,
+            detail=DetailRead(get_playbook, PlaybookRecord),
             identifier="playbook",
             web_route=PAGE,
             pass_principal=True,
-            record_type=PlaybookRecord,
         ),
         ResourceSpec(
             SCANS,
@@ -208,10 +207,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "an operator adopts or rejects it in HQ.",
             Capability.READ,
             listing=ListRead(list_scans, EmptyQuery, ScanResult),
-            detail_handler=get_scan,
+            detail=DetailRead(get_scan, ScanResult),
             identifier="id",
             identifier_type=RecordId,
             web_route=PAGE,
-            record_type=ScanResult,
         ),
     )

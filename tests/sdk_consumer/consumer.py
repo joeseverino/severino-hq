@@ -100,9 +100,13 @@ def sentences(registrar: str) -> None:
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
     ui.Kpi("Notes", 3)  # type: ignore[arg-type]
-    ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
-    ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
-    ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Group"), actions=("Up",))  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), snippet="nightly backup")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), chips="Running")  # type: ignore[arg-type]
+    # A row names its record once, and its state is words with their tone, never a tone alone.
+    ui.ListRow("Backup host")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), link=None)  # type: ignore[call-arg]
+    ui.ListRow(ui.RowTitle("Import"), state=ui.Tone.ATTENTION)  # type: ignore[arg-type]
 
 
 def the_demo(due: date, at: datetime) -> None:
@@ -262,7 +266,10 @@ def a_page() -> None:
     pages.PageAction("Mark read", "/example/1/", method="post")  # type: ignore[call-arg]
     pages.PageAction("Remove", "/example/1/", danger=True)  # type: ignore[call-arg]
     pages.PageAction.command("example.review", label="Mark read")  # type: ignore[call-arg]
-    pages.PageAction.command("example.block", fields=["client_id"])  # type: ignore[arg-type]
+    pages.PageAction.post("example.block", sends=["client_id"])  # type: ignore[arg-type]
+    # A press that posts opens no dialog, and a dialog posts nothing of its own.
+    pages.PageAction.post("example.import", modal="import")  # type: ignore[call-arg]
+    pages.PageAction.dialog("example.import", "import", sends={"key": "1"})  # type: ignore[call-arg]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
 
@@ -279,12 +286,14 @@ def a_read_link() -> None:
 def a_dialog() -> None:
     pages.PageDialog("import", "Import records")  # type: ignore[call-arg]
     pages.PageAction("Import", "/example/import/", modal=3)  # type: ignore[arg-type]
-    pages.PageAction.command("example.import", modal=3)  # type: ignore[arg-type]
+    pages.PageAction.dialog("example.import", 3)  # type: ignore[arg-type]
 
 
 class WronglyTrailed(pages.PageMixin):
     # One crumb written bare, not a tuple of them.
     page_trail = ("Things", reverse_lazy("example:things"))  # type: ignore[assignment]
+    # A page reads under one capability of its own, never several.
+    required_capability = ("example.read", "example.write")  # type: ignore[assignment]
 
     @override
     def trail_label(self, record: Any) -> int:  # type: ignore[override]

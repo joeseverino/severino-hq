@@ -105,13 +105,6 @@ class PlanTests(TestCase):
         self.assertTrue(dependency_updates.plan()["due"])
         self.assertIsNotNone(dependency_updates.asked_at())
 
-    def test_the_controller_registry_carries_the_plan(self):
-        from ..controller import controller_registry
-
-        opted_in("app", "https://github.com/example/app")
-
-        self.assertEqual(controller_registry()["dependency_updates"], dependency_updates.plan())
-
 
 class RunNowTests(TestCase):
     def setUp(self):

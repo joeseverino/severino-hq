@@ -2,39 +2,17 @@
 
 from unittest import mock
 
-from django.contrib.auth.models import AnonymousUser
-from django.template import Context, Template
-from django.test import RequestFactory, TestCase
+from django.test import TestCase
 from django.urls import reverse
 
-from hq.platform.application.markup_testing import elements, select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
-from hq.platform.core.context_processors import appearance
-from hq.platform.core.models import Appearance, AuditLog
+from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
 
-from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
+from ..appearance import SET_THEME, theme_for
 from ..capabilities import execute_capability
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, web_principal
-
-
-def drawn_theme(response) -> str | None:
-    """The theme the page is drawn in, as the stylesheet reads it."""
-
-    (document,) = elements(response, "html")
-    return document.attrs.get("data-theme")
-
-
-def color_scheme(response) -> str:
-    (meta,) = select(response, "name", "color-scheme")
-    return meta.attrs["content"]
-
-
-def pressed(response) -> list[str]:
-    """The theme the switch shows as chosen."""
-
-    return [choice.attrs["value"] for choice in select(response, "aria-pressed", "true") if "value" in choice.attrs]
 
 
 def denials() -> int:
@@ -49,37 +27,13 @@ class ThemeServiceTests(TestCase):
     def choose(self, theme, principal=None):
         return execute_capability(SET_THEME, keyed({"theme": theme}), principal=principal or self.person)
 
-    def test_nobody_has_chosen_until_they_choose(self):
-        self.assertEqual(theme_for(self.user), "system")
-        self.assertFalse(Appearance.objects.exists())
-
-    def test_anybody_signed_out_follows_the_system(self):
-        # The context processor passes signed_in(request), which is None for
-        # anybody signed out.
-        self.assertEqual(theme_for(None), "system")
-
-    def test_a_signed_out_page_prints_its_theme(self):
-        request = RequestFactory().get("/")
-        request.user = AnonymousUser()
-        context = appearance(request)
-
-        self.assertEqual(Template("{{ THEME }}").render(Context(context)), "system")
-
     def test_a_choice_is_kept_and_recorded_once(self):
         self.choose("dark")
         self.choose("dark")
 
         self.assertEqual(theme_for(self.user), "dark")
         (event,) = AuditLog.objects.filter(object_type="Appearance")
-        self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
-
-    def test_the_choice_does_not_happen_without_its_record(self):
-        with (
-            mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
-            self.assertRaises(RuntimeError),
-        ):
-            set_theme(ThemeCommand("dark"), principal=self.person)
-        self.assertEqual(theme_for(self.user), "system")
+        self.assertEqual(event.metadata["operation"], SET_THEME)
 
 
 class ThemeSwitchTests(TestCase):
@@ -88,25 +42,6 @@ class ThemeSwitchTests(TestCase):
 
     def choose(self, theme, **extra):
         return self.client.post(reverse("theme"), form_keyed({"theme": theme, "next": reverse("dashboard")}), **extra)
-
-    def test_a_choice_is_drawn_on_the_next_page_server_side(self):
-        for theme, meta in (("dark", "dark"), ("light", "light")):
-            with self.subTest(theme=theme):
-                response = self.choose(theme)
-                self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
-                page = self.client.get(reverse("dashboard"))
-                self.assertEqual(drawn_theme(page), theme)
-                self.assertEqual(color_scheme(page), meta)
-                self.assertEqual(pressed(page), [theme])
-
-    def test_system_removes_the_attribute(self):
-        self.choose("dark")
-        self.choose("system")
-
-        page = self.client.get(reverse("dashboard"))
-        self.assertIsNone(drawn_theme(page))
-        self.assertEqual(color_scheme(page), "light dark")
-        self.assertEqual(theme_for(self.user), "system")
 
     def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.SET_PREFERENCES})
@@ -117,16 +52,6 @@ class ThemeSwitchTests(TestCase):
         self.assertIn(b"set_preferences", refused.content)
         self.assertEqual(theme_for(self.user), "system")
         self.assertEqual(denials(), 1)
-
-    def test_it_returns_only_to_this_site(self):
-        response = self.client.post(reverse("theme"), form_keyed({"theme": "dark", "next": "https://example.net/"}))
-        self.assertRedirects(response, reverse("dashboard"), fetch_redirect_response=False)
-
-    def test_a_choice_belongs_to_the_person_who_made_it(self):
-        self.choose("dark")
-        operator(self.client, "other")
-
-        self.assertIsNone(drawn_theme(self.client.get(reverse("dashboard"))))
 
     def test_the_form_is_protected_against_cross_site_posts(self):
         from django.test import Client

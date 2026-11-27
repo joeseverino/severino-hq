@@ -9,7 +9,14 @@ from hq.platform.application.answer_fields import DeductibleAmount, PageUrl, Tot
 from hq.platform.application.assets import PaymentMethod
 from hq.platform.application.business_use import BusinessUseShare
 from hq.platform.application.describe import Describe
-from hq.platform.application.integration_specs import ListFilter, ListRead, ListSort, ListToggle, ResourceSpec
+from hq.platform.application.integration_specs import (
+    DetailRead,
+    ListFilter,
+    ListRead,
+    ListSort,
+    ListToggle,
+    ResourceSpec,
+)
 from hq.platform.application.projection import years_of
 from hq.platform.application.record_fields import Notes, RecordId
 from hq.platform.application.resources import BoundedQuery, SearchText
@@ -114,7 +121,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 toggles=(NO_RECEIPT,),
                 totals=expenses.list_totals,
             ),
-            detail_handler=expenses.get_expense,
+            detail=DetailRead(expenses.get_expense, ExpenseRecord),
             identifier="id",
             identifier_type=RecordId,
             pass_principal=True,
@@ -124,6 +131,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ("vendor", "item", "category", "business_purpose", "notes"),
             ),
             web_route="expenses:list",
-            record_type=ExpenseRecord,
         ),
     )

@@ -6,7 +6,19 @@ from annotationlib import Format
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, fields as dataclass_fields, is_dataclass, replace
 from functools import cache
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
+from types import FunctionType
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    TypeAliasType,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    is_typeddict,
+)
 
 from django.db.models import BigIntegerField, Q
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
@@ -37,6 +49,28 @@ class TargetKind:
     keyword: str
     coerce: Callable[[Any], Any]
     pattern: str = ""
+
+    def binds[H: Callable[..., Any]](self, handler: H) -> H:
+        """``handler``, written for any kind with its target as ``current``,
+        taking it as this kind's keyword instead, so Python itself refuses any
+        other keyword and its signature names the one it takes."""
+
+        function = cast(FunctionType, handler)
+        function.__code__ = function.__code__.replace(
+            co_varnames=tuple(self._named(name) for name in function.__code__.co_varnames)
+        )
+        function.__kwdefaults__ = {self._named(name): value for name, value in (function.__kwdefaults__ or {}).items()}
+        declared = function.__annotate__
+
+        def annotate(wanted: Format) -> dict[str, Any]:
+            found = annotationlib.call_annotate_function(declared, wanted) if declared else {}
+            return {self._named(name): hint for name, hint in found.items()}
+
+        function.__annotate__ = annotate
+        return handler
+
+    def _named(self, name: str) -> str:
+        return self.keyword if name == "current" else name
 
 
 # What an integer target may be sent as besides a number: the digits of an
@@ -626,6 +660,16 @@ def _asked_by(read: ListRead) -> type[BaseModel]:
 
 
 @dataclass(frozen=True, slots=True)
+class DetailRead:
+    """A resource's read of one record: the reader that answers it, and the
+    TypedDict it answers, where it types one."""
+
+    # Like a list's handler, checked at the call.
+    reader: Callable[..., object]
+    record: type | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceSpec(Requires):
     """One declaration of a readable domain and every operation it supports."""
 
@@ -634,8 +678,7 @@ class ResourceSpec(Requires):
     summary: str
     required_capability: Capability | str | tuple[Capability | str, ...]
     listing: ListRead | None = None
-    # Like a list's handler, checked at the call.
-    detail_handler: Callable[..., object] | None = None
+    detail: DetailRead | None = None
     identifier: str | None = None
     # A type, or one an ``Annotated`` bounds (``RecordId``).
     identifier_type: Any = str
@@ -648,8 +691,6 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The TypedDict a read of one record answers.
-    record_type: type | None = None
 
     def __post_init__(self) -> None:
         # A search declared through ``SearchDefinition.of`` is this resource's

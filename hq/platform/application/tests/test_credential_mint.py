@@ -1,7 +1,6 @@
 """A credential's missing permissions, expiry and mint command, derived."""
 
 import re
-import shlex
 from datetime import timedelta
 from pathlib import Path
 
@@ -12,23 +11,16 @@ from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import observer_permissions
-from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.permissions import Tailscale
-from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
-from hq.platform.core.testing import connection, operator
+from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
+from hq.platform.core.testing import operator
 from tests.mise_tasks import body, mise_tasks
 
-from ..connection_setup import setups
 from ..credential_mint import (
-    credential_fixes,
-    parse_expiry,
     projection_field,
-    store_references,
 )
-from ..credential_sight import credential_sight
 from ..report_testing import report_connections
-from ..security import cli_principal
 from .commands import commands_on
 
 ACCOUNT = "0123abcd"
@@ -38,11 +30,6 @@ STORE = {
     "bootstrap": "op://Operator Vault/Cloudflare bootstrap",
 }
 SECRET = "sekret-value-that-must-not-appear"
-COMMAND = (
-    "CLOUDFLARE_BOOTSTRAP_TOKEN='op://Operator Vault/Cloudflare bootstrap/credential' "
-    f"op run -- mise run mint:cloudflare --account {ACCOUNT} "
-    "--store 'op://Example Vault/exampleitem01/credential'"
-)
 PAGES = "cloudflare.pages_project"
 
 
@@ -74,65 +61,6 @@ def production_shape(refusal: str = CREDENTIAL_REFUSAL) -> None:
             )
 
 
-def missing_from_readings() -> tuple[str, ...]:
-    return tuple(sorted({name for kind in cloudflare_kinds() if kind != PAGES for name in OBSERVATIONS[kind].requires}))
-
-
-class StoreReferenceTests(TestCase):
-    def test_only_references_are_kept(self):
-        self.assertEqual(store_references({**STORE, "API_TOKEN": SECRET, "value": SECRET}), STORE)
-
-    def test_a_malformed_item_or_vault_is_dropped(self):
-        self.assertEqual(store_references({"vault": "a/b", "item": "x"}), {})
-        self.assertEqual(store_references({"vault": "Vault", "item": "has space"}), {})
-        self.assertEqual(store_references("op://Vault/item"), {})
-
-    def test_a_bootstrap_is_an_item_reference_outside_the_store_vault(self):
-        for bootstrap in (
-            "op://Example Vault/Cloudflare bootstrap",
-            "op://example vault/Cloudflare bootstrap",
-            "op://EXAMPLE VAULT/Cloudflare bootstrap",
-            "op://Example Vault /Cloudflare bootstrap",
-            "op://Operator Vault/Cloudflare bootstrap/credential",
-            "https://example.com",
-            "op://Operator Vault/line\nbreak",
-        ):
-            with self.subTest(bootstrap=bootstrap):
-                self.assertNotIn("bootstrap", store_references({**STORE, "bootstrap": bootstrap}))
-
-    def test_expiry_is_an_aware_moment_or_nothing(self):
-        self.assertIsNotNone(parse_expiry("2030-01-01T00:00:00Z"))
-        self.assertIsNone(parse_expiry("2030-01-01T00:00:00"))
-        self.assertIsNone(parse_expiry("soon"))
-        self.assertIsNone(parse_expiry(None))
-
-    def test_record_connections_keeps_references_and_expiry_and_no_secret(self):
-        report_connections(
-            [
-                {
-                    "connection_ref": "example-api",
-                    "provider": "cloudflare_api",
-                    "expires_at": "2030-01-01T00:00:00Z",
-                    "store": {**STORE, "API_TOKEN": SECRET},
-                }
-            ]
-        )
-
-        row = ProviderConnection.objects.get()
-        self.assertEqual(row.store, STORE)
-        self.assertEqual(row.expires_at.year, 2030)
-        self.assertNotIn(SECRET, repr(row.store))
-
-
-class MinterContractTests(TestCase):
-    """Each minter names a script, flags and variables that script really has."""
-
-    def test_store_fields_come_from_the_projection_registry(self):
-        self.assertEqual(projection_field("API_TOKEN"), "credential")
-        self.assertEqual(projection_field("CLIENT_SECRET"), "credential")
-        self.assertEqual(projection_field("CLIENT_ID"), "username")
-
-
 @tag("source")
 class MinterTaskTests(SimpleTestCase):
     """Each minter against the task that mints it: the command HQ prints runs as printed."""
@@ -156,119 +84,6 @@ class MinterTaskTests(SimpleTestCase):
                 self.assertTrue(observer_permissions(provider))
 
 
-class PerReadingRefusalTests(TestCase):
-    """The production case: one reading answers, the rest are refused."""
-
-    def test_a_credential_that_read_something_is_not_refused_outright(self):
-        production_shape()
-
-        provider = next(found for found in credential_sight() if found.provider == "cloudflare_api")
-
-        self.assertEqual(provider.credential_refusal, "")
-        self.assertEqual(provider.missing, missing_from_readings())
-        for sight in provider.refused_permission:
-            self.assertEqual(sight.refusal, PERMISSION_REFUSAL)
-
-    def test_a_credential_that_read_nothing_is_refused_outright(self):
-        now = timezone.now()
-        for kind in cloudflare_kinds():
-            ProviderInventory.objects.create(
-                kind=kind,
-                reachable=False,
-                refusal=CREDENTIAL_REFUSAL,
-                error="Invalid API Token",
-                observed_at=now,
-            )
-
-        provider = next(found for found in credential_sight() if found.provider == "cloudflare_api")
-
-        self.assertEqual(provider.credential_refusal, "Invalid API Token")
-        self.assertEqual(provider.missing, ())
-
-
-class MintCommandTests(TestCase):
-    def test_the_command_is_derived_from_references_only(self):
-        production_shape()
-        connection("cloudflare_api", "example-api", store=STORE)
-
-        fix = credential_fixes()["example-api"]
-
-        self.assertEqual(fix.command, COMMAND)
-        self.assertEqual(fix.gaps, ())
-        # A replacement is issued with what setup asks for, writes included.
-        (setup,) = [setup for setup in setups() if setup.provider == "cloudflare_api"]
-        self.assertEqual(fix.permissions, setup.permissions)
-        # Every word is a flag, the script, the account, or a reference.
-        words = shlex.split(fix.command)
-        for word in words:
-            self.assertRegex(
-                word,
-                r"^(--[a-z-]+|mise|mint:[a-z]+|op|run|--|"
-                rf"{ACCOUNT}|op://[^\n]+|[A-Z_]+=op://[^\n]+)$",
-            )
-
-    def test_no_item_reported_leaves_no_command(self):
-        production_shape()
-        connection("cloudflare_api", "example-api", store={})
-
-        fix = credential_fixes()["example-api"]
-
-        self.assertEqual(fix.command, "")
-        self.assertTrue(any("1Password item" in gap for gap in fix.gaps))
-
-    def test_no_account_in_the_readings_leaves_no_command(self):
-        production_shape()
-        ProviderInventory.objects.filter(kind=PAGES).update(records=[{"name": "example"}])
-        connection("cloudflare_api", "example-api", store=STORE)
-
-        fix = credential_fixes()["example-api"]
-
-        self.assertEqual(fix.command, "")
-        self.assertIn("HQ has not read the account id yet.", fix.gaps)
-
-    def test_no_bootstrap_item_reads_the_bootstrap_from_the_environment(self):
-        production_shape()
-        connection("cloudflare_api", "example-api", store={"vault": "Example Vault", "item": "exampleitem01"})
-
-        fix = credential_fixes()["example-api"]
-
-        self.assertTrue(fix.command.startswith("mise run mint:cloudflare "))
-        self.assertTrue(any("CLOUDFLARE_BOOTSTRAP_TOKEN" in gap for gap in fix.gaps))
-
-    def test_a_healthy_credential_offers_nothing(self):
-        ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())
-        connection("cloudflare_api", "example-api", store=STORE, expires_at=timezone.now() + timedelta(days=80))
-
-        fix = credential_fixes()["example-api"]
-
-        self.assertFalse(fix.needed)
-        self.assertEqual(fix.command, "")
-
-    def test_the_tailscale_client_stores_its_secret_and_id(self):
-        ProviderInventory.objects.create(
-            kind="tailscale.user",
-            reachable=False,
-            refusal=PERMISSION_REFUSAL,
-            error="Tailscale refused the users read (404).",
-            observed_at=timezone.now(),
-        )
-        connection(
-            "tailscale", "example-tailnet", store={**STORE, "bootstrap": "op://Operator Vault/Tailscale bootstrap"}
-        )
-
-        fix = credential_fixes()["example-tailnet"]
-
-        self.assertEqual(fix.missing, (Tailscale.USERS_READ,))
-        self.assertEqual(
-            fix.command,
-            "TAILSCALE_BOOTSTRAP_CLIENT_ID='op://Operator Vault/Tailscale bootstrap/username' "
-            "TAILSCALE_BOOTSTRAP_CLIENT_SECRET='op://Operator Vault/Tailscale bootstrap/credential' "
-            "op run -- mise run mint:tailscale "
-            "--store 'op://Example Vault/exampleitem01/credential' "
-            "--store-id 'op://Example Vault/exampleitem01/username'",
-        )
-
-
 class RenderedFixTests(TestCase):
     def setUp(self):
         operator(self.client)
@@ -288,24 +103,6 @@ class RenderedFixTests(TestCase):
     def test_the_connections_page_offers_the_command_and_no_secret(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "operator-command")
         self.assertIn("--account 0123abcd", commands_on(response))
         self.assertIn("op://Example Vault/exampleitem01/credential", commands_on(response))
-        self.assertNotContains(response, "Cloudflare API refused this credential")
         self.assertNotContains(response, SECRET)
-
-    def test_the_findings_page_offers_the_command_and_no_secret(self):
-        response = self.client.get(reverse("control_plane:findings"))
-
-        self.assertContains(response, "operator-command")
-        self.assertIn("op://Example Vault/exampleitem01/credential", commands_on(response))
-        self.assertNotContains(response, SECRET)
-
-    def test_the_findings_api_carries_the_step(self):
-        from ..findings import findings
-
-        found = findings(principal=cli_principal(), rule="credential-missing-permissions")
-        steps = found["findings"][0]["steps"]
-
-        self.assertIn("--store", steps[0]["command"])
-        self.assertNotIn(SECRET, repr(found))

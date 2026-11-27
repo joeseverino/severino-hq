@@ -272,7 +272,7 @@ class _Builder:
         found: dict[str, Any] = {}
         members = set(get_args(answering) or (answering,))
         for kind, (read, pointer) in READ_BY.items():
-            if kind in members and (spec := self.resource_specs.get(read)) and spec.detail_handler is not None:
+            if kind in members and (spec := self.resource_specs.get(read)) and spec.detail is not None:
                 found[_read_id(read)] = _link(_read_id(read), {"path.identifier": f"$response.body#/data{pointer}"})
         if not resource:
             return found
@@ -283,14 +283,14 @@ class _Builder:
             found[_list_id(resource)] = _link(
                 _list_id(resource), {f"query.{PAGE_FIELD}": "$response.body#/data/next", **parameters}
             )
-        record = spec.record_type
+        record = masked_kind(spec, listed=False)
         carried = (
             (spec.listing.fields if spec.listing else ())
             if listed
             else (typed_keys(record) if record is not None else ())
         )
         identifier = spec.identifier
-        if spec.detail_handler is None or identifier not in carried:
+        if spec.detail is None or identifier not in carried:
             return found
         at = "/data/items/0" if listed else "/data"
         if listed:
@@ -654,7 +654,7 @@ class _Builder:
                     f"One of the records {spec['label']} lists, found by its `{field}`." if listed else spec["summary"]
                 ),
                 parameters=[self.parameter(named, taken), self.mask(name, listed=False)],
-                answer=self.record_of(self.resource_specs[name].record_type),
+                answer=self.record_of(masked_kind(self.resource_specs[name], listed=False)),
                 links=self.links(resource=name),
                 scopes=spec["required_capabilities"],
                 **{"x-hq-resource": name, "x-hq-identifier": field},

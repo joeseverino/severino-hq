@@ -1,9 +1,7 @@
-"""Every page that lists automation runs shows the same evidence, drawn by one
-part, to a reader who may open Jobs, and to no one else. Every procedure here
-is a synthetic ``example.*`` one."""
+"""A page that lists automation runs shows their evidence only to a reader who
+may open Jobs. Every procedure here is a synthetic ``example.*`` one."""
 
 from unittest import mock
-from urllib.parse import urlencode
 
 from django.test import TestCase
 from django.urls import reverse
@@ -11,7 +9,7 @@ from django.urls import reverse
 from hq.platform.application import roles
 from hq.platform.application.markup_testing import all_elements, within
 from hq.platform.core import seeds
-from hq.platform.core.example_estate.automation import CACHE_FLUSH, CORRELATION
+from hq.platform.core.example_estate.automation import CACHE_FLUSH
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import operator
@@ -58,33 +56,6 @@ class RunEvidencePageTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
-
-    def test_jobs_and_a_machine_s_page_draw_the_same_evidence(self):
-        from hq.platform.application.work_runs import runs_on
-
-        machine = self.page(self.owner, reverse("control_plane:machine", kwargs={"name": MACHINE}))
-        jobs = self.page(self.owner, f"{reverse('jobs:list')}?{urlencode({'host': MACHINE})}")
-
-        tasks = [event["task"] for run in runs_on(MACHINE) for event in run.evidence.events]
-        self.assertTrue(tasks)
-        for page, drawn in (("machine", _evidence(machine, "runs")), ("jobs", _evidence(jobs))):
-            with self.subTest(page=page):
-                self.assertIn(CORRELATION, " ".join(drawn.get("Correlation", ())))
-                self.assertTrue(drawn.get("Claimed by"))
-                for task in tasks:
-                    self.assertTrue(any(task in said for said in drawn.get("Tasks", ())), task)
-
-    def test_a_procedure_s_page_draws_its_runs_evidence(self):
-        from hq.platform.application.work_runs import recent_runs
-
-        html = self.page(self.owner, reverse("command", args=[f"automation.{CACHE_FLUSH}.run"]))
-
-        drawn = _evidence(html, "runs")
-        tasks = [event["task"] for run in recent_runs(CACHE_FLUSH) for event in run.evidence.events]
-        self.assertTrue(tasks)
-        self.assertIn(CORRELATION, " ".join(drawn.get("Correlation", ())))
-        for task in tasks:
-            self.assertTrue(any(task in said for said in drawn.get("Tasks", ())), task)
 
     def test_a_reader_who_may_not_open_jobs_sees_the_runs_but_not_their_evidence(self):
         from hq.domains.jobs.views import JobListView

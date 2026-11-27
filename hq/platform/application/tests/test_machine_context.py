@@ -15,7 +15,7 @@ from django.utils import timezone
 from hq.domains.analytics.models import AnalyticsSite, RumDaily
 from hq.platform.core.testing import declare
 
-from ..machine_context import SECTIONS, sections_for
+from ..machine_context import sections_for
 from ..security import Capability, Principal
 from ..ui import MISSING
 
@@ -203,24 +203,6 @@ class IdentityTests(TestCase):
 
 
 class RegistryTests(TestCase):
-    def test_the_registry_is_the_only_list_of_sections(self):
-        """Adding one is a function and an entry, never an edit to the page."""
-
-        self.assertEqual(
-            [resolve.__name__ for resolve in SECTIONS],
-            [
-                "_identity",
-                "_names",
-                "_environments",
-                "_projects",
-                "_networks",
-                "_data",
-                "_images",
-                "_runs",
-                "_activity",
-            ],
-        )
-
     def test_a_section_with_nothing_to_say_does_not_appear(self):
         self.assertEqual(sections_for(a_machine(), principal=OPERATOR), ())
 

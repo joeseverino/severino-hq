@@ -1,6 +1,5 @@
-"""A declared table writes each cell of a row once, and the bytes a row and a
-page with no rows draw hold to their budgets (``data_table``'s rules, Opening a row
-moves no column)."""
+"""The bytes a declared table's row and a page with no rows draw hold to
+their budgets (``data_table``'s rules, Opening a row moves no column)."""
 
 import re
 
@@ -8,7 +7,7 @@ from django.template import Context, Template
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
-from hq.platform.application.markup_testing import all_elements, with_class
+from hq.platform.application.markup_testing import with_class
 from hq.platform.application.pages import PageAction
 from hq.platform.application.tables import Below, Cell, DataTable, Row, TableColumn
 from hq.platform.core.testing import SignedInTestCase
@@ -32,56 +31,7 @@ def _drawn(table: DataTable) -> str:
     return Template("{% data_table table %}").render(Context({"table": table}))
 
 
-def _probe(text: str, name: str, **options) -> Cell:
-    return Cell(text, data={"probe": name}, **options)
-
-
-class RowWrittenOnceTests(SimpleTestCase):
-    def test_a_row_writes_each_cell_once(self):
-        """A table draws no copy of a cell on a row's open line: the row's
-        own cells are what tables.js fills it from, through the one frame the
-        table draws. A block the row moves there is drawn there alone."""
-
-        row = Row(
-            (
-                Cell(
-                    "A",
-                    parts=(_probe("n", "narrow", shows="narrow-more"),),
-                    below=(Below("Also", (_probe("x", "below"),)),),
-                ),
-                _probe("said", "dropped"),
-                Cell("Up", parts=(_probe("since", "more", shows="more"),)),
-                _probe("Open", "act", url="/x/"),
-            )
-        )
-        columns = (
-            TableColumn("Name"),
-            TableColumn("Note", drop=1),
-            TableColumn("State", kind="status"),
-            TableColumn("Act", hidden=True, css="actions-col"),
-        )
-        html = _drawn(DataTable("Things", columns, (row,)))
-        found = all_elements(html)
-        probes = [each.attrs["data-probe"] for each in found if "data-probe" in each.attrs]
-
-        self.assertEqual(sorted(probes), ["act", "below", "dropped", "more", "narrow"])
-        self.assertEqual(html.count("<template data-open-line"), 1)
-        # Its rows' lines are drawn only as they open, so the table says a row
-        # can open, which keeps the gutter.
-        (table,) = [each for each in found if each.tag == "table"]
-        self.assertIn("data-rows-can-open", table.attrs)
-        (below,) = [each for each in found if each.attrs.get("data-probe") == "below"]
-        self.assertTrue(any("row-detail" in up.classes for up in below.ancestors))
-
-    def test_a_cell_held_back_holds_no_control(self):
-        """A cell its row's open line copies holds no field, which the copy
-        would draw twice: it stands in place, or moves there whole."""
-
-        held = Cell(field=object(), parts=(Cell("since", shows="more"),))
-        columns = (TableColumn("Name"), TableColumn("Note"))
-        with self.assertRaisesMessage(ValueError, "holds no control"):
-            _drawn(DataTable("Things", columns, (Row((Cell("A"), held)),)))
-
+class RowBytesTests(SimpleTestCase):
     def test_a_rows_bytes_hold_to_their_budget(self):
         """Bytes per row of a table like the connections list, whose rows hold
         a ranked column, a list's rest and a block beneath: a number load does

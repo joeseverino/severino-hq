@@ -784,25 +784,11 @@ def recent(
     return entries(page, within=rows)
 
 
-def who_did(object_types: Iterable[str], ids: Iterable[object], *, action: str = "") -> dict[str, Attribution]:
-    """Who did each act on the records ``ids`` name, of any of ``object_types``,
-    by id: the attribution of each record's first audit row (of ``action``,
-    given one), read in one query. A record no row is about is left out.
-
-    The act is written once, as its audit row; every page and read that says
-    who made a record says it from here rather than from a copy the record
-    keeps of its own.
-    """
-
-    (found,) = who_did_each(Acts(tuple(object_types), ids, action))
-    return found
-
-
 @dataclass(frozen=True)
 class Acts:
     """The records ``ids`` names, of any of ``object_types``, whose first audit
     row (of ``action``, and changing the field ``changed``, given either) says
-    who did each (``who_did``)."""
+    who did each."""
 
     object_types: tuple[str, ...]
     ids: Iterable[object]
@@ -811,8 +797,8 @@ class Acts:
 
 
 def who_did_each(*asked: Acts) -> list[dict[str, Attribution]]:
-    """``who_did`` for each of ``asked``, in its order, read in one query: a
-    page naming records of several kinds asks once, and a record of one kind
+    """Who did each act ``asked`` names, by id, for each of ``asked`` in its
+    order, read in one query: a page naming records of several kinds asks once, and a record of one kind
     is never taken for another's of the same id. Two parts of one page asking
     the same are answered by that one query (``read_once``)."""
 

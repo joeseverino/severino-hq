@@ -9,15 +9,17 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
-# Every browser test, in WebKit, which judges, as HQ is read in Safari: the
-# whole package, whose modules are not named test*.py so the plain suite
-# leaves them out. The pattern skips `__init__.py`, which discovery already
-# loads as its package: matched again, a package's tests would run twice.
+# Every browser test but the catalog walk, in WebKit, which judges, as HQ is
+# read in Safari: the whole package, whose modules are not named test*.py so
+# the plain suite leaves them out. The pattern skips `__init__.py`, which
+# discovery already loads as its package: matched again, a package's tests
+# would run twice. The catalog walk (tagged `catalog`) is browser:catalog's,
+# in WebKit in macOS's fonts, where Safari draws it.
 ["browser:webkit"]
-description = "Every real-browser test, over the stress estate, the example estate and the catalog, in WebKit"
+description = "Every real-browser test but the catalog walk, over the stress estate and the example estate, in WebKit"
 hide = true
 extends = "django-browser"
-vars.labels = "hq.platform.core.tests.browser --pattern '[!_]*.py'"
+vars.labels = "hq.platform.core.tests.browser --pattern '[!_]*.py' --exclude-tag catalog"
 
 # A second engine, so a break WebKit happens not to show still fails, over
 # the narrow set that says it: every shared part, the example estate at a phone
@@ -35,20 +37,17 @@ vars.labels = """\
   hq.platform.core.tests.browser.catalog.layout.ScriptedCatalogLayoutTests \
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.plants.CheckExampleTests \
-  hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock"""
 
-# Every shared part in the system faces of the machine it runs on, in the
-# engine HQ_BROWSER_ENGINE names (the test runner installs it): CI's macOS
-# legs, since macOS's monospace face is wider than Linux's and a part that
-# fits on Linux can wrap in Safari. The catalog is where a face moves a
-# layout, as every page draws its parts. Here, browser:webkit already runs
-# it, so `mise run browser` leaves it to CI.
+# The catalog walk, every shared part, in the system faces of the machine it
+# runs on, in WebKit unless HQ_BROWSER_ENGINE names another (the test runner
+# installs it): CI's macOS legs, since macOS's monospace face is wider than
+# Linux's and a part that fits on Linux can wrap in Safari. The catalog is
+# where a face moves a layout, as every page draws its parts. Its one other
+# walk is browser:chromium's, on Linux.
 ["browser:catalog"]
-description = "Every catalog entry's layout rules in this machine's fonts, in HQ_BROWSER_ENGINE's engine: CI's macOS legs, which mise run browser leaves out"
+description = "Every catalog entry's layout rules in this machine's fonts, in WebKit: CI's macOS legs"
 hide = true
 extends = "django-browser"
 depends = ["setup:lint-tools"]
-vars.labels = """\
-  hq.platform.core.tests.browser.catalog.layout.CatalogLayoutTests \
-  hq.platform.core.tests.browser.catalog.layout.ScriptedCatalogLayoutTests"""
+vars.labels = "hq.platform.core.tests.browser --pattern '[!_]*.py' --tag catalog"

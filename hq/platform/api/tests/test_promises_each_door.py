@@ -25,6 +25,7 @@ from hq.platform.core.testing import operator, run_ended
 from .doors import MCP, OPERATOR, SDK, Api, Caller, at_the_door, each_door
 
 WRITER = Caller("example-agent", "read write_projects write_assets")
+OTHER_WRITER = Caller("example-other", "read write_projects")
 ASKER = Caller("example-automation", "read manage_infrastructure")
 OTHER = Caller("example-other", "read manage_infrastructure")
 READER = Caller("example-automation", "read")
@@ -148,6 +149,36 @@ class OneRetryKeyTests(TestCase):
                         self.assertTrue(answer["ok"], answer)
                         self.assertEqual(answer["project"]["slug"], "once")
                         self.assertEqual(Project.objects.filter(slug="once").count(), 1)
+
+    def test_a_change_without_a_key_of_its_shape_acts_on_nothing_and_only_the_shell_is_not_asked(self):
+        for door in each_door(self, WRITER):
+            for key in (None, "", "has a space", "x" * 129, 7):
+                with door:
+                    keyed = {} if key is None else {"idempotency_key": key}
+                    answer = door.capability("project.create", PROJECT | keyed)
+
+                    code = "idempotency_key_required" if key is None else "invalid_idempotency_key"
+                    self.assertEqual(answer["error"]["code"], code, (key, answer))
+                    self.assertFalse(Project.objects.exists())
+        for door in each_door(self, OPERATOR):
+            with door:
+                self.assertTrue(door.capability("project.create", PROJECT)["ok"])
+
+    def test_a_key_is_its_callers_and_names_one_request(self):
+        for door in each_door(self, WRITER):
+            with door:
+                first = door.capability("project.create", PROJECT | {"idempotency_key": "example-once"})
+                other = door.capability(
+                    "project.create", PROJECT | {"slug": "other", "idempotency_key": "example-once"}
+                )
+                theirs = door.as_(OTHER_WRITER).capability(
+                    "project.create", PROJECT | {"slug": "theirs", "idempotency_key": "example-once"}
+                )
+
+                self.assertTrue(first["ok"], first)
+                self.assertEqual(other["error"]["code"], "idempotency_conflict", other)
+                self.assertTrue(theirs["ok"], theirs)
+                self.assertEqual(sorted(Project.objects.values_list("slug", flat=True)), ["once", "theirs"])
 
 
 class RetryKeyRaceTests(TransactionTestCase):

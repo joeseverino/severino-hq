@@ -12,7 +12,7 @@ from hq.platform.core.models import ServerError
 from .answer_fields import DateTime, PageUrl
 from .describe import Describe
 from .doors import Attribution
-from .integration_specs import ListRead, ListSort, ResourceSpec
+from .integration_specs import DetailRead, ListRead, ListSort, ResourceSpec
 from .projection import guarded, iso, page_of
 from .record_errors import RecordNotFound
 from .resources import BoundedQuery, SearchText
@@ -89,9 +89,8 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ServerErrorItem,
                 sorts=ListSort.both("-occurred_at", "Newest error", "Oldest error"),
             ),
-            detail_handler=get_error,
+            detail=DetailRead(get_error, ServerErrorRecord),
             identifier="request_id",
-            record_type=ServerErrorRecord,
             # A request id pasted into HQ's search finds its error; the traceback is never indexed.
             search=SearchDefinition.of(
                 ServerError,

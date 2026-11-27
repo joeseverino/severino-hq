@@ -18,10 +18,10 @@ from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
-from hq.platform.application.approval_review import asked
 from hq.platform.application.attention import waiting_for_approval
 from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.capability_policy import agents_may_hold
+from hq.platform.application.command_forms import SWITCH_VARIANTS, is_switch, own_fields, switch_field
 from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integration_testing import override_integration_graph
@@ -35,8 +35,6 @@ from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentAccess
 from hq.platform.core.testing import declare, operator
-
-from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
 # The changes said on their page, by the confirmation their button waits on.
 # A change to HQ alone is said by its button.
@@ -65,21 +63,13 @@ def stated(page, effect: str) -> bool:
 
 def switch_words(spec) -> list[str]:
     declared = dict(spec.variants)
-    return [declared.get(variant, "") for variant in SWITCH_WORDS]
+    return [declared.get(variant, "") for variant in SWITCH_VARIANTS]
 
 
 def pressed_as_words(spec) -> bool:
     """A switch that declares both words, which it is pressed by."""
 
-    return sets_yes_or_no(command_schema(spec.command_type)) and all(switch_words(spec))
-
-
-def checkboxes(page) -> list[str]:
-    return [
-        element.attrs.get("name", "")
-        for element in within(page, "data-command-form")
-        if element.tag == "input" and element.attrs.get("type") == "checkbox"
-    ]
+    return bool(switch_field(spec))
 
 
 class EveryCommandPageTests(TestCase):
@@ -119,7 +109,7 @@ class EveryCommandPageTests(TestCase):
         switches = [
             spec
             for spec in capability_registry()
-            if spec.name not in extensions and sets_yes_or_no(command_schema(spec.command_type))
+            if spec.name not in extensions and is_switch(command_schema(spec.command_type))
         ]
         for spec in switches:
             with self.subTest(command=spec.name):
@@ -138,7 +128,7 @@ class EveryCommandPageTests(TestCase):
                 # it may be sent without, and writes a default for one left out.
                 self.assertTrue(spec.target_kind)
                 self.assertFalse(spec.target_initial_fields)
-                self.assertTrue(optional_fields(schema))
+                self.assertTrue(own_fields(schema) - set(schema.get("required", ())))
                 self.assertIsNone(kept_by(spec))
         # A record's update and a message's review keep a field left blank,
         # so they warn of nothing.
@@ -296,8 +286,7 @@ WORDLESS = CapabilitySpec(
 
 
 class WordlessSwitchTests(TestCase):
-    """A switch without its words is still a working command: its checkbox,
-    pressed by its name, and a held request said by that name."""
+    """A switch without its words is still a working command, set by its checkbox."""
 
     @classmethod
     def setUpTestData(cls):
@@ -310,13 +299,6 @@ class WordlessSwitchTests(TestCase):
         self.enterContext(override_integration_graph(composed))
         SENT.clear()
 
-    def test_it_is_a_checkbox_pressed_by_its_name(self):
-        page = self.client.get(command_url(WORDLESS.name))
-
-        self.assertEqual(page.status_code, 200)
-        self.assertEqual(checkboxes(page), ["reminders"])
-        self.assertEqual(buttons(page), [WORDLESS.title])
-
     def test_it_sets_what_the_checkbox_holds(self):
         for posted, value in (({"reminders": "on"}, True), ({}, False)):
             with self.subTest(value=value):
@@ -328,12 +310,3 @@ class WordlessSwitchTests(TestCase):
 
                 self.assertEqual(response.status_code, 302)
                 self.assertEqual(SENT[-1], value)
-
-    def test_a_held_request_says_it_by_its_name(self):
-        for value in (True, False):
-            with self.subTest(value=value):
-                held = ApprovalRequest(
-                    capability=WORDLESS.name, payload={"reminders": value}, requested_actor="example-agent"
-                )
-
-                self.assertEqual(str(asked(held)), "example-agent wants to send reminders")

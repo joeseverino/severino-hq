@@ -13,7 +13,7 @@ and what each may do: docs/Architecture.md, "Approving an app update".
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 from django.db import transaction
 from django.utils import timezone
@@ -29,7 +29,7 @@ from .app_updates import MergeStanding
 from .command_fields import Describe
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
-from .record_errors import PolicyError, RecordNotFound, Sentence
+from .record_errors import PolicyError, RecordNotFound, Sentence, worded
 from .record_fields import RecordId
 from .security import Capability, PolicyDenied
 from .tone import Tone
@@ -85,7 +85,7 @@ class ApproveUpdateCommand:
 
 
 # The page a playbook is adopted on, as its refusal names it.
-PLAYBOOKS = "Playbooks"
+PLAYBOOKS: Final = "Playbooks"
 APPROVE = ACTION_CAPABILITY[OperationRequest.Action.MERGE]
 APPLY = "app_update.apply"
 
@@ -495,16 +495,16 @@ def _unapprovable(update: AppUpdate) -> Sentence:
     """Why ``update`` cannot be approved as it stands, or ""."""
 
     if not update.renovates:
-        return "HQ's Renovate run did not open it from this repository. Review it on GitHub."
+        return worded("HQ's Renovate run did not open it from this repository. Review it on GitHub.")
     if not update.whole:
-        return "HQ could not read every file it changes. Review it on GitHub."
+        return worded("HQ could not read every file it changes. Review it on GitHub.")
     if not update.within_apps:
-        return "It changes files outside the apps it names. Review it on GitHub."
+        return worded("It changes files outside the apps it names. Review it on GitHub.")
     if not update.readable:
-        return "HQ could not read the images this update moves from its Compose files. Review it on GitHub."
+        return worded("HQ could not read the images this update moves from its Compose files. Review it on GitHub.")
     if (update.checks or {}).get("state") != "success":
-        return "Its checks are not passing. Approve it once they pass."
-    return ""
+        return worded("Its checks are not passing. Approve it once they pass.")
+    return worded("")
 
 
 # Why GitHub refused a merge (``github.MergeRefusal``), as the update says it.

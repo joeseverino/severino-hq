@@ -47,7 +47,7 @@ def _records() -> dict[str, tuple[UriTemplate, ResourceSpec]]:
     return {
         name: (record_template(name, spec.identifier), spec)
         for name, spec in registry.resource_registry().items()
-        if spec.detail_handler and spec.identifier
+        if spec.detail and spec.identifier
     }
 
 

@@ -79,10 +79,6 @@ class ContentItem(TimestampedModel):
     def tag_list(self) -> list[str]:
         return split_list(self.tags)
 
-    @property
-    def is_published(self) -> bool:
-        return self.status == self.Status.PUBLISHED
-
 
 # The one place the registry is cut in two.
 #

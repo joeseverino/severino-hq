@@ -6,6 +6,7 @@ lazy from uuid import UUID
 lazy from django.contrib.auth import get_user_model
 lazy from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 lazy from django.contrib.messages.storage.base import Message
+lazy from django.test import RequestFactory
 
 from hq.platform.core.part_examples import DRAWN_AT
 from hq.platform.core.template_parts import Example
@@ -19,6 +20,7 @@ lazy from hq.platform.application.request_channel import TAILNET_CHANNEL
 lazy from hq.platform.application.service_context import ServiceSection
 lazy from hq.platform.application.tables import Cell, DataTable, Row, TableColumn
 lazy from hq.platform.application.ui import PageNavigation, PageSection, button_classes
+lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 lazy from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 
 
@@ -122,7 +124,23 @@ SITE_HEADER_STATES = {
         address="/example/",
         frame="before",
     ),
+    # A session signed in hours before the catalog's moment, which the
+    # person's menu says in hours.
+    "signed-in-hours": Example(
+        '{% include "partials/_site_header.html" %}',
+        context=lambda: {**_signed_in(), "request": _signed_in_hours_ago(5)},
+        frame="before",
+    ),
 }
+
+
+def _signed_in_hours_ago(hours):
+    """The example operator's request at /example/, its session signed in ``hours`` before ``DRAWN_AT``."""
+
+    request = RequestFactory().get("/example/")
+    request.user = _signed_in()["user"]
+    request.session = {SIGNED_IN_SESSION_KEY: (DRAWN_AT - timedelta(hours=hours)).isoformat()}
+    return request
 
 
 MODAL = Example(

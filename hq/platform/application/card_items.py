@@ -12,6 +12,7 @@ from typing import Literal, Protocol
 
 from .display_words import QUOTED, display, refused
 from .drawings import AllocationBar, Dots, Trend
+from .non_empty import RequiredText, holds_something
 from .tone import Tone
 lazy from .ui import agreed, counted_forms, ended
 
@@ -194,6 +195,28 @@ class RowAction(Protocol):
 
 
 @display
+class RowTitle:
+    """A row's record named in words: its title, and the page it opens."""
+
+    title: str
+    url: str = ""
+    # Leaves HQ. Rendered so the operator knows before they click, and so a
+    # linked page cannot reach back through window.opener.
+    external: bool = False
+
+
+@display
+class Badge:
+    """A row's state, in words and their tone, so state is never color alone."""
+
+    text: RequiredText
+    tone: Tone = Tone.NEUTRAL
+
+    def __post_init__(self) -> None:
+        holds_something(self)
+
+
+@display
 class ListRow:
     """One line of a compact record list: what it is, and when.
 
@@ -203,19 +226,16 @@ class ListRow:
     that needs interpreting belongs in ``_insight_grid.html``.
     """
 
-    title: str = ""
+    # The record the row names: in words (``RowTitle``), or as the entity it
+    # is, drawn as every mention of one is, so the name opens its page or, on
+    # that page, stands as plain text.
+    named: RowLink | RowTitle
     # Inline after the title, muted: the one fact that distinguishes this row.
     detail: str = ""
     # Trailing, right-aligned, in words: a duration, a measure, "Due Oct 3".
     # Kept short: it is scanned.
     meta: str = ""
-    url: str = ""
-    # Leaves HQ. Rendered so the operator knows before they click, and so a
-    # linked page cannot reach back through window.opener.
-    external: bool = False
-    # Optional state. `badge` carries the text, so state is never color alone.
-    status: Tone | Literal[""] = ""
-    badge: str = ""
+    state: Badge | None = None
     # When the record happened, after ``meta``: a value, so the row says it
     # in HQ's time words as the day it fell on, the moment itself on hover.
     at: date | None = None
@@ -223,10 +243,6 @@ class ListRow:
     # ``PageAction``: a link to a page, or a POST through ``button`` ("Move up", "Delete"). A
     # glyph's ``title`` names it aloud.
     actions: tuple[RowAction, ...] = ()
-    # The thing the row names, in place of ``title`` and ``url``: drawn as
-    # every mention of an entity is, so the name opens its page or, on that
-    # page, stands as plain text.
-    link: RowLink | None = None
     # A project's category key ("homelab"), drawn as its color before the
     # title; ``detail`` says it in words, since color is never alone.
     category: str = ""
@@ -239,10 +255,6 @@ class ListRow:
     chips: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.link is not None and (self.title or self.url or self.external):
-            raise ValueError("A ListRow names its record once: by its title and url, or by its link.")
-        if self.status and not self.badge:
-            raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
         # A line that repeats what the row already says says nothing.
         said = {self.title.casefold()}
         if self.detail.casefold() in said:
@@ -253,6 +265,30 @@ class ListRow:
             and "".join(text for text, _ in self.snippet).casefold() in said
         ):
             object.__setattr__(self, "snippet", ())
+
+    @property
+    def link(self) -> RowLink | None:
+        """The entity the row names, or None for one named in words."""
+
+        return None if isinstance(self.named, RowTitle) else self.named
+
+    # What the row says, read off ``named`` and ``state`` where a record of
+    # it is written out whole (``domain_records.InsightRowPart``).
+    @property
+    def title(self) -> str:
+        return self.named.title if isinstance(self.named, RowTitle) else self.named.label
+
+    @property
+    def url(self) -> str:
+        return self.named.url
+
+    @property
+    def status(self) -> Tone | Literal[""]:
+        return self.state.tone if self.state else ""
+
+    @property
+    def badge(self) -> str:
+        return self.state.text if self.state else ""
 
 
 @display
