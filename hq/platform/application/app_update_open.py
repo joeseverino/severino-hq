@@ -124,7 +124,7 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return _opening(TICKING, waits_on(tick), "Renovate runs once it is ticked", operation=tick)
+            return _opening(TICKING, waits_on(tick), operation=tick)
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
             message = str(result.get("message") or "")
@@ -140,14 +140,13 @@ OPENING = "Opening"
 BOX = "Its box on the Dependency Dashboard"
 TICKING = "Ticking its box on the Dependency Dashboard"
 RENOVATE = "Renovate's run"
-SHOWS = "Its pull request shows here once Renovate opens it"
 TRIES_AGAIN = "Open PR tries again"
 ASKS_AGAIN = "Open PR asks again"
 OPENED = "Renovate has opened its pull request."
 
 
 def _opening(*lines: str, operation: OperationRequest | None = None) -> MergeStanding:
-    """An Open PR under way: the step it is at, then what comes next."""
+    """An Open PR under way, and the step it is at."""
 
     return MergeStanding(OPENING, Tone.ATTENTION, taken=True, lines=lines, operation=operation)
 
@@ -159,12 +158,12 @@ def _run_standing(repository: str, since: datetime | None) -> MergeStanding | No
 
     if (asked := asked_at()) is not None and (since is None or asked >= since):
         said = controller_standing().cannot("", now=timezone.now())
-        return _opening(f"{RENOVATE} is asked", said, SHOWS)
+        return _opening(f"{RENOVATE} is asked", said)
     run = last_run(repository)
     if run is None or (since is not None and run.started_at < since):
         return None
     if run.seen == JobState.RUNNING:
-        return _opening("Renovate is running", SHOWS)
+        return _opening("Renovate is running")
     if run.seen == JobState.SUCCEEDED:
         read = kinds_read().get(PULL_REQUEST_KIND)
         if run.finished_at is not None and (read is None or read < run.finished_at):

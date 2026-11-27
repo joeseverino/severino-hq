@@ -446,11 +446,11 @@ def _check_run(name, conclusion, age, *, seconds=0):
     """One check of a pull request's head as GitHub's check run says it: run
     ``seconds`` from ``age`` ago, or still running given no ``conclusion``."""
 
-    started = iso(age)
+    url = f"https://github.com/example/{APPS}/actions/runs/{hexed(name, length=8)}"
+    run = {"name": name, "status": "in_progress", "conclusion": "", "started_at": iso(age), "completed_at": None, "url": url}
     if not conclusion:
-        return {"name": name, "status": "in_progress", "conclusion": "", "started_at": started, "completed_at": None}
-    done = iso(age - timedelta(seconds=seconds))
-    return {"name": name, "status": "completed", "conclusion": conclusion, "started_at": started, "completed_at": done}
+        return run
+    return {**run, "status": "completed", "conclusion": conclusion, "completed_at": iso(age - timedelta(seconds=seconds))}
 
 
 def _updates(name):

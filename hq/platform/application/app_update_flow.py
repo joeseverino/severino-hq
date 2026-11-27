@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from .app_updates import AppUpdate, UpdateKind, UpdateState
+from django.utils.text import capfirst
+
+from .app_updates import AppUpdate, UpdateKind, UpdateState, of_app
 from .card_items import Answer
 from .entity_links import EntityLink, declared_link, entity_link, web_url
 from .moments import duration, moment, when
@@ -53,6 +55,7 @@ def update_flow(state: UpdateState) -> tuple[FlowStep, ...]:
         if state.kind == UpdateKind.OPEN and not landed
         else _waiting("Approve", "Once its checks pass", done="Merged" if merged or landed else ""),
         _decided("Apply", state) if merged or landed else _waiting("Apply", "Once it merges"),
+        _health(state) if merged or landed else _waiting("Health check", "Once it applies"),
     )
 
 
@@ -83,14 +86,17 @@ def _checks(update: AppUpdate) -> FlowStep:
     return FlowStep("Checks", Answer(word, (*lines, said.why), tone), done=tone == Tone.GOOD)
 
 
-def _check(run: Mapping[str, Any]) -> str:
-    """One check as its line says it: ``Lint passed 58 s``, ``Test running``."""
+def _check(run: Mapping[str, Any]) -> EntityLink | str:
+    """One check as its line says it, ``Lint passed 58 s`` or ``Test running``,
+    linked to its run on GitHub where the reading names it."""
 
     status = str(run.get("status") or "")
     conclusion = str(run.get("conclusion") or "")
     word = CONCLUDED.get(conclusion, conclusion) if status == "completed" else STATUS.get(status, status)
     started, ended = moment(run.get("started_at")), moment(run.get("completed_at"))
-    return " ".join(part for part in (str(run.get("name") or ""), word, _took(started, ended)) if part)
+    said = " ".join(part for part in (str(run.get("name") or ""), word, _took(started, ended)) if part)
+    url = web_url(run.get("url"))
+    return declared_link(said, url, kind="dependency") if url else said
 
 
 def _took(started: datetime | None, ended: datetime | None) -> str:
@@ -108,3 +114,28 @@ def _decided(title: str, state: UpdateState) -> FlowStep:
         link = entity_link(Kind.RUN, run.id, label=title) if run is not None and run.url else None
         return FlowStep(title, standing.answer, done=standing.tone == Tone.GOOD, link=link)
     return FlowStep(title, Answer(f"Yours to {title.lower()}") if state.action else Answer("Waiting"))
+
+
+def _health(state: UpdateState) -> FlowStep:
+    """What each container it moves says of its own health once its apply
+    was asked, as HQ last read it; waiting until a read after the ask."""
+
+    standing = state.beside
+    operation = standing.operation if standing is not None else None
+    since = operation.claimed_at or operation.created_at if operation is not None else None
+    if since is None or not (standing and standing.taken and standing.tone != Tone.SERIOUS):
+        return _waiting("Health check", "Once it applies")
+    items = state.update.containers if state.update else of_app(state.managed.repository, state.managed.app)
+    read = [item for item in items if item.running.observed_at and item.running.observed_at > since]
+    if not read or len(read) < len(items):
+        return _waiting("Health check", "Once HQ reads it after the apply")
+    checks = [(item, item.running.check) for item in read]
+    if all(check is None for _item, check in checks):
+        return FlowStep("Health check", Answer("None declared"), done=True)
+    worst = next((pair for pair in checks if pair[1] is not None and pair[1].tone != Tone.GOOD), None)
+    lines = tuple(
+        f"{item.running.name} {check.value} {when(item.running.observed_at)}" for item, check in checks if check
+    )
+    if worst is not None:
+        return FlowStep("Health check", Answer(capfirst(worst[1].value), lines, worst[1].tone))
+    return FlowStep("Health check", Answer("Healthy", lines, Tone.GOOD), done=True)
