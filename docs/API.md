@@ -459,7 +459,11 @@ a `limit` or `page` sent inside `filters` is refused, so paging has one place
 on every tool. A row added or removed between two reads moves the rows after
 it, so one can be skipped or shown twice; a page number holds under any order,
 which a key does not. Every list's handler cuts its page through the shared
-helper, `projection.page_of`, or the read fails. A list too long
+helper, `projection.page_of`, or the read fails. A list whose query names no
+`limit`, one its handler derives whole, takes `limit` and `page` all the same
+(`ListRead.cut`): the resource layer reads them around the handler and
+`page_of` cuts the derived list by them, and without a `limit` the page is the
+whole list. So every list takes both. A list too long
 to count on every read declares itself uncounted (`ListRead.counted`), and
 its pages say whether more follow with `total` null.
 
@@ -472,7 +476,8 @@ toggle (`ListRead.toggles`) is a flag. A list that adds up what it matched
 declares its search takes `query`, looked up in its search scope, the one the
 site's search uses, with the best match first unless a `sort` is asked. A
 kind whose query has no `page` (search, which ranks each scope apart,
-analytics' ranked breakdowns, and an extension's own query) answers a top
+analytics' ranked breakdowns, and an extension's query that declares a
+`limit` and no `page`) answers a top
 `limit`, narrowed rather than paged, with `next` null.
 
 Readings leave only through their schema: `ObservationSpec.admitted` drops any
@@ -605,6 +610,12 @@ that finds what was missing: an MCP tool and its `arguments`, which the API
 serves as the route of that name. That is `describe_capabilities` for an
 unknown capability, or `list_resource` for a record no identifier matched,
 beside `details.identifier`, the field its kind is addressed by.
+An `invalid_input` refusal of a value outside its choices names the nearest
+choice beside them, a list sent to a text field is told to send its values
+comma-separated, and an MCP argument the tool does not take, whose value an
+argument it does take would take in its place (the missing required one, else
+the one nearest by name), is told to be sent as that one (`kind` as `name`).
+None of them repeats what was sent.
 `details.closest` is the call that reads each of up to three nearest the value
 asked for. For a record, it is the `get_resource` of each record near its
 identifier on the first page of its kind's list read as the caller, so it never
@@ -841,7 +852,9 @@ from each kind's query model (`list_filters` in
 it declares itself. With no `name`, `describe_resources` lists every kind with
 the `filters` its list narrows by, leaving out `limit` and `page`, which page
 it. With one, as `/api/v2/resources/?name=` does, it answers that kind with its
-list's `query_schema`, the filters alone. Beside it is `paging`, the schema of
+list's `query_schema`, the filters alone, and `all_fields`, every top-level
+field its items and its one record hold, the names a field mask takes, read
+from the paths the mask is checked against. Beside it is `paging`, the schema of
 the `limit` and `page` the list takes. Those are `list_resource`'s own
 arguments, which it refuses inside `filters`, and the machine API's query
 parameters beside the filters. A filter that takes only some values (a status,
