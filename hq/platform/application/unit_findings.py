@@ -48,15 +48,12 @@ STARTERS = (".timer", ".path", ".socket")
 KEPT_ACTIVE = (*STARTERS, ".mount")
 # The unit types that run when started and rest inactive between runs.
 RUN_WHEN_STARTED = (".service",)
-# ``test_unit_findings`` holds every unit type deploy/systemd ships to one of
-# the two.
 # How far behind its own next elapse a waiting timer may be when it is read.
 # Above every RandomizedDelaySec shipped, which systemd adds after that instant.
 OVERDUE_AFTER = timedelta(hours=2)
 # How long a unit a timer started may still be starting when it is read. Above
 # every TimeoutStartSec shipped, so systemd's own bound ends a slow run first.
 STARTING_TOO_LONG = timedelta(hours=2)
-# ``test_unit_findings`` holds both to the files under deploy/systemd.
 # How often systemd must have restarted a service on its own for HQ to call it
 # a loop. Above systemd's default StartLimitBurst of 5: a service restarting
 # faster than its start limit allows is stopped and failed, ``unit-failed``'s

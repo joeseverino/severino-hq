@@ -188,8 +188,7 @@ has none), as in "Free on /: 400 MB of 30 GB (1.3%); urgent once free space is
 under 512 MB and 3% of the disk." The ast-grep rule `attention-item-says-why`
 fails on an extension's `Finding` built without one, and `attention-why-restates-rating`
 on a why that closes on its rating or names its rule, in host source and,
-through the plugin check, in an extension's. `test_finding_help.py` holds every
-finding the example estate raises to a bar for its severity.
+through the plugin check, in an extension's.
 
 An item a threshold raises also says what clears it (`FindingRule.clears`,
 or `Finding.clears` for one no host rule words), worded from the same constant as its
