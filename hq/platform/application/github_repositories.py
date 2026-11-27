@@ -11,12 +11,11 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Any
 
-from django.db.models import Max
 from django.utils import timezone
 
-from hq.domains.control_plane.models import InboundEvent, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.github import FULL_READ_EVERY, PROVIDER, REPOSITORY_KIND, UNPROBED_EVENTS
+from hq.domains.control_plane.observations.github import FULL_READ_EVERY, REPOSITORY_KIND
 
 lazy from .moments import moment
 
@@ -46,34 +45,23 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
     reads due ones in.
 
     A held record the reading's schema refuses was stored under an older
-    contract, so it is due at once: carried, it would stand as current. So is
-    one GitHub told HQ of a change to since its read that the change query
-    cannot see (``UNPROBED_EVENTS``), an alert.
+    contract, so it is due at once: carried, it would stand as current.
     """
 
     now = now or timezone.now()
     reading = OBSERVATIONS[REPOSITORY_KIND]
     snapshot = ProviderInventory.objects.filter(kind=REPOSITORY_KIND).values_list("records", flat=True).first()
-    # Each event by its name, with or without the action after a dot.
-    unprobed = rf"^({'|'.join(UNPROBED_EVENTS)})(\.|$)"
-    told = dict(
-        InboundEvent.objects.filter(provider=PROVIDER, event__regex=unprobed)
-        .values("subject")
-        .annotate(last=Max("applied_at"))
-        .values_list("subject", "last")
-    )
     held = []
     for record in snapshot or ():
         name = str(record.get("repository", "") or "")
         if not name:
             continue
         read_at = moment(record.get("read_at"))
-        told_since = read_at is not None and told.get(name, read_at) > read_at
         held.append(
             {
                 "repository": name,
                 "fingerprint": str(record.get("fingerprint", "") or ""),
-                "due": due(name, read_at, now) or bool(reading.clean([record])[1]) or told_since,
+                "due": due(name, read_at, now) or bool(reading.clean([record])[1]),
                 "read_at": read_at or datetime.min.replace(tzinfo=now.tzinfo),
             }
         )

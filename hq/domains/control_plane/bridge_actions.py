@@ -203,7 +203,7 @@ def _analytics_plan(parameters: Parameters, payload: Any) -> Any:
 
 def _sweep_due(parameters: Parameters, payload: Any) -> Any:
     del payload
-    return sweep_due(parameters["controller-id"])
+    return sweep_due(parameters["controller-id"], taken=True)
 
 
 def _glance_plan(parameters: Parameters, payload: Any) -> Any:

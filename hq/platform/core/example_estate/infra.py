@@ -404,7 +404,7 @@ def refreshes_asked():
 
     kinds = [kind for kind, spec in OBSERVATIONS.items() if spec.provider and not reader_of(kind)][:20]
     cadence.ask(connection=PORTAINER)
-    cadence.ask(reads=kinds, spaced=True)
+    cadence.ask(reads=kinds)
 
 
 def glance_unanswered():

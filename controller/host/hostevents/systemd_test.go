@@ -7,6 +7,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -38,12 +39,15 @@ func bus(t *testing.T) (source Source, opened chan chan *dbus.Signal) {
 }
 
 // A job that ended as the contract's HostJobResult names is told at once, by
-// its unit's name and the job's result; a job that ended any other way is not.
+// its unit's name and the job's result; a job that ended any other way, or
+// one of HQ's own passes, is not.
 func TestAJobsEndIsToldAsTheUnitsJob(t *testing.T) {
 	source, opened := bus(t)
 	told, _ := watch(t, source)
 	signals := arrived(t, opened)
 
+	signals <- jobRemovedSignal(4018, host.ControllerUnit, "done")
+	signals <- jobRemovedSignal(4019, host.GlanceUnit, "done")
 	signals <- jobRemovedSignal(4020, "example-pull@0123abc.service", "done")
 	signals <- jobRemovedSignal(4021, "example-pull@4567def.service", "failed")
 	signals <- jobRemovedSignal(4022, "example-check.service", "skipped")

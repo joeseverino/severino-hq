@@ -62,7 +62,8 @@ def _carried(source: InboundSource) -> list[str]:
 @transaction.atomic
 def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
     """Store each new event in ``batch`` and ask once for every reading they
-    make due; how many were applied, repeated and ignored, and the kinds asked.
+    make due, of what each names; how many were applied, repeated and
+    ignored, and the kinds asked.
 
     ``batch`` is the contract's ``InboundBatch``. One with no events says its
     source is listening and nothing happened. One that says its source
@@ -74,9 +75,10 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         raise ValueError(departed)
     source = InboundSource(batch["source"])
     readings.note(channel(source), every=_NOTED_EVERY)
-    asked: dict[str, None] = {}
+    # The kinds asked of each subject; "" is all of each kind.
+    asked: dict[str, dict[str, None]] = {}
     if batch.get("reconnected"):
-        asked.update(dict.fromkeys(_carried(source)))
+        asked[""] = dict.fromkeys(_carried(source))
     arrivals = batch["events"]
     stored = set(
         InboundEvent.objects.filter(delivery_id__in={arrived["delivery_id"] for arrived in arrivals}).values_list(
@@ -99,7 +101,7 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
             outcome=InboundOutcome.APPLIED if kinds else InboundOutcome.IGNORED,
             reads=list(kinds),
         )
-        asked.update(dict.fromkeys(kinds))
+        asked.setdefault(new[delivery].subject, {}).update(dict.fromkeys(kinds))
     # One statement for the batch; a delivery stored meanwhile by another
     # batch is the one event, as the constraint says.
     InboundEvent.objects.bulk_create(new.values(), ignore_conflicts=True)
@@ -108,9 +110,10 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         "repeated": len(arrivals) - len(new),
         "ignored": sum(event.outcome == InboundOutcome.IGNORED for event in new.values()),
     }
-    if asked:
-        ask(reads=asked, spaced=True)
-    return {"ok": True, **counts, "asked": list(asked)}
+    for subject, kinds in asked.items():
+        if kinds:
+            ask(reads=kinds, subject=subject)
+    return {"ok": True, **counts, "asked": list(dict.fromkeys(kind for kinds in asked.values() for kind in kinds))}
 
 
 def prune_events(_progress: Any = None, *, subject: str = "", principal: Any = None) -> dict[str, Any]:

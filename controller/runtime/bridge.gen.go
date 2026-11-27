@@ -1972,6 +1972,9 @@ type ForcedRead struct {
 	Kind        ResourceKind   `json:"kind"`
 	Kinds       []ResourceKind `json:"kinds"`
 	RequestedAt time.Time      `json:"requested_at"`
+
+	// Subject What of the kind is to be read, as its provider names it, such as a repository; empty is all of it.
+	Subject string `json:"subject"`
 }
 
 // GitHubAllowanceRecord One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.

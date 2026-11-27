@@ -328,9 +328,17 @@ func (r *Registry) githubRead(ctx context.Context) githubPass {
 	for i, repository := range r.Repositories.Held {
 		held[repository.Repository], order[repository.Repository] = repository, i
 	}
+	// A pass an event asked for reads in full the repositories it names, and
+	// any HQ holds no record of, and carries the rest unprobed.
+	told := runtime.Told(ctx, runtime.ResourceKindGitHubRepository)
+	reads := func(name string) bool { _, isHeld := held[name]; return !isHeld || slices.Contains(told, name) }
+	probed := names
+	if told != nil {
+		probed = slices.DeleteFunc(slices.Clone(names), func(name string) bool { return !reads(name) })
+	}
 	// A query that failed leaves every repository unknown, so each is read
 	// in full, as far as the fuse allows.
-	fingerprints, _ := r.githubFingerprints(ctx, c, names)
+	fingerprints, _ := r.githubFingerprints(ctx, c, probed)
 	updater := sync.OnceValues(func() (string, error) { return r.githubBot(ctx, c) })
 	records := make([]*githubRepositoryRead, len(names))
 	failures := make([]error, len(names))
@@ -348,6 +356,12 @@ func (r *Registry) githubRead(ctx context.Context) githubPass {
 	group.SetLimit(githubReadConcurrency)
 	due := []int{}
 	for i, name := range names {
+		if told != nil {
+			if reads(name) {
+				group.Go(func() error { read(i); return nil })
+			}
+			continue
+		}
 		standing, isHeld := held[name]
 		if fingerprint := fingerprints[name]; !isHeld || fingerprint == "" || fingerprint != standing.Fingerprint {
 			group.Go(func() error { read(i); return nil })

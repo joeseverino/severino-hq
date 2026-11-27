@@ -1747,6 +1747,11 @@
           "kind": {
             "$ref": "#/components/schemas/ResourceKind"
           },
+          "subject": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "What of the kind is to be read, as its provider names it, such as a repository; empty is all of it."
+          },
           "requested_at": {
             "type": "string",
             "format": "date-time"
@@ -1765,6 +1770,7 @@
         "required": [
           "connection_ref",
           "kind",
+          "subject",
           "requested_at",
           "kinds"
         ],

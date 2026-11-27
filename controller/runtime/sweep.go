@@ -21,6 +21,9 @@ func (w *Worker) sweep(ctx context.Context) error {
 	if len(verdict.OnlyKinds) == 0 || slices.ContainsFunc(verdict.Forced, func(read ForcedRead) bool { return read.ConnectionRef != "" }) {
 		w.connections(ctx, verdict.Carry)
 	}
+	if len(verdict.OnlyKinds) != 0 {
+		ctx = Telling(ctx, verdict.Forced)
+	}
 	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds, verdict.CarryKinds)
 	if err != nil {
 		return err
@@ -41,6 +44,32 @@ func (w *Worker) sweep(ctx context.Context) error {
 	}
 	w.post("analytics", w.Bridge.Analytics(ctx, w.ID, readings))
 	return nil
+}
+
+// toldKey carries the forced reads of a pass that reads only what they ask.
+type toldKey struct{}
+
+// Telling is ctx for a pass that reads only what forced asks.
+func Telling(ctx context.Context, forced []ForcedRead) context.Context {
+	return context.WithValue(ctx, toldKey{}, forced)
+}
+
+// Told is what of kind the pass reading ctx was asked for, as its provider
+// names each (a repository), or nil for all of it: a pass due on its own
+// clock, or one a read of the whole kind forces.
+func Told(ctx context.Context, kind ResourceKind) []string {
+	forced, _ := ctx.Value(toldKey{}).([]ForcedRead)
+	var told []string
+	for _, read := range forced {
+		if read.Kinds != nil && !slices.Contains(read.Kinds, kind) {
+			continue
+		}
+		if read.Subject == "" {
+			return nil
+		}
+		told = append(told, read.Subject)
+	}
+	return told
 }
 
 // connections probes every connection, but the carried, and tells HQ.

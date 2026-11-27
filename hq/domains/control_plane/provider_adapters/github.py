@@ -273,8 +273,8 @@ CONNECTIONS = {
     ),
 }
 
-# What one App webhook sends from every installation, each event making the
-# repositories' reading due, and the webhook's own, since a delivery that
+# What one App webhook sends from every installation, each event making its
+# repository's full read due, and the webhook's own, since a delivery that
 # arrived is one GitHub's log no longer counts as failing; GitHub's docs name
 # the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
@@ -290,7 +290,10 @@ INBOUND = {
                 "deployment_status",
                 "deployment_review",
                 "merge_group",
-                *readings.UNPROBED_EVENTS,
+                "dependabot_alert",
+                "code_scanning_alert",
+                "secret_scanning_alert",
+                "workflow_run",
             ),
             (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
         ),

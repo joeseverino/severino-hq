@@ -2,7 +2,11 @@
 what each forces, and which a sweep answered.
 
 ``cadence.ask`` stores a request; the sweep's verdict (``cadence.sweep_due``)
-reads them here, and a sweep's report settles them.
+reads them here and, handed to a controller, marks each taken. Only a pass
+that took a request answers it, by storing what it forces after taking it: a
+pass that read before an ask and stored after it never answers that ask. A
+burst of asks coalesces on the pass itself, since the controller runs one
+pass at a time and every ask during one is taken by the next.
 """
 
 from collections.abc import Iterable
@@ -16,17 +20,9 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.control_plane.observations.contract import read_together
 lazy from hq.platform.core.attribution import continuing
 
-from .derivations import reached
 lazy from .cadence import every_sweep
 lazy from .credential_sight import fed_kinds
 lazy from .projection import iso
-
-# How long after a kind was stored an event's ask for it waits, so a burst of
-# events is a read at once and one more after it rather than a pass for each:
-# a reading two minutes behind is still fresh, and every pass spends the
-# providers' request budgets. No longer than a request lives, so the one that
-# waits is still pending when the gap ends. A person's ask never waits.
-EVENT_READ_GAP = timedelta(minutes=2)
 
 
 def read_request_lifetime() -> timedelta:
@@ -45,18 +41,19 @@ class ForcedRead:
     kinds: tuple[str, ...] | None
     # The creation context of its latest ask, which its answer continues.
     traceparent: str = ""
-    # When an event's ask for a kind read lately may force a pass, or None
-    # for one that may at once.
-    waits_until: datetime | None = None
+    # What of the kind it asks for, "" for all of it; and when a pass took it.
+    subject: str = ""
+    taken_at: datetime | None = None
 
     @property
-    def subject(self) -> str:
-        return self.connection_ref or self.kind or "every connection"
+    def label(self) -> str:
+        return " ".join(filter(None, (self.connection_ref or self.kind or "every connection", self.subject)))
 
     def as_dict(self) -> dict[str, object]:
         return {
             "connection_ref": self.connection_ref,
             "kind": self.kind,
+            "subject": self.subject,
             "requested_at": iso(self.requested_at),
             "kinds": list(self.kinds) if self.kinds is not None else None,
         }
@@ -90,9 +87,11 @@ def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
 
 
 def _answered(read: ForcedRead, stored: dict[str, datetime], probed: dict[str, datetime]) -> bool:
-    """Whether everything ``read`` forces was stored after it was asked for."""
+    """Whether a pass took ``read`` and stored everything it forces since."""
 
-    asked = read.requested_at
+    asked = read.taken_at
+    if asked is None:
+        return False
     if read.connection_ref and probed.get(read.connection_ref, asked) <= asked:
         return False
     if read.kinds is None:
@@ -129,29 +128,24 @@ def forced_reads(asked: Iterable[ReadRequest] | None = None) -> tuple[ForcedRead
             request.connection_ref,
             request.kind,
             request.requested_at,
-            (kinds := forced_kinds(request.connection_ref, request.kind)),
+            forced_kinds(request.connection_ref, request.kind),
             request.traceparent,
-            _spaced(request, kinds, stored),
+            request.subject,
+            request.taken_at,
         )
         for request in requests
     )
     return tuple(read for read in reads if not _answered(read, stored, probed))
 
 
-def _spaced(request: ReadRequest, kinds: tuple[str, ...] | None, stored: dict[str, datetime]) -> datetime | None:
-    """When an event's ask may force a pass: ``EVENT_READ_GAP`` after the
-    kinds it forces were stored, or None once one of them never was."""
+def take(forced: tuple[ForcedRead, ...], at: datetime) -> None:
+    """Mark ``forced`` taken by the pass handed them at ``at``. Each is matched
+    on the ask it was read as, so an ask made since stays for the next pass."""
 
-    if not request.spaced or not kinds or any(kind not in stored for kind in kinds):
-        return None
-    return min(stored[kind] for kind in kinds) + EVENT_READ_GAP
-
-
-def due_reads(forced: tuple[ForcedRead, ...]) -> tuple[ForcedRead, ...]:
-    """Of ``forced``, the reads that force a pass now: an event's waits
-    out its gap, still pending, so nothing it asked for is lost."""
-
-    return tuple(read for read in forced if read.waits_until is None or reached(read.waits_until))
+    for read in forced:
+        ReadRequest.objects.filter(
+            connection_ref=read.connection_ref, kind=read.kind, subject=read.subject, requested_at=read.requested_at
+        ).update(taken_at=at)
 
 
 def askers(kinds: Iterable[str]) -> dict[str, str]:
@@ -170,10 +164,11 @@ def settle_read_requests() -> int:
     """Forget read requests that were answered or expired; how many went."""
 
     every = list(ReadRequest.objects.all())
-    pending = {(read.connection_ref, read.kind) for read in forced_reads(every)}
-    settled = [request for request in every if (request.connection_ref, request.kind) not in pending]
+    pending = {(read.connection_ref, read.kind, read.subject) for read in forced_reads(every)}
+    settled = [request for request in every if (request.connection_ref, request.kind, request.subject) not in pending]
     for request in settled:
-        request.audit_gone = f"Read of {request.connection_ref or request.kind or 'every connection'} answered"
+        named = " ".join(filter(None, (request.connection_ref or request.kind or "every connection", request.subject)))
+        request.audit_gone = f"Read of {named} answered"
         with continuing(request.traceparent):
             request.delete()
     return len(settled)

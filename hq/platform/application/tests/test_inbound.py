@@ -196,47 +196,44 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(asked(), [])
 
-    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
-    def test_a_burst_of_events_is_read_at_once_and_once_after_it(self):
+    def test_two_events_for_one_repository_make_one_read_of_it(self):
+        from ..read_requests import forced_reads
+
+        self.apply(worker(PUSH, {**PUSH, "event": "pull_request.opened", "delivery_id": "second"}))
+
+        reads = forced_reads()
+        self.assertEqual(sorted(read.kind for read in reads), PUSHED)
+        self.assertEqual({read.subject for read in reads}, {"example/app"})
+
+    def test_an_ask_made_after_a_pass_took_its_verdict_is_read_by_the_next(self):
         from hq.domains.control_plane.models import ProviderInventory
 
         from ..cadence import sweep_due
         from ..derivation_testing import frozen
+        from ..read_requests import forced_reads
 
         start = timezone.now()
-        passes = []
 
         @contextmanager
-        def at(moment):
+        def at(seconds):
+            moment = start + timedelta(seconds=seconds)
             with frozen(moment), mock.patch("django.utils.timezone.now", return_value=moment):
                 yield
 
-        def sweep(moment):
-            """A pass, whenever one is due: it stores what was asked."""
-
-            with at(moment):
-                if sweep_due()["due"]:
-                    passes.append(moment)
-                    for kind in PUSHED:
-                        ProviderInventory.objects.update_or_create(
-                            kind=kind, defaults={"records": [], "reachable": True, "observed_at": moment}
-                        )
-
-        with at(start - timedelta(hours=1)):
+        with at(-3600):
             for kind in PUSHED:
                 ProviderInventory.objects.create(kind=kind, records=[], reachable=True)
-        for second in range(25):
-            with at(start + timedelta(seconds=second)):
-                self.apply(worker({**PUSH, "delivery_id": f"burst-{second}"}))
-            sweep(start + timedelta(seconds=second))
-        for second in range(30, 900, 30):
-            sweep(start + timedelta(seconds=second))
-
-        self.assertEqual(passes[0], start, "the first event reads at once")
-        self.assertLessEqual(len(passes), 2)
-        for request in ReadRequest.objects.all():
-            read = ProviderInventory.objects.get(kind=request.kind).updated_at
-            self.assertGreater(read, request.requested_at, "the last event's ask was read")
+        with at(0):
+            self.apply(worker(PUSH))
+        with at(1):
+            sweep_due("example-controller", taken=True)
+        with at(2):
+            self.apply(worker({**PUSH, "event": "pull_request.opened", "delivery_id": "after"}))
+        # The pass that read before the second ask stores after it.
+        with at(3):
+            ProviderInventory.objects.update(observed_at=timezone.now(), updated_at=timezone.now())
+            self.assertEqual(sorted(read.kind for read in forced_reads()), PUSHED)
+            self.assertTrue(sweep_due()["due"])
 
     def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent

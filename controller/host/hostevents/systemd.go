@@ -8,6 +8,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -90,6 +91,11 @@ func jobArrival(signal *dbus.Signal, heard time.Time) (runtime.InboundArrival, b
 	unit, unitOK := signal.Body[2].(string)
 	result, resultOK := signal.Body[3].(string)
 	if !idOK || !unitOK || !resultOK || unit == "" || !runtime.HostJobResult(result).Valid() {
+		return runtime.InboundArrival{}, false
+	}
+	// HQ's own passes are its work, never a change to read: each pass's end
+	// would ask for the next.
+	if unit == host.ControllerUnit || unit == host.GlanceUnit {
 		return runtime.InboundArrival{}, false
 	}
 	heard = heard.UTC().Truncate(time.Microsecond)

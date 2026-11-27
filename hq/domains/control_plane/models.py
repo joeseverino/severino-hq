@@ -340,25 +340,31 @@ class DashboardRefreshRequest(TimestampedModel):
 
 
 class ReadRequest(TimestampedModel):
-    """An operator asking for one connection, one kind, or everything read now.
+    """Somebody, or an event, asking for one connection, one kind, or
+    everything read now, of one ``subject`` where the event names one (a
+    repository).
 
     Blank ``connection_ref`` and ``kind`` is every connection. Answered once
-    every reading it forces was stored after ``requested_at``; see
-    ``application.cadence``.
+    a pass that took it stored every reading it forces; see
+    ``application.read_requests``.
     """
 
     connection_ref = models.CharField(max_length=160, blank=True)
     kind = models.CharField(max_length=64, blank=True)
+    # What of the kind is to be read, as the provider names it; blank is all of it.
+    subject = models.CharField(max_length=255, blank=True)
     requested_at = models.DateTimeField(default=timezone.now)
+    # When a controller's pass took it in its verdict, or None while no pass
+    # has since its latest ask.
+    taken_at = models.DateTimeField(null=True, blank=True)
     # The chain of its latest ask, which the sweep that answers it continues
     # (``sweep.record_sweep``).
     traceparent = queued_chain()
-    # Its latest ask was an event's, which waits a gap after its kind was
-    # stored (``read_requests.EVENT_READ_GAP``).
-    spaced = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
+        constraints = [
+            models.UniqueConstraint(fields=("connection_ref", "kind", "subject"), name="one_read_request_per_subject")
+        ]
 
     @override
     def __str__(self) -> str:

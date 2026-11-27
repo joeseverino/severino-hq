@@ -766,13 +766,13 @@ class AskedReadCarryTests(TestCase):
 
 
 class AnsweredReadTests(TestCase):
-    """A read is answered only by what was stored after it was asked for."""
+    """A read is answered only by what was stored after a pass took it."""
 
     def setUp(self):
         self.asked = timezone.now() - timedelta(minutes=1)
 
     def ask(self, **subject):
-        ReadRequest.objects.create(requested_at=self.asked, **subject)
+        ReadRequest.objects.create(requested_at=self.asked, taken_at=self.asked, **subject)
 
     def store(self, kind, at):
         ProviderInventory.objects.update_or_create(
