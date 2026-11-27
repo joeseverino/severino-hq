@@ -20,9 +20,6 @@ class SearchBackend(Protocol):
     relevance column.
     """
 
-    def search(self, *, scope: str, query: str, limit: int) -> list[str]:
-        """Return relevance-ordered stable object ids for one scope."""
-
     def search_scopes(
         self, *, scopes: Sequence[str], query: str, limit: int
     ) -> dict[str, list[tuple[str, SnippetParts]]]:
@@ -67,13 +64,6 @@ _RANKED_SQL = """
     JOIN search_index_searchdocument AS document
       ON document.id = search.rowid
     WHERE search_index_fts MATCH %s AND document.scope IN ({scopes})
-"""
-
-_IDS_SQL = """
-    SELECT ranked.object_id
-    FROM ({ranked}) AS ranked
-    WHERE ranked.position <= %s
-    ORDER BY ranked.position
 """
 
 # CROSS JOIN fixes the loop order: the match is walked once and each row is
@@ -153,15 +143,6 @@ def snippet_parts(raw: str) -> SnippetParts:
 
 
 class SQLiteFTS5Backend:
-    def search(self, *, scope: str, query: str, limit: int) -> list[str]:
-        expression = _fts_query(query)
-        if not expression:
-            return []
-        sql = _IDS_SQL.format(ranked=_ranked_sql([scope]))
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [expression, scope, limit])
-            return [row[0] for row in cursor.fetchall()]
-
     def search_scopes(
         self, *, scopes: Sequence[str], query: str, limit: int
     ) -> dict[str, list[tuple[str, SnippetParts]]]:

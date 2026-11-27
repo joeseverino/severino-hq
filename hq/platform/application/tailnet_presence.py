@@ -11,9 +11,8 @@ lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
 from .tailnet import TAILNET_KIND, snapshots
 lazy from .arrivals import arrivals
-lazy from .expiry import days_until
 lazy from .locate import container_hosts, host_of
-lazy from .moments import expiry_words, moment, when
+lazy from .moments import moment, when
 lazy from .reach import is_public, network_of
 lazy from .ui import MISSING
 
@@ -173,24 +172,6 @@ class Presence:
         return tuple(
             dict.fromkeys(host for host in (host_of(endpoint) for endpoint in self.endpoints) if is_public(host))
         )
-
-    @property
-    def key_expiry_days(self) -> int | None:
-        """Days until the node key expires, or None when it does not.
-
-        A device with expiry disabled has no expiry, which is not the same as
-        an expiry far away: one is a decision and the other is a deadline.
-        """
-
-        when = moment(self.key_expires)
-        return days_until(when) if when is not None else None
-
-    @property
-    def key_expiry(self) -> str:
-        """When the node key runs out, in words ("expired 4 days ago"), or "" when it does not."""
-
-        days = self.key_expiry_days
-        return expiry_words(days) if days is not None else ""
 
 
 def _instant(stamp: object) -> str:

@@ -105,26 +105,6 @@ def _ability_contains_any(ability: ConnectionAbility, query: str) -> bool:
     )
 
 
-def _connection_matches(spec: ConnectionSpec, query: str) -> bool:
-    return _contains_all(
-        (
-            spec.name,
-            spec.label,
-            spec.summary,
-            *(
-                term
-                for ability in spec.abilities
-                for term in (
-                    ability.name,
-                    ability.label,
-                    ability.summary,
-                )
-            ),
-        ),
-        query,
-    )
-
-
 def _matching_ability_labels(spec: ConnectionSpec, query: str) -> tuple[str, ...]:
     """Name why a connection matched instead of showing an opaque family hit."""
 

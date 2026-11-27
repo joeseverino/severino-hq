@@ -123,7 +123,7 @@ class OneListTests(WorkRunsTestCase):
         from hq.domains.jobs.runner import AUDIT_TYPE, run as run_job
         from hq.platform.core.models import AuditLog
 
-        from ..history import asked_by, who_did
+        from ..history import Acts, asked_by, who_did_each
 
         asked = self.run_of(APP)
         person = operator()
@@ -132,7 +132,7 @@ class OneListTests(WorkRunsTestCase):
         with CaptureQueriesContext(connection) as sent:
             rows = {row.source: row for row in self.listed()}
 
-        self.assertEqual(rows[JOB].by, who_did((AUDIT_TYPE,), [job.pk])[str(job.pk)])
+        self.assertEqual(rows[JOB].by, who_did_each(Acts((AUDIT_TYPE,), [job.pk]))[0][str(job.pk)])
         self.assertEqual(rows[RUN].by, asked_by(OperationRequest, [asked])[str(asked.pk)])
         self.assertNotEqual(rows[JOB].by, rows[RUN].by)
         self.assertEqual(len([query for query in sent if AuditLog._meta.db_table in query["sql"]]), 1)

@@ -15,7 +15,6 @@ from hq.platform.core.testing import declare
 from ..certificate_expiry import HeldCertificate, judged as certificates_judged
 from ..credential_findings import EXPIRES, expiring as credentials_expiring
 from ..registration_findings import RULES as REGISTRATION_RULES
-from ..tailnet_presence import Presence
 from ..topology_model import TopologyNode
 from ..zones import find_zone
 from .zone_records import sweep
@@ -126,9 +125,6 @@ class EveryCallerTests(TestCase):
         from ..request_standard import _expiry_phrase
 
         self.assertSays(lambda when: _expiry_phrase(when.isoformat()))
-
-    def test_a_machines_node_key(self):
-        self.assertSays(lambda when: Presence(key_expires=when.isoformat()).key_expiry)
 
     @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_a_domains_security_card(self):
