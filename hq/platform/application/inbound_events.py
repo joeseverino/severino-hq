@@ -31,7 +31,8 @@ lazy from .facts import stored_snapshots
 if TYPE_CHECKING:
     from .credential_sight import Standing
 
-# What each channel is called in a sentence about it.
+# What the listener is called in a sentence about it, as its channel's
+# label (``InboundSource.WORKER``) says it at the head of one.
 LISTENER_NAMED = "event listener"
 
 # How often each channel's reader (the Worker's listener, the Docker reader)

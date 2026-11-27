@@ -30,4 +30,9 @@ class Migration(migrations.Migration):
                 max_length=20,
             ),
         ),
+        migrations.AlterField(
+            model_name="inboundevent",
+            name="source",
+            field=models.CharField(choices=[("worker", "Event listener"), ("host", "Host")], max_length=16),
+        ),
     ]

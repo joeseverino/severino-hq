@@ -367,9 +367,9 @@ class ReadRequest(TimestampedModel):
 
 class InboundSource(models.TextChoices):
     """Who told HQ an event happened: the listener on the Worker's socket, or
-    HQ's own host jobs."""
+    HQ's own host jobs. Each label is what every page calls the channel."""
 
-    WORKER = "worker", "Worker"
+    WORKER = "worker", "Event listener"
     HOST = "host", "Host"
 
 

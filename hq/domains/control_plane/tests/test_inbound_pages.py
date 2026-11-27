@@ -48,7 +48,10 @@ class EventsPageTests(TestCase):
 
         self.assertEqual(
             [(group.label, [row.cells[0].text for row in group.rows]) for group in table.groups],
-            [("Worker", ["example.new", "example.old"]), ("Host", ["example.host"])],
+            [
+                (InboundSource.WORKER.label, ["example.new", "example.old"]),
+                (InboundSource.HOST.label, ["example.host"]),
+            ],
         )
 
     def test_what_hq_takes_is_each_declared_event_under_its_provider_by_what_it_makes_due(self):
