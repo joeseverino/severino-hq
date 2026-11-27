@@ -114,14 +114,11 @@ class OneDeclarationTests(SimpleTestCase):
 
         self.assertEqual(classes, set(rules.FAILURE_CLASSES))
 
-    def test_the_thresholds_are_the_timers_and_the_renderers(self):
+    def test_the_thresholds_are_the_timers(self):
         timer = self.source("deploy", "systemd", "severino-hq-secrets.timer")
-        main = self.source("controller", "cmd", "hq-secrets", "main.go")
 
         self.assertIn("OnUnitActiveSec=1h\n", timer)
         self.assertIn("RandomizedDelaySec=30s\n", timer)
-        # gofmt aligns the field to its neighbors, so any run of spaces.
-        self.assertRegex(main, r"FullEvery: +24 \* time\.Hour,")
         # Read from the timer, not restated beside it.
         self.assertEqual(rules.RENDER_EVERY, timedelta(hours=1))
         self.assertEqual(rules.RENDER_DELAY, timedelta(seconds=30))

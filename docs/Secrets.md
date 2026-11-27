@@ -372,7 +372,9 @@ machine the controller runs on; the Checks page
 The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`). So a
 renderer two runs behind is raised as the third falls due. A full read is
-forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
+forced every 24 hours (`FULL_READ_EVERY` in
+`hq/domains/control_plane/observations/host.py`, which the renderer reads from
+the bridge contract), so it is overdue that allowance later.
 
 Both are measured against when the reading was taken, never against the
 present moment, so a quiet stretch between reads raises nothing. A reading

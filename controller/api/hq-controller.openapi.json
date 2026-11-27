@@ -6663,6 +6663,11 @@
           "RefusalPermission"
         ]
       },
+      "RenderFullReadSeconds": {
+        "default": 86400,
+        "type": "integer",
+        "description": "The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full."
+      },
       "RendererRegistryVersion": {
         "const": 2,
         "type": "integer",

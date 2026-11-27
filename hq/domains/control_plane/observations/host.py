@@ -1,6 +1,7 @@
 """Readings a controller takes of the machine it runs on and the edges it can see."""
 
 import re
+from datetime import timedelta
 from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field
@@ -70,6 +71,8 @@ RENDERER_NAME = r"^[a-z][a-z0-9-]{0,31}$"
 RENDER_READ = "read"
 RENDER_UNREADABLE = "unreadable"
 RENDER_REASONS = ("missing", "unreadable", "oversized", "invalid")
+# The longest a renderer whose vault is unchanged goes without reading it in full.
+FULL_READ_EVERY = timedelta(hours=24)
 
 _STATUS_WORD = re.compile(STATUS_WORD)
 
@@ -472,4 +475,9 @@ SHARED = (
     SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
     SharedValue("HostJobResult", tuple(JOB_ENDS), "How a job HQ's host tells it of ended, as systemd says it."),
     SharedValue("UnitName", UnitName, "A systemd unit's name, as systemd spells it."),
+    SharedValue(
+        "RenderFullReadSeconds",
+        Annotated[int, Field(default=int(FULL_READ_EVERY.total_seconds()))],
+        "The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full.",
+    ),
 )

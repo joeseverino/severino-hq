@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets"
@@ -39,6 +40,10 @@ func main() {
 }
 
 var containerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+// fullEvery is the longest an unchanged vault goes without a full read, as
+// HQ's registry declares it beside the findings that judge it.
+var fullEvery = time.Duration(api.MustLimit("RenderFullReadSeconds", "default")) * time.Second
 
 type configError string
 
@@ -88,7 +93,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 		},
 		RegistryPath:   *registry,
 		ConnectTimeout: *timeout,
-		FullEvery:      24 * time.Hour,
+		FullEvery:      fullEvery,
 		HealthAttempts: 12,
 		HealthInterval: 5 * time.Second,
 	}, container, nil

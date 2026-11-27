@@ -2891,6 +2891,9 @@ type RefusedPart struct {
 	Scope   string       `json:"scope"`
 }
 
+// RenderFullReadSeconds The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full.
+type RenderFullReadSeconds = int
+
 // RendererRegistryVersion The only renderer registry version the renderer reads.
 type RendererRegistryVersion int
 

@@ -14,6 +14,7 @@ from typing import Any
 from django.conf import settings
 
 from hq.domains.control_plane.observations.host import (
+    FULL_READ_EVERY,
     RENDER_READ,
     RENDER_STATUS_KIND,
     RENDER_UNREADABLE,
@@ -38,9 +39,7 @@ from .ui import ended
 
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
-# disagree. A run that finds the vault unchanged still reads it in full once a
-# day (FullEvery in controller/cmd/hq-secrets/main.go, which
-# ``test_render_status`` holds to the value below).
+# disagree.
 RENDER_TIMER = Path(settings.BASE_DIR) / "deploy" / "systemd" / "severino-hq-secrets.timer"
 _SPAN = re.compile(r"(\d+)\s*(h|min|s)")
 _UNITS = {"h": timedelta(hours=1), "min": timedelta(minutes=1), "s": timedelta(seconds=1)}
@@ -61,7 +60,6 @@ def _timer_span(key: str) -> timedelta:
 
 RENDER_EVERY = _timer_span("OnUnitActiveSec")
 RENDER_DELAY = _timer_span("RandomizedDelaySec")
-FULL_READ_EVERY = timedelta(hours=24)
 # The installed files are stale once nothing has confirmed them current for
 # three runs at their latest: one missed run is a restart or a held lock, two
 # is a slow Connect.
