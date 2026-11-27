@@ -1536,7 +1536,7 @@ collections it ships, from a checkout of HQ at the commit the repository
 targets, `main` for one HQ deploys:
 
 ```sh
-tools/pipeline/check-playbooks.sh <checkout>
+mise run playbooks:check <checkout>
 ```
 
 It exits 1 with each reason, worded as the Playbooks page says it, so a

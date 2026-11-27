@@ -57,3 +57,10 @@ description = "One extension package's contract check against this host, as its 
 hide = true
 dir = "{{cwd}}"
 run = "{{config_root}}/tools/pipeline/check-plugin.sh"
+
+["playbooks:check"]
+description = "Before a repository of playbooks merges a commit: every reason HQ's adoption would refuse its checkout, as that repository's CI runs it"
+hide = true
+dir = "{{cwd}}"
+usage = 'arg "<checkout>" help="The repository of playbooks, as its next commit would hold it"'
+run = '{{config_root}}/tools/pipeline/check-playbooks.sh "$usage_checkout"'
