@@ -493,14 +493,30 @@ REPORTED = Ended(
 )
 
 
-# What the applier stated of each app it released (its ``compose_project_outcomes``),
+# What the applier stated of each service it released (its ``compose_project_outcomes``),
 # one the commit did not change left as it ran, and of the pull, which applied it.
 RELEASES = [
-    {"project": app, "service": app, "image": image, "running_digest": f"sha256:{hexed('digest', app)}", **said}
-    for app, image, said in (
-        ("forgejo", "codeberg.org/forgejo/forgejo:9.0.2", {"health": "healthy", "result": "ok", "changed": True}),
-        ("immich", "ghcr.io/immich-app/immich-server:v1.120.1", {"health": "healthy", "result": "ok", "changed": True}),
-        ("jellyfin", "jellyfin/jellyfin:10.10.1", {"health": "healthy", "result": "ok", "changed": False}),
+    {"project": app, "service": service, "image": image, "running_digest": f"sha256:{hexed('digest', service)}", **said}
+    for app, service, image, said in (
+        (
+            "forgejo",
+            "forgejo",
+            "codeberg.org/forgejo/forgejo:9.0.2",
+            {"health": "healthy", "result": "ok", "changed": True},
+        ),
+        (
+            "immich",
+            "immich",
+            "ghcr.io/immich-app/immich-server:v1.120.1",
+            {"health": "healthy", "result": "ok", "changed": True},
+        ),
+        (
+            "immich",
+            "machine-learning",
+            "ghcr.io/immich-app/immich-machine-learning:v1.120.1",
+            {"health": "healthy", "result": "ok", "changed": False},
+        ),
+        ("jellyfin", "jellyfin", "jellyfin/jellyfin:10.10.1", {"health": "healthy", "result": "ok", "changed": False}),
     )
 ]
 APPLIED = Ended(

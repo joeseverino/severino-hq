@@ -551,13 +551,18 @@ class ApproveUpdateTests(TestCase):
         # An app the merge's pull left as it ran says so, beside one it replaced.
         merge = self.settle()
         self.assertTrue(merge.result["then"]["run"])
+        # Each service of an app is its own record, named apart from the app's others.
         apps = [
             {"project": "app", "result": "ok", "changed": False},
-            {"project": "web", "result": "ok", "changed": True},
+            {"project": "web", "service": "web", "result": "ok", "changed": True},
+            {"project": "web", "service": "proxy", "result": "ok", "changed": False},
         ]
         applied = self.worked(stated=receipt(apps=apps))
         words = {reading.kind: reading.records for reading in run_row(applied).evidence.readings}
-        self.assertEqual([said for _title, said, _tone in words["apps.pull"]], ["Unchanged", "Released"])
+        self.assertEqual([said for _title, said, _tone in words["apps.pull"]], ["Unchanged", "Released", "Unchanged"])
+        titles = [title for title, _said, _tone in words["apps.pull"]]
+        self.assertEqual(len(set(titles)), 3, titles)
+        self.assertIn("proxy", titles[2])
         self.assertEqual(words["apps.receipt"][0][1:], ("Applied", "good"))
 
     def test_a_container_read_running_an_older_pin_after_it_applied_is_applied_again(self):
