@@ -17,6 +17,7 @@ from .attribution import logging_in, unattributed_kinds
 from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .observations.contract import Reader, ReadingPart
+from .permissions import Permission
 from .provider_adapters import DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
@@ -180,7 +181,8 @@ class Read:
     label: str
     source: Literal["reading", "resource", "part"]
     by: Reader = "controller"
-    permissions: tuple[str, ...] = ()
+    # What the read requires: a reading's own, or the parts it reads of a kind.
+    permissions: tuple[Permission, ...] = ()
 
 
 @cache
@@ -196,17 +198,18 @@ def provider_reads() -> Mapping[str, tuple[Read, ...]]:
             Read(kind, reading.label, "reading", reading.read_by, tuple(reading.requires))
         )
     for kind, spec in PROVIDERS.items():
-        if spec.sweeps:
-            for provider in spec.connection_providers:
-                found.setdefault(provider, []).append(Read(kind, spec.label, "resource"))
-        by_provider: dict[str, list[ReadingPart]] = {}
+        # A part names its credential when it is not the kind's own.
+        by_provider: dict[str, list[ReadingPart]] = {provider: [] for provider in spec.connection_providers}
         for part in spec.parts:
-            if part.provider and part.provider not in spec.connection_providers:
-                by_provider.setdefault(part.provider, []).append(part)
+            for provider in (part.provider,) if part.provider else spec.connection_providers:
+                by_provider.setdefault(provider, []).append(part)
         for provider, parts in by_provider.items():
-            label = ", ".join(part.label for part in parts)
             needs = tuple(dict.fromkeys(name for part in parts for name in part.requires))
-            found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
+            if provider not in spec.connection_providers:
+                label = ", ".join(part.label for part in parts)
+                found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
+            elif spec.sweeps:
+                found.setdefault(provider, []).append(Read(kind, spec.label, "resource", permissions=needs))
     return frozendict({provider: tuple(reads) for provider, reads in found.items()})
 
 

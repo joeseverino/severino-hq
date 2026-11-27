@@ -77,8 +77,10 @@ class Sight:
     def missing(self) -> tuple[str, ...]:
         """The permissions to add: the kind's, or its refused parts'."""
 
+        # A resource kind's permissions are its parts', which a refusal of the
+        # whole kind does not name.
         if self.state == REFUSED and self.refusal == PERMISSION_REFUSAL:
-            return self.permissions
+            return self.permissions if self.source == "reading" else ()
         return tuple(dict.fromkeys(name for part in self.parts for name in part.missing))
 
     @property

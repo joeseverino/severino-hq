@@ -8,10 +8,9 @@ in ``permissions``.
 
 from collections.abc import Mapping
 
-from .observations import OBSERVATIONS
 from .permissions import Cloudflare, Permission, Tailscale
 lazy from .connection_kinds import CONNECTION_KINDS
-lazy from .providers import PROVIDERS
+lazy from .providers import provider_reads
 
 # Reads an observer credential needs that neither a registered reading nor a
 # resource kind's declared parts state: what the sweep asks for on the way to
@@ -34,21 +33,11 @@ UNREGISTERED_READS: Mapping[str, tuple[tuple[Permission, str], ...]] = frozendic
 
 
 def observer_permissions(provider: str) -> tuple[Permission, ...]:
-    """Every read permission this provider's observer credential needs, sorted.
+    """Every read permission this provider's observer credential needs, sorted:
+    what each of its reads requires (``providers.provider_reads``), and the
+    reads none declares."""
 
-    What its readings require, what the parts of resource kinds read through it
-    require, and the reads neither declares.
-    """
-
-    found = {name for spec in OBSERVATIONS.values() if spec.provider == provider for name in spec.requires}
-    found.update(
-        name
-        # A part names its credential when it is not the kind's own.
-        for spec in PROVIDERS.values()
-        for part in spec.parts
-        if part.provider == provider or (not part.provider and provider in spec.connection_providers)
-        for name in part.requires
-    )
+    found = {name for read in provider_reads().get(provider, ()) for name in read.permissions}
     found.update(name for name, _ in UNREGISTERED_READS.get(provider, ()))
     return tuple(sorted(found))
 
