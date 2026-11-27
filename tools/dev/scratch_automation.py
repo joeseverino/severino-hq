@@ -122,7 +122,7 @@ def connections(machines: Iterable[str]) -> dict[str, Any]:
     each machine as each profile, every one reaching this machine."""
 
     return {
-        "schema_version": 2,
+        "schema_version": logins.SCHEMA_VERSION,
         "connections": [
             {
                 "ref": f"{machine}-{profile}",
@@ -130,7 +130,7 @@ def connections(machines: Iterable[str]) -> dict[str, Any]:
                     "host": LOOPBACK,
                     "port": "22",
                     "user": USER,
-                    "role": "runner",
+                    "role": logins.ROLE,
                     "machine": machine,
                     "profile": profile,
                 },

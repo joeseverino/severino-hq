@@ -13,7 +13,7 @@ from hq.platform.application.container_standard import CHECK_IDS
 from hq.platform.application.github_public import GitHubRepositoryURL
 from hq.platform.application.record_fields import one_of
 
-from ..connection_shapes import API_TOKEN
+from ..connection_shapes import API_TOKEN, ConnectionRef
 from ..observations import portainer as readings
 from ..provider_spec import (
     ConnectionKind,
@@ -40,8 +40,7 @@ class PortainerContainerSpec(ProviderModel):
     watch and to cycle", and reconciliation is locked with nothing to converge.
     """
 
-    connection_ref: RequiredText = Field(
-        max_length=160,
+    connection_ref: ConnectionRef = Field(
         title="Portainer",
         description="The Portainer that manages this machine.",
     )

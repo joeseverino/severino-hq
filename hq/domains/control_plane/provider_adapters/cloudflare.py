@@ -13,7 +13,7 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
 
-from ..connection_shapes import API_TOKEN
+from ..connection_shapes import API_TOKEN, ConnectionRef
 from ..consoles import cloudflare_dashboard
 from ..names import LEADS_TO, normalized_hostname
 from ..observations import cloudflare as readings
@@ -297,8 +297,7 @@ class CloudflareZoneSpec(ProviderModel):
         title="Domain",
         description="The domain itself, e.g. example.com.",
     )
-    connection_ref: RequiredText = Field(
-        max_length=160,
+    connection_ref: ConnectionRef = Field(
         title="Served by",
         description="The connection that holds this zone.",
     )
@@ -669,7 +668,7 @@ class ContactInboxSpec(ProviderModel):
     nothing.
     """
 
-    connection_ref: RequiredText = Field(max_length=160, title="Connection")
+    connection_ref: ConnectionRef = Field(title="Connection")
     account_id: RequiredText = Field(max_length=64, title="Account")
     database_id: RequiredText = Field(max_length=64, title="Database")
     reviews: tuple[ContactReview, ...] = Field(default=(), max_length=CONTACT_CHANGES_LIMIT, title="Reviews")

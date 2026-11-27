@@ -8,6 +8,7 @@ from pydantic import Field
 from hq.platform.application.command_fields import RequiredText
 
 from ..certificate_authorities import authority_name
+from ..connection_shapes import BlankOrConnectionRef
 from ..names import normalized_hostname
 from ..provider_spec import ProviderModel, ProviderSpec, SharedValue, applies
 from .contracts import ServedCertificate
@@ -95,9 +96,8 @@ def _resolve(authored: dict[str, Any], context: Any) -> dict[str, Any]:
 class CaddyRouteSpec(ProviderModel):
     """One name Caddy serves, and where it hands each request off to."""
 
-    connection_ref: str = Field(
+    connection_ref: BlankOrConnectionRef = Field(
         default="",
-        max_length=160,
         title="Caddy",
         description=("The connection to the host that serves this route."),
     )

@@ -7556,6 +7556,7 @@
             "default": "",
             "description": "The connection to the host that serves this route.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Caddy",
             "type": "string"
           },
@@ -9081,7 +9082,7 @@
           "connection_ref": {
             "description": "The connection that holds this zone.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Served by",
             "type": "string"
           },
@@ -23290,7 +23291,7 @@
           "connection_ref": {
             "description": "The Portainer that manages this machine.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Portainer",
             "type": "string"
           },
@@ -30107,7 +30108,7 @@
           "connection_ref": {
             "description": "The connection HQ uses to reach this target.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Connection",
             "type": "string"
           },
@@ -30382,6 +30383,7 @@
             "default": "",
             "description": "The connection HQ uses to change this device.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Tailscale",
             "type": "string"
           },
@@ -30556,6 +30558,7 @@
             "default": "",
             "description": "The Tailscale connection the policy is read through.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Tailscale",
             "type": "string"
           },

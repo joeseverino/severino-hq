@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/connections"
 )
 
@@ -61,8 +62,9 @@ type Registry struct {
 	RequiredAppVariables []string `json:"required_app_variables"`
 }
 
-// RegistryVersion is the only registry version the renderer reads.
-const RegistryVersion = 2
+// RegistryVersion is the only registry version the renderer reads, as the
+// bridge contract states it.
+var RegistryVersion = api.MustLimit("RendererRegistryVersion", "const")
 
 // ErrRegistry is every reason a registry is refused.
 var ErrRegistry = errors.New("invalid connection registry")

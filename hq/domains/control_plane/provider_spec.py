@@ -74,6 +74,10 @@ class SharedValue:
     varnames: tuple[str, ...] = ()
 
 
+# A setting's name, as a vault item's projection states it.
+SETTING_NAME = r"^[A-Z][A-Z0-9_]*$"
+
+
 @dataclass(frozen=True, slots=True)
 class Setting:
     """One setting of a connection, and where its vault item holds it.
@@ -97,7 +101,7 @@ class Setting:
         return self.item_field in {"credential", "password"}
 
     def __post_init__(self) -> None:
-        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", self.name):
+        if not re.fullmatch(SETTING_NAME, self.name):
             raise ValueError(f"{self.name!r} is not a setting name.")
         if sum((bool(self.item_field), bool(self.label), self.url is not None)) != 1:
             raise ValueError(f"{self.name} comes from exactly one place on its item.")
@@ -325,6 +329,11 @@ SHARED = (
         "of the plan it answers. Numbers, instants and states only: HQ words them.",
         mode="validation",
         refs=(("panel_id", "GlancePanelID"),),
+    ),
+    SharedValue(
+        "SettingName",
+        Annotated[str, Field(pattern=SETTING_NAME)],
+        "A setting's name, as a vault item's projection states it.",
     ),
 )
 

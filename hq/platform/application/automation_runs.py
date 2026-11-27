@@ -20,6 +20,7 @@ from pydantic import Field, StrictBool, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core.digests import digest
+lazy from hq.domains.control_plane.connection_shapes import READ_PROFILE
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
     ManagedResource,
@@ -281,11 +282,6 @@ def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple
             },
         )
     return resolved
-
-
-# The privilege profile of the worker's login that escalates to nothing, as
-# the controller's connections.ReadProfile and hq_runner's READ_PROFILE name it.
-READ_PROFILE = "read"
 
 
 def login_profile(manifest: OperationManifest) -> str:

@@ -4,14 +4,12 @@ document's shape, are the contracts'.
 The worker ships without HQ, so it cannot read either contract at run time;
 each bound it holds a report or a call to is held here to the declaration in
 ``bridge_base.json``, and each key of the connections document it reads to
-the schema HQ's registry emits (``hq-connections.openapi.json``) and the
-version and bound the controller reads it at and the role it lends a runner
-connection under, so a change there that the
-worker misses fails here.
+the schema HQ's registry emits (``hq-connections.openapi.json``), and each
+value it checks a connection with to the bridge contract's, so a change there
+that the worker misses fails here.
 """
 
 import json
-import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,8 +22,6 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "hq" / "domains" / "control_plane" / "bridge_base.json"
 CONNECTIONS = ROOT / "controller" / "api" / "hq-connections.openapi.json"
 CONTROLLER = ROOT / "controller" / "api" / "hq-controller.openapi.json"
-DOCUMENT_GO = ROOT / "controller" / "connections" / "document.go"
-RUNS = ROOT / "hq" / "platform" / "application" / "automation_runs.py"
 
 
 @tag("source")
@@ -158,31 +154,14 @@ class ConnectionsDocumentTests(unittest.TestCase):
         self.assertLessEqual(set(connections.CONNECTION_KEYS), set(schemas["Connection"]["properties"]))
         self.assertLessEqual(set(connections.TRANSPORT_KEYS), set(schemas["SSHTransport"]["properties"]))
 
-    def test_the_document_is_read_at_the_controller_s_version_and_bound(self):
+    def test_each_value_the_worker_checks_a_connection_with_is_the_contract_s(self):
         from hq_runner import connections
 
-        source = DOCUMENT_GO.read_text(encoding="utf-8")
-        version = re.search(r"^const SchemaVersion = (\d+)$", source, re.MULTILINE)
-        bound = re.search(r"^const MaxBytes = 1 << (\d+)$", source, re.MULTILINE)
-        self.assertIsNotNone(version)
-        self.assertIsNotNone(bound)
-        self.assertEqual(connections.SCHEMA_VERSION, int(version.group(1)))
-        self.assertEqual(connections.MAX_BYTES, 1 << int(bound.group(1)))
-
-    def test_the_worker_reads_the_role_the_controller_lends(self):
-        from hq_runner import connections
-
-        role = re.search(r'^const RunnerRole = "([^"]*)"$', DOCUMENT_GO.read_text(encoding="utf-8"), re.MULTILINE)
-        self.assertIsNotNone(role)
-        self.assertEqual(connections.ROLE, role.group(1))
-
-    def test_the_read_login_s_profile_is_one_word_on_every_side(self):
-        from hq_runner import connections
-
-        profile = re.search(r'^const ReadProfile = "([^"]*)"$', DOCUMENT_GO.read_text(encoding="utf-8"), re.MULTILINE)
-        # Read as source, since the worker imports nothing of HQ.
-        hq = re.search(r'^READ_PROFILE = "([^"]*)"$', RUNS.read_text(encoding="utf-8"), re.MULTILINE)
-        self.assertIsNotNone(profile)
-        self.assertIsNotNone(hq)
-        self.assertEqual(connections.READ_PROFILE, profile.group(1))
-        self.assertEqual(hq.group(1), profile.group(1))
+        schemas = json.loads(CONTROLLER.read_text(encoding="utf-8"))["components"]["schemas"]
+        self.assertEqual(connections.SCHEMA_VERSION, schemas["ConnectionsVersion"]["const"])
+        self.assertEqual(connections.MAX_BYTES, schemas["ConnectionsDocument"]["maxLength"])
+        self.assertEqual(connections.ROLE, schemas["RunnerRole"]["const"])
+        self.assertEqual(connections.READ_PROFILE, schemas["ReadProfile"]["const"])
+        self.assertEqual(connections._REF.pattern, schemas["ConnectionRef"]["pattern"])
+        self.assertEqual(connections._MACHINE.pattern, schemas["RunnerMachine"]["pattern"])
+        self.assertEqual(connections.PROFILE.pattern, schemas["PrivilegeProfile"]["pattern"])

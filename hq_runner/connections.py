@@ -15,13 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# The connections document's schema version and read bound, as the
-# controller's (controller/connections/document.go).
+# The bridge contract's ConnectionsVersion, ConnectionsDocument maxLength,
+# RunnerRole and ReadProfile (the profile of a login that escalates to nothing).
 SCHEMA_VERSION = 2
 MAX_BYTES = 1 << 20
 ROLE = "runner"
-# The profile of a login that escalates to nothing, as the controller's
-# ReadProfile names it.
 READ_PROFILE = "read"
 KNOWN_HOSTS = "known_hosts"
 
@@ -35,16 +33,16 @@ TRANSPORT_KEYS = ("host", "port", "user", "role", "machine", "profile")
 SHELL_TYPE = "shell_type"
 
 # As the controller and the renderer hold them (controller/runtime/connections.go):
-# a host is a name or an address alone, the user a login name, and the ref a
-# file name in the ssh directory.
+# a host is a name or an address alone, the user a login name.
 _HOST = re.compile(r"[A-Za-z0-9][A-Za-z0-9.:-]*")
 _USER = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}")
-_REF = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*")
 _PORT = re.compile(r"[0-9]{1,5}")
 _SHELL_TYPES = frozenset({"sh", "powershell", "cmd"})
-# A machine and a profile as the controller holds them (document.go).
-_MACHINE = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
-PROFILE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
+# The bridge contract's ConnectionRef (a file name in the ssh directory),
+# RunnerMachine and PrivilegeProfile patterns.
+_REF = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
+_MACHINE = re.compile(r"^[a-z0-9][a-z0-9.-]{0,252}$")
+PROFILE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 
 
 class ConnectionsError(Exception):

@@ -17,7 +17,7 @@ from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
 lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
-from . import provider_spec
+from . import connection_shapes, provider_spec
 from .connection_kinds import SHAPES
 from .observations import OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS, INBOUND
@@ -252,7 +252,7 @@ def _heartbeat() -> dict[str, dict[str, Any]]:
 def _declared() -> Iterable[dict[str, dict[str, Any]]]:
     yield _enumerations()
     yield _heartbeat()
-    for module in (provider_spec, *ADMITTED):
+    for module in (provider_spec, connection_shapes, *ADMITTED):
         for value in getattr(module, "SHARED", ()):
             yield _shared(value)
     yield from _records()
@@ -373,7 +373,7 @@ def connections_document() -> dict[str, Any]:
         "openapi": "3.2.0",
         "info": {
             "title": CONNECTIONS_TITLE,
-            "version": "2.0.0",
+            "version": f"{connection_shapes.CONNECTIONS_VERSION}.0.0",
             "description": (
                 "The document that carries provider connections from the secret "
                 "renderer to the controller. It is a file, not an API: there are no "

@@ -3684,6 +3684,22 @@
           "ConnectionProviderTailscale"
         ]
       },
+      "ConnectionRef": {
+        "maxLength": 160,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "type": "string",
+        "description": "A connection's name: a file name in the renderer's directories."
+      },
+      "ConnectionsDocument": {
+        "maxLength": 1048576,
+        "type": "string",
+        "description": "The connections document as written: maxLength is the most bytes it may be."
+      },
+      "ConnectionsVersion": {
+        "const": 2,
+        "type": "integer",
+        "description": "The only connections document version either side accepts."
+      },
       "FailureClass": {
         "type": "string",
         "description": "Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.",
@@ -6497,6 +6513,11 @@
         "type": "object",
         "description": "One portainer.volume record: Volumes and mounts."
       },
+      "PrivilegeProfile": {
+        "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+        "type": "string",
+        "description": "A runner transport's privilege profile, as a procedure names its privilege."
+      },
       "R2BackupRecord": {
         "additionalProperties": false,
         "description": "The newest backup archive in a connection's bucket, as the bucket's own listing states it: the r2.backup reading's one record per connection. The controller uploads the host's newest archive first when the bucket lacks it, so this is the last off-site copy.",
@@ -6542,6 +6563,11 @@
           "copies"
         ],
         "type": "object"
+      },
+      "ReadProfile": {
+        "const": "read",
+        "type": "string",
+        "description": "The privilege profile of a runner login that escalates to nothing."
       },
       "ReadingPartName": {
         "type": "string",
@@ -6636,6 +6662,11 @@
           "RefusalCredential",
           "RefusalPermission"
         ]
+      },
+      "RendererRegistryVersion": {
+        "const": 2,
+        "type": "integer",
+        "description": "The only renderer registry version the renderer reads."
       },
       "ResourceKind": {
         "type": "string",
@@ -6776,6 +6807,21 @@
           "ResourceKindTLSDeliveryTarget",
           "ResourceKindTLSUploadedCertificate"
         ]
+      },
+      "RunnerMachine": {
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,252}$",
+        "type": "string",
+        "description": "The machine a runner transport reaches, by its name in HQ."
+      },
+      "RunnerRole": {
+        "const": "runner",
+        "type": "string",
+        "description": "The role of an SSH transport the automation worker runs playbooks through."
+      },
+      "SettingName": {
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "type": "string",
+        "description": "A setting's name, as a vault item's projection states it."
       },
       "SweptKind": {
         "type": "string",

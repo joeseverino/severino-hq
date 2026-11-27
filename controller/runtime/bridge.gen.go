@@ -134,6 +134,21 @@ func (e ConnectionProvider) Valid() bool {
 	}
 }
 
+// Defines values for ConnectionsVersion.
+const (
+	ConnectionsVersionN2 ConnectionsVersion = 2
+)
+
+// Valid indicates whether the value is a known member of the ConnectionsVersion enum.
+func (e ConnectionsVersion) Valid() bool {
+	switch e {
+	case ConnectionsVersionN2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FailureClass.
 const (
 	FailureClassAddress      FailureClass = "address"
@@ -611,6 +626,21 @@ func (e PassMode) Valid() bool {
 	}
 }
 
+// Defines values for ReadProfile.
+const (
+	ReadProfileRead ReadProfile = "read"
+)
+
+// Valid indicates whether the value is a known member of the ReadProfile enum.
+func (e ReadProfile) Valid() bool {
+	switch e {
+	case ReadProfileRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReadingPartName.
 const (
 	PartACLManagement     ReadingPartName = "acl_management"
@@ -746,6 +776,21 @@ func (e Refusal) Valid() bool {
 	case RefusalPermission:
 		return true
 	case RefusalUnclassified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RendererRegistryVersion.
+const (
+	RendererRegistryVersionN2 RendererRegistryVersion = 2
+)
+
+// Valid indicates whether the value is a known member of the RendererRegistryVersion enum.
+func (e RendererRegistryVersion) Valid() bool {
+	switch e {
+	case RendererRegistryVersionN2:
 		return true
 	default:
 		return false
@@ -1007,6 +1052,21 @@ func (e RunEventOutcome) Valid() bool {
 	case Started:
 		return true
 	case Unreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerRole.
+const (
+	Runner RunnerRole = "runner"
+)
+
+// Valid indicates whether the value is a known member of the RunnerRole enum.
+func (e RunnerRole) Valid() bool {
+	switch e {
+	case Runner:
 		return true
 	default:
 		return false
@@ -1642,6 +1702,15 @@ type ConnectionRecord struct {
 	// Store Where the connection's credentials are stored, as connection_env reports it.
 	Store any `json:"store,omitempty"`
 }
+
+// ConnectionRef A connection's name: a file name in the renderer's directories.
+type ConnectionRef = string
+
+// ConnectionsDocument The connections document as written: maxLength is the most bytes it may be.
+type ConnectionsDocument = string
+
+// ConnectionsVersion The only connections document version either side accepts.
+type ConnectionsVersion int
 
 // Contract The desired-only contract for one resource (export).
 type Contract struct {
@@ -2759,6 +2828,9 @@ type PortainerVolumeRecord struct {
 	UsedBy        []PortainerVolumeMountUser `json:"used_by,omitempty"`
 }
 
+// PrivilegeProfile A runner transport's privilege profile, as a procedure names its privilege.
+type PrivilegeProfile = string
+
 // Problem An RFC 9457 problem: why HQ refused or failed a bridge call.
 type Problem struct {
 	Detail string `json:"detail"`
@@ -2788,6 +2860,9 @@ type R2BackupRecord struct {
 	UploadedAt string `json:"uploaded_at"`
 }
 
+// ReadProfile The privilege profile of a runner login that escalates to nothing.
+type ReadProfile string
+
 // ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
 type ReadingPartName string
 
@@ -2815,6 +2890,9 @@ type RefusedPart struct {
 	Refusal FailureClass `json:"refusal"`
 	Scope   string       `json:"scope"`
 }
+
+// RendererRegistryVersion The only renderer registry version the renderer reads.
+type RendererRegistryVersion int
 
 // Renewal A renewed lease. continue false tells the claimant to stop; a held operation's lease is still extended so it can report what it did.
 type Renewal struct {
@@ -2904,11 +2982,17 @@ type RunStated struct {
 	Readings map[string]map[string][]map[string]any `json:"readings,omitempty"`
 }
 
+// RunnerMachine The machine a runner transport reaches, by its name in HQ.
+type RunnerMachine = string
+
 // RunnerReach One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.
 type RunnerReach struct {
 	Machine string `json:"machine"`
 	Profile string `json:"profile"`
 }
+
+// RunnerRole The role of an SSH transport the automation worker runs playbooks through.
+type RunnerRole string
 
 // ScannedFile A file of the repository, by its path and the git object id that names its content.
 type ScannedFile struct {
@@ -2935,6 +3019,9 @@ type ScannedRole struct {
 	ArgumentSpec any    `json:"argument_spec"`
 	Role         string `json:"role"`
 }
+
+// SettingName A setting's name, as a vault item's projection states it.
+type SettingName = string
 
 // SourceCatalog The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.
 type SourceCatalog struct {

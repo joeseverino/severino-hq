@@ -15,6 +15,7 @@ from typing import Any, final
 
 from django.core.exceptions import ValidationError
 
+from hq.domains.control_plane.connection_shapes import READ_PROFILE
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.analytics import analytics_plan, record_analytics
@@ -39,7 +40,6 @@ from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.sealing import Sealed, sealer
 from hq.platform.application.security import Principal, internal_principal
 from hq.platform.application.sweep import record_sweep
-lazy from hq.platform.application.automation_runs import READ_PROFILE
 
 Parameters = Mapping[str, Any]
 Run = Callable[[Parameters, Any], Any]
