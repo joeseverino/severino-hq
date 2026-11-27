@@ -154,16 +154,34 @@ func (r *Registry) portainerPublished(ctx context.Context) ([]PublishedContainer
 	return out, nil
 }
 
-// hostRun is whether a container is one of hq-host's runs in flight, this
-// pass included: its label names a nonce registered in Env.Runs. What makes
-// that safe is deployed.RunLabel's to say.
-func (r *Registry) hostRun(labels map[string]string) bool {
-	nonce := labels[deployed.RunLabel]
-	if r.Env.Runs == "" || !deployed.RunNonce.MatchString(nonce) {
+// strangers is the listed containers that are none of hq-host's runs, this
+// pass included: a run's label names a nonce registered in Env.Runs, and what
+// makes that safe is deployed.RunLabel's to say. A run removes its containers
+// before its nonce, and a list is read once a sweep, so a container whose
+// nonce has gone since is listed again by its id: gone now, it was that run's;
+// still there, it is reported as anyone's.
+func (r *Registry) strangers(ctx context.Context, ref string, environment int64, listed []dockerContainer) []dockerContainer {
+	found := []dockerContainer{}
+	for _, container := range listed {
+		if nonce := container.Labels[deployed.RunLabel]; r.Env.Runs != "" && deployed.RunNonce.MatchString(nonce) {
+			if _, err := os.Stat(filepath.Join(r.Env.Runs, nonce)); err == nil || r.gone(ctx, ref, environment, container.ID) {
+				continue
+			}
+		}
+		found = append(found, container)
+	}
+	return found
+}
+
+// gone is whether Docker no longer lists the container id, asked afresh.
+func (r *Registry) gone(ctx context.Context, ref string, environment int64, id string) bool {
+	filters, err := json.Marshal(map[string][]string{"id": {id}})
+	if err != nil {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(r.Env.Runs, nonce))
-	return err == nil
+	path := "/endpoints/" + itoa(environment) + "/docker/containers/json?" + url.Values{"all": {"1"}, "filters": {string(filters)}}.Encode()
+	still, err := portainerGet[[]dockerContainer](ctx, r, ref, path, "", "container lookup")
+	return err == nil && len(still) == 0
 }
 
 // portainerToken is a Portainer connection's address and API token.
@@ -505,10 +523,8 @@ func (r *Registry) portainerContainerRecords(ctx context.Context) ([]PortainerCo
 			if err != nil {
 				return nil, err
 			}
-			for _, container := range containers {
-				if !r.hostRun(container.Labels) {
-					records = append(records, containerRecord(container, host, ref, createdHere, environment.Address))
-				}
+			for _, container := range r.strangers(ctx, ref, environment.ID, containers) {
+				records = append(records, containerRecord(container, host, ref, createdHere, environment.Address))
 			}
 		}
 	}

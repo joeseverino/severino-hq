@@ -249,13 +249,7 @@ func (r *Registry) siteContainers(ctx context.Context, at portainerSite) ([]dock
 	if err != nil {
 		return nil, err
 	}
-	found := []dockerContainer{}
-	for _, container := range listed {
-		if !r.hostRun(container.Labels) {
-			found = append(found, container)
-		}
-	}
-	return found, nil
+	return r.strangers(ctx, at.ConnectionRef, at.EnvironmentID, listed), nil
 }
 
 // nonEmpty is the values that are not blank.
