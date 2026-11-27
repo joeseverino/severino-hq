@@ -988,7 +988,6 @@ def catalog_pages(asked) -> dict[str, str]:
 # says it was undrawn, since the change owes no survey of a page that is not.
 DRAWN_BY_NOTHING = {
     "403.html": "Django draws it for a refused request, which the look asks only with --as viewer",
-    "404.html": "Django draws it for an address no route answers, which no page of the estate is",
     "500.html": "Django draws it for a request that raised, which no page of the estate does",
     "auth/login.html": "drawn for a reader signed out, and the look signs in as the estate's owner",
     "control_plane/zone_index.html": "drawn only where no zone is managed, and the estate manages one",

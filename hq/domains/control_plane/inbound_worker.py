@@ -35,6 +35,8 @@ SOCKET_TOKEN = "SOCKET_TOKEN"  # noqa: S105 - the Worker secret's name, never it
 SOCKET_PATH = "/socket"
 # The directory the Worker's static pages are served from, beside wrangler.jsonc.
 PUBLIC = "public"
+# The Worker's static pages under it: its root, and what any path it does not answer is given.
+ROOT, MISSING = "index.html", "404.html"
 
 HEADER = """\
 // The inbound-events Worker (src/index.ts). The account and the route's
@@ -125,16 +127,18 @@ def _drawn(template: str, context: dict[str, object]) -> str:
     return "".join(line.rstrip() + "\n" for line in drawn.splitlines() if line.strip())
 
 
-def pages(served: list[dict[str, object]]) -> dict[str, str]:
+def pages(served: list[dict[str, object]], **frame: object) -> dict[str, str]:
     """The Worker's static pages, by file: its root, then what any path the
-    Worker does not answer is given."""
+    Worker does not answer is given. ``frame`` is what a page drawn for a
+    test also carries (the gate's nonce), which the Worker's own have none of."""
 
     head = Page(title="Inbound events", lede="Receives HQ's signed webhooks")
     listed = [{"label": provider_label(str(route["provider"])), "events": route["events"]} for route in served]
     links = (("Demo", source.DEMO), ("Repository", source.REPOSITORY))
+    root = {"page": head, "routes": listed, "links": links}
     return {
-        "index.html": _drawn("control_plane/inbound_worker.html", {"page": head, "routes": listed, "links": links}),
-        "404.html": _drawn("404.html", {"back": "Back to inbound events"}),
+        ROOT: _drawn("control_plane/inbound_worker.html", {**root, **frame}),
+        MISSING: _drawn("404.html", {"back": "Back to inbound events", **frame}),
     }
 
 

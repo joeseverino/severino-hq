@@ -65,9 +65,9 @@ class Reach:
 
 @functools.cache
 def drawings() -> dict[str, Drawing]:
-    """Each catalog entry's page as its gate draws it. The gallery holds every
-    part in a shadow root of its own, which no probe reads, so it is no entry
-    of these."""
+    """Each page of the catalog as its gate draws it. The gallery holds every
+    part in a shadow root of its own, which no probe reads, so it is none of
+    these."""
 
     found = {}
     heard: set[str] = set()
@@ -78,7 +78,9 @@ def drawings() -> dict[str, Drawing]:
 
     template_rendered.connect(hear)
     try:
-        for name in catalog.CATALOG:
+        for name in catalog.PAGES:
+            if name == catalog.GALLERY:
+                continue
             heard.clear()
             markup = catalog.page(name)
             words = {word for value in _CLASSES.findall(markup) for word in value.split()}
