@@ -6,9 +6,15 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND, PULL_REQUEST_KIND
-from hq.domains.control_plane.provider_adapters import github as delivery
+from hq.domains.control_plane.models import (
+    InboundEvent,
+    InboundOutcome,
+    InboundSource,
+    ManagedResource,
+    ProviderInventory,
+)
+from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND, PROVIDER, PULL_REQUEST_KIND
+from hq.domains.control_plane.provider_adapters import INBOUND, github as delivery
 
 from .names import GITHUB, MACHINE, hexed, iso
 from .sweep import store
@@ -173,14 +179,30 @@ def opening(owner, at: str) -> None:
 
 
 def checks_running() -> None:
-    """The open app update's head checked again: one check passed, one running."""
+    """The open app update's head checked again: one check passed, one
+    queued when it was read, and running since, as GitHub's job event told
+    HQ after the read."""
 
     held = ProviderInventory.objects.get(kind=PULL_REQUEST_KIND).records
+    queued = {**check_run("scan", "", timedelta(minutes=2)), "status": "queued", "started_at": None}
     running = {
         "checks": {"state": "pending", "total": 2, "failing": [], "running": 1, "names": ["validate", "scan"]},
-        "check_runs": [
-            check_run("validate", "success", timedelta(minutes=3), seconds=58),
-            check_run("scan", "", timedelta(minutes=2)),
-        ],
+        "check_runs": [check_run("validate", "success", timedelta(minutes=3), seconds=58), queued],
     }
     store(PULL_REQUEST_KIND, *({**each, **running} if each.get("number") == 58 else each for each in held))
+    update = next(each for each in held if each.get("number") == 58)
+    job = INBOUND[PROVIDER].facts["workflow_job"]
+    said = job.read(job.example)
+    started = iso(timedelta(minutes=1))
+    InboundEvent.objects.create(
+        provider=PROVIDER,
+        event="workflow_job.in_progress",
+        subject=str(update["repository"]),
+        delivery_id=hexed("scan", length=36),
+        source=InboundSource.WORKER,
+        received_at=timezone.now(),
+        outcome=InboundOutcome.APPLIED,
+        about=str(update["head"]),
+        said_at=timezone.now(),
+        fact={**said["fact"], "name": "scan", "started_at": started, "url": queued["url"]},
+    )

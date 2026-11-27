@@ -22,7 +22,7 @@ from .card_items import Answer
 from .container_words import named
 from .containers import Container, containers, published_digest, standing_of
 from .entity_links import EntityLink
-from .github_estate import PullChecks, Repository, pull_checks, repositories
+from .github_estate import PullCheck, PullChecks, Repository, pull_checks, repositories
 from .image_findings import ranked
 from .images import ImageRef
 from .projection import projection_scope, read_once
@@ -122,8 +122,9 @@ class AppUpdate:
     within_apps: bool
     # Whether HQ read every file GitHub says it changes.
     whole: bool
-    # Each check on its head as its last run stands (``CheckRun``).
-    check_runs: tuple[Mapping[str, Any], ...] = ()
+    # Each check on its head as its last run stands, or as GitHub told HQ
+    # since (``Repository.pull_check_runs``).
+    check_runs: tuple[PullCheck, ...] = ()
 
     @property
     def label(self) -> str:
@@ -267,6 +268,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
     running = containers()
     found = []
     for _name, repository in sorted(repositories().items()):
+        checks = repository.pull_check_runs()
         for pull in sorted(repository.update_pulls, key=lambda pull: -int(pull.get("number") or 0)):
             for change in pull.get("apps") or ():
                 app = str(change.get("app") or "")
@@ -278,7 +280,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
                     )
                     if _app(path) == app
                 }
-                found.append(_update(repository, pull, change, files, running))
+                found.append(_update(repository, pull, change, files, running, checks))
     return tuple(found)
 
 
@@ -288,6 +290,7 @@ def _update(
     change: Mapping[str, Any],
     files: set[str],
     running: list[Container],
+    checks: Mapping[int, tuple[PullCheck, ...]],
 ) -> AppUpdate:
     pins = tuple(
         _pin(
@@ -329,7 +332,7 @@ def _update(
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
         artifact_problem=tuple(pull.get("artifact_problem") or ()),
-        check_runs=tuple(pull.get("check_runs") or ()),
+        check_runs=checks.get(int(pull.get("number") or 0), ()),
         readable=bool(change.get("read")),
         renovates=bool(repository.updater)
         and pull.get("author") == repository.updater
@@ -510,7 +513,7 @@ class UpdateState:
         """Whether its card asks again: a step of it is under way, or a check of its pull request is."""
 
         live = self.standing is not None and self.standing.live
-        return live or any(run.get("status") != "completed" for run in (self.update.check_runs if self.update else ()))
+        return live or any(check.run.status != "completed" for check in (self.update.check_runs if self.update else ()))
 
     @property
     def flow(self) -> tuple[Step, ...]:

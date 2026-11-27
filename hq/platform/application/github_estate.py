@@ -20,10 +20,13 @@ from hq.domains.control_plane.observations.github import (
     CODE_SCANNING,
     DEPENDABOT,
     LEAKED_CREDENTIALS,
+    PROVIDER,
     PULL_REQUEST_KIND,
     REPOSITORY_KIND,
     WORKFLOW_RUN_KIND,
+    CheckRun,
     JobFailure,
+    PullRequestRecord,
     RepositoryRecord,
 )
 from hq.platform.application.labels import dotted
@@ -35,6 +38,7 @@ from .entity_links import EntityLink, declared_link, web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
+from .inbound_events import told
 from .moments import duration, moment, when
 from .projection import read_once
 from .thresholds import Threshold
@@ -155,20 +159,35 @@ _CONCLUDED = {"success": "passed", "failure": "failed", "cancelled": "cancelled"
 _STATUS = {"queued": "queued", "in_progress": "running", "waiting": "waiting", "pending": "queued"}
 
 
-def check_said(run: Mapping[str, Any]) -> EntityLink | str:
-    """One check of a pull request's head (``CheckRun``) as every page says
-    it, ``lint passed 58 s`` or ``test running since 2 minutes ago``, linked
-    to its run on GitHub where the reading names one."""
+class PullCheck(NamedTuple):
+    """One check on a pull request's head, and whether GitHub told HQ of it
+    since the pull request was read, which its next read replaces."""
 
-    status = str(run.get("status") or "")
-    conclusion = str(run.get("conclusion") or "")
-    word = _CONCLUDED.get(conclusion, conclusion) if status == "completed" else _STATUS.get(status, status)
-    started, ended = moment(run.get("started_at")), moment(run.get("completed_at"))
+    run: CheckRun
+    told: bool = False
+
+
+def check_said(check: PullCheck) -> EntityLink | str:
+    """One check of a pull request's head as every page says it, ``lint
+    passed 58 s`` or ``test running since 2 minutes ago``, marked told where
+    an event said it since the read, linked to its run on GitHub where one is
+    named."""
+
+    run = check.run
+    word = (
+        _CONCLUDED.get(run.conclusion, run.conclusion)
+        if run.status == "completed"
+        else _STATUS.get(run.status, run.status)
+    )
     took = ""
-    if started is not None:
-        took = str(duration(ended - started, short=True)) if ended is not None else f"since {when(started)}"
-    said = " ".join(part for part in (str(run.get("name") or ""), word, took) if part)
-    url = web_url(run.get("url"))
+    if run.started_at is not None:
+        took = (
+            str(duration(run.completed_at - run.started_at, short=True))
+            if run.completed_at is not None
+            else f"since {when(run.started_at)}"
+        )
+    said = dotted(" ".join(part for part in (run.name, word, took) if part), "told by GitHub" if check.told else "")
+    url = web_url(run.url)
     return declared_link(said, url, kind="dependency") if url else said
 
 
@@ -222,6 +241,21 @@ class Repository:
         if declared is None:
             raise AttributeError(item)
         return declared.get_default(call_default_factory=True)
+
+    def pull_check_runs(self) -> dict[int, tuple[PullCheck, ...]]:
+        """Each open pull request's checks by its number: each as it was read,
+        with what a job's event said since that read laid over it as told,
+        the one place a told check stands in for a read one."""
+
+        said = told(PROVIDER, self.name, moment(str(self.record.get("read_at") or "")))
+        found = {}
+        for pull in self.pull_requests:
+            checks = {run.name: PullCheck(run) for run in PullRequestRecord.model_validate(pull).check_runs}
+            for each in said.get(str(pull.get("head") or ""), ()):
+                if isinstance(each.fact, CheckRun):
+                    checks[each.fact.name] = PullCheck(each.fact, told=True)
+            found[int(pull.get("number") or 0)] = tuple(checks.values())
+        return found
 
     @property
     def reading(self) -> Freshness:
