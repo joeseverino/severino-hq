@@ -297,16 +297,11 @@ def listed(resource: ManagedResource, machines=None, at=None, targets=None) -> M
     }
 
 
-def list_managed_resources(*, limit: int = 50, kind: str | None = None, kinds: str | None = None) -> dict[str, Any]:
-    """List canonical public infrastructure state without provider credentials, by kind then key.
-
-    Each filter sent narrows the list, so both keep the records of ``kind`` when it is among ``kinds``.
-    """
+def list_managed_resources(*, limit: int = 50, kind: str | None = None) -> dict[str, Any]:
+    """List canonical public infrastructure state without provider credentials, by kind then key."""
     resources = ManagedResource.objects.all()
     if kind:
         resources = resources.filter(kind=kind)
-    if kinds:
-        resources = resources.filter(kind__in=kinds.split(","))
     # Read once for the whole page: asked per row, where each forwards is a
     # query budget that grows with the estate.
     machines, targets = declared_machines(), delivery_targets()

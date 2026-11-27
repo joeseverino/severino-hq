@@ -10,6 +10,7 @@ the way a scan's does: HQ's ask, the worker's claim, and its report.
 """
 
 from contextlib import suppress
+from copy import deepcopy
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -201,27 +202,38 @@ class AdoptTests(AdoptionTestCase):
         notes = " ".join(capability_spec("automation.example.check.run").execution_notes)
         self.assertIn("`apps.pull`", notes)
 
-    def test_a_change_is_settled_only_by_a_read_of_its_targets_at_its_revision(self):
-        def at_revision(found: dict[str, Any]) -> dict[str, Any]:
+    def test_a_change_is_settled_and_verified_only_by_a_read_of_its_targets_at_its_revision(self):
+        from ..automation_runs import operation_registry
+
+        def at_revision(found: dict[str, Any], **terms: Any) -> dict[str, Any]:
             found["declaration"]["inputs"] = {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}}
             found["roles"][0]["argument_spec"]["options"] = {
-                "revision": {"type": "str", "required": True, "description": "The commit."}
+                "revision": {"type": "str", "required": True, "description": "The commit.", **terms}
             }
             return found
 
+        # Its play asserts nothing once it hands off: the read that settles it does.
         apply = at_revision(procedure("apply", effect="infrastructure_change", settled_by="example.last"))
+        apply["verification"] = []
+        # The read may also be run with no revision, which it says in words of its own.
+        last = at_revision(procedure("last"), required=False, default="", description="The pull's commit.")
+        silent = deepcopy(last)
+        last["verification"] = ["Every app is proven at the revision."]
         cases = {
             "a read of this commit": procedure("other"),
             "a read": at_revision(procedure("last", effect="infrastructure_change")),
             "the same kinds of target": at_revision(procedure("last", target_kinds=["example.edge"])),
             "its revision input": procedure("last"),
+            "a read that asserts": silent,
         }
-        for number, (case, last) in enumerate(cases.items()):
+        for number, (case, read) in enumerate(cases.items()):
             with self.subTest(case):
-                said = self.refused(self.adopt(self.proposed(catalog(apply, last)), key=f"example-settle-{number}"))
+                found = self.proposed(catalog(apply, read))
 
+                said = self.refused(self.adopt(found, key=f"example-settle-{number}", playbook="example.apply"))
                 self.assertIn("settled_by", said)
-        self.assertTrue(self.adopt(self.proposed(catalog(apply, at_revision(procedure("last")))))["adopted"])
+        self.assertTrue(self.adopt(self.proposed(catalog(apply, last)))["adopted"])
+        self.assertEqual(operation_registry()["example.apply"].verification, ("Every app is proven at the revision.",))
 
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})
@@ -520,26 +532,24 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
         self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
         self.assertIsNone(capability_spec("automation.example.other.run"))
 
-    def test_a_playbook_hq_cannot_run_is_refused_alone_and_the_one_beside_it_is_adopted(self):
+    def test_a_playbook_hq_cannot_run_is_refused_alone_and_adopting_all_adopts_the_ones_beside_it(self):
         self.adopt(self.proposed(catalog(procedure("check"))))
         unbounded = procedure("check")
         unbounded["roles"][0]["argument_spec"]["options"]["service"] = {"type": "dict"}
-        newer = self.proposed(catalog(unbounded, procedure("fresh"), revision=SECOND))
+        newer = self.proposed(catalog(unbounded, procedure("fresh"), procedure("other"), revision=SECOND))
 
-        every = self.adopt(newer, key="example-adopt-all")
         alone = self.adopt(newer, key="example-adopt-check", playbook="example.check")
-        fresh = self.adopt(newer, key="example-adopt-fresh", playbook="example.fresh")
+        every = self.adopt(newer, key="example-adopt-all")
 
-        self.assertIn("playbooks/check.hq.yml", " ".join(every["error"]["details"]["refused"]))
         self.assertIn("playbooks/check.hq.yml", " ".join(alone["error"]["details"]["refused"]))
-        self.assertTrue(fresh["adopted"], fresh)
+        self.assertTrue(every["adopted"], every)
         self.assertEqual(
             {key: found.revision for key, found in self.pinned().items()},
-            {
-                "example.check": FIRST,
-                "example.fresh": SECOND,
-            },
+            {"example.check": FIRST, "example.fresh": SECOND, "example.other": SECOND},
         )
+        self.assertEqual(self.waiting(newer), {"example.check": "changed"}, "the one HQ can't adopt still waits")
+        refused = self.adopt(newer, key="example-adopt-all-again")
+        self.assertIn("playbooks/check.hq.yml", " ".join(refused["error"]["details"]["refused"]))
 
     def test_a_playbook_the_scan_does_not_hold_is_not_found(self):
         newer = self.proposed(catalog(procedure("check")))

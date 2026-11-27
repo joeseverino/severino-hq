@@ -1,0 +1,15 @@
+{% extends "page.html" %}
+{% comment %}
+The page the inbound-events Worker answers at its root, rendered once by
+`manage.py inbound_worker` (control_plane.inbound_worker): each provider it
+takes webhooks from, with the events HQ takes, as `routes` names them, then
+where HQ's demo and source are (`links`, each a label and an address).
+{% endcomment %}
+{% block page %}
+{% facts %}
+  {% for route in routes %}
+  {% fact route.label %}{% list kind="codes" %}{% for event in route.events %}<li><code>{{ event }}</code></li>{% endfor %}{% endlist %}{% endfact %}
+  {% endfor %}
+{% endfacts %}
+{% list kind="chips" %}{% for label, url in links %}<li>{% entity url|outside label=label %}</li>{% endfor %}{% endlist %}
+{% endblock %}

@@ -1,12 +1,13 @@
 """The records HQ manages: their commands and their readable resource."""
 
+from functools import partial
 from typing import Any, override
 
 from django.db.models import Model
+from django.utils.text import capfirst, get_text_list
 from pydantic import Field, create_model
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, spec_withheld
@@ -23,17 +24,31 @@ from .adoption import ADOPT_SERVICE, AdoptServiceCommand, adopt_service
 from .cadence import CONTROLLER_REFRESH
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
-from .labels import adding
+from .integration_specs import CapabilitySpec, ListFilter, ListRead, ResourceSpec, typed_keys
+from .labels import adding, lower_first, one
 from .managed_records import ManagedResourceListed, ManagedResourceRecord, ManagedResourceRow
 from .policy_fixes import request_empty_groups_removal
 from .records import EDIT, KEPT
 from .resource_capabilities import MACHINE_DETAILS
 from .resource_refusals import INFRASTRUCTURE
-from .resources import BoundedQuery, one_of, several_of
+from .resources import BoundedQuery, one_of
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
+
+
+def _acting(action: str) -> tuple[str, ...]:
+    """The kinds whose controller may run ``action``, as each declares."""
+
+    return tuple(
+        kind for kind, provider in PROVIDERS.items() if getattr(provider.actions.get(action), "mode", "") == "apply"
+    )
+
+
+def _acted_on(action: str) -> str:
+    """What ``action`` acts on, in words: the labels of the kinds that run it."""
+
+    return get_text_list([lower_first(PROVIDERS[kind].label) for kind in _acting(action)], "or")
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -97,6 +112,20 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             wants="keep the live version of {target}",
         ),
         CapabilitySpec(
+            operations.ALLOW_UPLOADS,
+            "Set a proxy in front of HQ to let through the largest upload HQ takes, then apply it.",
+            Effect.REMOTE_WRITE,
+            Capability.MANAGE_INFRASTRUCTURE,
+            operations.OperationCommand,
+            operations.allow_uploads,
+            "key",
+            "infrastructure",
+            target_label="Record",
+            target_help="The proxy record to change.",
+            label="Let HQ's uploads through",
+            wants="let HQ's uploads through {target}",
+        ),
+        CapabilitySpec(
             operations.ACTION_CAPABILITY[OperationRequest.Action.RECONCILE],
             "Apply HQ's copy of one record to the live system.",
             Effect.INFRASTRUCTURE_CHANGE,
@@ -135,30 +164,31 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 effect,
                 Capability.MANAGE_INFRASTRUCTURE,
                 operations.OperationCommand,
-                handler,
+                partial(operations.request_lifecycle, action=action),
                 "key",
                 "infrastructure",
-                target_label="Container",
-                target_help="The container to act on.",
-                target_query=(("kind", CONTAINER_KIND),),
+                target_label=capfirst(_acted_on(action)),
+                target_help=f"The {_acted_on(action)} to act on.",
+                target_query=(("kinds", ",".join(_acting(action))),),
                 execution_notes=(
-                    "Refuse a container switched off in HQ, or one Portainer cannot do this to.",
+                    "Refuse a record switched off in HQ, or one its kind cannot do this to.",
                     "Queue it once for the controller, which does it outside this request.",
                 ),
-                label=f"{action.label} a container",
+                label=said.format(one(_acted_on(action))),
                 verb=action.label,
             )
-            for action, handler, summary, effect in (
+            # Each command's label is a sentence about what it acts on (``{}``).
+            for action, said, summary, effect in (
                 (
                     OperationRequest.Action.RESTART,
-                    operations.request_restart,
-                    "Restart the container through Portainer.",
+                    "Restart {}",
+                    "Restart a container, or one of HQ's units.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 (
                     OperationRequest.Action.START,
-                    operations.request_start,
-                    "Start the container through Portainer.",
+                    "Start {}",
+                    "Start a container, or one of HQ's units.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 # A stop takes the thing away from whoever uses it until someone
@@ -166,9 +196,21 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 # person's is confirmed on a page of its own.
                 (
                     OperationRequest.Action.STOP,
-                    operations.request_stop,
+                    "Stop {}",
                     "Stop the container through Portainer; it stays down until it is started.",
                     Effect.DESTRUCTIVE,
+                ),
+                (
+                    OperationRequest.Action.RESET_FAILED,
+                    "Clear the failure of {}",
+                    "Clear the failure systemd holds against one of HQ's units.",
+                    Effect.INFRASTRUCTURE_CHANGE,
+                ),
+                (
+                    OperationRequest.Action.ENABLE,
+                    "Enable {}",
+                    "Have one of HQ's units start at boot.",
+                    Effect.INFRASTRUCTURE_CHANGE,
                 ),
             )
         ),
@@ -308,15 +350,6 @@ class ResourceSearchDefinition(SearchDefinition):
 InfrastructureResourceQuery = create_model(
     "InfrastructureResourceQuery",
     __base__=BoundedQuery,
-    kinds=(
-        str | None,
-        Field(
-            default=None,
-            max_length=2000,
-            pattern=several_of(PROVIDERS),
-            description="Several types to keep, comma-separated, each one the single type filter offers.",
-        ),
-    ),
     kind=(
         one_of(PROVIDERS) | None,
         Field(default=None, description="Only the records of this type."),
@@ -346,6 +379,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                 InfrastructureResourceQuery,
                 ManagedResourceListed,
                 fields=FIELDS,
+                filters=(
+                    ListFilter("kinds", "Type", [(kind, each.label) for kind, each in PROVIDERS.items()], "kind"),
+                ),
             ),
             detail_handler=resource_context.get_managed_resource,
             identifier="key",

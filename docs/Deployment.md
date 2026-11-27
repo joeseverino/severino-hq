@@ -329,6 +329,7 @@ The security properties:
 | `/run/severino-hq-unit/` | the unit socket, in a directory only the controller's account and root may enter, mounted into the controller's container alone | `deploy/tmpfiles/severino-hq.conf`, `severino-hq-unit.socket` |
 | each grant's `path` under `/run` | a host grant's installation token, root's, mode 0400 ([Tokens on the host](#tokens-on-the-host)) | `hq-host controller` |
 | `/run/severino-hq-runs/` | root's, mode 0711: one empty file per hq-host run in flight that starts containers (a pass, a deploy, a worker, a dependency run), named by the nonce its containers carry as `severino-hq.run`, mounted read-only into a pass, which leaves those containers out of what it finds (`controller/host/runs.go`) | `deploy/tmpfiles/severino-hq.conf`, each such run |
+| `/run/severino-hq-deploy/deploy.lock` | root-only, mounted nowhere: held exclusively by a deploy while it replaces the release, shared by the unit socket while it acts on a unit the release ships | `deploy/tmpfiles/severino-hq.conf`, a deploy |
 | `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
 | `/run/severino-hq-secrets/automation.*/` | one automation worker's lent connections, identities and token, the web account's, removed when it ends | `hq-host automation` |
 | `/var/lib/severino-hq/automation/` | the automation worker's journal, the web account's alone, mode 0700, a `noexec` mount of its own | `deploy/tmpfiles/severino-hq.conf`, `var-lib-severino\x2dhq-automation.mount`, the worker |
@@ -357,7 +358,7 @@ from the tree, and every unit and the deploy call it.
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: the tree, each file the setup would change (a check run of it), and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
 | `backup` | snapshots and archives HQ's volumes, where docker says they are, with no network; the next applying controller pass copies the archive off-site ([Backup](Backup.md)) |
-| `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
+| `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)); or starts, restarts, clears or enables a unit the installed release ships, unless a deploy holds the deploy lock ([Architecture](Architecture.md#hqs-own-units)) |
 | `edge-receiver` | as any account, writes to a pipe a tar of the tree's `hq-edge` and its `SHA256SUMS` line, for an administrator to install on an edge, once the tree is proven to be the release ([Remote targets](#remote-targets)) |
 | `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks free disk, and that every program a sudo rule names, and the edge receiver, is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |
 
@@ -394,8 +395,10 @@ systemd through the runner image CI built, then checks it clean.
 
 The setup installs every unit and drop-in under `deploy/systemd`, found by
 walking the directory (`controller/host/units.go`), and enables and starts
-every timer, path and unit with an `[Install]` section. Adding a unit is adding
-its file. A unit a release no longer ships is stopped, disabled and removed. A
+every timer, path and unit with an `[Install]` section. What starts a
+controller pass (a timer or path whose unit is the controller's) starts last,
+once the rest is up, since a pass reads every unit's state. Adding a unit is
+adding its file. A unit a release no longer ships is stopped, disabled and removed. A
 drop-in the host adds beside a shipped one is the host's, and `verify` does not
 compare it.
 
@@ -526,12 +529,12 @@ nothing. `hq-host deploy`:
    healthy on it. The old HQ cuts a request or stream still open at its
    graceful bound (`GRACEFUL_SHUTDOWN_SECONDS` in `hq/config/serve.py`), so
    production is down for that and the new image's boot.
-8. Applies the whole setup: the controller preflight is the release's first
-   pass against the new bridge.
-9. Starts what step 6 stopped.
+8. Applies the whole setup, which starts what step 6 stopped among every
+   unit, and what starts a controller pass last: the controller preflight is
+   the release's first pass against the new bridge.
 
 A failure from step 6 on puts back the previous image, tree and units, then
-restarts what was held. A unit that was not active before the deploy is not
+restarts what was held, what starts a controller pass last. A unit that was not active before the deploy is not
 started by it. A failure of that rollback ends the deploy with a status of its
 own, so its deployment says production's state is unknown.
 

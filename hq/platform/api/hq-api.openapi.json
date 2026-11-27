@@ -52,6 +52,8 @@
               "steps.kind",
               "steps.label",
               "steps.command",
+              "steps.why",
+              "steps.machine",
               "steps.notes",
               "steps.text",
               "steps.value",
@@ -532,6 +534,8 @@
               "credential_fix.steps",
               "credential_fix.steps.label",
               "credential_fix.steps.command",
+              "credential_fix.steps.why",
+              "credential_fix.steps.machine",
               "credential_fix.steps.notes",
               "credential_fix.steps.kind",
               "credential_fix.steps.text",
@@ -2130,6 +2134,26 @@
         },
         "style": "form"
       },
+      "RecordItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "kind",
+              "record",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "RelationshipsRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -2726,6 +2750,8 @@
               "findings.steps.kind",
               "findings.steps.label",
               "findings.steps.command",
+              "findings.steps.why",
+              "findings.steps.machine",
               "findings.steps.notes",
               "findings.steps.text",
               "findings.steps.value",
@@ -4319,6 +4345,21 @@
           }
         }
       },
+      "UploadsAllowedSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UploadsAllowedSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "VisitRefreshedSuccess": {
         "content": {
           "application/json": {
@@ -4383,7 +4424,7 @@
     "schemas": {
       "AbilityDescription": {
         "additionalProperties": false,
-        "description": "One ability a connection family offers, as ``describe_connections`` names it.",
+        "description": "One ability a connection family offers, as ``describe_connections``\nnames it: what it is, and with the family named, what it needs and acts on.",
         "properties": {
           "capability": {
             "anyOf": [
@@ -4451,13 +4492,7 @@
         "required": [
           "name",
           "label",
-          "summary",
-          "effect",
-          "required_scopes",
-          "grant",
-          "capability",
-          "governs_kinds",
-          "subject_resource"
+          "effect"
         ],
         "type": "object"
       },
@@ -7584,6 +7619,73 @@
         "minimum": 0,
         "type": "integer"
       },
+      "ByHand": {
+        "additionalProperties": false,
+        "description": "A command a person runs on their own machine, and why HQ does not.",
+        "properties": {
+          "command": {
+            "description": "The exact command to paste into a shell on the machine it names.",
+            "type": "string"
+          },
+          "kind": {
+            "const": "run",
+            "default": "run",
+            "description": "A command you run.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What running it does, said before the command.",
+            "type": "string"
+          },
+          "machine": {
+            "default": "",
+            "description": "The machine it acts on over ssh; empty for one run where you are.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          },
+          "why": {
+            "$ref": "#/components/schemas/Why"
+          }
+        },
+        "required": [
+          "label",
+          "command",
+          "why",
+          "machine",
+          "notes",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ByHandPartial": {
+        "additionalProperties": false,
+        "description": "A command a person runs on their own machine, and why HQ does not.",
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/ByHand/properties/command"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ByHand/properties/kind"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ByHand/properties/label"
+          },
+          "machine": {
+            "$ref": "#/components/schemas/ByHand/properties/machine"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          },
+          "why": {
+            "$ref": "#/components/schemas/Why"
+          }
+        },
+        "type": "object"
+      },
       "CaddyRouteSpec": {
         "additionalProperties": false,
         "description": "One name Caddy serves, and where it hands each request off to.",
@@ -9240,7 +9342,7 @@
         "description": "What ``describe_connections`` answers.",
         "properties": {
           "connections": {
-            "description": "Every type of connection HQ knows.",
+            "description": "Each type of connection asked for: every one HQ knows, or the one named.",
             "items": {
               "$ref": "#/components/schemas/ConnectionDescription"
             },
@@ -11669,8 +11771,8 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Run",
-                  "title": "Run"
+                  "$ref": "#/components/schemas/ByHand",
+                  "title": "By hand"
                 },
                 {
                   "$ref": "#/components/schemas/Do",
@@ -11726,8 +11828,8 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/RunPartial",
-                  "title": "Run"
+                  "$ref": "#/components/schemas/ByHandPartial",
+                  "title": "By hand"
                 },
                 {
                   "$ref": "#/components/schemas/DoPartial",
@@ -12261,6 +12363,19 @@
           },
           "spec": {
             "$ref": "#/components/schemas/GitHubPullRequestSpec"
+          }
+        },
+        "type": "object"
+      },
+      "DeclaredHostUnitSpec": {
+        "properties": {
+          "kind": {
+            "const": "host.unit",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/HostUnitSpec"
           }
         },
         "type": "object"
@@ -15698,7 +15813,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 3
+            "const": 4
           },
           "summary": {
             "$ref": "#/components/schemas/FindingsSummary"
@@ -16864,6 +16979,23 @@
         },
         "type": "object"
       },
+      "HostUnitSpec": {
+        "additionalProperties": false,
+        "description": "One unit HQ's release installs, by name: identity and nothing else,\nsince its unit file is the release's and HQ does not edit it.",
+        "properties": {
+          "unit": {
+            "description": "The unit's name, as systemd knows it.",
+            "maxLength": 255,
+            "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit"
+        ],
+        "type": "object"
+      },
       "HqImportRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -17702,6 +17834,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredSourceSpec",
                 "title": "Declared source spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredHostUnitSpec",
+                "title": "Declared host unit spec"
               }
             ],
             "description": "The command: the fields its input schema names.",
@@ -17742,6 +17878,9 @@
           "payload"
         ],
         "type": "object"
+      },
+      "InfrastructureResourceEnableRequest": {
+        "$ref": "#/components/schemas/InfrastructureResourceResetFailedRequest"
       },
       "InfrastructureResourceReconcileRequest": {
         "additionalProperties": false,
@@ -17791,6 +17930,33 @@
         ],
         "type": "object"
       },
+      "InfrastructureResourceResetFailedRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "$ref": "#/components/schemas/InfrastructureResourceResetFailedTarget"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "InfrastructureResourceResetFailedTarget": {
+        "description": "The HQ unit to act on: its key.",
+        "examples": [
+          "example-key"
+        ],
+        "minLength": 1,
+        "type": "string"
+      },
       "InfrastructureResourceRestartRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -17811,7 +17977,7 @@
         "type": "object"
       },
       "InfrastructureResourceRestartTarget": {
-        "description": "The container to act on: its key.",
+        "description": "The container or HQ unit to act on: its key.",
         "examples": [
           "example-key"
         ],
@@ -17822,7 +17988,28 @@
         "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
       },
       "InfrastructureResourceStopRequest": {
-        "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "description": "The container to act on: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
       },
       "InfrastructureResourceUpdateRequest": {
         "additionalProperties": false,
@@ -17909,6 +18096,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredSourceSpec",
                 "title": "Declared source spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredHostUnitSpec",
+                "title": "Declared host unit spec"
               }
             ],
             "description": "The command: the fields its input schema names.",
@@ -17940,6 +18131,30 @@
           },
           "target": {
             "description": "The record to change: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "InfrastructureResourceUploadsAllowRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "description": "The proxy record to change: its key.",
             "examples": [
               "example-key"
             ],
@@ -19444,7 +19659,8 @@
           "cloudflare.dns_record",
           "cloudflare.zone",
           "automation.operation",
-          "automation.source"
+          "automation.source",
+          "host.unit"
         ],
         "type": "string",
         "x-enumDescriptions": {
@@ -19457,6 +19673,7 @@
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.pull_request": "Pull request",
+          "host.unit": "HQ unit",
           "machine": "Machine",
           "network": "Network",
           "npm.proxy_host": "Proxy host",
@@ -21113,6 +21330,21 @@
             "title": "Certificate",
             "type": "string"
           },
+          "client_max_body_size": {
+            "anyOf": [
+              {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "In MB, 0 for any size. Blank keeps Nginx Proxy Manager's own limit.",
+            "title": "Largest request"
+          },
           "domain_names": {
             "description": "One per line.",
             "items": {
@@ -21558,7 +21790,7 @@
         "type": "object"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run`, `scan` or `merge`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `reset-failed`, `enable`, `approve-routes`, `run`, `scan` or `merge`.",
         "type": "string"
       },
       "OperationAsked": {
@@ -23701,7 +23933,7 @@
       },
       "Press": {
         "additionalProperties": false,
-        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``FindingRemedy``: a detector\nnames the command, and never the link a reader presses.",
+        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``Does``: a detector names the\ncommand, and never the link a reader presses.",
         "properties": {
           "kind": {
             "const": "press",
@@ -23721,7 +23953,7 @@
       },
       "PressPartial": {
         "additionalProperties": false,
-        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``FindingRemedy``: a detector\nnames the command, and never the link a reader presses.",
+        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``Does``: a detector names the\ncommand, and never the link a reader presses.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/Press/properties/kind"
@@ -25651,8 +25883,15 @@
             ]
           },
           "provider": {
-            "description": "The service it is read from, such as `adguard`.",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The service it is read from, such as `adguard`; null where no one connection reads it."
           },
           "records": {
             "description": "How many records the last read stored.",
@@ -26325,6 +26564,67 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "RecordItem": {
+        "additionalProperties": false,
+        "description": "One record a reading holds, as its type's schema admits it.",
+        "properties": {
+          "kind": {
+            "description": "The reading's type, such as `github.workflow_run`.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/AsRead"
+          }
+        },
+        "required": [
+          "kind",
+          "record"
+        ],
+        "type": "object"
+      },
+      "RecordItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/RecordItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RecordItemPartial": {
+        "additionalProperties": false,
+        "description": "One record a reading holds, as its type's schema admits it.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/RecordItem/properties/kind"
+          },
+          "record": {
+            "$ref": "#/components/schemas/AsRead"
+          }
+        },
         "type": "object"
       },
       "RecordProblem": {
@@ -27610,37 +27910,6 @@
         "pattern": "^[A-Za-z0-9]{1,16}$",
         "type": "string"
       },
-      "Run": {
-        "additionalProperties": false,
-        "description": "A command an operator runs on their own machine. HQ never runs it.",
-        "properties": {
-          "command": {
-            "description": "The exact command to paste into a shell on the machine it names.",
-            "type": "string"
-          },
-          "kind": {
-            "const": "run",
-            "default": "run",
-            "description": "A command the operator runs.",
-            "type": "string"
-          },
-          "label": {
-            "description": "What running it does, said before the command.",
-            "type": "string"
-          },
-          "notes": {
-            "$ref": "#/components/schemas/StepNotes",
-            "default": []
-          }
-        },
-        "required": [
-          "label",
-          "command",
-          "notes",
-          "kind"
-        ],
-        "type": "object"
-      },
       "RunAsked": {
         "additionalProperties": false,
         "description": "A playbook's run as asking for it or cancelling it answers: the run\nthat `runs` reads by its `operation.id`.",
@@ -27685,26 +27954,6 @@
           "ok",
           "data"
         ],
-        "type": "object"
-      },
-      "RunPartial": {
-        "additionalProperties": false,
-        "description": "A command an operator runs on their own machine. HQ never runs it.",
-        "properties": {
-          "command": {
-            "$ref": "#/components/schemas/Run/properties/command"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/Run/properties/kind"
-          },
-          "label": {
-            "$ref": "#/components/schemas/Run/properties/label"
-          },
-          "notes": {
-            "$ref": "#/components/schemas/StepNotes",
-            "default": []
-          }
-        },
         "type": "object"
       },
       "RunRecord": {
@@ -29716,7 +29965,7 @@
           "mapping": {
             "do": "#/components/schemas/Do",
             "press": "#/components/schemas/Press",
-            "run": "#/components/schemas/Run"
+            "run": "#/components/schemas/ByHand"
           },
           "propertyName": "kind"
         },
@@ -29726,8 +29975,8 @@
             "title": "Press"
           },
           {
-            "$ref": "#/components/schemas/Run",
-            "title": "Run"
+            "$ref": "#/components/schemas/ByHand",
+            "title": "By hand"
           },
           {
             "$ref": "#/components/schemas/Do",
@@ -29750,8 +29999,8 @@
             "title": "Press"
           },
           {
-            "$ref": "#/components/schemas/RunPartial",
-            "title": "Run"
+            "$ref": "#/components/schemas/ByHandPartial",
+            "title": "By hand"
           },
           {
             "$ref": "#/components/schemas/DoPartial",
@@ -29872,6 +30121,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.alert",
           "cloudflare.contact_inbox",
           "cloudflare.contact_submission",
           "cloudflare.d1_database",
@@ -29880,7 +30130,9 @@
           "cloudflare.pages_project",
           "cloudflare.redirect",
           "cloudflare.tunnel",
+          "cloudflare.worker",
           "cloudflare.zone",
+          "dns.reverse",
           "github.allowance",
           "github.dashboard_box",
           "github.delivery",
@@ -29901,6 +30153,7 @@
           "host.unit",
           "hq.request_path",
           "machine",
+          "machine.telemetry",
           "network",
           "npm.access_list",
           "npm.certificate",
@@ -29908,6 +30161,7 @@
           "npm.proxy_host",
           "npm.redirect",
           "npm.stream",
+          "nws.forecast",
           "pki.authority",
           "portainer.compose_project",
           "portainer.container",
@@ -29943,6 +30197,7 @@
           "caddy.route": "Caddy route",
           "cloudflare.access_app": "Access application",
           "cloudflare.access_service_token": "Access service token",
+          "cloudflare.alert": "Cloudflare alert",
           "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.contact_submission": "Contact message",
           "cloudflare.d1_database": "D1 database",
@@ -29951,7 +30206,9 @@
           "cloudflare.pages_project": "Pages project",
           "cloudflare.redirect": "Redirect",
           "cloudflare.tunnel": "Tunnel",
+          "cloudflare.worker": "Worker",
           "cloudflare.zone": "Domain",
+          "dns.reverse": "Reverse DNS",
           "github.allowance": "GitHub hourly allowance",
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
@@ -29969,9 +30226,10 @@
           "host.reboot": "Pending restart",
           "host.render_status": "Credentials refresh",
           "host.tailnet_lock": "Tailnet lock",
-          "host.unit": "Background jobs",
+          "host.unit": "HQ unit",
           "hq.request_path": "Requests reaching HQ",
           "machine": "Machine",
+          "machine.telemetry": "Machine figures",
           "network": "Network",
           "npm.access_list": "NPM access list",
           "npm.certificate": "NPM certificate",
@@ -29979,6 +30237,7 @@
           "npm.proxy_host": "Proxy host",
           "npm.redirect": "NPM redirect",
           "npm.stream": "NPM stream",
+          "nws.forecast": "Weather forecast",
           "pki.authority": "Certificate authority",
           "portainer.compose_project": "Compose project",
           "portainer.container": "Container",
@@ -32083,6 +32342,52 @@
         ],
         "type": "object"
       },
+      "UploadsAllowed": {
+        "additionalProperties": false,
+        "description": "The proxy as saved letting through the largest request HQ takes, and why that was asked.",
+        "properties": {
+          "applying": {
+            "$ref": "#/components/schemas/Applying"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "created",
+          "resource",
+          "applying",
+          "message",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "UploadsAllowedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UploadsAllowed"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "UsagePart": {
         "additionalProperties": false,
         "properties": {
@@ -32297,6 +32602,19 @@
         "maximum": 100,
         "minimum": 1,
         "type": "integer"
+      },
+      "Why": {
+        "description": "Why a command is a person's to run rather than HQ's: the closed set of\nreasons, each said as the sentence a reader is shown.",
+        "enum": [
+          "It asks for a sudo password HQ does not hold.",
+          "It asks for Touch ID, which only you can give.",
+          "It asks for a sign-in only you can make.",
+          "It runs on a machine HQ has no way to reach.",
+          "HQ is not set up there yet, so nothing of HQ's can run it.",
+          "It restores the way HQ reaches the machine, so HQ cannot do it through that way.",
+          "HQ is not granted this on the machine."
+        ],
+        "type": "string"
       },
       "WorkItem": {
         "additionalProperties": false,
@@ -32613,14 +32931,14 @@
         "type": "string"
       },
       "WrittenSteps": {
-        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine (`run`), or what to do in words (`do`).",
+        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine with why it is yours (`run`), or what to do in words (`do`).",
         "items": {
           "$ref": "#/components/schemas/Step"
         },
         "type": "array"
       },
       "WrittenStepsPartial": {
-        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine (`run`), or what to do in words (`do`).",
+        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine with why it is yours (`run`), or what to do in words (`do`).",
         "items": {
           "$ref": "#/components/schemas/StepPartial"
         },
@@ -33074,6 +33392,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "relationships",
@@ -36000,6 +36319,81 @@
         "x-hq-effect": "remote_write"
       }
     },
+    "/api/v2/capabilities/infrastructure.resource.enable/": {
+      "post": {
+        "description": "Have one of HQ's units start at boot.",
+        "operationId": "infrastructureResourceEnableV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceEnableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Enable an HQ unit",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.enable",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/infrastructure.resource.reconcile/": {
       "post": {
         "description": "Apply HQ's copy of one record to the live system.",
@@ -36150,9 +36544,84 @@
         "x-hq-effect": "destructive"
       }
     },
+    "/api/v2/capabilities/infrastructure.resource.reset_failed/": {
+      "post": {
+        "description": "Clear the failure systemd holds against one of HQ's units.",
+        "operationId": "infrastructureResourceResetFailedV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceResetFailedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Clear the failure of an HQ unit",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.reset_failed",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/infrastructure.resource.restart/": {
       "post": {
-        "description": "Restart the container through Portainer.",
+        "description": "Restart a container, or one of HQ's units.",
         "operationId": "infrastructureResourceRestartV2",
         "parameters": [
           {
@@ -36217,7 +36686,7 @@
             ]
           }
         ],
-        "summary": "Restart a container",
+        "summary": "Restart a container or HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36227,7 +36696,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.start/": {
       "post": {
-        "description": "Start the container through Portainer.",
+        "description": "Start a container, or one of HQ's units.",
         "operationId": "infrastructureResourceStartV2",
         "parameters": [
           {
@@ -36292,7 +36761,7 @@
             ]
           }
         ],
-        "summary": "Start a container",
+        "summary": "Start a container or HQ unit",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36447,6 +36916,81 @@
           "hq.infrastructure"
         ],
         "x-hq-capability": "infrastructure.resource.update",
+        "x-hq-effect": "remote_write"
+      }
+    },
+    "/api/v2/capabilities/infrastructure.resource.uploads.allow/": {
+      "post": {
+        "description": "Set a proxy in front of HQ to let through the largest upload HQ takes, then apply it.",
+        "operationId": "infrastructureResourceUploadsAllowV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceUploadsAllowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UploadsAllowedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Let HQ's uploads through",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.uploads.allow",
         "x-hq-effect": "remote_write"
       }
     },
@@ -37912,12 +38456,15 @@
                 "infrastructure.resource.accept_observed",
                 "infrastructure.resource.adopt",
                 "infrastructure.resource.create",
+                "infrastructure.resource.enable",
                 "infrastructure.resource.reconcile",
                 "infrastructure.resource.remove",
+                "infrastructure.resource.reset_failed",
                 "infrastructure.resource.restart",
                 "infrastructure.resource.start",
                 "infrastructure.resource.stop",
                 "infrastructure.resource.update",
+                "infrastructure.resource.uploads.allow",
                 "infrastructure.service.adopt",
                 "infrastructure.zone.adopt",
                 "lookup.address.read",
@@ -38042,9 +38589,28 @@
       "get": {
         "description": "The connection contracts, and whether your token may use each.",
         "operationId": "connectionsV2",
+        "parameters": [
+          {
+            "description": "One type of connection, answered with what each ability needs and acts on. Absent, every type.",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hq.nws",
+                "hq.public_registries",
+                "infrastructure.controllers"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/ConnectionCatalogSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -38156,10 +38722,13 @@
                 "split-horizon-disagrees",
                 "published-port-unfronted",
                 "service-wiring-incomplete",
+                "proxy-refuses-uploads",
                 "posture-unmet",
                 "automation-worker-absent",
                 "offsite-backup-late",
                 "event-channel-silent",
+                "events-worker-behind",
+                "events-worker-refusing",
                 "deploy-running",
                 "machine-offline",
                 "content-drafts",
@@ -38320,6 +38889,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "relationships",
@@ -41289,7 +41859,7 @@
     },
     "/api/v2/resources/hq/": {
       "get": {
-        "description": "HQ itself: its release and branch, machine and container, background jobs, what it reads and open problems.",
+        "description": "HQ itself: its release and branch, machine and container, units, what it reads and open problems.",
         "operationId": "listHqV2",
         "parameters": [
           {
@@ -41565,19 +42135,6 @@
         "operationId": "listInfrastructureV2",
         "parameters": [
           {
-            "description": "Several types to keep, comma-separated, each one the single type filter offers.",
-            "explode": true,
-            "in": "query",
-            "name": "kinds",
-            "required": false,
-            "schema": {
-              "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
             "description": "Only the records of this type.",
             "explode": true,
             "in": "query",
@@ -41604,8 +42161,23 @@
                 "cloudflare.zone",
                 "cloudflare.contact_inbox",
                 "automation.operation",
-                "automation.source"
+                "automation.source",
+                "host.unit"
               ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit))*$",
+              "title": "Type",
               "type": "string"
             },
             "style": "form"
@@ -41662,6 +42234,13 @@
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
+              "infrastructureResourceEnableV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceEnableV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
               "infrastructureResourceReconcileV2": {
                 "operationId": "infrastructureResourceReconcileV2",
                 "requestBody": {
@@ -41674,22 +42253,29 @@
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
+              "infrastructureResourceResetFailedV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceResetFailedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
               "infrastructureResourceRestartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceRestartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
               "infrastructureResourceStartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceStartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
               "infrastructureResourceStopV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container`.",
                 "operationId": "infrastructureResourceStopV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
@@ -41697,6 +42283,12 @@
               },
               "infrastructureResourceUpdateV2": {
                 "operationId": "infrastructureResourceUpdateV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
+              "infrastructureResourceUploadsAllowV2": {
+                "operationId": "infrastructureResourceUploadsAllowV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
                 }
@@ -41821,6 +42413,13 @@
                   "target": "{$response.body#/data/key}"
                 }
               },
+              "infrastructureResourceEnableV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceEnableV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
               "infrastructureResourceReconcileV2": {
                 "operationId": "infrastructureResourceReconcileV2",
                 "requestBody": {
@@ -41833,22 +42432,29 @@
                   "target": "{$response.body#/data/key}"
                 }
               },
+              "infrastructureResourceResetFailedV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceResetFailedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
               "infrastructureResourceRestartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceRestartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
               "infrastructureResourceStartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceStartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
               "infrastructureResourceStopV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container`.",
                 "operationId": "infrastructureResourceStopV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"
@@ -41858,6 +42464,12 @@
                 "operationId": "infrastructureResourceUpdateV2",
                 "requestBody": {
                   "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceUploadsAllowV2": {
+                "operationId": "infrastructureResourceUploadsAllowV2",
+                "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
@@ -42675,6 +43287,440 @@
         "x-hq-resource": "projects"
       }
     },
+    "/api/v2/resources/reading.records/": {
+      "get": {
+        "description": "Each record a reading holds, of one type or every type, filtered by its own fields.",
+        "operationId": "listReadingRecordsV2",
+        "parameters": [
+          {
+            "description": "Only the records of this type of reading; absent, every type's.",
+            "explode": true,
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "npm.certificate",
+                "npm.redirect",
+                "npm.stream",
+                "npm.access_list",
+                "npm.dead_host",
+                "github.repository",
+                "github.workflow_run",
+                "github.open_pull_request",
+                "github.profile",
+                "github.dependency_run",
+                "github.allowance",
+                "github.webhook",
+                "portainer.environment",
+                "portainer.network",
+                "portainer.volume",
+                "portainer.image",
+                "portainer.runtime",
+                "portainer.compose_project",
+                "tailscale.dns",
+                "tailscale.settings",
+                "tailscale.user",
+                "adguard.client",
+                "adguard.query_summary",
+                "adguard.dns",
+                "cloudflare.pages_project",
+                "cloudflare.d1_database",
+                "cloudflare.worker",
+                "cloudflare.alert",
+                "cloudflare.access_app",
+                "cloudflare.access_service_token",
+                "cloudflare.tunnel",
+                "cloudflare.edge_certificate",
+                "cloudflare.redirect",
+                "r2.backup",
+                "host.firewall",
+                "host.perimeter",
+                "host.render_status",
+                "host.unit",
+                "host.tailnet_lock",
+                "host.filesystem",
+                "host.reboot",
+                "host.edge_reboot",
+                "machine.telemetry",
+                "nws.forecast",
+                "hq.request_path",
+                "registry.address",
+                "dns.reverse",
+                "registry.domain",
+                "registry.image",
+                "registry.upstream",
+                "registry.digest",
+                "registry.vulnerabilities"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose fields hold these values, each a field of `kind`'s records: a field that lists values holds the one given, and one a record leaves out holds its default; absent, every record.",
+            "explode": true,
+            "in": "query",
+            "name": "where",
+            "required": false,
+            "schema": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "propertyNames": {
+                "enum": [
+                  "accept_requires_interface",
+                  "account",
+                  "account_id",
+                  "acls_externally_managed_on",
+                  "activates",
+                  "active",
+                  "active_at",
+                  "address",
+                  "addresses",
+                  "agent_version",
+                  "alert_type",
+                  "anonymize_client_ip",
+                  "answered_publicly",
+                  "app",
+                  "archived",
+                  "arpa",
+                  "artifact_problem",
+                  "author",
+                  "avatar",
+                  "base",
+                  "base_branch",
+                  "bio",
+                  "blocked",
+                  "branch",
+                  "bucket",
+                  "cap_add",
+                  "cap_drop",
+                  "carried",
+                  "certificate",
+                  "certificate_authority",
+                  "changed_files",
+                  "channel",
+                  "checked",
+                  "city",
+                  "client_count",
+                  "company",
+                  "compose",
+                  "conclusion",
+                  "condition",
+                  "condition_at",
+                  "config_files",
+                  "config_source",
+                  "connection_ref",
+                  "container",
+                  "containers",
+                  "copies",
+                  "count",
+                  "country",
+                  "cpu_limit",
+                  "cpu_percent",
+                  "cpu_time",
+                  "cpu_time_p50_us",
+                  "cpu_time_p99_us",
+                  "dashboard",
+                  "default_branch",
+                  "deliveries",
+                  "deployment_commit",
+                  "deployment_id",
+                  "description",
+                  "destinations",
+                  "device",
+                  "devices",
+                  "devices_approval_on",
+                  "devices_auto_updates_on",
+                  "devices_key_duration_days",
+                  "digest",
+                  "digests",
+                  "display_name",
+                  "dns_addresses",
+                  "dnssec_enabled",
+                  "docker_version",
+                  "domain",
+                  "domains",
+                  "draft",
+                  "driver",
+                  "enabled",
+                  "ended_at",
+                  "entry_point",
+                  "environment_id",
+                  "errors",
+                  "event",
+                  "events",
+                  "exit_code",
+                  "exposed_ports",
+                  "failing",
+                  "file_size",
+                  "file_state",
+                  "filter_lists",
+                  "filter_rules",
+                  "filtering_enabled",
+                  "fingerprint",
+                  "firewall_unit",
+                  "first_seen",
+                  "followers",
+                  "following",
+                  "foreign",
+                  "foreign_interface_dropped",
+                  "forwarded_by",
+                  "forwarding_host",
+                  "forwarding_port",
+                  "free_bytes",
+                  "handle",
+                  "head",
+                  "head_repository",
+                  "health",
+                  "healthcheck",
+                  "hireable",
+                  "host",
+                  "host_address",
+                  "hostnames",
+                  "hosts",
+                  "https_enabled",
+                  "id",
+                  "ids",
+                  "image",
+                  "image_id",
+                  "incoming_port",
+                  "installation",
+                  "interface",
+                  "internal",
+                  "ipc_mode",
+                  "key",
+                  "labels",
+                  "last_trigger_at",
+                  "limit",
+                  "load",
+                  "local",
+                  "location",
+                  "locked_out",
+                  "login",
+                  "login_name",
+                  "logins",
+                  "magic_dns",
+                  "main",
+                  "main_code",
+                  "main_status",
+                  "mechanism_type",
+                  "memory_limit",
+                  "memory_usage",
+                  "memory_usage_basis",
+                  "mergeable_state",
+                  "mount",
+                  "name",
+                  "nameservers",
+                  "network_mode",
+                  "next_elapse_at",
+                  "node_key_signed",
+                  "note",
+                  "number",
+                  "organization",
+                  "others_since",
+                  "others_spent",
+                  "outcome",
+                  "override_local_dns",
+                  "owner",
+                  "packages",
+                  "pass_auth",
+                  "pending",
+                  "pid_mode",
+                  "pids_limit",
+                  "platform_digest",
+                  "point",
+                  "policy_id",
+                  "ports_checked",
+                  "posture_identity_collection_on",
+                  "prefixes",
+                  "preserve_path",
+                  "preserve_query_string",
+                  "private",
+                  "privileged",
+                  "production_branch",
+                  "protection_enabled",
+                  "protects",
+                  "provider",
+                  "public_addresses",
+                  "public_gists",
+                  "public_repos",
+                  "pull_request_checks",
+                  "queries",
+                  "querylog_enabled",
+                  "querylog_retention_hours",
+                  "range",
+                  "read_at",
+                  "read_only_rootfs",
+                  "reason",
+                  "record",
+                  "references",
+                  "refresh_failed",
+                  "regional_routing_on",
+                  "registrar",
+                  "remaining",
+                  "renderer",
+                  "repository",
+                  "requests",
+                  "resolver",
+                  "restart_count",
+                  "restart_policy",
+                  "restarts",
+                  "result",
+                  "review_state",
+                  "revision",
+                  "rewrites_enabled",
+                  "role",
+                  "running",
+                  "satisfy_any",
+                  "sbom",
+                  "scheduled_action",
+                  "scheduled_at",
+                  "scope",
+                  "search_paths",
+                  "security_opt",
+                  "serves",
+                  "service",
+                  "session_duration",
+                  "sha",
+                  "since",
+                  "size",
+                  "size_bytes",
+                  "social",
+                  "source",
+                  "spent",
+                  "ssl_forced",
+                  "stack",
+                  "starred",
+                  "started_at",
+                  "state",
+                  "status",
+                  "status_code",
+                  "sub",
+                  "subdomain",
+                  "subnets",
+                  "tags",
+                  "target",
+                  "target_host",
+                  "tcp",
+                  "title",
+                  "total_bytes",
+                  "type",
+                  "udp",
+                  "unit",
+                  "unread",
+                  "unresolved",
+                  "updater",
+                  "upstream_mode",
+                  "url",
+                  "use_global_settings",
+                  "used",
+                  "user",
+                  "users_approval_on",
+                  "uuid",
+                  "version",
+                  "website",
+                  "window_hours",
+                  "window_start",
+                  "working_dir",
+                  "zone"
+                ]
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/RecordItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listReadingRecordsV2": {
+                "operationId": "listReadingRecordsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.kind": "$request.query.kind",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
+                  "query.where": "$request.query.where"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Reading records: the list",
+        "tags": [
+          "hq.connections"
+        ],
+        "x-hq-resource": "reading.records"
+      }
+    },
     "/api/v2/resources/readings/": {
       "get": {
         "description": "Each type of reading, when it was last read, and the records it holds.",
@@ -42696,8 +43742,10 @@
                 "hq",
                 "image_registry",
                 "npm",
+                "nws",
                 "osv",
                 "portainer",
+                "public_dns",
                 "r2",
                 "rdap",
                 "ssh",
@@ -44174,6 +45222,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "request.path",

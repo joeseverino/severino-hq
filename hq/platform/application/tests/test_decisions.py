@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from hq.platform.application.action_links import read_link
 from hq.platform.application.decisions import decision
-from hq.platform.application.finding_steps import Do, Press, Run
+from hq.platform.application.finding_steps import ByHand, Do, Press, Why
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, select, text, with_class
 from hq.platform.application.tests.links import example_command
 
@@ -55,6 +55,14 @@ class DecisionTests(SimpleTestCase):
         html = card(item)
         self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
         self.assertEqual(elements(html, "form"), [])
+
+    def test_a_press_it_leads_with_is_its_one_button(self):
+        """An item with no page of its own leads with its press, by the press's words."""
+
+        start = example_command("start", "Start", "infrastructure_change", "/example/start/", method="POST")
+        shown = decision(self.item(steps=(Press(start),), action="Start", url="/findings/?rule=example"))
+
+        self.assertEqual([action["url"] for action in shown["actions"]], ["/example/start/"])
 
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = example_command("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
@@ -105,7 +113,9 @@ class DecisionTests(SimpleTestCase):
         self.assertNotIn("Why HQ cannot", text(html))
 
     def test_the_steps_are_one_list_in_their_order_and_never_folded(self):
-        html = card(self.item(steps=(Run("On the machine", "example --fix"), Do("Then sign in again."))))
+        html = card(
+            self.item(steps=(ByHand("On the machine", "example --fix", Why.NOT_GRANTED), Do("Then sign in again.")))
+        )
 
         (steps,) = with_class(html, "step-list")
         said = [step.words for step in elements(html, "li") if step.inside(steps)]
@@ -115,13 +125,17 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(elements(html, "details"), [])
 
     def test_a_steps_notes_are_said_under_it(self):
-        html = card(self.item(steps=(Run("On the machine", "example --fix", ("Then press Refresh.",)),)))
+        html = card(
+            self.item(
+                steps=(ByHand("On the machine", "example --fix", Why.NOT_GRANTED, notes=("Then press Refresh.",)),)
+            )
+        )
 
         (steps,) = with_class(html, "step-list")
         self.assertIn("Then press Refresh.", steps.words)
 
     def test_the_queue_holds_every_step_in_the_rows_opened_line(self):
-        many = tuple(Run(f"Step {n}", "example " + "--flag " * 40) for n in range(3))
+        many = tuple(ByHand(f"Step {n}", "example " + "--flag " * 40, Why.NOT_GRANTED) for n in range(3))
         html = card(self.item(steps=many))
 
         (below,) = with_class(html, "row-below")

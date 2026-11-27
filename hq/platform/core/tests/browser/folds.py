@@ -56,6 +56,52 @@ NESTED = (
     "{% endsection %}{% endsection %}"
 )
 CLOSED = "() => document.querySelectorAll('details:not([open])').length"
+# The rows in the order a press on the first heading sorts them.
+SORTED = """() => {
+  document.querySelector('[data-sort-local]').click();
+  return [...document.querySelectorAll('main .data-table > tbody > tr:not(.row-detail)')]
+    .map((row) => row.cells[0].textContent.trim());
+}"""
+
+
+def _sorted_fold() -> DataTable:
+    """A row heading a fold, a row and a row across the table under it, and a
+    row its sort puts first."""
+
+    columns = (TableColumn("What"), TableColumn("When"))
+    return DataTable(
+        "Events",
+        columns,
+        (
+            Row((Cell("Example second", fold=True), Cell("Nov 2")), folds="example-second"),
+            Row((Cell("Example item"), Cell("Nov 2")), folded="example-second"),
+            Row((Cell("Example rest"),), folded="example-second", across=True),
+            Row((Cell("Example first"), Cell("Nov 1"))),
+        ),
+    )
+
+
+# A reason held across the table under the row it folds beneath, far wider
+# than any table has room for on one line.
+REASON = " ".join(["Example reason, read from example.com and refused"] * 40)
+# The widths of the table's tracks past its own columns, its line names left out.
+SPARE = r"""(columns) => getComputedStyle(document.querySelector('main .data-table'))
+  .gridTemplateColumns.replace(/\[[^\]]*\] */g, "").split(" ").slice(columns).map(parseFloat)"""
+
+
+def _folded_reason() -> DataTable:
+    """A row of four columns heading a fold, and a long reason across the
+    table under it."""
+
+    columns = (TableColumn("Name"), TableColumn("State"), TableColumn("Read"), TableColumn("When"))
+    return DataTable(
+        "Readings",
+        columns,
+        (
+            Row((Cell("Example connection", fold=True), Cell("Ok"), Cell("12"), Cell("Nov 1")), folds="example"),
+            Row((Cell(REASON),), folded="example", across=True),
+        ),
+    )
 
 
 class FoldBrowserTests(LayoutBrowserTests):
@@ -79,6 +125,15 @@ class FoldBrowserTests(LayoutBrowserTests):
         self.assertEqual(self.page.evaluate(SAID, "example-event"), [])
 
     @with_script
+    def test_a_sort_on_the_page_keeps_a_folds_rows_under_the_row_that_heads_them(self):
+        self.pages = {**self.pages, "sorted-probe": probe("{% data_table table %}", table=_sorted_fold())}
+        self.open("sorted-probe", WIDE)
+
+        self.assertEqual(
+            self.page.evaluate(SORTED), ["Example first", "Example second", "Example item", "Example rest"]
+        )
+
+    @with_script
     def test_a_defect_in_a_fold_within_a_fold_is_found_once_every_fold_is_open_and_the_folds_close_again(self):
         self.pages = {**self.pages, "nested-probe": probe(NESTED)}
         self.open("nested-probe", WIDE)
@@ -92,3 +147,15 @@ class FoldBrowserTests(LayoutBrowserTests):
 
         self.page.evaluate(CLOSE_OPENED)
         self.assertEqual(self.page.evaluate(CLOSED), 2)
+
+    @with_script
+    def test_a_row_across_the_table_adds_no_width_to_its_columns_closed_or_open(self):
+        """The name column keeps the room left over, so the columns reach the
+        table's end, with the fold closed and with it open."""
+
+        self.pages = {**self.pages, "reason-probe": probe("{% data_table table %}", table=_folded_reason())}
+        self.open("reason-probe", WIDE)
+        self.assertEqual(set(self.page.evaluate(SPARE, 4)), {0})
+
+        self.page.evaluate(PRESS_FOLD, "example")
+        self.assertEqual(set(self.page.evaluate(SPARE, 4)), {0})

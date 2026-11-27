@@ -54,6 +54,10 @@ class Cloudflare(Permission):
     TUNNEL_READ = "Cloudflare Tunnel Read", "account"
     D1_READ = "D1 Read", "account"
     D1_EDIT = "D1 Edit", "account", "D1 Write"
+    # Reading the account's alert history: of the groups List History
+    # accepts (x-api-token-group), the read-only one that opens neither
+    # personal data nor the account's settings.
+    NOTIFICATIONS_READ = "Notifications Read", "account"
     # What List Registrations needs
     # (https://developers.cloudflare.com/api/resources/registrar/subresources/registrations/methods/list/).
     # Neither the permissions reference nor that operation in Cloudflare's
@@ -64,6 +68,10 @@ class Cloudflare(Permission):
     # As R2's own token page (R2, Manage API tokens) names it, scoped to one
     # bucket there; the token editor's name for it is the API one.
     R2_OBJECT_WRITE = "Object Read & Write", "bucket", "Workers R2 Storage Bucket Item Write"
+    # Reading a Worker's deployments and its versions' tags: of the groups
+    # both operations accept (x-api-token-group), the read-only one that
+    # opens no live logs.
+    WORKERS_SCRIPTS_READ = "Workers Scripts Read", "account"
     DNS_WRITE = "DNS Write", "zone"
     PAGE_RULES_READ = "Page Rules Read", "zone"
     SINGLE_REDIRECT_READ = "Single Redirect Read", "zone", "Dynamic URL Redirects Read"

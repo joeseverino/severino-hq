@@ -19,6 +19,27 @@ import (
 // ServerURLClientAPI defines the Server URL for Client API
 const ServerURLClientAPI = "https://api.cloudflare.com/client/v4"
 
+// Defines values for AaaMechanismType.
+const (
+	AaaMechanismTypeEmail     AaaMechanismType = "email"
+	AaaMechanismTypePagerduty AaaMechanismType = "pagerduty"
+	AaaMechanismTypeWebhook   AaaMechanismType = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the AaaMechanismType enum.
+func (e AaaMechanismType) Valid() bool {
+	switch e {
+	case AaaMechanismTypeEmail:
+		return true
+	case AaaMechanismTypePagerduty:
+		return true
+	case AaaMechanismTypeWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for D1JurisdictionNullable.
 const (
 	D1JurisdictionNullableEu      D1JurisdictionNullable = "eu"
@@ -687,19 +708,19 @@ func (e TLSCertificatesAndHostnamesType2) Valid() bool {
 
 // Defines values for TLSCertificatesAndHostnamesValidationMethod.
 const (
-	Email TLSCertificatesAndHostnamesValidationMethod = "email"
-	HTTP  TLSCertificatesAndHostnamesValidationMethod = "http"
-	Txt   TLSCertificatesAndHostnamesValidationMethod = "txt"
+	TLSCertificatesAndHostnamesValidationMethodEmail TLSCertificatesAndHostnamesValidationMethod = "email"
+	TLSCertificatesAndHostnamesValidationMethodHTTP  TLSCertificatesAndHostnamesValidationMethod = "http"
+	TLSCertificatesAndHostnamesValidationMethodTxt   TLSCertificatesAndHostnamesValidationMethod = "txt"
 )
 
 // Valid indicates whether the value is a known member of the TLSCertificatesAndHostnamesValidationMethod enum.
 func (e TLSCertificatesAndHostnamesValidationMethod) Valid() bool {
 	switch e {
-	case Email:
+	case TLSCertificatesAndHostnamesValidationMethodEmail:
 		return true
-	case HTTP:
+	case TLSCertificatesAndHostnamesValidationMethodHTTP:
 		return true
-	case Txt:
+	case TLSCertificatesAndHostnamesValidationMethodTxt:
 		return true
 	default:
 		return false
@@ -823,6 +844,21 @@ func (e TunnelTunnelType) Valid() bool {
 	}
 }
 
+// Defines values for WorkersBindingKindAnalyticsEngineType.
+const (
+	AnalyticsEngine WorkersBindingKindAnalyticsEngineType = "analytics_engine"
+)
+
+// Valid indicates whether the value is a known member of the WorkersBindingKindAnalyticsEngineType enum.
+func (e WorkersBindingKindAnalyticsEngineType) Valid() bool {
+	switch e {
+	case AnalyticsEngine:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ZonesType.
 const (
 	Full      ZonesType = "full"
@@ -885,6 +921,51 @@ func (e CertificatePacksListCertificatePacksParamsStatus) Valid() bool {
 		return false
 	}
 }
+
+// AaaComponentsSchemasDescription Description of the notification policy (if present).
+type AaaComponentsSchemasDescription = string
+
+// AaaHistory defines model for aaa_history.
+type AaaHistory struct {
+	// AlertType Type of notification that has been dispatched.
+	AlertType AaaSchemasAlertType `json:"alert_type,omitempty"`
+
+	// Description Description of the notification policy (if present).
+	Description AaaComponentsSchemasDescription `json:"description,omitempty"`
+
+	// ID UUID
+	ID AaaUUID `json:"id,omitempty"`
+
+	// MechanismType The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.
+	MechanismType AaaMechanismType `json:"mechanism_type,omitempty"`
+
+	// Name Name of the policy.
+	Name AaaSchemasName `json:"name,omitempty"`
+
+	// PolicyID The unique identifier of a notification policy
+	PolicyID AaaPolicyID `json:"policy_id,omitempty"`
+
+	// Sent Timestamp of when the notification was dispatched in ISO 8601 format.
+	Sent AaaSent `json:"sent,omitempty"`
+}
+
+// AaaMechanismType The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.
+type AaaMechanismType string
+
+// AaaPolicyID The unique identifier of a notification policy
+type AaaPolicyID = string
+
+// AaaSchemasAlertType Type of notification that has been dispatched.
+type AaaSchemasAlertType = string
+
+// AaaSchemasName Name of the policy.
+type AaaSchemasName = string
+
+// AaaSent Timestamp of when the notification was dispatched in ISO 8601 format.
+type AaaSent = string
+
+// AaaUUID UUID
+type AaaUUID = string
 
 // AccessClientID The Client ID for the service token. Access will check for this value in the `CF-Access-Client-ID` request header.
 type AccessClientID = string
@@ -2203,6 +2284,77 @@ type TunnelTunnelType string
 // TunnelVersion The cloudflared version used to establish this connection.
 type TunnelVersion = string
 
+// WorkersVersion defines model for workers_Version.
+type WorkersVersion struct {
+	// Annotations Metadata about the version.
+	Annotations struct {
+		// WorkersMessage Human-readable message about the version. Truncated to 1000 bytes if longer.
+		WorkersMessage string `json:"workers/message,omitempty"`
+
+		// WorkersTag User-provided identifier for the version. Maximum 100 bytes.
+		WorkersTag string `json:"workers/tag,omitempty"`
+
+		// WorkersTriggeredBy Operation that triggered the creation of the version.
+		WorkersTriggeredBy string `json:"workers/triggered_by,omitempty"`
+	} `json:"annotations,omitempty"`
+
+	// Bindings List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.
+	Bindings WorkersBindings `json:"bindings,omitempty"`
+
+	// ID Version identifier.
+	ID string `json:"id"`
+
+	// Number The integer version number, starting from one.
+	Number int `json:"number"`
+}
+
+// WorkersBindingItem A binding to allow the Worker to communicate with resources.
+type WorkersBindingItem struct {
+	union json.RawMessage
+}
+
+// WorkersBindingKindAnalyticsEngine defines model for workers_binding_kind_analytics_engine.
+type WorkersBindingKindAnalyticsEngine struct {
+	// Dataset The name of the dataset to bind to.
+	Dataset string `json:"dataset"`
+
+	// Name A JavaScript variable name for the binding.
+	Name WorkersBindingName `json:"name"`
+
+	// Type The kind of resource that the binding provides.
+	Type WorkersBindingKindAnalyticsEngineType `json:"type"`
+}
+
+// WorkersBindingKindAnalyticsEngineType The kind of resource that the binding provides.
+type WorkersBindingKindAnalyticsEngineType string
+
+// WorkersBindingName A JavaScript variable name for the binding.
+type WorkersBindingName = string
+
+// WorkersBindings List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.
+type WorkersBindings = []WorkersBindingItem
+
+// WorkersDeployment defines model for workers_deployment.
+type WorkersDeployment struct {
+	CreatedOn string `json:"created_on"`
+	ID        string `json:"id"`
+
+	// Versions Worker versions included in this deployment. Each object must contain a `version_id` UUID and a `percentage`; percentages across all objects must total 100. In the `cf` CLI, pass the entire array as one JSON value to `--versions`, either inline, for example `--versions '[{"version_id":"023e105f-2a42-4f8b-a1c1-73f6a2a30c0f","percentage":100}]'`, or from a JSON file with `--versions @versions.json`.
+	Versions []struct {
+		// Percentage Percentage of traffic served by this version.
+		Percentage float32 `json:"percentage"`
+
+		// VersionID Identifier of the Worker Version.
+		VersionID string `json:"version_id"`
+	} `json:"versions"`
+}
+
+// WorkersScriptResponse defines model for workers_script-response.
+type WorkersScriptResponse struct {
+	// ID The name used to identify the script.
+	ID string `json:"id,omitempty"`
+}
+
 // ZonesIdentifier Identifier
 type ZonesIdentifier = string
 
@@ -2390,6 +2542,13 @@ type AccessServiceTokensListServiceTokensParams struct {
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
+// NotificationHistoryListHistoryParams defines parameters for NotificationHistoryListHistory.
+type NotificationHistoryListHistoryParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+	Since   *string  `form:"since,omitempty" json:"since,omitempty"`
+}
+
 // CloudflareTunnelListCloudflareTunnelsParams defines parameters for CloudflareTunnelListCloudflareTunnels.
 type CloudflareTunnelListCloudflareTunnelsParams struct {
 	Page      *float32 `form:"page,omitempty" json:"page,omitempty"`
@@ -2573,6 +2732,71 @@ func (t *PagesEnvVars_AdditionalProperties) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsWorkersBindingKindAnalyticsEngine returns the union data inside the WorkersBindingItem as a WorkersBindingKindAnalyticsEngine
+func (t WorkersBindingItem) AsWorkersBindingKindAnalyticsEngine() (WorkersBindingKindAnalyticsEngine, error) {
+	var body WorkersBindingKindAnalyticsEngine
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkersBindingKindAnalyticsEngine overwrites any union data inside the WorkersBindingItem as the provided WorkersBindingKindAnalyticsEngine
+func (t *WorkersBindingItem) FromWorkersBindingKindAnalyticsEngine(v WorkersBindingKindAnalyticsEngine) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"analytics_engine"}`))
+	t.union = b
+	return err
+}
+
+// MergeWorkersBindingKindAnalyticsEngine performs a merge with any union data inside the WorkersBindingItem, using the provided WorkersBindingKindAnalyticsEngine
+func (t *WorkersBindingItem) MergeWorkersBindingKindAnalyticsEngine(v WorkersBindingKindAnalyticsEngine) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"analytics_engine"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkersBindingItem) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := runtime.JSONUnmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t WorkersBindingItem) ValueByDiscriminator() (any, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "analytics_engine":
+		return t.AsWorkersBindingKindAnalyticsEngine()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t WorkersBindingItem) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *WorkersBindingItem) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -2656,6 +2880,9 @@ type ClientInterface interface {
 	// AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
 	AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// NotificationHistoryListHistory performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+	NotificationHistoryListHistory(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CloudflareTunnelListCloudflareTunnels performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 	CloudflareTunnelListCloudflareTunnels(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2687,6 +2914,15 @@ type ClientInterface interface {
 
 	// WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
 	WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WorkerScriptListWorkers performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+	WorkerScriptListWorkers(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WorkerDeploymentsListDeployments performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+	WorkerDeploymentsListDeployments(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetWorkerVersion performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+	GetWorkerVersion(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UserAPITokensVerifyToken performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
 	UserAPITokensVerifyToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2761,6 +2997,19 @@ func (c *API) AccessApplicationsListAccessApplications(ctx context.Context, acco
 // AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
 func (c *API) AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAccessServiceTokensListServiceTokensRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NotificationHistoryListHistory performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+func (c *API) NotificationHistoryListHistory(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewNotificationHistoryListHistoryRequest(c.Server, accountID, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2893,6 +3142,45 @@ func (c *API) RegistrarDomainRegistrationList(ctx context.Context, accountID str
 // WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
 func (c *API) WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewWebAnalyticsListSitesRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WorkerScriptListWorkers performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+func (c *API) WorkerScriptListWorkers(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWorkerScriptListWorkersRequest(c.Server, accountID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WorkerDeploymentsListDeployments performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+func (c *API) WorkerDeploymentsListDeployments(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWorkerDeploymentsListDeploymentsRequest(c.Server, accountID, scriptName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetWorkerVersion performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+func (c *API) GetWorkerVersion(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkerVersionRequest(c.Server, accountID, workerID, versionID)
 	if err != nil {
 		return nil, err
 	}
@@ -3265,6 +3553,91 @@ func NewAccessServiceTokensListServiceTokensRequest(server string, accountID str
 		if params.PerPage != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewNotificationHistoryListHistoryRequest constructs an http.Request for the NotificationHistoryListHistory method
+func NewNotificationHistoryListHistoryRequest(server string, accountID string, params *NotificationHistoryListHistoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/alerting/v3/history"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -3832,6 +4205,129 @@ func NewWebAnalyticsListSitesRequest(server string, accountID string, params *We
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWorkerScriptListWorkersRequest constructs an http.Request for the WorkerScriptListWorkers method
+func NewWorkerScriptListWorkersRequest(server string, accountID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/scripts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWorkerDeploymentsListDeploymentsRequest constructs an http.Request for the WorkerDeploymentsListDeployments method
+func NewWorkerDeploymentsListDeploymentsRequest(server string, accountID string, scriptName string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "script_name", scriptName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/scripts/" + pathParam1 + "/deployments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetWorkerVersionRequest constructs an http.Request for the GetWorkerVersion method
+func NewGetWorkerVersionRequest(server string, accountID string, workerID string, versionID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "worker_id", workerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version_id", versionID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/workers/" + pathParam1 + "/versions/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -4483,6 +4979,11 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	AccessServiceTokensListServiceTokensWithResponse(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*AccessServiceTokensListServiceTokensReply, error)
 
+	// NotificationHistoryListHistoryWithResponse performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	NotificationHistoryListHistoryWithResponse(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*NotificationHistoryListHistoryReply, error)
+
 	// CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -4532,6 +5033,21 @@ type ClientWithResponsesInterface interface {
 	//
 	// Returns a wrapper object for the known response body format(s).
 	WebAnalyticsListSitesWithResponse(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*WebAnalyticsListSitesReply, error)
+
+	// WorkerScriptListWorkersWithResponse performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WorkerScriptListWorkersWithResponse(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*WorkerScriptListWorkersReply, error)
+
+	// WorkerDeploymentsListDeploymentsWithResponse performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WorkerDeploymentsListDeploymentsWithResponse(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*WorkerDeploymentsListDeploymentsReply, error)
+
+	// GetWorkerVersionWithResponse performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GetWorkerVersionWithResponse(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*GetWorkerVersionReply, error)
 
 	// UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
 	//
@@ -4695,6 +5211,40 @@ func (r AccessServiceTokensListServiceTokensReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AccessServiceTokensListServiceTokensReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type NotificationHistoryListHistoryReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r NotificationHistoryListHistoryReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r NotificationHistoryListHistoryReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r NotificationHistoryListHistoryReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r NotificationHistoryListHistoryReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5001,6 +5551,108 @@ func (r WebAnalyticsListSitesReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r WebAnalyticsListSitesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WorkerScriptListWorkersReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WorkerScriptListWorkersReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WorkerScriptListWorkersReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WorkerScriptListWorkersReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WorkerScriptListWorkersReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WorkerDeploymentsListDeploymentsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WorkerDeploymentsListDeploymentsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WorkerDeploymentsListDeploymentsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WorkerDeploymentsListDeploymentsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WorkerDeploymentsListDeploymentsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetWorkerVersionReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r GetWorkerVersionReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWorkerVersionReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWorkerVersionReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetWorkerVersionReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5414,6 +6066,17 @@ func (c *ClientWithResponses) AccessServiceTokensListServiceTokensWithResponse(c
 	return ParseAccessServiceTokensListServiceTokensReply(rsp)
 }
 
+// NotificationHistoryListHistoryWithResponse performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) NotificationHistoryListHistoryWithResponse(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*NotificationHistoryListHistoryReply, error) {
+	rsp, err := c.NotificationHistoryListHistory(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseNotificationHistoryListHistoryReply(rsp)
+}
+
 // CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -5522,6 +6185,39 @@ func (c *ClientWithResponses) WebAnalyticsListSitesWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseWebAnalyticsListSitesReply(rsp)
+}
+
+// WorkerScriptListWorkersWithResponse performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WorkerScriptListWorkersWithResponse(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*WorkerScriptListWorkersReply, error) {
+	rsp, err := c.WorkerScriptListWorkers(ctx, accountID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWorkerScriptListWorkersReply(rsp)
+}
+
+// WorkerDeploymentsListDeploymentsWithResponse performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WorkerDeploymentsListDeploymentsWithResponse(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*WorkerDeploymentsListDeploymentsReply, error) {
+	rsp, err := c.WorkerDeploymentsListDeployments(ctx, accountID, scriptName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWorkerDeploymentsListDeploymentsReply(rsp)
+}
+
+// GetWorkerVersionWithResponse performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GetWorkerVersionWithResponse(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*GetWorkerVersionReply, error) {
+	rsp, err := c.GetWorkerVersion(ctx, accountID, workerID, versionID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWorkerVersionReply(rsp)
 }
 
 // UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
@@ -5715,6 +6411,22 @@ func ParseAccessServiceTokensListServiceTokensReply(rsp *http.Response) (*Access
 	return response, nil
 }
 
+// ParseNotificationHistoryListHistoryReply parses an HTTP response from a NotificationHistoryListHistoryWithResponse call
+func ParseNotificationHistoryListHistoryReply(rsp *http.Response) (*NotificationHistoryListHistoryReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &NotificationHistoryListHistoryReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
 // ParseCloudflareTunnelListCloudflareTunnelsReply parses an HTTP response from a CloudflareTunnelListCloudflareTunnelsWithResponse call
 func ParseCloudflareTunnelListCloudflareTunnelsReply(rsp *http.Response) (*CloudflareTunnelListCloudflareTunnelsReply, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5852,6 +6564,54 @@ func ParseWebAnalyticsListSitesReply(rsp *http.Response) (*WebAnalyticsListSites
 	}
 
 	response := &WebAnalyticsListSitesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseWorkerScriptListWorkersReply parses an HTTP response from a WorkerScriptListWorkersWithResponse call
+func ParseWorkerScriptListWorkersReply(rsp *http.Response) (*WorkerScriptListWorkersReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WorkerScriptListWorkersReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseWorkerDeploymentsListDeploymentsReply parses an HTTP response from a WorkerDeploymentsListDeploymentsWithResponse call
+func ParseWorkerDeploymentsListDeploymentsReply(rsp *http.Response) (*WorkerDeploymentsListDeploymentsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WorkerDeploymentsListDeploymentsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetWorkerVersionReply parses an HTTP response from a GetWorkerVersionWithResponse call
+func ParseGetWorkerVersionReply(rsp *http.Response) (*GetWorkerVersionReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWorkerVersionReply{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

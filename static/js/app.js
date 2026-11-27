@@ -404,6 +404,20 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   });
 })();
 
+// A file field says the largest file it takes, and how many (forms.FileField).
+// A choice over either is refused as it is made, in the field's own words, so
+// the browser never sends what the proxy in front of HQ would refuse with an
+// error page of its own. The form stays unsent until the choice is changed.
+document.addEventListener("change", (event) => {
+  const input = event.target;
+  if (!input.matches?.("input[type=file][data-max-bytes]")) return;
+  const files = Array.from(input.files || []);
+  const over = files.find((file) => file.size > Number(input.dataset.maxBytes));
+  const many = input.dataset.maxFiles && files.length > Number(input.dataset.maxFiles);
+  input.setCustomValidity(over ? `${over.name} ${input.dataset.tooLarge}` : many ? input.dataset.tooMany : "");
+  input.reportValidity();
+});
+
 // Tooltips, for chart marks and anything else carrying data-tip. The SVG
 // <title> element is the browser's own tooltip: it waits a second or two,
 // cannot be styled, and does not follow the pointer, long enough that reading

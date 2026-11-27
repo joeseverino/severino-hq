@@ -28,7 +28,7 @@ from .moments import moment
 from .projection import read_once
 lazy from .connections import connection_rows
 lazy from .credential_findings import fix_steps
-lazy from .credential_sight import credential_sight
+lazy from .credential_sight import sight_by_connection
 lazy from .facts import snapshots_of
 
 # How far ahead of expiry a credential is replaced.
@@ -250,7 +250,7 @@ def credential_fixes() -> dict[str, CredentialFix]:
     """Each reported connection's credential fix, by connection ref."""
 
     def load() -> dict[str, CredentialFix]:
-        sights = {found.provider: found for found in credential_sight()}
-        return {row.connection_ref: _fix(row, sights.get(row.provider)) for row in connection_rows()}
+        sights, _ = sight_by_connection()
+        return {row.connection_ref: _fix(row, sights.get(row.connection_ref)) for row in connection_rows()}
 
     return read_once("credential_fixes", load)

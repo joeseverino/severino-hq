@@ -133,6 +133,13 @@ def problems_by_part(parts: Mapping[str, About], principal: Principal) -> tuple[
     return tuple(found)
 
 
+def problems_of(about: About, principal: Principal) -> tuple[dict[str, Any], ...]:
+    """The open problems ``principal`` may read about a page with no record
+    of its own, such as the controller's, in the queue's order."""
+
+    return tuple(item for _part, item in problems_by_part({"": about}, principal))
+
+
 def grouped(found: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, tuple[Mapping[str, Any], ...]]:
     """``problems_by_part``'s answer by part, as a page draws each under its part."""
 

@@ -12,7 +12,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
 from hq.platform.application.markup_testing import select
 from hq.platform.application.plugin_testing import form_keyed
@@ -441,6 +441,48 @@ class ADeletedContainerIsForgottenTests(TestCase):
         self.sweep({**A_COMPOSED_CONTAINER, "name": "a-db"}, self.ELSEWHERE)
 
         self.assertIn("a-web", self.names())
+
+
+def a_unit(name, **fields):
+    return {
+        "unit": name,
+        "load": "loaded",
+        "active": "active",
+        "sub": "running",
+        "read_at": "2026-01-01T00:00:00Z",
+        **fields,
+    }
+
+
+class HQsOwnUnitsAreTheInstalledSetTests(TestCase):
+    """The units HQ acts on are the ones its release installed, taken on and
+    forgotten by the reading alone, with no connection and no click."""
+
+    def sweep(self, *records):
+        return bridged("inventory", {"host.unit": {"ok": True, "records": list(records)}})
+
+    def units(self):
+        return set(ManagedResource.objects.filter(kind="host.unit").values_list("spec__unit", flat=True))
+
+    def test_a_shipped_unit_is_taken_on_and_forgotten_once_it_leaves(self):
+        self.sweep(a_unit("example-job.service"), a_unit("example-job.timer"), a_unit("other.service", foreign=True))
+
+        self.assertEqual(self.units(), {"example-job.service", "example-job.timer"})
+
+        timer = ManagedResource.objects.get(spec__unit="example-job.timer")
+        operation = OperationRequest.objects.create(
+            resource=timer, action="start", requested_actor="example", idempotency_key="example-start"
+        )
+        self.sweep(a_unit("example-job.service"))
+
+        self.assertEqual(self.units(), {"example-job.service", "example-job.timer"}, "an unfinished act keeps it")
+
+        operation.state, operation.completed_at = OperationRequest.State.SUCCEEDED, timezone.now()
+        operation.save(update_fields=["state", "completed_at"])
+        result = self.sweep(a_unit("example-job.service"))
+
+        self.assertEqual(self.units(), {"example-job.service"})
+        self.assertEqual(result["retired"], [timer.key])
 
 
 class ADeclarationCanAlwaysBeGotRidOfTests(TestCase):

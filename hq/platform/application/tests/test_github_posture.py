@@ -13,7 +13,7 @@ from hq.platform.application.markup_testing import hrefs, select
 from hq.platform.core.testing import SignedInTestCase
 
 from ..attention import raised
-from ..finding_steps import Do, Run
+from ..finding_steps import ByHand, Do
 from ..findings import finding_key
 from ..github_posture import EXAMPLES, PINS_CALLED, PINS_UNREAD, STANDARD, postures
 from ..repository_findings import PROJECTS
@@ -84,7 +84,7 @@ class PostureViewTests(SignedInTestCase):
 def runs(item) -> list[tuple[str, str]]:
     """Each command an item offers: its label and the command."""
 
-    return [(step.label, step.command) for step in item.steps if isinstance(step, Run)]
+    return [(step.label, step.command) for step in item.steps if isinstance(step, ByHand)]
 
 
 def told(item) -> list[str]:

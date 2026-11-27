@@ -1,5 +1,7 @@
 """Seeing what the providers hold: what a sweep records, what a reading stands for, and what an observation is."""
 
+from datetime import timedelta
+
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -77,6 +79,21 @@ class RecordingTests(TestCase):
 
         self.assertEqual(state[0]["count"], 2)
         self.assertEqual(state[0]["label"], "Internal DNS record")
+
+    def test_a_reading_kept_per_subject_replaces_one_subject_and_a_failure_keeps_the_last_answer(self):
+        from ..inventory import keep
+
+        read, later = timezone.now() - timedelta(hours=1), timezone.now()
+        keep("dns.reverse", "address", {"address": "192.0.2.1", "hostnames": ["a.example.net"]}, read_at=read)
+        keep("dns.reverse", "address", {"address": "192.0.2.2", "hostnames": ["b.example.net"]}, read_at=read)
+        keep("dns.reverse", "address", {"address": "192.0.2.1", "unread": "Down"}, read_at=later, failed="Down")
+
+        row = ProviderInventory.objects.get(kind="dns.reverse")
+        held = {record["address"]: record for record in row.records}
+        self.assertEqual(held["192.0.2.2"]["hostnames"], ["b.example.net"])
+        self.assertEqual(held["192.0.2.1"]["unread"], "Down")
+        # Something answered before, so the kind still reads, as of that answer.
+        self.assertEqual((row.reachable, row.observed_at, row.error), (True, read, "Down"))
 
 
 class ReadingStandingTests(TestCase):

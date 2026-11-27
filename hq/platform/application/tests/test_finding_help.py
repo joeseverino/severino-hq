@@ -5,7 +5,9 @@ problem alone."""
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 
-from ..finding_model import Finding, FindingRemedy
+from ..cadence import CONTROLLER_REFRESH
+from ..finding_model import Finding
+from ..finding_steps import ByHand, Do, Does, Why
 from ..findings import RULES, _no_help_reason
 from ..plugins import checked_attention
 
@@ -18,11 +20,9 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
             checked_attention("example", (_finding(no_help_reason=" "),))
 
     def test_a_source_item_with_any_help_is_kept(self):
-        from ..finding_steps import Do
-
         helped = (
             _finding(steps=(Do("Renew it at the registrar."),)),
-            _finding(remedies=(FindingRemedy("example.fix", "example", "Fix", ""),)),
+            _finding(fixes=(Does(CONTROLLER_REFRESH.name),)),
             _finding(no_help_reason="Only the registrar can."),
             _finding(held=True),
             # What only reports stays off the queue, so it needs none.
@@ -46,17 +46,13 @@ class FindingHelpTests(SimpleTestCase):
         self.assertEqual(_no_help_reason(_finding(no_help_reason="Specific.")), "Specific.")
 
     def test_a_remedy_or_a_command_needs_no_reason(self):
-        from ..finding_steps import Run
-
-        remedied = _finding(remedies=(FindingRemedy("example.fix", "example", "Fix", ""),))
-        commanded = _finding(steps=(Run("Run it", "example --fix"),))
+        remedied = _finding(fixes=(Does(CONTROLLER_REFRESH.name),))
+        commanded = _finding(fixes=(ByHand("Run it", "example --fix", Why.NOT_GRANTED),))
 
         self.assertEqual((_no_help_reason(remedied), _no_help_reason(commanded)), ("", ""))
 
     def test_words_alone_still_say_why_hq_cannot_do_it(self):
-        from ..finding_steps import Do
-
-        self.assertEqual(_no_help_reason(_finding(steps=(Do("Go and figure it out"),))), RULES[0].no_help_reason)
+        self.assertEqual(_no_help_reason(_finding(fixes=(Do("Go and figure it out"),))), RULES[0].no_help_reason)
 
 
 class ExampleEstateTests(TestCase):

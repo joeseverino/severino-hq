@@ -69,3 +69,36 @@ describe("Tailscale's signature", () => {
     expect(await verify(tailscale, "another-webhook-secret", SIGNED, TS_BODY, at(0))).toBe(false);
   });
 });
+
+// Cloudflare sends the destination's secret itself in cf-webhook-auth
+// (developers.cloudflare.com, Notifications, Configure webhooks).
+const CF_SECRET = "example-cloudflare-webhook-secret";
+
+describe("Cloudflare's shared secret", () => {
+  const cloudflare = scheme("cloudflare_api");
+
+  it("verifies the secret, whatever the body", async () => {
+    expect(await verify(cloudflare, CF_SECRET, CF_SECRET, PAYLOAD)).toBe(true);
+  });
+
+  it.each([
+    ["another secret", CF_SECRET, "another-cloudflare-secret"],
+    ["the secret cut short", CF_SECRET, CF_SECRET.slice(0, -1)],
+    ["the secret and more", CF_SECRET, `${CF_SECRET} `],
+    ["no header", CF_SECRET, null],
+    ["an empty header with no secret held", "", ""],
+  ])("refuses %s", async (_, held, header) => {
+    expect(await verify(cloudflare, held, header, PAYLOAD)).toBe(false);
+  });
+
+  it("is never read as a signature, nor a signature as a secret", async () => {
+    expect(await verify({ ...cloudflare, form: "hmac" }, CF_SECRET, CF_SECRET, PAYLOAD)).toBe(false);
+    expect(await verify(scheme("github_app"), SECRET, SECRET, PAYLOAD)).toBe(false);
+  });
+});
+
+describe("a scheme of a form the Worker does not know", () => {
+  it("proves nothing", async () => {
+    expect(await verify({ ...scheme("github_app"), form: "rsa" }, SECRET, SIGNATURE, PAYLOAD)).toBe(false);
+  });
+});

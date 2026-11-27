@@ -93,15 +93,15 @@ provider credentials.
 ### The dashboard glance
 
 The page-head glance is a projection, never an owner. Whole-host CPU, memory
-and storage are stored as the machine's telemetry reading
-(`machine-telemetry:<key>`, `hq/platform/application/readings.py`), so the
+and storage are the machine's record of the `machine.telemetry` reading, so the
 machine page, the resource API and the dashboard summarize one timestamped
 fact. The operator picks the machine with "Show on dashboard" on its edit form;
 the choice lives in `DashboardConfiguration`. Weather is the configured point's
-reading (`weather:<point>`), the point edited in the dashboard's Settings popover.
-Every value HQ reads from outside is an `UpstreamReading` under a key that
-`readings.py` names, and `test_readings.py` fails a model that keeps one of
-its own.
+record of the `nws.forecast` reading, the point edited in the dashboard's
+Settings popover. Every value HQ reads from outside is an observation kind's,
+stored in the inventory; one kept per subject (a machine, a point, an address)
+is written a subject at a time by `inventory.keep`
+(`hq/domains/control_plane/observations/glance.py`).
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
 same address:
@@ -109,7 +109,7 @@ same address:
 | Who asks | For what |
 |---|---|
 | The refresh button | every panel |
-| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
+| The dashboard, opening on a reading older than five minutes (`observations.glance.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
 
 Either way HQ records a credential-free `DashboardRefreshRequest` and rings the
 glance doorbell. That starts a glance pass, the only reader of a dashboard
@@ -1082,7 +1082,10 @@ never a change to its record's state.
 A playbook that starts a long unit and leaves it running ends at once,
 stating a hand-off (`RunStated.handoff`: each of its machines to the unit's
 name). Its procedure names the read that settles it (`settled_by`: a read of
-the same commit, target kinds and `revision` input, held at adoption). HQ
+the same commit and target kinds that takes every revision its `revision`
+input takes, held at adoption). Since the read's report is the run's, its
+post_tasks are the change's verification, after any of the change's own, so
+a change that hands off before its work is done states none of its own. HQ
 holds the run claimed, the hand-off on its result, under a lease its
 declaration's `timeout_seconds` bounds from the claim, which no worker renews
 (`controller._hold`). It then settles it from that read alone, asked as HQ
@@ -1417,6 +1420,40 @@ Portainer token can already do to those containers through Docker. Planting a
 labeled container can only block a real unit from being acted on: a refusal,
 never an action.
 
+### HQ's own units
+
+Each unit HQ's release installs on its machine is a `host.unit` declaration
+(`provider_adapters/host.py`). The set is derived: a sweep takes on each unit
+the `host.unit` reading lists that is not `foreign`, and forgets one the
+reading no longer lists (`ProviderSpec.listed_whole`), so nobody adopts or
+removes one. Its verbs are Start, Restart, Clear failure (`reset-failed`) and
+Enable. Each is queued like a container's and handed to the same socket. A
+finding about a unit offers the verb as a press, and its command line only to
+a reader who may not press it.
+
+The socket takes these in a second grammar, beside the container's:
+
+- **The installed release decides.** The verb is start, restart, reset-failed
+  or enable, and the name one of the unit files `host.Shipped` lists in the
+  tree, read for each request. Drop-ins and templates are not units to ask
+  for. Any other name falls to the container grammar, which takes neither of
+  the new verbs.
+- **Nothing starts on its own.** The kind's reconcile is locked, and no verb
+  is automatic: only a person's or an agent's request changes a unit.
+- **A deploy holds the units.** The socket takes `host.DeployLock` shared
+  while it acts, and refuses when it cannot. A deploy takes it exclusively
+  while it holds the timers and replaces the release, so a timer the deploy
+  stopped on purpose is not started under it. The lock is `host.Lock`'s: in
+  a directory only root can change, opened without following a link, and
+  waited for no longer than the longest unit request, so no other account can
+  swap it, plant a link in its place or hold it to stall a deploy.
+- **A start does not wait.** `--no-block` queues the job and returns, so the
+  controller's own pass can ask for its unit without waiting on itself. The
+  next reading says how it went.
+
+An account that takes over the controller gains these four verbs on units
+root already installed, and none on any other unit.
+
 ### Operation manifests
 
 An automation procedure (an Ansible playbook a worker runs against a host) is
@@ -1475,37 +1512,35 @@ revision or repository.
 
 A read-only playbook may declare `investigates` with the finding rule names it
 helps explain. Needs you offers its existing Run command when the adopted
-playbook can reach the finding's machine and the reader may run it. The link
+playbook can reach the finding's machine and the reader may run it: its
+subject, or for a finding about something on a machine (a controller, a
+connection, one of HQ's own jobs) the machine its detector names. The link
 names the finding. Opening the form reads that finding again for the current
-reader and selects the machine. When it identifies one systemd service, HQ
-fills a declared `service_unit` input that accepts its exact name. Multiple
-services leave that field for the reader to fill. The form still validates
-every input and a run still goes through the canonical capability.
+reader and selects the machine. Where the finding names one of each, HQ fills
+the declared inputs that accept its exact value: `service_unit`, a systemd
+service by its full name, and `mount`, a filesystem by where it is mounted
+(`finding_model.LookInto`). A finding that names several leaves the field for
+the reader to fill. The form still validates every input and a run still goes
+through the canonical capability.
 
-The sidecar's format is published as a JSON Schema,
-`hq/platform/application/hq-procedure.schema.json`, written from
-`ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the
-model HQ holds a sidecar to, by the generator every schema HQ publishes comes
-from (`hq/platform/application/json_schemas.py`, Pydantic's own beneath). `mise run fix` rewrites it,
-and `lint:drift-procedure-schema` fails while it is behind the model. A
-repository of procedures lints its sidecars against the file at the HQ commit
-it targets, with [check-jsonschema](https://check-jsonschema.readthedocs.io/):
+### Checking a repository of playbooks
+
+A repository of playbooks checks its own checkout with the code HQ's adoption
+runs, as a client's linter is the server's own validator (`kubectl apply
+--dry-run=server`): the worker's scan (`hq_runner.catalog.read`) reads it as
+its next commit would hold it, every file git would commit, and HQ's judgment
+(`automation_adoption.refusals`) names every reason it would refuse the commit
+or one of its playbooks, all but the signature, which GitHub says of a pushed
+commit alone. It runs in the worker's environment, the runner group with the
+collections it ships, from a checkout of HQ at the commit the repository
+targets, `main` for one HQ deploys:
 
 ```sh
-check-jsonschema --schemafile hq-procedure.schema.json playbooks/*.hq.yml
+mise run playbooks:check <checkout>
 ```
 
-check-jsonschema reads YAML as it reads JSON, takes a schema by path or URL,
-and ships as a pre-commit hook and as a Python tool (`pipx:check-jsonschema`
-in mise). It validates with python-jsonschema, the library HQ's own test of
-the schema judges a sidecar with.
-
-The schema holds a sidecar's shape: every key, its type and range, the dotted
-names, the enumerations, and the inputs' names. What it cannot say HQ still
-refuses at a scan, naming each in the proposal. That is a read that names a
-privilege, a host not in HQ's spelling, a statement that is only whitespace, an
-input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
-a kind in `readings` HQ declares no words for, and two sidecars with one id.
+It exits 1 with each reason, worded as the Playbooks page says it, so a
+commit HQ would refuse fails the repository's CI before it merges.
 
 ### Running a playbook
 
@@ -2028,8 +2063,8 @@ whatever its commit. `plan()` refuses with every reason at once, in
 - an `ansible.cfg` or a directory Ansible loads code from, which a run would
   load beside every playbook;
 - a playbook with a problem the scan or HQ found, or an input no closed type
-  can take: that playbook's change alone, and every change at once while it
-  waits.
+  can take: that playbook's change alone. Every change at once adopts the
+  rest and leaves it waiting, and is refused only when none is left.
 
 Each change is compared file by file, and each way it lets a run do more is
 a widening. A widening is a playbook that may run on more machines or kinds
@@ -2056,7 +2091,7 @@ adoption, and says why the newest scan failed. While a commit waits, the table h
 for every playbook, adopted or brought by the commit, its last column the
 change table's Status, and each changed row its own Adopt and Reject
 (`automation_sources.playbook_rows`); the head carries View diff, Adopt all
-(when HQ can adopt every change that waits) and Reject all
+(Adopt all HQ can, while it can't adopt some) and Reject all
 (`automation_sources.decisions`). View diff opens the audit entry that records
 the scan's read (`automation_sources.entry_url`): the
 commit read and the commit adopted, the commit's own refusals, each changed

@@ -10,6 +10,8 @@ from collections.abc import Callable, Iterator, Mapping
 
 import httpx2
 
+from hq.platform.core import source
+
 # What a read that never got an answer raises. httpx2 maps a socket's own
 # errors to its own; OSError stays for a system error raised beneath it.
 UNREACHABLE = (httpx2.HTTPError, httpx2.InvalidURL, httpx2.StreamError, OSError)
@@ -19,7 +21,7 @@ Hook = Callable[..., None]
 # Who every outside read says is asking, with where to find out more. An HTTP
 # library's default signature is refused by some (Cloudflare's browser
 # integrity check), and GitHub's API refuses a request with none.
-USER_AGENT = "Severino-HQ (+https://github.com/joeseverino/severino-hq)"
+USER_AGENT = f"Severino-HQ (+{source.REPOSITORY})"
 
 
 def at_most(chunks: Iterator[bytes], limit: int) -> bytes:

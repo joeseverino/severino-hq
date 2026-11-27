@@ -256,7 +256,7 @@ class ProjectionTests(TestCase):
         found = self.context()
 
         self.assertEqual(found.work.jobs, ())
-        self.assertIn("could not read HQ's background jobs: no answer from systemd", found.work.unread)
+        self.assertIn("could not read HQ's units: no answer from systemd", found.work.unread)
         self.assertEqual([item.name for item in found.work.renderers], ["hq"])
 
     def test_a_reading_past_its_cadence_is_out_of_date(self):
@@ -282,6 +282,7 @@ class ProjectionTests(TestCase):
     def test_a_reading_that_needs_no_connection_is_listed_and_never_called_unconnected(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
+        from ..credential_sight import NEVER_SWEPT
         from ..hq_context import KEYLESS
 
         seen = self.context().sight
@@ -291,6 +292,12 @@ class ProjectionTests(TestCase):
         self.assertEqual(seen.groups[-1][0], KEYLESS)
         self.assertLessEqual(set(seen.unconnected), set(CONNECTION_LABELS.values()))
         self.assertGreaterEqual(seen.never, 1)
+        # Every row the table says is never read is counted, and reverse DNS,
+        # owed nothing until an address is looked up, is among them.
+        unread = {row.sight.kind for row in seen.rows if row.sight.state == NEVER_SWEPT}
+        self.assertIn("dns.reverse", unread)
+        self.assertEqual(seen.never, len(unread))
+        self.assertLess(seen.owed, len(unread))
         (tile,) = (tile for tile in self.context().tiles if tile.label == "Sees")
         self.assertIn(f"{seen.never} never read", tile.detail)
 
@@ -514,7 +521,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("hq_self"))
 
-        self.assertContains(response, "HQ could not read HQ&#x27;s background jobs.")
+        self.assertContains(response, "HQ could not read HQ&#x27;s units.")
 
     def test_the_machine_page_says_hq_is_up_to_date(self):
         estate()

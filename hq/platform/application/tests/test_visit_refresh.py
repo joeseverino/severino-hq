@@ -356,7 +356,9 @@ class AskableTests(TestCase):
     def test_a_provider_api_kind_is_and_one_read_by_logging_in_is_not(self):
         self.assertTrue(askable(FAST))
         self.assertTrue(askable("github.repository"))
-        for kind in (*LOGS_IN, "tls.certificate", "registry.domain", "a.kind.nothing.declares"):
+        # A reading the dashboard asks for when it opens is never a sweep's to answer.
+        on_open = ("machine.telemetry", "nws.forecast", "dns.reverse")
+        for kind in (*LOGS_IN, *on_open, "tls.certificate", "registry.domain", "a.kind.nothing.declares"):
             with self.subTest(kind=kind):
                 self.assertFalse(askable(kind))
 

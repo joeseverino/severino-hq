@@ -267,6 +267,10 @@ UNREADY = (
     _renamed(_FLUSH, "cache_warm", title="Warm a cache", preconditions=[], verification=[]),
 )
 UNREADY_REVISION = _commit("Move the upgrade onto a new role; add a cache warm.")
+# A commit after the estate's with two changes HQ can adopt, the flush's and
+# the new disk cleanup, and the cache warm, which it can't.
+PARTLY = (*WIDENED, _UPGRADE, UNREADY[-1])
+PARTLY_REVISION = _commit("Escalate the cache flush; add a disk cleanup and a cache warm.")
 UNREADY_PLUGINS = ("collections",)
 
 
@@ -425,6 +429,13 @@ def unadoptable() -> None:
     so it is the one that waits."""
 
     _scanned("example-scan-unadoptable", catalog(UNREADY, UNREADY_REVISION, UNREADY_PLUGINS), "Read the playbooks.")
+
+
+def partly_adoptable() -> None:
+    """A scan after the estate's that read a commit HQ can adopt all but one
+    playbook of, so that one waits beside the rest."""
+
+    _scanned("example-scan-partly", catalog(PARTLY, PARTLY_REVISION), "Read the playbooks.")
 
 
 def unattended() -> None:

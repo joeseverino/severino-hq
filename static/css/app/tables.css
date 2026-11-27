@@ -51,8 +51,8 @@
   inline-size: 100%;
   & > :is(thead, tbody, tfoot) { display: contents; }
   & > * > tr { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
-  /* Every span is a row of one cell across the table, or its open line. */
-  & > * > tr > [colspan] { grid-column: 1 / -1; }
+  /* Every span is a row of one cell across the table, or its open line, as wide as the columns make it and adding no width to them, so a long one wraps rather than spread itself over the tracks no column stands in. */
+  & > * > tr > [colspan] { grid-column: 1 / -1; contain: inline-size; }
 }
 .data-table[data-selectable-table] { --lead: fit-content(100%); }
 /* A key/value table's labels are as wide as the longest, and its values take the room. */
@@ -431,8 +431,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr.row-detail { display: none; }
 /* An open row's line is drawn only where it holds something at this width: a block moved there whole, an entry shown at every width, or a column that has left (above), so a row opened narrow and widened draws no empty line. */
 .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > :not(.row-columns), > td > .row-columns > :not([data-drop]:not([data-holds]))) { display: grid; }
-/* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. It asks its columns for no width past its own pad, which the cells it spans already hold, so opening a row moves no column, an empty track's included. */
-.data-table .row-detail > td { --cell: open; contain: inline-size; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
+/* It starts where its row's words do, past the tick-boxes' column and the toggle, so nothing it holds sits left of them. As every span does, it asks its columns for no width past its own pad, which the cells it spans already hold, so opening a row moves no column. */
+.data-table .row-detail > td { --cell: open; padding-block: 0 var(--row-pad); padding-inline-start: calc(var(--row-lead) + var(--row-inset, var(--cell-pad))); }
 .row-detail > td > * { margin-block: 0 var(--row-pad); }
 .row-detail > td > :last-child { margin-block-end: 0; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }

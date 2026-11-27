@@ -23,7 +23,7 @@ class MultipleFileFieldTests(SimpleTestCase):
 
         from ..forms import MultipleFileField
 
-        field = MultipleFileField()
+        field = MultipleFileField(max_bytes=8, max_files=2)
         files = MultiValueDict({"f": [self._upload("a.csv"), self._upload("b.csv")]})
         data = field.widget.value_from_datadict(QueryDict(), files, "f")
         self.assertEqual([item.name for item in field.clean(data)], ["a.csv", "b.csv"])
@@ -33,14 +33,14 @@ class MultipleFileFieldTests(SimpleTestCase):
 
         # The multiple attribute has to come from the widget: rendering it while
         # reading a single file is how uploads get dropped without an error.
-        self.assertTrue(MultipleFileField().widget.attrs.get("multiple"))
+        self.assertTrue(MultipleFileField(max_bytes=8, max_files=2).widget.attrs.get("multiple"))
 
     def test_each_file_is_validated_not_just_the_first(self):
         from django.core.exceptions import ValidationError as FormValidationError
 
         from ..forms import MultipleFileField
 
-        field = MultipleFileField(max_length=5)
+        field = MultipleFileField(max_bytes=8, max_files=2, max_length=5)
         with self.assertRaises(FormValidationError):
             field.clean([self._upload("ok.csv"), self._upload("far-too-long.csv")])
 
@@ -50,8 +50,24 @@ class MultipleFileFieldTests(SimpleTestCase):
         from ..forms import MultipleFileField
 
         with self.assertRaises(FormValidationError):
-            MultipleFileField().clean([])
-        self.assertEqual(MultipleFileField(required=False).clean([]), [])
+            MultipleFileField(max_bytes=8, max_files=2).clean([])
+        self.assertEqual(MultipleFileField(max_bytes=8, max_files=2, required=False).clean([]), [])
+
+    def test_a_file_over_the_declared_size_or_count_is_refused_in_the_words_its_input_carries(self):
+        from django.core.exceptions import ValidationError as FormValidationError
+
+        from ..forms import MultipleFileField
+
+        field = MultipleFileField(max_bytes=8, max_files=2)
+        attrs = field.widget.attrs
+        self.assertEqual((attrs["data-max-bytes"], attrs["data-max-files"]), ("8", "2"))
+        with self.assertRaises(FormValidationError) as refused:
+            field.clean([self._upload("big.csv", b"x" * 9)])
+        self.assertEqual(refused.exception.messages, [f"big.csv {attrs['data-too-large']}"])
+        with self.assertRaises(FormValidationError) as refused:
+            field.clean([self._upload("a.csv"), self._upload("b.csv"), self._upload("c.csv")])
+        self.assertEqual(refused.exception.messages, [attrs["data-too-many"]])
+        self.assertEqual(len(field.clean([self._upload("a.csv", b"x" * 8)])), 1)
 
 
 class ListRowTests(SimpleTestCase):

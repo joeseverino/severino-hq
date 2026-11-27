@@ -28,7 +28,7 @@ from ..entity_links import entity_link
 from ..machines import MachineState, machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
-from .glance_readings import HOST, reported_machine
+from .glance_readings import HOST, keep_machine, reported_machine
 
 
 def containers(*records):
@@ -195,18 +195,12 @@ class DeclaredMachineTests(TestCase):
     def test_it_projects_telemetry_from_the_same_declaration(self):
         from django.utils import timezone
 
-        from hq.platform.application import readings
-
         observed = timezone.now()
-        readings.record(
-            readings.machine_telemetry("a-laptop"),
-            reported_machine("a-laptop", host=HOST),
-            observed_at=observed,
-        )
+        keep_machine(reported_machine("a-laptop", host=HOST), at=observed)
 
         found = self.machine()
 
-        self.assertEqual(found.telemetry, reported_machine("a-laptop", host=HOST))
+        self.assertLessEqual(reported_machine("a-laptop", host=HOST).items(), found.telemetry.items())
         self.assertEqual(found.telemetry_observed_at, observed)
 
     def test_a_machine_nobody_declared_links_nothing(self):

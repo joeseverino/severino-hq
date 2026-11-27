@@ -63,6 +63,9 @@ DEP003 = [
     # keeps the schema and error types it does not re-export. A pin of our own
     # would stop the weekly update whenever pydantic-core releases first.
     "pydantic_core",
+    # The metadata pydantic records a field's bounds in: uploads.py reads a
+    # list's largest length from its MaxLen, which pydantic does not re-export.
+    "annotated_types",
     # hq/platform/core/oidc.py catches the error mozilla-django-oidc raises from
     # its own requests calls; the client is the library's choice.
     "requests",

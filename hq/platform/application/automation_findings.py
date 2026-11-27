@@ -9,13 +9,13 @@ the host declined to start one.
 from typing import Any
 
 from .finding_model import Finding, FindingEstate, FindingRule, matter_key, opens
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .security import Principal
 from .tone import Tone
 from .unit_findings import HQ_HOST, WORKER_READ, stopped_reporting, unit_causes
 lazy from .automation_runs import READ_PROFILE
 lazy from .automation_workers import ProfileWorker, profile_workers
-lazy from .problems import About, problems_by_part
+lazy from .problems import About, problems_of
 lazy from .routes import reverse
 
 RULE = "automation-worker-absent"
@@ -27,16 +27,13 @@ HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 # As deploy/host.example.json shows it: the grant is one of the file's own,
 # and reads that repository's contents.
 _ENTRY = (
-    Run(label="On HQ's machine, open its configuration", command=f"sudoedit {HOST_CONFIGURATION}"),
+    ByHand("On HQ's machine, open its configuration", f"sudoedit {HOST_CONFIGURATION}", Why.FIRST_INSTALL),
     Do(
         "Add this, naming the repository your playbooks are in and, for a private one, the grant that reads it",
         value='"automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}',
     ),
 )
-_START = Run(
-    label="Start the worker, which names anything still missing",
-    command=f"sudo {HQ_HOST} automation",
-)
+_START = ByHand("Start the worker, which names anything still missing", f"sudo {HQ_HOST} automation", Why.FIRST_INSTALL)
 
 
 def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
@@ -46,7 +43,7 @@ def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
     found by its queue item's key (``findings.finding_key``)."""
 
     keys = tuple(matter_key(RULE, "", worker.profile) for worker in profile_workers())
-    return tuple(item for _part, item in problems_by_part({RULE: About(keys=keys)}, principal))
+    return problems_of(About(keys=keys), principal)
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -80,7 +77,7 @@ def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
             severity=Tone.ATTENTION,
             explanation=explanation,
             evidence=(("Last seen", "never"),),
-            steps=(*_ENTRY, _START) if read else (_START,),
+            fixes=(*_ENTRY, _START) if read else (_START,),
             primary=playbooks,
             follows=unit_causes(estate, AUTOMATION_UNIT),
         )
@@ -94,7 +91,6 @@ def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
         explanation=explanation,
         severity=Tone.SERIOUS,
         primary=playbooks,
-        steps=(_START,),
     )
 
 

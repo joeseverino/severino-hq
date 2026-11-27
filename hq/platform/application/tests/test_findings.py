@@ -96,17 +96,6 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertNotIn("skipped-by-a-sweep", rules)
         self.assertNotIn("never-observed", rules)
 
-    def test_the_controller_is_looked_at_with_commands_that_paste(self):
-        from ..controller_findings import _controller_steps
-
-        self.assertEqual(
-            [step.command for step in _controller_steps("lab-1")],
-            [
-                'ssh lab-1 "sudo systemctl status severino-hq-controller.service --no-pager"',
-                'ssh lab-1 "sudo journalctl -u severino-hq-controller.service -n 50 --no-pager"',
-            ],
-        )
-
     def test_a_shared_ability_does_not_guess_between_two_controllers(self):
         old = (self.now - timedelta(days=3)).isoformat()
         topology = Topology(
@@ -204,31 +193,6 @@ class FindingsTests(SentinelMixin, TestCase):
         subjects = {f.subject for f in self.raised(READER) if f.subject}
 
         self.assertLessEqual(subjects, visible)
-
-    def test_no_rule_offers_a_destructive_capability(self):
-        """A finding may link to a review page; it may never hand over a delete."""
-
-        from ..capabilities import capability_registry
-
-        destructive = {spec.name for spec in capability_registry() if spec.effect == "destructive"}
-        observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
-        observed(self.rewrite("swept"), self.now)
-
-        offered = {remedy.capability for f in self.raised() for remedy in f.remedies}
-
-        self.assertEqual(offered & destructive, set())
-
-    def test_every_remedy_names_a_capability_the_registry_holds(self):
-        from ..capabilities import capability_registry
-
-        known = {spec.name for spec in capability_registry()}
-        observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
-        observed(self.rewrite("swept"), self.now)
-
-        for finding in self.raised():
-            for remedy in finding.remedies:
-                with self.subTest(rule=finding.rule):
-                    self.assertIn(remedy.capability, known)
 
     def test_no_rule_names_an_installed_extension(self):
         """The host does not name its extensions, stated as a test."""

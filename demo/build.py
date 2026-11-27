@@ -45,8 +45,11 @@ from hq.platform.core.static import COPIES
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(settings.BASE_DIR) / "var" / "demo")
 # Pages that need sign-in, an API token or an outside provider.
 _SKIPPED = ("/accounts/", "/oidc/", "/api/v2/", "/static/", "/csp-report/", "/admin/", "/media/", "/_internal-media/")
-# Stops a link loop from running forever.
-_MOST_PAGES = 800
+# Stops a chain of ever-new addresses (a day linking the next) from running
+# forever. A crawl that reaches it fails, naming what it left unsaved, since
+# every address a page names must be in the demo; the estate's pages are far
+# fewer.
+_MOST_PAGES = 5000
 # Links, and addresses a script reads from the page (data-*-url).
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
 # An image a page draws from one of HQ's own addresses, not a static file.
@@ -468,10 +471,11 @@ class DemoBuild(TestCase):
     def _walk(self, client: Client, queue: list[str], seen: set[str], fragments: dict, offered: _Offered) -> None:
         """Save every page reachable from ``queue`` that is not saved yet."""
 
-        while queue and len(seen) < _MOST_PAGES:
+        while queue:
             path = queue.pop(0)
             if path in seen or not _wanted(path):
                 continue
+            self.assertLess(len(seen), _MOST_PAGES, f"the crawl reached its bound with {path} and more unsaved")
             seen.add(path)
             queue.extend(self._visit(client, path, fragments, offered))
 

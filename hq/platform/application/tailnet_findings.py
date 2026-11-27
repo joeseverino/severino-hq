@@ -11,12 +11,11 @@ from .action_links import command_url
 from .finding_model import (
     Finding,
     FindingEstate,
-    FindingRemedy,
     FindingRule,
     Said,
     per_connection,
 )
-from .finding_steps import Do
+from .finding_steps import Do, Does
 from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
 from .tone import Tone
 from .ui import agreed, counted, counted_forms, ended
@@ -72,14 +71,13 @@ class _GrantedToNobody:
             says=lambda _node, names: self._said(names, remedies),
         )
 
-    def _said(self, names: tuple[str, ...], remedies: tuple[FindingRemedy, ...]) -> Said:
+    def _said(self, names: tuple[str, ...], remedies: tuple[Does, ...]) -> Said:
         one = len(names) == 1
         joined = ", ".join(names)
         return {
             "title": self.one.format(names=joined) if one else f"{counted(len(names), *self.counted_as)} {self.many}",
             "explanation": self.because[0 if one else 1].format(names=joined),
-            "remedies": remedies,
-            "steps": (Do(self.step.format(names=joined)),),
+            "fixes": (*remedies, Do(self.step.format(names=joined))),
         }
 
 
@@ -118,7 +116,7 @@ def _tag_granted_to_nobody(estate: FindingEstate) -> tuple[Finding, ...]:
     return _TAG_GRANTED_TO_NOBODY.findings(estate)
 
 
-def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[FindingRemedy, ...]:
+def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[Does, ...]:
     """A policy amendment, offered when a tailnet policy is declared to amend.
 
     The capability re-derives the change from the declaration and writes it
@@ -134,7 +132,7 @@ def _policy_remedy(estate: FindingEstate, capability: str) -> tuple[FindingRemed
     url = command_url(capability, policy.label)
     if not url:
         return ()
-    return (FindingRemedy(capability=capability, target=policy.label, url=url),)
+    return (Does(capability, policy.label, url=url),)
 
 
 def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -193,7 +191,7 @@ def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
                 *(("Port", f"{item.machine} {port.entry}, {_listens(port)}") for port in item.ports),
             )
         ),
-        steps=tuple(step for item in grants for step in _loopback_steps(item)),
+        fixes=tuple(step for item in grants for step in _loopback_steps(item)),
     )
 
 

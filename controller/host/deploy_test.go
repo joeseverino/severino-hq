@@ -8,7 +8,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -46,6 +48,7 @@ func newDeployer(f *fakeHost) (*Deployer, *handover) {
 			LookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			Poll:     time.Millisecond,
 		},
+		Lock: filepath.Join(f.root, "deploy.lock"),
 	}, handed
 }
 
@@ -332,6 +335,41 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f.before(t, "systemctl start severino-hq-controller.path", "systemctl start "+DriftUnit)
 }
 
+// A controller pass reads the state of every unit HQ ships, so whatever ends
+// a deploy's hold, the release standing or its rollback, starts each held
+// unit before anything that starts a pass: HQ rings the doorbell while the
+// hold lasts, and its path unit starts a pass the moment it is up. The
+// setup's playbook starts the held units of a release that stands.
+func TestNoControllerPassStartsBeforeTheHeldUnitsItReads(t *testing.T) {
+	starter := "systemctl start severino-hq-controller.path"
+	startsHeld := func(call string) bool {
+		return call == "systemctl start severino-hq-secrets.timer" || isSetup(call) && !strings.Contains(call, " --check ") && !strings.Contains(call, " --tags ")
+	}
+	for name, fails := range map[string]bool{"stands": false, "rolled back": true} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeHost(t)
+			f.active = []string{"severino-hq-controller.path", "severino-hq-secrets.timer"}
+			if err := f.machine.Record(running); err != nil {
+				t.Fatal(err)
+			}
+			if fails {
+				f.failRestartOnce()
+			}
+			d, _ := newDeployer(f)
+
+			if err := d.Release(context.Background(), next); (err != nil) != fails {
+				t.Fatalf("%v\n%s", err, f.out.String())
+			}
+
+			calls := f.calls()
+			first := f.index(starter)
+			if first < 0 || !slices.ContainsFunc(calls[:first], startsHeld) || slices.ContainsFunc(calls[first:], startsHeld) {
+				t.Errorf("a pass could start before the held units were:\n%s", strings.Join(calls, "\n"))
+			}
+		})
+	}
+}
+
 // Drift found after a healthy release fails the deploy and leaves the release
 // standing: rolling back would not mend the host.
 // A deploy waits out a glance pass as it does a controller pass: each is a
@@ -343,9 +381,11 @@ func TestTheHoldWaitsOutEveryPassUnderWay(t *testing.T) {
 			f.active = []string{unit}
 			d, _ := newDeployer(f)
 
-			if _, err := d.hold(context.Background()); err != nil {
+			_, release, err := d.hold(context.Background())
+			if err != nil {
 				t.Fatal(err)
 			}
+			release()
 
 			if !strings.Contains(f.out.String(), "still going") {
 				t.Errorf("the hold did not wait for %s", unit)
@@ -354,9 +394,35 @@ func TestTheHoldWaitsOutEveryPassUnderWay(t *testing.T) {
 	}
 }
 
-// failOnce fails the first run of call alone, as a release that does not
-// come up does before the previous one comes up again.
-func (f *fakeHost) failOnce(call string) {
+// The hold keeps the deploy lock until its release, so the unit socket,
+// which takes it shared and never waits, refuses while it stands.
+func TestTheHoldKeepsTheDeployLock(t *testing.T) {
+	d, _ := newDeployer(newFakeHost(t))
+	_, release, err := d.hold(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := func() error {
+		file, err := os.Open(d.Lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		return syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+	}
+	if shared() == nil {
+		t.Error("a shared hold was granted while the deploy held the lock")
+	}
+	release()
+	if err := shared(); err != nil {
+		t.Errorf("the lock stayed held after its release: %v", err)
+	}
+}
+
+// failRestartOnce fails the first restart of HQ alone, as a release that
+// does not come up does before the previous one comes up again.
+func (f *fakeHost) failRestartOnce() {
+	call := "systemctl restart " + hostcore.WebUnit
 	program, failed := f.machine.Command, false
 	f.machine.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		if !failed && strings.Join(append([]string{name}, args...), " ") == call {
@@ -407,7 +473,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if err := os.WriteFile(previousUnit, []byte("previous\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f.failOnce("systemctl restart " + hostcore.WebUnit)
+	f.failRestartOnce()
 	d, _ := newDeployer(f)
 
 	err := d.Release(context.Background(), next)
@@ -583,7 +649,7 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	f.failOnce("systemctl restart " + hostcore.WebUnit)
+	f.failRestartOnce()
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {
@@ -620,7 +686,7 @@ func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f.failOnce("systemctl restart " + hostcore.WebUnit)
+	f.failRestartOnce()
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {

@@ -596,7 +596,7 @@ class RequestPath:
                     severity=Tone.ATTENTION,
                     title=hop.label,
                     explanation=hop.check.detail,
-                    steps=(Do(hop.check.step),) if hop.check.step else (),
+                    fixes=(Do(hop.check.step),) if hop.check.step else (),
                 )
                 for hop in self.findings
             ),

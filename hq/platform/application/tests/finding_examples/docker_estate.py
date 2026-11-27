@@ -2,7 +2,6 @@ from unittest import mock
 
 from hq.platform.core.testing import connection, declare
 
-from ...finding_steps import Run
 from . import Example, Examples, Raised
 
 ON_LAB = {"connection_ref": "example-portainer", "environment_id": 1, "host": "lab-1", "host_address": "192.0.2.10"}
@@ -90,11 +89,6 @@ EXAMPLES = (
                     Raised(
                         title="1 unused image on lab-1",
                         evidence=(("Image", "example/web:0"),),
-                        steps=(
-                            Run(
-                                label="Remove them from lab-1", command='ssh lab-1 "sudo docker image rm example/web:0"'
-                            ),
-                        ),
                     ),
                 ),
             ),

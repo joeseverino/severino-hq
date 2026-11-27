@@ -6,19 +6,16 @@ with an error that names the write, not the disk, so this reads the
 says how it is taken).
 """
 
-import shlex
 from dataclasses import dataclass
 from typing import Any
 
 from hq.domains.control_plane.observations.host import FILESYSTEM_KIND
 
-from .finding_model import FindingRule, cannot_run_commands, machine_step
-from .finding_steps import Run
+from .finding_model import FindingRule, LookInto, cannot_run_commands
 from .labels import human_bytes
 from .reading_facts import OnEachMachine, ReadingRow
 from .thresholds import Threshold
 from .tone import Tone
-from .topology_model import TopologyNode
 from .ui import counted, measured
 
 GIB = 1 << 30
@@ -85,19 +82,6 @@ def _share(filesystem: FilesystemSpace) -> str:
     return measured(filesystem.free * 100 / filesystem.total, "%", 1)
 
 
-def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[Run, ...]:
-    mount = shlex.quote(row.mount)
-    return (
-        *machine_step(f"See the space on {row.mount}", node.label, f"df -h {mount}"),
-        *machine_step(
-            f"Find what fills {row.mount}",
-            node.label,
-            f"du -xh --max-depth=1 {mount} | sort -h | tail",
-            ("Free space there.",),
-        ),
-    )
-
-
 # A filesystem whose free space, when it was read, was under both the floor
 # and the share of its size: one finding per machine, at the worst
 # filesystem's severity.
@@ -116,7 +100,7 @@ _nearly_full = OnEachMachine(
     evidence=lambda row: (
         (f"Free on {row.mount}", f"{human_bytes(row.free)} of {human_bytes(row.total)} ({_share(row)})"),
     ),
-    steps=_steps,
+    look_into=lambda row: LookInto(mount=row.mount),
 )
 
 

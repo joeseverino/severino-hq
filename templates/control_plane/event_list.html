@@ -1,9 +1,38 @@
 {% extends "list_page.html" %}
 {% comment %}
-The events list, then every event HQ takes (`inbound_events.taken`): each
-admitted provider's declaration, its events by the readings they make due.
+The events list, then the events Worker as Cloudflare runs it
+(`inbound_events.events_worker`): its deployment, whether that carries the
+routes HQ generates, its last day of invocations, how it answered each route
+(accepted, refused, and refused for a signature or token that does not match
+its secret) and how its reading stands;
+then every event HQ takes (`inbound_events.taken`): each admitted provider's
+declaration, its events by the readings they make due. Above it all, the
+open problems whose fix is read here (`problems`).
 {% endcomment %}
-{% block page %}{{ block.super }}
+{% block page %}{% include "partials/_problems.html" with problems=problems only %}{{ block.super }}
+{% with standing=worker.standing %}
+{% section "Worker" %}
+  {% facts layout="band" %}
+    {% fact "Version" %}{% if worker.deployed %}{% for number, tag in worker.versions %}{% if not forloop.first %}{% dot %}{% endif %}{{ number|default_if_none:"" }}{% endfor %}{% else %}{% status "not set up"|absent pill=False %}{% endif %}
+    {% detail %}{% if worker.deployed_at %}<small>Deployed {{ worker.deployed_at|when }}</small>{% endif %}
+    {% endfact %}
+    {% if worker.deployed %}
+    {% fact "Routes" tone=worker.behind|yesno:"attention,good" %}{{ worker.behind|yesno:"Behind,Current" }}{% endfact %}
+    {% endif %}
+    {% fact "Invocations, 24 h" value=worker.requests %}
+    {% fact "Errors, 24 h" value=worker.errors %}
+    {% fact "CPU time, p50" %}{{ worker.cpu_time_p50_ms|measured:"ms,-1" }}{% detail %}{% if worker.cpu_time_p99_ms is not None %}<small>p99 {{ worker.cpu_time_p99_ms|measured:"ms,-1" }}</small>{% endif %}{% endfact %}
+    {% for route in worker.routes %}
+    {% fact route.label|add:", 24 h" tone=route.refusing|yesno:"attention," %}{{ route.accepted }} <small>accepted</small>
+    {% detail %}{% for line in route.said %}<small>{{ line }}</small>{% endfor %}
+    {% endfact %}
+    {% endfor %}
+    {% fact "Reading" tone=standing.tone %}{% if standing.read %}{% include "partials/_reading_age.html" with reading=standing.age only %}{% else %}{{ standing.label }}{% endif %}
+    {% detail %}{% if standing.sight.remedy %}<small>{{ standing.sight.remedy }}</small>{% endif %}
+    {% endfact %}
+  {% endfacts %}
+{% endsection %}
+{% endwith %}
 {% section "What HQ takes" %}
   {% data_table taken %}
 {% endsection %}

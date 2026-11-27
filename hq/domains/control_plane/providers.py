@@ -11,13 +11,13 @@ from hq.platform.application.labels import human_label
 from hq.platform.application.record_errors import Sentence
 lazy from hq.platform.application.default_hold import needs_approval
 lazy from hq.platform.application.entity_links import page_url
-lazy from hq.platform.application.readings import KEPT
 lazy from hq.platform.application.references import Kind
 
 from .attribution import logging_in, unattributed_kinds
-from .connection_kinds import CONNECTION_LABELS
+from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .observations.contract import Reader, ReadingPart
+from .permissions import Permission
 from .provider_adapters import DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
@@ -175,17 +175,14 @@ def read_spec[T](kind: str, spec: Mapping[str, Any], read: Callable[[dict[str, A
 @dataclass(frozen=True, slots=True)
 class Read:
     """One thing a provider reads: a reading, a resource kind a sweep reads
-    back, the parts of another provider's kind, or a value kept outside the
-    inventory (``readings.Kept``)."""
+    back, or the parts of another provider's kind."""
 
     kind: str
     label: str
     source: Literal["reading", "resource", "part"]
     by: Reader = "controller"
-    permissions: tuple[str, ...] = ()
-    # The kept value this is, whose ``through`` says whether a stored value
-    # came through this provider; ``kind`` is then the cadence it is judged by.
-    kept: Any = None
+    # What the read requires: a reading's own, or the parts it reads of a kind.
+    permissions: tuple[Permission, ...] = ()
 
 
 @cache
@@ -195,25 +192,46 @@ def provider_reads() -> Mapping[str, tuple[Read, ...]]:
 
     found: dict[str, list[Read]] = {}
     for kind, reading in OBSERVATIONS.items():
+        if reading.provider is None:
+            continue
         found.setdefault(reading.provider, []).append(
             Read(kind, reading.label, "reading", reading.read_by, tuple(reading.requires))
         )
     for kind, spec in PROVIDERS.items():
-        if spec.sweeps:
-            for provider in spec.connection_providers:
-                found.setdefault(provider, []).append(Read(kind, spec.label, "resource"))
-        by_provider: dict[str, list[ReadingPart]] = {}
+        # A part names its credential when it is not the kind's own.
+        by_provider: dict[str, list[ReadingPart]] = {provider: [] for provider in spec.connection_providers}
         for part in spec.parts:
-            if part.provider and part.provider not in spec.connection_providers:
-                by_provider.setdefault(part.provider, []).append(part)
+            for provider in (part.provider,) if part.provider else spec.connection_providers:
+                by_provider.setdefault(provider, []).append(part)
         for provider, parts in by_provider.items():
-            label = ", ".join(part.label for part in parts)
             needs = tuple(dict.fromkeys(name for part in parts for name in part.requires))
-            found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
-    for kept in KEPT:
-        for provider in kept.through:
-            found.setdefault(provider, []).append(Read(kept.cadence, kept.label, "reading", "hq", kept=kept))
+            if provider not in spec.connection_providers:
+                label = ", ".join(part.label for part in parts)
+                found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
+            elif spec.sweeps:
+                found.setdefault(provider, []).append(Read(kind, spec.label, "resource", permissions=needs))
     return frozendict({provider: tuple(reads) for provider, reads in found.items()})
+
+
+@cache
+def keyless_reads() -> Mapping[str, tuple[Read, ...]]:
+    """Each connection HQ reaches with no credential, and what comes through
+    it: the readings taken on HQ's clock or when a page opens, never a sweep."""
+
+    return frozendict(
+        {
+            provider: through
+            for provider, reads in provider_reads().items()
+            if provider not in CONNECTION_CREDENTIALS
+            and (
+                through := tuple(
+                    read
+                    for read in reads
+                    if read.source == "reading" and (read.by == "hq" or OBSERVATIONS[read.kind].on_open)
+                )
+            )
+        }
+    )
 
 
 # Kinds a controller reports as readings rather than as resources; see

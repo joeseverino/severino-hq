@@ -25,13 +25,11 @@ from .finding_model import (
     CONTAINERS_CARD,
     Finding,
     FindingEstate,
-    FindingRemedy,
     FindingRule,
     cannot_run_commands,
     distinct,
-    machine_step,
 )
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Does, Why
 from .images import ImageRef
 from .labels import human_bytes
 from .projection import read_once
@@ -171,24 +169,19 @@ def unrecognized_containers(estate: FindingEstate) -> tuple[Finding, ...]:
                     title=f"Unrecognized container {name} on {node.label}",
                     severity=Tone.SERIOUS,
                     explanation="No compose project started it.",
-                    steps=machine_step(
-                        f"If nothing needs it, remove it from {host or node.label}",
-                        host or node.label,
-                        f"docker rm -f {shlex.quote(name)}",
+                    fixes=(
+                        Does("infrastructure.resource.create", name, intent="Adopt it", url=adopt_url, method="POST"),
+                        *ByHand.on(
+                            host or node.label,
+                            f"If nothing needs it, remove it from {host or node.label}",
+                            f"docker rm -f {shlex.quote(name)}",
+                            Why.NOT_GRANTED,
+                        ),
                     ),
                     part=name,
                     evidence=(
                         ("Container", container_link(node.label, name)),
                         ("Machine", entity_link("machine", node.label)),
-                    ),
-                    remedies=(
-                        FindingRemedy(
-                            capability="infrastructure.resource.create",
-                            target=name,
-                            intent="Adopt it",
-                            url=adopt_url,
-                            method="POST",
-                        ),
                     ),
                 )
             )
@@ -239,11 +232,12 @@ def images_unused(estate: FindingEstate) -> tuple[Finding, ...]:
                     severity=Tone.NEUTRAL,
                     explanation=ended(f"They take {size}"),
                     evidence=tuple(("Image", Code(image_title(record))) for record in spare),
-                    steps=machine_step(
-                        f"Remove them from {host}",
+                    fixes=ByHand.on(
                         host,
+                        f"Remove them from {host}",
                         "docker image rm "
                         + " ".join(shlex.quote(ref) for record in spare for ref in _removed_by(record)),
+                        Why.NOT_GRANTED,
                     ),
                 )
             )
@@ -267,7 +261,7 @@ def images_behind(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Running", running),
                 ("Tagged now", tagged),
             ),
-            steps=_recreate(container, service, host or node.label),
+            fixes=_recreate(container, service, host or node.label),
         )
         for node, container, host, reference, running, tagged, service in _stated(estate, IMAGE_BEHIND)
     )
@@ -289,19 +283,20 @@ def images_untagged(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Image", running),
                 *((("Started from", reference),) if reference else ()),
             ),
-            steps=(Do("Pin a tag in its compose file."), *_recreate(container, service, host or node.label)),
+            fixes=(Do("Pin a tag in its compose file."), *_recreate(container, service, host or node.label)),
         )
         for node, container, host, reference, running, _tagged, service in _stated(estate, IMAGE_UNTAGGED)
     )
 
 
-def _recreate(container: str, service: str, host: str) -> tuple[Run, ...]:
+def _recreate(container: str, service: str, host: str) -> tuple[ByHand, ...]:
     """Recreate the compose service, run in the project's directory on the machine."""
 
     return (
-        Run(
-            label=f"On {host}, in the compose project that runs {container}, recreate it",
-            command=f"docker compose up -d --force-recreate {service}".rstrip(),
+        ByHand(
+            f"On {host}, in the compose project that runs {container}, recreate it",
+            f"docker compose up -d --force-recreate {service}".rstrip(),
+            Why.NOT_GRANTED,
         ),
     )
 

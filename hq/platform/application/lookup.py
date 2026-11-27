@@ -9,9 +9,9 @@ are ``read`` capabilities, so every interface reaches this one implementation.
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from django.utils.timezone import now
 from pydantic import Field, IPvAnyAddress, StringConstraints
@@ -19,6 +19,11 @@ from pydantic import Field, IPvAnyAddress, StringConstraints
 from hq.domains.control_plane.dns_lookup import LookupUnavailable, registry, resolve
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core import outbound_allowed
+lazy from hq.domains.control_plane.observations.public_registry import (
+    ADDRESS_KIND,
+    REVERSE_DNS_KIND,
+    AddressHolderRecord,
+)
 
 from .answer_fields import ObservedAt
 from .command_fields import Checked, Describe
@@ -28,7 +33,9 @@ from .projection import iso
 from .reach import is_documentation, is_public, network_of
 from .security import Capability, Principal
 from .tables import Cell, DataTable, TableColumn
-lazy from . import readings
+lazy from .facts import kept_by, record_read_at
+lazy from .inventory import keep
+lazy from .public_registry import read_address
 
 # A hostname, conservatively. The value becomes a query parameter on a URL the
 # gateway owns, so it cannot change the shape of the request, but a name that
@@ -264,10 +271,10 @@ def _unrouted(address: str) -> str:
     return _UNROUTED.get(network_of(address), "This address is not on the public internet, so nothing there knows it.")
 
 
-def _address_answer(command: AddressCommand) -> tuple[Any, dict[str, Any] | None]:
+def _address_answer(command: AddressCommand) -> tuple[Any, AddressLookedUp | None]:
     """The parsed address and what HQ can say about it without asking anyone.
 
-    A stored reading, or for a non-routable address the local answer; None
+    The stored readings, or for a non-routable address the local answer; None
     when only the registries could say.
     """
 
@@ -280,10 +287,37 @@ def _address_answer(command: AddressCommand) -> tuple[Any, dict[str, Any] | None
             "hostnames": [],
             "note": _unrouted(str(parsed)),
         }
-    stored = readings.stored(readings.public_address(str(parsed)))
-    if stored is not None:
-        return parsed, {**stored.value, "observed_at": iso(stored.observed_at)}
-    return parsed, None
+    named = kept_by(REVERSE_DNS_KIND, "address").get(str(parsed))
+    if named is None:
+        return parsed, None
+    return parsed, _answer(parsed, named, kept_by(ADDRESS_KIND, "address").get(str(parsed)))
+
+
+def _answer(parsed: Any, named: Mapping[str, Any], held: Mapping[str, Any] | None) -> AddressLookedUp:
+    """One address's answer from its two readings: what its reverse DNS names
+    it, and who the registry says holds it."""
+
+    answer: AddressLookedUp = {
+        "ok": True,
+        "address": str(parsed),
+        "version": parsed.version,
+        "hostnames": list(named.get("hostnames") or ()),
+        "note": str(named.get("note") or named.get("unread") or ""),
+    }
+    if not named.get("unread"):
+        answer["arpa"] = str(named.get("arpa") or "")
+        answer["resolver"] = str(named.get("resolver") or "")
+    # Every field the registry's answer has, its default where the record left one out.
+    answered = (
+        AddressHolderRecord.model_validate(held).model_dump(mode="json") if held and not held.get("unread") else {}
+    )
+    answer["allocation"] = cast(
+        Allocation, {field: answered[field] for field in Allocation.__annotations__ if answered}
+    )
+    read = [at for record in (named, held) if record is not None and (at := record_read_at(record)) is not None]
+    if read:
+        answer["observed_at"] = iso(max(read))
+    return answer
 
 
 def stored_address(address: str, *, principal: Principal) -> dict[str, Any] | None:
@@ -339,47 +373,44 @@ def look_up_address(
     allocations = allocations or registry
     if known is not None and (not command.refresh or not is_public(str(parsed))):
         return known
-    reading: AddressLookedUp = {
-        "ok": True,
-        "address": str(parsed),
-        "version": parsed.version,
-        "hostnames": [],
-        "note": "",
-    }
+    address = str(parsed)
+    observed_at = now()
     # Each registry is asked independently and neither is allowed to take the
     # other down with it. One answering is a better panel than none, and which
     # one failed is visible in what is missing.
+    named: dict[str, Any] = {"address": address}
     try:
         with outbound_allowed.allowed("lookup"):
-            answer = resolver("api/reverse-dns", {"ip": str(parsed)})
+            answer = resolver("api/reverse-dns", {"ip": address})
     except LookupUnavailable:
-        reading["note"] = "Reverse DNS could not be read."
+        named["unread"] = "Reverse DNS could not be read."
     else:
         hostnames = answer.get("hostnames")
         found = [str(item) for item in (hostnames if isinstance(hostnames, list) else ()) if item]
         server = answer.get("server")
-        reading["hostnames"] = found
-        reading["arpa"] = str(answer.get("arpaName") or "")
-        reading["resolver"] = str(server.get("name", "")) if isinstance(server, dict) else ""
+        named["hostnames"] = found
+        named["arpa"] = str(answer.get("arpaName") or "")
+        named["resolver"] = str(server.get("name", "")) if isinstance(server, dict) else ""
         # A 200 carrying an `error` key is this resolver reporting "resolved
         # fine, found nothing". Carried as a note rather than raised: no PTR
         # record is a fact about the address, not a failed lookup.
         if not found:
-            reading["note"] = str(answer.get("error") or "No PTR record exists.")
-
-    try:
-        with outbound_allowed.allowed("lookup"):
-            held = allocations(str(parsed))
-    except LookupUnavailable:
-        reading["allocation"] = {}
-    else:
-        reading["allocation"] = allocation_of(held)
+            named["note"] = str(answer.get("error") or "No PTR record exists.")
     # Written even when a registry failed. A partial answer is still worth not
     # asking for again a second later, and `refresh` is how an operator says
     # the stored one is not good enough.
-    observed_at = now()
-    readings.record(readings.public_address(str(parsed)), reading, observed_at=observed_at)
-    return {**reading, "observed_at": iso(observed_at)}
+    keep(REVERSE_DNS_KIND, "address", named, read_at=observed_at, failed=str(named.get("unread", "")))
+    held: Mapping[str, Any] | None
+    try:
+        with outbound_allowed.allowed("lookup"):
+            held = read_address(address, allocations)
+    except LookupUnavailable:
+        # A failed read never replaces who the registry said holds it.
+        held = kept_by(ADDRESS_KIND, "address").get(address)
+    else:
+        keep(ADDRESS_KIND, "address", held, read_at=observed_at)
+        held = {**held, "read_at": iso(observed_at)}
+    return _answer(parsed, {**named, "read_at": iso(observed_at)}, held)
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:

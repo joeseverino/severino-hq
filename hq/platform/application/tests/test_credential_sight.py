@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_KINDS, CONNECTION_LABELS
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
 from hq.domains.control_plane.permissions import Cloudflare, Tailscale
@@ -22,7 +22,8 @@ from hq.platform.application.markup_testing import text
 from hq.platform.core.testing import connection, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from ..connections import _controller_contract
+from ..connection_catalog import CONTROLLER_CONNECTIONS
+from ..connections import _controller_contract, describe_connections
 from ..credential_sight import (
     NEVER_SWEPT,
     NOT_CONNECTED,
@@ -169,7 +170,9 @@ class CredentialSightTests(TestCase):
         )
 
     def test_providers_without_a_connection_are_split_out(self):
-        connected, unconnected = sight_by_connection({"edge": "ssh"})
+        connection("ssh", "edge")
+
+        connected, unconnected = sight_by_connection()
 
         self.assertEqual(set(connected), {"edge"})
         self.assertEqual(connected["edge"].provider, "ssh")
@@ -179,13 +182,15 @@ class CredentialSightTests(TestCase):
         )
 
     def test_with_nothing_connected_no_provider_is_said_to_be_missing(self):
-        self.assertEqual(sight_by_connection({}), ({}, ()))
+        self.assertEqual(sight_by_connection(), ({}, ()))
 
 
 class PerConnectionSightTests(TestCase):
     """Two connections of one provider never show each other's readings."""
 
     def setUp(self):
+        connection("ssh", "edge")
+        connection("ssh", "shared-host")
         now = timezone.now()
         ProviderInventory.objects.create(
             kind="host.perimeter",
@@ -210,7 +215,7 @@ class PerConnectionSightTests(TestCase):
         return {sight.kind: sight.records for sight in found.sights}
 
     def test_each_connection_counts_only_what_was_read_through_it(self):
-        connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
+        connected, _ = sight_by_connection()
 
         self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "host.edge_reboot": 1, "caddy.route": 3})
         seen = self.labels(connected["shared-host"])
@@ -226,19 +231,25 @@ class PerConnectionSightTests(TestCase):
     def test_a_failed_read_is_said_on_every_connection_it_could_be(self):
         ProviderInventory.objects.filter(kind="host.perimeter").update(reachable=False, error="exit 255")
 
-        connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
+        connected, _ = sight_by_connection()
 
         for ref in ("edge", "shared-host"):
             states = {sight.kind: sight.state for sight in connected[ref].sights}
             self.assertEqual(states["host.perimeter"], UNREADABLE)
 
     def test_more_connections_cost_no_more_queries(self):
-        connections = (("edge", "ssh"), ("shared-host", "ssh"), ("dns", "cloudflare_dns"))
+        connections = (("ssh", "edge"), ("ssh", "shared-host"), ("cloudflare_dns", "dns"))
+
+        def arrange(count):
+            ProviderConnection.objects.all().delete()
+            for provider, ref in connections[:count]:
+                connection(provider, ref)
 
         assert_cost_does_not_grow(
             self,
             sizes=(1, 3),
-            draw=lambda count: sight_by_connection(dict(connections[:count])),
+            arrange=arrange,
+            draw=lambda _count: sight_by_connection(),
             rows=lambda found: len(found[0]),
         )
 
@@ -266,13 +277,18 @@ class PerConnectionSightTests(TestCase):
 
 
 class CanDoTests(TestCase):
-    def test_a_provider_can_do_every_reading_it_feeds(self):
-        abilities, by_provider_names = _controller_contract()
-        labels = {ability.name: ability.label for ability in abilities}
+    def test_a_provider_can_do_every_reading_it_feeds_with_the_permissions_it_declares(self):
+        _, by_provider_names = _controller_contract()
+        (family,) = describe_connections(name=CONTROLLER_CONNECTIONS)["connections"]
+        described = {ability["name"]: ability for ability in family["abilities"]}
 
         for kind, spec in OBSERVATIONS.items():
+            if not spec.provider:
+                continue
             self.assertIn(kind, by_provider_names[spec.provider])
-            self.assertEqual(labels[kind], spec.label)
+            self.assertEqual(described[kind]["label"], spec.label)
+            granted = (described[kind]["required_scopes"], described[kind]["grant"])
+            self.assertEqual(granted, (list(spec.requires), CONNECTION_CREDENTIALS.get(spec.provider)))
         self.assertIn("analytics.read", by_provider_names["cloudflare_api"])
 
     def test_ability_names_are_unique(self):
@@ -442,23 +458,16 @@ class PartReasonTests(SimpleTestCase):
 
         from ..credential_sight import PARTIAL, Sight
 
-        off = "not available on this repository (its plan or settings leave it off)."
+        upgrade = "Upgrade to GitHub Pro or make this repository public to enable this feature."
         scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
         parts = (
             *(
-                RefusedPart(kind="example", part=part, refusal="", reason=off, scope=f"example/{repository}")
+                RefusedPart(kind="example", part=part, refusal="", reason=upgrade, scope=f"example/{repository}")
                 for repository in ("app", "site")
                 for part in (scanning, rules)
             ),
             RefusedPart(kind="example", part=rules, refusal="", reason="GitHub timed out", scope="example/app"),
-            RefusedPart(
-                kind="example", part=scanning, refusal="", scope="example/web",
-                reason="GitHub 404 for /repos/example/web/code-scanning/alerts?state=open",
-            ),
-            RefusedPart(
-                kind="example", part=rules, refusal="", scope="example/web",
-                reason="GitHub 404 for /repos/example/web/rules/branches/main",
-            ),
+            RefusedPart(kind="example", part=scanning, refusal="", reason="the service answered 404", scope="example/web"),
         )  # fmt: skip
 
         sight = Sight(kind="example", label="Repository", source="reading", state=PARTIAL, parts=parts)
@@ -466,14 +475,36 @@ class PartReasonTests(SimpleTestCase):
         self.assertEqual(
             sight.part_reasons,
             (
-                (
-                    "Code scanning alerts, Branch rules not read on app, site: "
-                    "not available on this repository (its plan or settings leave it off)"
-                ),
+                f"Code scanning alerts, Branch rules not read on app, site: {upgrade.rstrip('.')}",
                 "Branch rules not read on app: GitHub timed out",
-                "Code scanning alerts, Branch rules not read on web: hidden from HQ's connection",
+                "Code scanning alerts not read on web: hidden from HQ's connection",
             ),
         )
+
+    def test_the_readings_table_folds_the_reasons_under_a_row_that_counts_the_parts(self):
+        from hq.domains.control_plane.observations import ReadingPart
+        from hq.domains.control_plane.reading_parts import RefusedPart
+
+        from ..credential_sight import PARTIAL, Sight, Standing
+        from ..hq_context.sight_part import HqSight
+
+        scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
+        reasons = {repository: f"GitHub 403 for /repos/example/{repository}/rules" for repository in ("app", "site")}
+        parts = tuple(
+            RefusedPart(kind="example", part=part, refusal="", reason=reason, scope=f"example/{repository}")
+            for repository, reason in reasons.items()
+            for part in (scanning, rules)
+        )
+        sight = Sight(kind="example", label="Repository", source="reading", state=PARTIAL, parts=parts)
+
+        head, *folded = HqSight(groups=(("Example", (Standing.of(sight),)),)).table.groups[0].rows
+
+        said = [line.text for cell in head.cells for line in cell.lines]
+        self.assertIn("2 parts not read", said)
+        self.assertFalse(any(reason in line for line in said for reason in reasons.values()))
+        self.assertTrue(head.folds and head.cells[0].fold)
+        self.assertEqual({row.folded for row in folded}, {head.folds})
+        self.assertEqual([row.cells[0].text for row in folded], list(sight.part_reasons))
 
     def test_a_bare_status_is_said_as_what_it_means_to_the_connection_that_read(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
@@ -487,8 +518,8 @@ class PartReasonTests(SimpleTestCase):
             return RefusedPart(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
 
         self.assertEqual(said("the service answered 404"), f"hidden from HQ's {label}")
-        self.assertEqual(said("Example 403 for /repos/example/app/rules"), f"closed to HQ's {label}")
-        self.assertEqual(said("provider answered 503"), "the service failed to answer; the next read tries again")
-        for reason in ("Example timed out", "Example listed more than 10 pages"):
+        self.assertEqual(said("list rules: the service answered 403"), f"list rules: closed to HQ's {label}")
+        self.assertEqual(said("the service answered 503"), "the service failed to answer; the next read tries again")
+        for reason in ("Example timed out", "Example listed more than 10 pages", "Example 403 answer"):
             with self.subTest(reason):
                 self.assertEqual(said(reason), reason)

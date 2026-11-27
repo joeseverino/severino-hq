@@ -263,11 +263,11 @@ func TestEveryStopForAnAllowanceIsMarkedLimited(t *testing.T) {
 			t.Errorf("%s: %#v", name, budget.tripped)
 		}
 	}
-	secondary := githubRateLimited(http.Header{"Retry-After": {"60"}}, &ProviderError{HTTPStatus: http.StatusTooManyRequests}, now)
+	secondary := githubRefusal(http.Header{"Retry-After": {"60"}}, &ProviderError{HTTPStatus: http.StatusTooManyRequests}, now)
 	if !limited(secondary) {
 		t.Errorf("GitHub's own limit: %#v", secondary)
 	}
-	refused := githubRateLimited(http.Header{}, &ProviderError{HTTPStatus: http.StatusForbidden, Failure: runtime.FailureClassPermission}, now)
+	refused := githubRefusal(http.Header{}, &ProviderError{HTTPStatus: http.StatusForbidden, Failure: runtime.FailureClassPermission}, now)
 	if limited(refused) {
 		t.Errorf("a refusal of permission is no limit: %#v", refused)
 	}

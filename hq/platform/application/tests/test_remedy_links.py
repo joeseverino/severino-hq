@@ -49,7 +49,8 @@ def an_operator():
 def _kind_for(spec) -> str:
     """A resource kind the command acts on: its own, or any declared kind."""
 
-    wanted = dict(spec.target_query).get("kind")
+    query = dict(spec.target_query)
+    wanted = query.get("kind") or str(query.get("kinds", "")).split(",")[0]
     return str(wanted) if wanted else "adguard.rewrite"
 
 

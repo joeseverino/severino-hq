@@ -69,7 +69,7 @@ run = "gotestsum --format standard-quiet --raw-command -- go -C controller test 
 # The inbound-events Worker's tests, run inside workerd by Cloudflare's Vitest
 # plugin with the Worker's own wrangler.jsonc.
 ["test:worker"]
-description = "The inbound-events Worker verifies each provider's signature, authenticates the listener's socket, and forwards a verified event's metadata to every listener"
+description = "The inbound-events Worker verifies each provider's signature, authenticates the listener's socket, forwards a verified event's metadata to every listener, and sends a reconnecting one exactly what it missed"
 hide = true
 tags = ["fast"]
 sources = [
@@ -82,5 +82,4 @@ sources = [
 ]
 outputs = []
 depends = ["setup:worker-tools"]
-env = { WRANGLER_SEND_METRICS = "false" }
 run = "cd worker && ./node_modules/.bin/vitest run"

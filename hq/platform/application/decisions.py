@@ -31,8 +31,10 @@ def _identity(action: dict[str, Any]) -> tuple[str, str]:
     return (action["method"], action["url"])
 
 
-def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[dict[str, Any]], str]:
-    """The owner's named next step: a link to where it is done, or a sentence."""
+def _next_step(item: dict[str, Any], actions: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str]:
+    """The owner's named next step: a link to where it is done, or a sentence;
+    nothing where a button already is it, by its address or by its words, as
+    a press it leads with is (``dashboard._queue_item``)."""
 
     said = str(item.get("action") or "").strip()
     url = item.get("url") or ""
@@ -40,7 +42,7 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
         return [], ""
     if not url or len(said) > _LABEL_LENGTH or said.endswith("."):
         return [], said
-    if ("GET", url) in taken:
+    if any(_identity(action) == ("GET", url) or action["label"] == said for action in actions):
         return [], ""
     link = {
         "name": "open",
@@ -145,7 +147,7 @@ def _buttons(item: Any) -> list[dict[str, Any]]:
 def decision(item: dict[str, Any]) -> dict[str, Any]:
     actions = _buttons(item)
     subject = item.get("subject") or {}
-    links, advice = _next_step(item, {_identity(action) for action in actions})
+    links, advice = _next_step(item, actions)
     anchor = item_anchor(str(item.get("key", "")))
     return {
         **item,

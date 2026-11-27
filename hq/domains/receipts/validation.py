@@ -1,10 +1,7 @@
 """Canonical receipt-file policy shared by forms and application services."""
 
-import math
-
 from django.core.files.uploadedfile import UploadedFile
 
-from hq.platform.application.labels import human_bytes
 from hq.platform.application.record_errors import InputError
 
 ALLOWED_RECEIPT_CONTENT_TYPES = {
@@ -34,9 +31,6 @@ INLINE_SAFE_CONTENT_TYPES = {
 PICTURE_CONTENT_TYPES = frozenset(kind for kind in INLINE_SAFE_CONTENT_TYPES if kind.startswith("image/"))
 
 MAX_RECEIPT_BYTES = 15 * 1024 * 1024
-# The longest base64 text a file within the limit encodes to, so a longer one
-# is refused before anything is decoded.
-MAX_RECEIPT_BASE64_CHARS = 4 * math.ceil(MAX_RECEIPT_BYTES / 3)
 
 # What a stored file type is called on a page.
 FILE_TYPE_LABELS = {
@@ -55,8 +49,6 @@ FILE_TYPE_LABELS = {
 def validate_receipt_file(upload: UploadedFile) -> None:
     """Refuse a file the receipt rules do not admit, in the words every adapter shows."""
 
-    if upload.size > MAX_RECEIPT_BYTES:
-        raise InputError(f"This file is {human_bytes(upload.size)}. The limit is {human_bytes(MAX_RECEIPT_BYTES)}.")
     # An unstated type is a rejected upload, not a trusted one: the allowlist
     # has to be a gate every upload passes through, not one it can decline.
     content_type = (upload.content_type or "").strip().lower()

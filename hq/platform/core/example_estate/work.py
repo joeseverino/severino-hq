@@ -9,6 +9,8 @@ from hq.domains.content.content_sync import sync_content_index
 from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.github import (
+    ALLOWANCE_KIND,
+    CODE_SCANNING,
     DEPENDENCY_RUN_KIND,
     PULL_REQUEST_KIND,
     REPOSITORY_KIND,
@@ -19,10 +21,16 @@ from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import outbound_work
+from hq.platform.application.adoption import adopt_discovered
 from hq.platform.application.conditions import READY
+from hq.platform.application.freshness import cadence
 from hq.platform.application.images import ImageRef
+from hq.platform.application.security import internal_principal
+from hq.platform.application.sweep import ADOPT
+from hq.platform.core import bindings
 from hq.platform.core.audit import stamped
 
+from . import doors
 from .names import (
     BUILT,
     CONTAINERS,
@@ -352,6 +360,27 @@ def _watched():
 UPDATER = "example-hq[bot]"
 
 
+def readings_aged():
+    """The update run's reading past its tolerance, the hourly allowance
+    failing on its last try, and code scanning closed to the App on every
+    repository but HQ's: each standing the Controller page lists a reading in."""
+
+    late = cadence(DEPENDENCY_RUN_KIND).stale_after + timedelta(hours=3)
+    ProviderInventory.objects.filter(kind=DEPENDENCY_RUN_KIND).update(observed_at=timezone.now() - late)
+    store(ALLOWANCE_KIND, reachable=False, observed_at=None, error="GitHub did not answer in time.")
+    closed = [
+        {
+            "part": CODE_SCANNING.name,
+            "refusal": "",
+            "reason": f"GitHub 403 for /repos/example/{name}/code-scanning/alerts",
+            "scope": f"example/{name}",
+            "connection_ref": GITHUB,
+        }
+        for name in REPOSITORIES[1:]
+    ]
+    ProviderInventory.objects.filter(kind=REPOSITORY_KIND).update(refused_parts=closed)
+
+
 def _store_repositories(records: list[dict]) -> None:
     """Each repository's record, and its ``pull_requests`` and ``runs`` as the
     readings taken in its pass, each naming the repository."""
@@ -596,6 +625,15 @@ def _ran(declared, ago, work):
     )
 
 
+def _take_on_units() -> None:
+    """Each unit the release ships declared, as the controller's sweep takes
+    them on (``sweep.record_sweep``), so a unit's verbs are presses."""
+
+    hq = internal_principal(doors.CONTROLLER)
+    with doors.controller("sweep"), bindings.audit_operation(operation=ADOPT, principal=hq):
+        adopt_discovered(UNIT_KIND, principal=hq)
+
+
 def units(*more: dict):
     """systemd's word on each unit HQ ships and on a service it keeps
     restarting, then on ``more``, and the last credentials render."""
@@ -680,6 +718,7 @@ def units(*more: dict):
         "read_at": stamp(),
     }
     store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found), looping)
+    _take_on_units()
     store(
         RENDER_STATUS_KIND,
         {

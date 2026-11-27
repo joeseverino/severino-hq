@@ -280,14 +280,23 @@ class Cell:
 
     @classmethod
     def reading(
-        cls, *, reading: Freshness | None = None, at: datetime | None = None, unread: str = "", muted: bool = False
+        cls,
+        *,
+        reading: Freshness | None = None,
+        at: datetime | None = None,
+        unread: str = "",
+        muted: bool = False,
+        lines: tuple[Cell, ...] = (),
     ) -> Cell:
         """A reading's age as every page words it (``partials/_reading_age.html``):
         of its ``Freshness``, of the moment ``at`` it was taken, else why there is none."""
 
         taken = at or (reading.observed_at if reading else None)
         return cls(
-            piece=reading_age(reading, at=at, unread=unread), muted=muted, sort=str(epoch(taken)) if taken else ""
+            piece=reading_age(reading, at=at, unread=unread),
+            muted=muted,
+            sort=str(epoch(taken)) if taken else "",
+            lines=lines,
         )
 
     @classmethod

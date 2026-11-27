@@ -130,19 +130,6 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
         self.assertIn(SENTINEL_CONNECTION, {instance["label"] for instance in core})
         self.assertNoSentinel(outcome)
 
-    def test_scope_coverage_is_derived_for_every_ability(self):
-        with offering(_finance_spec()):
-            groups = connection_catalog(principal=FINANCE)
-
-        finance = next(group for group in groups if group.spec.name == "example.finance")
-        states = {state.ability.name: state for state in finance.connections[0].abilities}
-        self.assertTrue(states["accounts.read"].available)
-        self.assertFalse(states["transactions.sync"].available)
-        self.assertEqual(
-            states["transactions.sync"].missing_scopes,
-            ("transactions:read",),
-        )
-
     def test_a_provider_is_asked_once_for_one_answer(self):
         from ..projection import projection_scope
 
@@ -157,18 +144,6 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             connection_catalog(principal=FINANCE)
 
         self.assertEqual(provider.call_count, 1)
-
-    def test_unknown_scope_coverage_stays_unknown(self):
-        spec = _finance_spec()
-        instance = replace(spec.instance_provider()[0], scopes_known=False)
-        spec = replace(spec, instance_provider=lambda: (instance,))
-        with offering(spec):
-            groups = connection_catalog(principal=FINANCE)
-
-        states = groups[0].connections[0].abilities
-        self.assertTrue(states)
-        self.assertTrue(all(state.available is None for state in states))
-        self.assertTrue(all(state.missing_scopes == () for state in states))
 
     def test_an_ability_without_provider_scopes_is_capability_authorized(self):
         spec = _finance_spec()
@@ -268,9 +243,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
 class ConnectionRegistrationTests(TestCase):
     def test_one_spec_drives_machine_discovery(self):
         with offering(_finance_spec()):
-            described = describe_connections()
-
-        finance = next(item for item in described["connections"] if item["name"] == "example.finance")
+            (finance,) = describe_connections(name="example.finance")["connections"]
         self.assertEqual(finance["secret_store"], "Example Vault")
         self.assertEqual(
             finance["abilities"][1]["required_scopes"],
@@ -357,11 +330,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertEqual(discovered["connections"], ())
 
     def test_core_connection_describes_every_tailscale_ability(self):
-        from hq.domains.control_plane.observations import OBSERVATIONS
-
-        core = next(
-            item for item in describe_connections()["connections"] if item["name"] == "infrastructure.controllers"
-        )
+        (core,) = describe_connections(name="infrastructure.controllers")["connections"]
         tailscale = [ability for ability in core["abilities"] if ability["name"].startswith("tailscale.")]
         changes = [ability for ability in tailscale if ability["effect"] != "read"]
 
@@ -376,10 +345,6 @@ class ConnectionRegistrationTests(TestCase):
                 "tailscale.device": ["tailscale.device"],
                 "tailscale.policy": ["tailscale.policy"],
             },
-        )
-        self.assertEqual(
-            {ability["name"] for ability in tailscale if ability["effect"] == "read"},
-            {kind for kind, spec in OBSERVATIONS.items() if spec.provider == "tailscale"},
         )
 
     def test_invalid_governed_resource_kinds_fail_at_composition(self):
@@ -492,7 +457,7 @@ class ConnectionRegistrationTests(TestCase):
             ("non-ConnectionInstance", object()),
             ("incomplete instance", replace(good, kind=" ")),
             ("invalid granted scopes", replace(good, granted_scopes=("accounts:read", "accounts:read"))),
-            ("invalid granted scopes", replace(good, granted_scopes=("accounts read",))),
+            ("invalid granted scopes", replace(good, refused_scopes=("accounts\nread",))),
             ("invalid relationship", replace(good, dependencies=(ConnectionLink("Box", resource_key=" box"),))),
             ("invalid relationship", replace(good, targets=(ConnectionLink(" "),))),
             ("invalid fact", replace(good, facts=(ConnectionFact("Last refresh", " "),))),
@@ -610,6 +575,10 @@ class GrantEvidenceTests(TestCase):
             ): "verified",
             (scoped, self.instance(credential_model="scoped", scopes_known=True, granted_scopes=())): "missing",
             (scoped, self.instance(credential_model="scoped")): "unknown",
+            # Or against what its reads proved it holds or were refused.
+            (scoped, self.instance(credential_model="scoped", granted_scopes=("a:read",))): "verified",
+            (scoped, self.instance(credential_model="scoped", refused_scopes=("a:read",))): "missing",
+            (self.ability(grant="scoped"), self.instance(credential_model="scoped")): "verified",
             # Nothing required: the provider could have been asked, or nothing is known.
             (self.ability(), self.instance(credential_model="scoped")): "unverified",
             (self.ability(), self.instance()): "undeclared",

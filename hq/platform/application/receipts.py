@@ -16,7 +16,6 @@ from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
-    MAX_RECEIPT_BASE64_CHARS,
     MAX_RECEIPT_BYTES,
     validate_receipt_file,
 )
@@ -73,6 +72,10 @@ def _decoded(data: bytes) -> bytes:
     return base64.b64decode(data, validate=True)
 
 
+# The file a receipt keeps: what its form's picker offers, and what a call may send.
+RECEIPT_FILE = Upload(max_bytes=MAX_RECEIPT_BYTES, accepts=tuple(ALLOWED_RECEIPT_CONTENT_TYPES))
+
+
 @dataclass(frozen=True, slots=True)
 class ReceiptFile:
     """A receipt's file as JSON carries it. Its bytes are stored as the
@@ -81,11 +84,8 @@ class ReceiptFile:
 
     name: RequiredText
     content_type: str
-    # Bounded before it is decoded, so a file over the limit is refused
-    # without its bytes ever being held.
     content: Annotated[
         bytes,
-        Field(max_length=MAX_RECEIPT_BASE64_CHARS),
         Checked(_decoded, Reason("base64", "must be base64")),
         Field(json_schema_extra={"format": "base64"}),
         Field(description="The file's bytes, base64-encoded."),
@@ -97,7 +97,7 @@ class ReceiptFile:
 class ReceiptUploadCommand(ReceiptMetadataCommand):
     file: Annotated[
         ReceiptFile,
-        Upload(accepts=tuple(ALLOWED_RECEIPT_CONTENT_TYPES)),
+        RECEIPT_FILE,
         Describe(f"The receipt: a PDF or image, up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB."),
     ]
 

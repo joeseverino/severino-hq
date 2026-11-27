@@ -8,6 +8,7 @@ import { defineConfig } from "vitest/config";
 Object.assign(process.env, {
   GITHUB_WEBHOOK_SECRET: "It's a Secret to Everybody",
   TAILSCALE_WEBHOOK_SECRET: "tskey-webhook-example",
+  CLOUDFLARE_WEBHOOK_SECRET: "example-cloudflare-webhook-secret",
   SOCKET_TOKEN: "example-socket-token",
 });
 

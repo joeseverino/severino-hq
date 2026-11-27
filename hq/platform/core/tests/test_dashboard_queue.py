@@ -13,7 +13,7 @@ from hq.platform.application.cadence import ControllerSweepCommand
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.finding_model import Finding, opens
-from hq.platform.application.finding_steps import Do, Press, Run
+from hq.platform.application.finding_steps import ByHand, Do, Press, Why
 from hq.platform.application.markup_testing import hrefs, select, with_class, within
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.test_decisions import row_hrefs
@@ -137,7 +137,7 @@ class DashboardQueueTests(SignedInTestCase):
             severity="serious",
             title="A run is failing",
             explanation="Two checks fail.",
-            steps=(Run("See the failing runs", "example-tool runs --failing"),),
+            steps=(ByHand("See the failing runs", "example-tool runs --failing", Why.NOT_GRANTED),),
             observed_at=timezone.now() - timedelta(days=30),
             reads="github.repository",
         )

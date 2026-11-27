@@ -21,7 +21,8 @@
   // too (hand_drawn_tables). A press sorts ascending, the next descending,
   // the third puts the rows back as they came.
   // Rows keep to their own section, a section's heading row stays on top of
-  // it, and an open row takes the line beneath it along. A cell sorts by the
+  // it, and an open row takes the line beneath it along, as a row heading a
+  // fold takes the rows folded under it. A cell sorts by the
   // value the server wrote on it where that is not its words (`data-sort`,
   // `Cell.sort_value`), else by the words it shows; one that says nothing
   // (`data-blank`) sorts last.
@@ -221,12 +222,16 @@
     table.querySelectorAll(":scope > tbody").forEach((body) => {
       const units = [];
       const fixed = [];
+      const heads = new Map();
       [...body.children].forEach((row) => {
         if (row.classList.contains("row-detail") && units.length) units[units.length - 1].rows.push(row);
+        else if (heads.has(row.dataset.folded)) heads.get(row.dataset.folded).rows.push(row);
         else if (row.classList.contains("row-group") || row.querySelector(":scope > [colspan]")) fixed.push(row);
         else {
           if (!cameIn.has(row)) cameIn.set(row, cameIn.get(body) ?? 0), cameIn.set(body, (cameIn.get(body) ?? 0) + 1);
-          units.push({ rows: [row], value: sortValue(row.children[column]), came: cameIn.get(row) });
+          const unit = { rows: [row], value: sortValue(row.children[column]), came: cameIn.get(row) };
+          units.push(unit);
+          if ("folds" in row.dataset) heads.set(row.id, unit);
         }
       });
       const sign = direction === "descending" ? -1 : 1;

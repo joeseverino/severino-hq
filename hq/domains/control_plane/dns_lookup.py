@@ -20,13 +20,12 @@ from hq.platform.application.connection_contracts import (
 )
 from hq.platform.application.http_read import UNREACHABLE, fetch, redirect_target
 from hq.platform.application.reach import public_host
-from hq.platform.application.readings import PUBLIC_DNS
 from hq.platform.application.security import Capability
 from hq.platform.application.url_query import with_query
 from hq.platform.core.errors import UpstreamUnavailable
 lazy from hq.platform.application.entity_links import https_url
 
-from .observations.public_registry import RDAP
+from .observations.public_registry import PUBLIC_DNS, RDAP
 
 
 def connection_specs():

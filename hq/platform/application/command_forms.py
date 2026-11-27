@@ -8,7 +8,7 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLen
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
-from .command_fields import ACCEPTS, among_now, for_agents, is_upload, named_records, referred
+from .command_fields import ACCEPTS, MAX_BYTES, among_now, for_agents, is_upload, named_records, referred
 from .command_targets import CommandTargetOption
 from .contracts import Effect
 from .describe import meanings
@@ -145,7 +145,11 @@ def _field_for_schema(
         return _record_choice(effective, offered, options)
     if is_upload(schema):
         accepts = ",".join(schema.get(ACCEPTS, ()))
-        return UploadField(widget=forms.ClearableFileInput(attrs={"accept": accepts} if accepts else {}), **options)
+        return UploadField(
+            max_bytes=schema[MAX_BYTES],
+            widget=forms.ClearableFileInput(attrs={"accept": accepts} if accepts else {}),
+            **options,
+        )
 
     choices = labeled_choices(effective)
     if choices:

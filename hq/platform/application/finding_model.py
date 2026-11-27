@@ -1,11 +1,9 @@
-"""What a finding is made of: the claim, its remedies, the rule that raises it and the estate it reads.
+"""What a finding is made of: the claim, its fixes, the rule that raises it and the estate it reads.
 
 Every detector module builds its findings from these, and application.findings
 derives, resolves and serves them. Kept apart so a detector can import its
 vocabulary without importing the pipeline that collects it."""
 
-import re
-import shlex
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -17,60 +15,17 @@ from .action_links import ActionLink, read_link
 from .describe import Describe
 from .display_words import Code, as_members, in_words
 from .entity_links import EntityLink, link_url
-from .finding_steps import Do, Press, Run, Step
+from .finding_steps import Advice, Does, Press, Step
 from .moments import moment
 from .non_empty import RequiredText, holds_something
 from .tone import Tone
 from .topology_model import Topology, TopologyNode
 from .ui import ended
-lazy from .capabilities import capability_spec, capability_words
-lazy from .pages import command_reach
 
 if TYPE_CHECKING:
     from .asks import Standing
     from .cadence import ControllerSweepCommand
     from .security import Principal
-
-
-@dataclass(frozen=True, slots=True)
-class FindingRemedy:
-    """An existing capability, named: never a new way to change anything.
-
-    ``intent`` is this remedy's words for the press where the command's name
-    would not say it, read by every surface that offers it. ``url`` and
-    ``method`` name a route that runs it on something other than its target.
-    """
-
-    capability: str
-    target: str
-    intent: str = ""
-    variant: str = ""
-    url: str = ""
-    method: str = "GET"
-    # Whether the controller would run this unattended. Left False here: this
-    # module proposes, and the thing that already schedules automatic work is
-    # the only correct place for anything else.
-    auto: bool = False
-
-    @property
-    def label(self) -> str:
-        return self.intent or capability_words(self.capability, self.variant)
-
-    @property
-    def effect(self) -> str:
-        """What running it does, as its command declares; empty for a command HQ does not hold."""
-
-        spec = capability_spec(self.capability)
-        return spec.effect if spec else ""
-
-    @property
-    def reach(self) -> tuple[str, str]:
-        """Where it is pressed, and how: its own route, else where its command is reached."""
-
-        if self.url:
-            return self.url, self.method
-        url, answers_get = command_reach(self.capability, self.target, self.variant)
-        return url, "GET" if answers_get else "POST"
 
 
 # A line of what a finding rests on: its label, and its value in words,
@@ -96,6 +51,26 @@ def matter_key(rule: str, about: str, part: str = "") -> str:
     key = f"finding:{rule}:{about}"
     # Two containers on one machine are two matters, each keyed by its own.
     return f"{key}:{part}" if part else key
+
+
+@dataclass(frozen=True, slots=True)
+class LookInto:
+    """What a read-only playbook that investigates a finding is run with: the
+    machine, where its subject is none, and each input HQ fills by its name
+    where the playbook declares one (docs/Architecture.md, "Declaring a
+    playbook"). A value is left empty where the finding names several."""
+
+    machine: str = ""
+    # A systemd service by its exact name, its ``.service`` suffix included.
+    service_unit: str = ""
+    # A filesystem by where it is mounted.
+    mount: str = ""
+
+    @property
+    def inputs(self) -> dict[str, str]:
+        """The inputs it fills, by the name a playbook declares each under."""
+
+        return {name: value for name, value in (("service_unit", self.service_unit), ("mount", self.mount)) if value}
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,10 +112,10 @@ class Finding:
     # reaches a person as a title alone.
     explanation: RequiredText
     evidence: tuple[Fact, ...] = ()
-    # The commands that would fix it, as its detector names them. Derivation
-    # resolves each once, into a ``Press`` among its steps for a reader who may
-    # run it, and empties this.
-    remedies: tuple[FindingRemedy, ...] = ()
+    # What to do about it, in order, as its detector says: a command HQ runs
+    # (``Does``), one a person runs by hand and why (``ByHand``), or what to
+    # do in words (``Do``). Derivation resolves it into ``steps`` and empties it.
+    fixes: tuple[Advice, ...] = ()
     # Safe reads that help with it: the detector's own (a container's upgrade
     # plan), then the subject node's. Delivery adapters render these; they do
     # not rediscover or filter them.
@@ -153,10 +128,9 @@ class Finding:
     # Kinds this higher-order claim explains. They remain exact machine facts,
     # while a page can lead with the shared cause once.
     affected_scopes: tuple[str, ...] = ()
-    # What to do about it, in order: a command HQ runs (``Press``, which only
-    # derivation writes), one the operator runs (``Run``), or what to do in
-    # words (``Do``). Derivation adds its rule's ``operator_action`` where it
-    # leaves none.
+    # What a reader is shown to do about it, from ``fixes``: derivation writes
+    # each ``Does`` as a press for a reader who may run it, else its
+    # ``by_hand``, adding its rule's ``operator_action`` where it leaves none.
     steps: tuple[Step, ...] = ()
     # Why HQ can neither run a remedy nor name the exact command for this one.
     # Derivation fills it from the rule when the finding carries neither.
@@ -210,8 +184,8 @@ class Finding:
     # What kind of matter it is, as its owner heads a list of them; several
     # of one family from one source fold under it in the queue.
     family: str = ""
-    # Playbook context, derived from the observed service and adopted source.
-    service_unit: str = field(default="", kw_only=True)
+    # Where and on what a playbook that investigates it runs.
+    look_into: LookInto = field(default=LookInto(), kw_only=True)
     # How the work HQ does on it now stands (a press's run under way), with
     # its page: its row says it and asks again until that work ends, so it
     # says where it stands without a refresh.
@@ -226,6 +200,12 @@ class Finding:
     def __post_init__(self) -> None:
         as_members(self)
         holds_something(self)
+        if self.fixes and not self.steps:
+            # Before derivation, or where none comes (a page's own check), a
+            # reader is shown what needs no one's authority: each command HQ
+            # runs said by its by_hand, and the rest as written.
+            shown = tuple(fix.by_hand if isinstance(fix, Does) else fix for fix in self.fixes)
+            object.__setattr__(self, "steps", tuple(step for step in shown if step is not None))
         # A card says it as written, so what it says is words, and each
         # reading's label is drawn once with its values beside it.
         for text in (self.title, self.explanation):
@@ -337,7 +317,7 @@ class FindingEstate:
         return self.topology.nodes
 
 
-def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
+def open_the_path(node: TopologyNode) -> tuple[Does, ...]:
     """Amend the policy, and look again once it is amended.
 
     The capability is handed the resource, not a path: which one to open is
@@ -347,12 +327,12 @@ def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """
 
     return (
-        FindingRemedy(capability="tailnet.reach.allow", target=node.label),
+        Does("tailnet.reach.allow", node.label),
         *reconcile_remedy(node),
     )
 
 
-def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
+def reconcile_remedy(node: TopologyNode) -> tuple[Does, ...]:
     """The one capability that makes the live record match HQ's config, where
     the kind allows it: it creates a record that is missing and corrects one
     that differs."""
@@ -361,7 +341,7 @@ def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     policy = provider.actions.get("reconcile") if provider else None
     if policy is not None and policy.mode == "locked":
         return ()
-    return (FindingRemedy(capability="infrastructure.resource.reconcile", target=node.label),)
+    return (Does("infrastructure.resource.reconcile", node.label),)
 
 
 def fact_values(node, key: str) -> tuple[str, ...]:
@@ -387,8 +367,8 @@ class Said(TypedDict):
 
     title: str
     explanation: RequiredText
-    remedies: NotRequired[tuple[FindingRemedy, ...]]
-    steps: NotRequired[tuple[Run | Do, ...]]
+    fixes: NotRequired[tuple[Advice, ...]]
+    look_into: NotRequired[LookInto]
 
 
 def per_connection(
@@ -436,34 +416,6 @@ def distinct(findings: Iterable[Finding]) -> tuple[Finding, ...]:
 
 
 PLAYBOOK_INVESTIGATION = "playbook-investigation"
-
-# A machine name a shell takes as one word.
-_MACHINE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-
-
-def on_machine(machine: str, command: str) -> str:
-    """``command`` as it is pasted on the owner's own machine: over ssh, as
-    root on ``machine``. "" when the name is not one a shell takes as one word,
-    so a step never carries a command built on a guess."""
-
-    if not _MACHINE_NAME.match(machine or "") or not command.strip():
-        return ""
-    escaped = re.sub(r'(["\\$`])', r"\\\1", command.strip())
-    return f'ssh {machine} "sudo {escaped}"'
-
-
-def machine_step(label: str, machine: str, command: str, notes: tuple[str, ...] = ()) -> tuple[Run, ...]:
-    """One step that is a command on ``machine``, or none when the command
-    cannot be written for it: a step with no command says nothing to run."""
-
-    pasted = on_machine(machine, command)
-    return (Run(label=label, command=pasted, notes=notes),) if pasted else ()
-
-
-def journal_step(label: str, machine: str, unit: str, notes: tuple[str, ...] = ()) -> tuple[Run, ...]:
-    """The step that reads a background job's log on its machine."""
-
-    return machine_step(label, machine, f"journalctl -u {shlex.quote(unit)} -n 50 --no-pager", notes)
 
 
 def cannot_run_commands(machine: str = "") -> str:

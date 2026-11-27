@@ -21,12 +21,11 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    LookInto,
     cannot_run_commands,
-    journal_step,
-    machine_step,
     matter_key,
 )
-from .finding_steps import Run
+from .finding_steps import ByHand, Does, Fix, Why
 from .moments import duration, moment, when
 from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
@@ -34,6 +33,7 @@ from .security import Capability
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import agreed, counted, ended
+lazy from .infrastructure import enabled_resources
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -226,6 +226,12 @@ def machine_units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[U
 WORKER_READ = (str(Capability.READ),)
 
 
+def unit_machine(estate: FindingEstate, unit: str) -> str:
+    """The machine whose units include ``unit``, by its name; "" where none read does."""
+
+    return next((node.label for node, units in machine_units(estate) if any(each.unit == unit for each in units)), "")
+
+
 def unit_causes(estate: FindingEstate, unit: str) -> tuple[str, ...]:
     """The findings a worker's silence follows from, on the machine whose
     units include ``unit``, the one that runs it: that unit failed, or it or
@@ -252,11 +258,13 @@ def stopped_reporting(
     severity: Tone,
     primary: ActionLink,
     part: str = "",
-    steps: tuple[Run, ...] = (),
 ) -> Finding:
     """The one finding for a worker on HQ's machine, run by ``unit``, that
-    stopped reporting: when it was last seen and how to read why, beneath its
-    unit's own failure."""
+    stopped reporting: when it was last seen, beneath its unit's own failure,
+    and the unit's start. A worker that reported before is installed, so
+    starting its unit is what brings it back."""
+
+    start = ByHand("Start the worker again", f"sudo systemctl start {shlex.quote(unit)}", Why.NOT_GRANTED)
 
     return Finding(
         rule=rule,
@@ -267,12 +275,10 @@ def stopped_reporting(
         severity=severity,
         explanation=explanation,
         evidence=(("Last seen", when(seen_at, now=estate.now)),),
-        steps=(
-            *steps,
-            Run(label="Read why it stopped", command=f"sudo journalctl -u {shlex.quote(unit)} -n 50 --no-pager"),
-        ),
+        fixes=on_unit("infrastructure.resource.start", unit, (start,), intent="Start the worker"),
         primary=primary,
         follows=unit_causes(estate, unit),
+        look_into=LookInto(machine=unit_machine(estate, unit), service_unit=unit),
     )
 
 
@@ -312,7 +318,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"{failed[0].named} failed on {node.label}"
                     if len(failed) == 1
-                    else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
+                    else f"{counted(len(failed), 'HQ unit', 'HQ units')} failed on {node.label}"
                 ),
                 severity=Tone.ATTENTION if all(unit.unit in scheduled for unit in failed) else Tone.SERIOUS,
                 # What HQ's own program said as the run failed, where one unit
@@ -332,18 +338,21 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Failed", _failed_when(node.label, unit, estate.now)),
                     )
                 ),
-                steps=tuple(
+                fixes=tuple(
                     step
                     for unit in failed
-                    for step in (
-                        *journal_step(f"See why {unit.named} failed", node.label, unit.unit),
-                        *machine_step(
-                            f"Start {unit.named} again",
+                    for step in on_unit(
+                        "infrastructure.resource.restart",
+                        unit.unit,
+                        ByHand.on(
                             node.label,
+                            f"Start {unit.named} again",
                             f"systemctl restart {shlex.quote(unit.unit)}",
+                            Why.NOT_GRANTED,
                         ),
                     )
                 ),
+                look_into=LookInto(service_unit=failed[0].unit if len(failed) == 1 else ""),
                 no_help_reason=cannot_run_commands(node.label),
                 # A job cannot start without a unit it requires, so its failure
                 # follows from that unit not being set up.
@@ -375,41 +384,73 @@ class Setup:
     sentence: str
     label: str
     command: Callable[[UnitState], str]
+    # The verbs HQ asks of the unit that do what the command does, in order;
+    # none where only a person can.
+    verbs: tuple[str, ...]
 
 
 # Installing the release installs, enables and starts every unit it ships
 # (``hq-host install``); a unit it installed that is off or idle needs only
-# turning on or starting.
+# turning on or starting, each a verb HQ asks of its own units.
 SETUP = {
     "Not installed": Setup(
-        "Installing HQ's release sets {it} up.", "Install HQ's release", lambda _unit: f"{HQ_HOST} install"
+        "Installing HQ's release sets {it} up.", "Install HQ's release", lambda _unit: f"{HQ_HOST} install", ()
     ),
     "Switched off": Setup(
         "Turning {it} on sets {it} up.",
         "Turn on {unit}",
         lambda unit: f"systemctl enable --now {shlex.quote(unit.unit)}",
+        ("infrastructure.resource.enable", "infrastructure.resource.start"),
     ),
     "Not started": Setup(
-        "Starting {it} sets {it} up.", "Start {unit}", lambda unit: f"systemctl start {shlex.quote(unit.unit)}"
+        "Starting {it} sets {it} up.",
+        "Start {unit}",
+        lambda unit: f"systemctl start {shlex.quote(unit.unit)}",
+        ("infrastructure.resource.start",),
     ),
 }
 
 
-def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[Run, ...]]:
+def unit_key(unit: str) -> str:
+    """The key of the declaration of HQ's own ``unit``, or "" for one HQ does not declare."""
+
+    return next((r.key for r in enabled_resources() if r.kind == UNIT_KIND and r.spec.get("unit") == unit), "")
+
+
+def on_unit(capability: str, unit: str, by_hand: tuple[ByHand, ...], *, intent: str = "") -> tuple[Fix, ...]:
+    """``capability`` on the declaration of HQ's own ``unit``, shown as
+    ``by_hand`` to a reader who may not press it; ``by_hand`` alone for a unit
+    HQ does not declare. ``intent`` tells its press apart from another unit's
+    on the same item."""
+
+    if not (key := unit_key(unit)):
+        return by_hand
+    return (Does(capability, key, by_hand=by_hand[0] if by_hand else None, intent=intent),)
+
+
+def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[Fix, ...]]:
     """What sets ``absent`` up on ``node``: a sentence per state and each
-    distinct command once, both from ``SETUP``."""
+    distinct step once, both from ``SETUP``. A verb HQ asks of the unit is a
+    press, its command shown by hand beside the first."""
 
     states = {unit.absent: [each for each in absent if each.absent == unit.absent] for unit in absent}
     sentence = " ".join(
         SETUP[state].sentence.format(it=agreed(len(units), "it", "them")) for state, units in states.items()
     )
-    steps: dict[str, Run] = {}
+    steps: dict[str, tuple[Fix, ...]] = {}
     for unit in absent:
         setup = SETUP[unit.absent]
         command = setup.command(unit)
-        if command not in steps:
-            steps[command] = machine_step(setup.label.format(unit=unit.named), node.label, command)[0]
-    return sentence, tuple(steps.values())
+        if command in steps:
+            continue
+        by_hand = ByHand.on(node.label, setup.label.format(unit=unit.named), command, Why.NOT_GRANTED)
+        verbs = setup.verbs or ("",)
+        steps[command] = tuple(
+            fix
+            for index, verb in enumerate(verbs)
+            for fix in (on_unit(verb, unit.unit, by_hand if index == 0 else ()) if verb else by_hand)
+        )
+    return sentence, tuple(fix for fixes in steps.values() for fix in fixes)
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -433,12 +474,12 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"{absent[0].named} is not set up on {node.label}"
                     if len(absent) == 1
-                    else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
+                    else f"{counted(len(absent), 'HQ unit', 'HQ units')} are not set up on {node.label}"
                 ),
                 severity=Tone.SERIOUS,
                 explanation=sentence,
                 evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
-                steps=steps,
+                fixes=steps,
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -517,23 +558,9 @@ def _stalled_finding(
                 ("Last ran", when(timer.last_trigger_at, now)),
             )
         ),
-        steps=tuple(
-            step
-            for timer in timers
-            for step in (
-                *machine_step(
-                    f"See when {timer.named} last ran and is next due",
-                    node.label,
-                    f"systemctl list-timers {shlex.quote(timer.unit)}",
-                ),
-                *(
-                    journal_step("See what the job it starts last did", node.label, timer.activates)
-                    if timer.activates
-                    else ()
-                ),
-            )
-        ),
         no_help_reason=cannot_run_commands(node.label),
+        # The job a timer starts, whose state and log say why it is not running.
+        look_into=LookInto(service_unit=timers[0].activates if len(timers) == 1 else ""),
     )
 
 
@@ -546,7 +573,7 @@ _restarting = OnEachMachine(
     rule="unit-restarting",
     row=UnitState,
     picked=lambda unit: bool(unit.unit) and unit.looping,
-    service_unit=lambda unit: unit.unit,
+    look_into=lambda unit: LookInto(service_unit=unit.unit),
     severity=lambda _looping: Tone.SERIOUS,
     title=lambda node, looping: (
         f"{looping[0].named} keeps restarting on {node.label}"
@@ -565,10 +592,14 @@ _restarting = OnEachMachine(
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
         ("How it last ended", _ended(unit)),
     ),
-    steps=lambda node, unit: (
-        *journal_step(f"See why {unit.named} keeps stopping", node.label, unit.unit),
-        *machine_step(
-            "Once it is fixed, clear its restart count", node.label, f"systemctl reset-failed {shlex.quote(unit.unit)}"
+    fixes=lambda node, unit: on_unit(
+        "infrastructure.resource.reset_failed",
+        unit.unit,
+        ByHand.on(
+            node.label,
+            "Once it is fixed, clear its restart count",
+            f"systemctl reset-failed {shlex.quote(unit.unit)}",
+            Why.NOT_GRANTED,
         ),
     ),
 )
@@ -603,12 +634,6 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         )
                     )
                 ),
-                steps=machine_step(
-                    "See whether systemd answers for HQ's jobs",
-                    node.label,
-                    "systemctl list-units 'severino-hq-*' --all --no-pager",
-                    ("If that works and this stays, deploy HQ.",),
-                ),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -616,14 +641,14 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _cannot_check(node: TopologyNode) -> str:
-    return f"HQ cannot check the background jobs on {node.label}"
+    return f"HQ cannot check its units on {node.label}"
 
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         FAILED,
-        "Background job failed",
+        "HQ unit failed",
         Tone.SERIOUS,
         _failed,
         gathered=True,
@@ -636,7 +661,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         NOT_INSTALLED,
-        "Background job not set up",
+        "HQ unit not set up",
         Tone.SERIOUS,
         _absent,
         gathered=True,
@@ -677,12 +702,12 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "unit-state-unread",
-        "Background jobs not checked",
+        "HQ units not checked",
         Tone.ATTENTION,
         _unread,
         gathered=True,
         operator_action="Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ.",
         no_help_reason=cannot_run_commands(),
-        bars={Tone.ATTENTION: "HQ cannot read whether its background jobs run"},
+        bars={Tone.ATTENTION: "HQ cannot read whether its units run"},
     ),
 )

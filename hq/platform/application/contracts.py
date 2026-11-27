@@ -13,7 +13,7 @@ from hq.platform.application.routes import reverse
 
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
-SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/&();-]*$")
 
 
 class Closed(BaseModel):

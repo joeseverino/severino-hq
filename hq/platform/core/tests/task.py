@@ -48,6 +48,8 @@ lazy from hq.platform.application.routes import routed
 ROOT = Path(__file__).resolve().parents[4]
 # How mise names a task's argument in the script's environment.
 PREFIX = "usage_"
+# The ref fast reads its change from, which it hands the gates and tests it runs (tools/gate/fast.py).
+FAST_BASE = "HQ_FAST_BASE"
 ESTATE = "estate"
 # A page named by a template it draws.
 TEMPLATE = "template:"

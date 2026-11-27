@@ -21,12 +21,14 @@ from ..observations.contract import ReadingPart
 from ..permissions import Cloudflare
 from ..provider_spec import (
     ConnectionKind,
+    InboundSpec,
     Minter,
     NameContext,
     Observes,
     ProviderModel,
     ProviderSpec,
     SharedValue,
+    SignatureScheme,
     applies,
     locked,
     named_page,
@@ -718,6 +720,13 @@ SHARED = (
         "validates a declared CAA record with it and both sides take the content apart "
         "with it.",
     ),
+    SharedValue(
+        "WorkerAnswersDataset",
+        (readings.ANSWERS_DATASET,),
+        "The Analytics Engine dataset HQ's events Worker writes each request it answers to, "
+        "its route's path the first blob and its status the first double. The controller "
+        "counts it for a Worker whose serving version binds it.",
+    ),
 )
 
 # The connection this provider's credential arrives through, beside its kinds:
@@ -770,5 +779,40 @@ CONNECTIONS = {
         create="A random token, set as the inbound-events Worker's SOCKET_TOKEN secret by its deploy.",
         create_url="https://developers.cloudflare.com/workers/configuration/secrets/",
         gives="Your providers' events as they happen, so what changed is read in seconds.",
+    ),
+}
+
+# Cloudflare's notifications on what HQ reads of the account, each alert type
+# by its alert_type (the Alerting API's alert types,
+# https://developers.cloudflare.com/api/resources/alerting/), making its reading
+# due and the alert history's, which has a row for it. Worker Issues alerts as
+# workers_observability_real_time_issue; the vendored spec's pin predates it.
+_ALERTED = {
+    "universal_ssl_event_type": (readings.EDGE_CERTIFICATE_KIND,),
+    "dedicated_ssl_certificate_event_type": (readings.EDGE_CERTIFICATE_KIND,),
+    "access_custom_certificate_expiration_type": (),
+    "expiring_service_token_alert": (readings.ACCESS_SERVICE_TOKEN_KIND,),
+    "tunnel_health_event": (readings.TUNNEL_KIND,),
+    "tunnel_update_event": (readings.TUNNEL_KIND,),
+    "pages_event_alert": (readings.PAGES_PROJECT_KIND,),
+    "workers_observability_real_time_issue": (readings.WORKER_KIND,),
+}
+INBOUND = {
+    "cloudflare_api": InboundSpec(
+        {event: (*kinds, readings.ALERT_KIND) for event, kinds in _ALERTED.items()},
+        path="/cloudflare",
+        # A generic webhook carries the destination's secret itself in
+        # cf-webhook-auth (developers.cloudflare.com, Notifications, Configure
+        # webhooks), signing nothing.
+        scheme=SignatureScheme("cf-webhook-auth", form="shared-secret"),
+        # One JSON object per notification, its type at alert_type
+        # (Notifications, Webhook payload schema), and none on the test
+        # message a destination is saved with.
+        event_pointer="/alert_type",
+        unnamed_event="test",
+        subject_pointer="/account_id",
+        secret_binding="CLOUDFLARE_WEBHOOK_SECRET",  # noqa: S106 - the Worker secret's name, never its value
+        # Cloudflare states no cap; a notification is a few kilobytes.
+        max_body_bytes=1024 * 1024,
     ),
 }

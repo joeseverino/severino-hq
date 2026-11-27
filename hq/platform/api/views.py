@@ -14,7 +14,6 @@ from typing import Annotated, Any, Concatenate, TypedDict, Union, cast, get_args
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
-from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import URLPattern, reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -26,7 +25,7 @@ from pydantic import (
     ValidationError as PydanticValidationError,
 )
 
-from hq.platform.application import agent_admission
+from hq.platform.application import agent_admission, uploads
 from hq.platform.application.access import (
     ANYONE,
     READS_A_LIST,
@@ -61,6 +60,7 @@ from hq.platform.application.integration_specs import (
     CapabilitySpec,
     answer_type,
 )
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.json_schemas import merged_definitions, sent_schema
 from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
@@ -560,16 +560,16 @@ def resources(request: APIRequest) -> HttpResponse:
     return _ok(describe_resources(principal=request.principal, **_narrowing(request, resource_query())))
 
 
-def resource_query() -> QueryFields:
-    """What the resource catalog narrows by: one resource, by its name."""
+def _one_named(names: Iterable[str], description: str) -> QueryFields:
+    """What a catalog narrows by: one of its entries, by its name."""
 
-    return {
-        "name": {
-            "type": "string",
-            "enum": sorted(resource_registry()),
-            "description": "One resource, answered with its list's whole query schema. Absent, every resource.",
-        }
-    }
+    return {"name": {"type": "string", "enum": sorted(names), "description": description}}
+
+
+def resource_query() -> QueryFields:
+    return _one_named(
+        resource_registry(), "One resource, answered with its list's whole query schema. Absent, every resource."
+    )
 
 
 # The narrowing input, for the OpenAPI document's query parameters.
@@ -587,6 +587,18 @@ class _UnreadableQuery(QueryRefusal):
 # int() never meets its digit limit; a plus, a space, an underscore or another
 # script's digits stays text.
 _COUNT = re.compile(r"-?[0-9]{1,18}")
+
+
+def _member(key: str) -> tuple[str, str] | None:
+    """``field[member]``, the document's deepObject style, as its field and
+    member; None for any other key. Read by partition, never a pattern a key
+    could make backtrack."""
+
+    field, opened, rest = key.partition("[")
+    member, closed, after = rest.partition("]")
+    if not (opened and closed) or after or not member or "[" in member:
+        return None
+    return (field, member) if field.isascii() and field.isidentifier() else None
 
 
 def _counts(schema: Mapping[str, Any]) -> bool:
@@ -715,41 +727,65 @@ findings: View = _projection(
 
 
 @_endpoint(
-    ("GET",), title="List connections", requires=ANYONE, data=ConnectionCatalog, page="control_plane:connections"
+    ("GET",),
+    title="List connections",
+    requires=ANYONE,
+    data=ConnectionCatalog,
+    codes=(Code.INVALID_INPUT,),
+    page="control_plane:connections",
 )
 def connections(request: APIRequest) -> HttpResponse:
     """The connection contracts, and whether your token may use each.
 
-    A family's instances are the ``connections`` resource.
+    `?name=` returns one family with what each ability needs and acts on. A
+    family's instances are the ``connections`` resource.
     """
 
-    return _ok(describe_connections(principal=request.principal))
+    return _ok(describe_connections(principal=request.principal, **_judged(request, connection_query())))
+
+
+def connection_query() -> QueryFields:
+    return _one_named(
+        held_graph().connections,
+        "One type of connection, answered with what each ability needs and acts on. Absent, every type.",
+    )
+
+
+# The narrowing input, for the OpenAPI document's query parameters.
+connections.__dict__.update(__hq_query_fields__=connection_query)
 
 
 RESOURCE_CODES = answered_by(Door.RESOURCE)
 
 
-def _selection(raw: str | None) -> list[str] | None:
-    """``?fields=a,b`` as the field mask it is (``FIELD_MASK``), or ``None`` without one."""
+def _selection(request: APIRequest) -> list[str] | None:
+    """``?fields=a,b`` as the field mask it is (``FIELD_MASK``), or ``None`` without one; read by its exact
+    name, so ``fields[member]`` meets the list's query model, which refuses it."""
 
-    if raw is None:
-        return None
-    return split_list(raw)
+    asked = request.GET.getlist(RESERVED_QUERY_FIELD)
+    if len(asked) > 1:
+        raise _UnreadableQuery(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.")
+    return split_list(asked[0]) if asked else None
 
 
 @_endpoint(("GET",), title="List a resource", requires=READS_A_LIST, data=ResourceCollection, codes=RESOURCE_CODES)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """One resource's records, narrowed by the query its schema checks."""
 
-    filters: dict[str, str] = {}
+    fields = _selection(request)
+    filters: dict[str, Any] = {}
     for key, values in request.GET.lists():
-        if len(values) != 1:
+        if key == RESERVED_QUERY_FIELD:
+            continue
+        # An object's member is sent as ``field[member]``, the document's deepObject style.
+        found = _member(key)
+        into, place = (filters.setdefault(found[0], {}), found[1]) if found else (filters, key)
+        if len(values) != 1 or not isinstance(into, dict) or place in into:
             return _fail(
                 f"Query field {key!r} may appear only once.",
                 code=Code.INVALID_INPUT,
             )
-        filters[key] = values[0]
-    fields = _selection(filters.pop(RESERVED_QUERY_FIELD, None))
+        into[place] = values[0]
     return _ok(list_application_resource(name, filters, principal=request.principal, strict=False, fields=fields))
 
 
@@ -766,10 +802,7 @@ type ResourceRecordAnswer = Annotated[
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """One record of a resource, by its identifier."""
 
-    asked = request.GET.getlist(RESERVED_QUERY_FIELD)
-    if len(asked) > 1:
-        return _fail(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.", code=Code.INVALID_INPUT)
-    fields = _selection(asked[0] if asked else None)
+    fields = _selection(request)
     return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False, fields=fields))
 
 
@@ -782,21 +815,30 @@ class EnvelopeError(Exception):
         self.code = code
 
 
-def _body_json(request: HttpRequest) -> dict[str, Any]:
-    """The request body as a JSON object, or an EnvelopeError saying why not."""
+def _body_json(request: HttpRequest, limit: int) -> dict[str, Any]:
+    """The request body as a JSON object of at most ``limit`` bytes, or an
+    EnvelopeError saying why not.
+
+    Read here rather than through ``request.body``, which holds every body to
+    the one ``DATA_UPLOAD_MAX_MEMORY_SIZE``, since a call's limit is its
+    capability's own (``uploads.call_body``).
+    """
 
     if request.content_type != "application/json":
         raise EnvelopeError(
             "Content-Type must be application/json.",
             code=Code.UNSUPPORTED_MEDIA_TYPE,
         )
-    try:
-        body = request.body
-    except RequestDataTooBig:
+    declared = request.META.get("CONTENT_LENGTH") or ""
+    # Refused on its stated length before a byte is read, and on what it sends
+    # past the limit when it states none or too little.
+    too_large = declared.isdigit() and int(declared) > limit
+    body = b"" if too_large else request.read(limit + 1)
+    if too_large or len(body) > limit:
         raise EnvelopeError(
             "Request body exceeds this deployment's safety limit.",
             code=Code.REQUEST_TOO_LARGE,
-        ) from None
+        )
     if not body:
         return {}
     try:
@@ -872,7 +914,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability. A retry with the same idempotency key returns the first answer."""
 
     try:
-        body = _body_json(request)
+        body = _body_json(request, uploads.call_body(name))
     except EnvelopeError as exc:
         return _fail(exc.message, code=exc.code)
     envelope = read_body(name, body)

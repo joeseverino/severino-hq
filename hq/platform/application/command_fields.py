@@ -5,6 +5,7 @@ adapter reads. They are plain values rather than pydantic's ``Field``, so a
 module that declares a command loads no validation library at startup.
 """
 
+import math
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -37,6 +38,8 @@ REFERS = "x-hq-reference"
 UPLOAD = "x-hq-upload"
 # The media types an upload takes, which a file picker offers.
 ACCEPTS = "x-hq-accepts"
+# The largest file an upload takes, in bytes.
+MAX_BYTES = "x-hq-max-bytes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,17 +191,58 @@ def _marker[T](hint: Any, marker: type[T]) -> T | None:
     return None
 
 
-@dataclass(frozen=True, slots=True)
+# Why a file past its ``Upload``'s limit is refused; its schema's ``x-hq-max-bytes`` says the limit.
+_TOO_LARGE = Reason("too_large", "is larger than the largest file it takes")
+
+
+def _content(file: Any) -> object:
+    return file.get("content") if isinstance(file, dict) else getattr(file, "content", None)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Upload:
     """A field that is a file, sent in JSON as its ``name``, ``content_type``
     and base64 ``content``: the form offers a file to pick and sends it so
     (``forms.file_as_sent``). ``accepts`` names the media types it takes,
-    which the form's picker offers."""
+    which the form's picker offers, and ``max_bytes`` the largest file, which
+    the picker refuses before sending and ``uploads`` sums with every form's.
+    It may mark a list's items, whose ``max_length`` says how many one call sends.
 
+    It holds the file to ``max_bytes`` on every door: its ``content`` as sent,
+    before anything decodes it, to the longest text such a file encodes to,
+    and its bytes, where its type decodes them, to ``max_bytes`` itself."""
+
+    max_bytes: int
     accepts: tuple[str, ...] = ()
 
+    @property
+    def max_encoded(self) -> int:
+        """The longest base64 text a file within ``max_bytes`` encodes to, as a call sends it."""
+
+        return 4 * math.ceil(self.max_bytes / 3)
+
+    def _within(self, sent: Any, inner: Callable[[Any], Any]) -> Any:
+        content = _content(sent)
+        if isinstance(content, str | bytes) and len(content) > self.max_encoded:
+            raise _TOO_LARGE.refused()
+        file = inner(sent)
+        content = _content(file)
+        if isinstance(content, bytes) and len(content) > self.max_bytes:
+            raise _TOO_LARGE.refused()
+        return file
+
+    def __get_pydantic_core_schema__(self, source: Any, handler: GetCoreSchemaHandler) -> CoreSchema:
+        return Checked(self._within, mode="wrap").__get_pydantic_core_schema__(source, handler)
+
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), UPLOAD: True, **({ACCEPTS: sorted(self.accepts)} if self.accepts else {})}
+        accepts = {ACCEPTS: sorted(self.accepts)} if self.accepts else {}
+        return {**handler(schema), UPLOAD: True, MAX_BYTES: self.max_bytes, **accepts}
+
+
+def upload_of(hint: Any) -> Upload | None:
+    """The ``Upload`` a field's type carries, when it is a file."""
+
+    return _marker(hint, Upload)
 
 
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -265,6 +309,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 __all__ = [
     "AMONG",
     "CONFIRM_MISMATCH",
+    "MAX_BYTES",
     "NAMES_RECORDS",
     "REFERS",
     "UPLOAD",
@@ -290,4 +335,5 @@ __all__ = [
     "named_records",
     "referred",
     "stored_in",
+    "upload_of",
 ]

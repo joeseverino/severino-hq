@@ -43,19 +43,20 @@ from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_key
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .moments import when
+from .record_errors import RecordNotFound
 from .resources import BoundedQuery, EmptyQuery, one_of
 from .security import Capability, Principal
 from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
-lazy from .credential_sight import credential_sight
+lazy from .credential_sight import credential_sight, sight_by_connection
 lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
 lazy from .path_records import HopRow
 lazy from .projection import read_once
-lazy from .reading_records import ReadingItem, ReadingRecord, ReadingRow
+lazy from .reading_records import ReadingItem, ReadingRecord, ReadingRow, RecordItem, RecordQuery
 lazy from .resource_refusals import READINGS
 
 
@@ -203,8 +204,8 @@ def connection_rows() -> tuple:
 
 def connection_standings() -> Mapping[tuple[str, str], Lifecycle]:
     """How each reported connection stands, by ``(controller id, connection ref)``,
-    read once per projection. Its abilities declare no permission it could lack,
-    so its authority is never missing."""
+    read once per projection. A permission it lacks is said beside its state,
+    since the credential still reads the rest."""
 
     def build() -> dict[tuple[str, str], Lifecycle]:
         refused = credential_refusals()
@@ -366,17 +367,16 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
 
     # Every reading a provider feeds is something its credential lets HQ see.
     for kind, reading in sorted(OBSERVATIONS.items()):
+        if not reading.provider:
+            continue
         abilities.append(
             ConnectionAbility(
                 name=kind,
                 label=reading.label,
-                summary=" ".join(
-                    (
-                        ended(f"Reads {reading.label}"),
-                        *((ended(f"Needs {', '.join(reading.requires)}"),) if reading.requires else ()),
-                    )
-                ),
+                summary=ended(f"Reads {reading.label}"),
                 effect=Effect.READ,
+                required_scopes=tuple(reading.requires),
+                grant=held.credential if (held := CONNECTION_KINDS.get(reading.provider)) else "",
             )
         )
         by_provider.setdefault(reading.provider, []).append(kind)
@@ -390,8 +390,10 @@ def _controller_instances(
     instances = []
     readings = connection_readings()
     name_controller = len({item.controller_id for item in readings}) > 1
+    sights, _ = sight_by_connection()
     for reading in readings:
         targets, dependencies = _depends(reading)
+        sight = sights.get(reading.connection_ref)
         instances.append(
             ConnectionInstance(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
@@ -401,7 +403,12 @@ def _controller_instances(
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
-                ability_names=ability_names.get(reading.provider, ()),
+                # A reading another connection of its provider took is that one's.
+                ability_names=tuple(
+                    name
+                    for name in ability_names.get(reading.provider, ())
+                    if sight is None or name not in OBSERVATIONS or any(seen.kind == name for seen in sight.sights)
+                ),
                 targets=targets,
                 dependencies=dependencies,
                 facts=tuple(
@@ -424,6 +431,8 @@ def _controller_instances(
                 # credential this is comes from the provider's own model,
                 # declared once beside the providers.
                 credential_model=connection_credential(reading.provider),
+                granted_scopes=sight.granted if sight else (),
+                refused_scopes=sight.missing if sight else (),
             )
         )
     return tuple(instances)
@@ -457,27 +466,32 @@ CONNECTIONS_SCHEMA_VERSION = 1
 
 
 class AbilityDescription(TypedDict):
-    """One ability a connection family offers, as ``describe_connections`` names it."""
+    """One ability a connection family offers, as ``describe_connections``
+    names it: what it is, and with the family named, what it needs and acts on."""
 
     name: Annotated[str, Describe("The name of what it lets HQ do, unique within its type of connection.")]
     label: Annotated[str, Describe("What it lets HQ do, in a few words.")]
-    summary: Annotated[str, Describe("What it lets HQ do, in a sentence.")]
     effect: Effect
-    required_scopes: Annotated[
-        list[str], Describe("The permissions the credential must carry for it, in the service's own names.")
+    summary: NotRequired[Annotated[str, Describe("What it lets HQ do, in a sentence.")]]
+    required_scopes: NotRequired[
+        Annotated[list[str], Describe("The permissions the credential must carry for it, in the service's own names.")]
     ]
-    grant: Annotated[
-        str | None,
-        Describe(
-            f"How HQ proves the credential allows it: {listed(GRANT_MODELS)}, where `scoped` is checked against "
-            "`required_scopes`; null where the connection says nothing."
-        ),
+    grant: NotRequired[
+        Annotated[
+            str | None,
+            Describe(
+                f"How HQ proves the credential allows it: {listed(GRANT_MODELS)}, where `scoped` is checked against "
+                "`required_scopes`; null where the connection says nothing."
+            ),
+        ]
     ]
-    capability: Annotated[str | None, Describe("The command that uses it, by name; null for none.")]
-    governs_kinds: Annotated[list[str], Describe("The types of record it lets HQ manage; empty for none.")]
-    subject_resource: Annotated[
-        str | None,
-        Describe("The list those records are read from, by the name `describe_resources` gives it; null for none."),
+    capability: NotRequired[Annotated[str | None, Describe("The command that uses it, by name; null for none.")]]
+    governs_kinds: NotRequired[Annotated[list[str], Describe("The types of record it lets HQ manage; empty for none.")]]
+    subject_resource: NotRequired[
+        Annotated[
+            str | None,
+            Describe("The list those records are read from, by the name `describe_resources` gives it; null for none."),
+        ]
     ]
 
 
@@ -503,24 +517,27 @@ class ConnectionCatalog(TypedDict):
     """What ``describe_connections`` answers."""
 
     schema_version: Annotated[SchemaVersion, Pinned(CONNECTIONS_SCHEMA_VERSION)]
-    connections: Annotated[list[ConnectionDescription], Describe("Every type of connection HQ knows.")]
+    connections: Annotated[
+        list[ConnectionDescription],
+        Describe("Each type of connection asked for: every one HQ knows, or the one named."),
+    ]
 
 
-def _ability(ability: ConnectionAbility) -> AbilityDescription:
-    return {
-        "name": ability.name,
-        "label": ability.label,
-        "summary": ability.summary,
-        "effect": ability.effect,
-        "required_scopes": list(ability.required_scopes),
-        "grant": ability.grant or None,
-        "capability": ability.capability or None,
-        "governs_kinds": list(ability.governs_kinds),
-        "subject_resource": ability.subject_resource or None,
-    }
+def _ability(ability: ConnectionAbility, *, whole: bool) -> AbilityDescription:
+    described: AbilityDescription = {"name": ability.name, "label": ability.label, "effect": ability.effect}
+    if whole:
+        described |= {
+            "summary": ability.summary,
+            "required_scopes": list(ability.required_scopes),
+            "grant": ability.grant or None,
+            "capability": ability.capability or None,
+            "governs_kinds": list(ability.governs_kinds),
+            "subject_resource": ability.subject_resource or None,
+        }
+    return described
 
 
-def _connection(spec: ConnectionSpec, principal: Principal | None) -> ConnectionDescription:
+def _connection(spec: ConnectionSpec, principal: Principal | None, *, whole: bool) -> ConnectionDescription:
     described: ConnectionDescription = {
         "name": spec.name,
         "label": spec.label,
@@ -531,21 +548,26 @@ def _connection(spec: ConnectionSpec, principal: Principal | None) -> Connection
         "setup_route": spec.setup_route or None,
         "documentation_url": spec.documentation_url or None,
         "secret_store": spec.secret_store or None,
-        "abilities": [_ability(ability) for ability in spec.abilities],
+        "abilities": [_ability(ability, whole=whole) for ability in spec.abilities],
     }
     if principal is not None:
         described["permitted"] = spec.permitted_to(principal)
     return described
 
 
-def describe_connections(*, principal: Principal | None = None) -> ConnectionCatalog:
-    """Every connection family and its abilities; given ``principal``, each
-    entry says whether it is ``permitted``: whether the principal's
-    capabilities admit the family."""
+def describe_connections(*, principal: Principal | None = None, name: str = "") -> ConnectionCatalog:
+    """Every connection family and what each of its abilities is; or, given
+    ``name``, that family with what each ability needs and acts on. Given
+    ``principal``, each entry says whether it is ``permitted``: whether the
+    principal's capabilities admit the family."""
 
+    families = held_graph().connections
+    if name and name not in families:
+        raise RecordNotFound("No type of connection has that name; describe_connections names each.")
+    asked = [families[name]] if name else families.values()
     return {
         "schema_version": CONNECTIONS_SCHEMA_VERSION,
-        "connections": [_connection(spec, principal) for spec in held_graph().connections.values()],
+        "connections": [_connection(spec, principal, whole=bool(name)) for spec in asked],
     }
 
 
@@ -606,7 +628,7 @@ ReadingQuery = create_model(
     "ReadingQuery",
     __base__=BoundedQuery,
     provider=(
-        one_of(sorted({spec.provider for spec in OBSERVATIONS.values()})) | None,
+        one_of(sorted({spec.provider for spec in OBSERVATIONS.values() if spec.provider is not None})) | None,
         Field(default=None, description="Only the readings from this service; absent, every service's."),
     ),
 )
@@ -633,6 +655,14 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="kind",
             web_route="control_plane:connections",
             record_type=ReadingRecord,
+        ),
+        ResourceSpec(
+            "reading.records",
+            "Reading records",
+            "Each record a reading holds, of one type or every type, filtered by its own fields.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_reading_records, RecordQuery, RecordItem),
+            web_route="control_plane:connections",
         ),
         ResourceSpec(
             "credentials",

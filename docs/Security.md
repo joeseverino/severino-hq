@@ -706,6 +706,12 @@ path from the public internet. Setting it up is
   (`workers_dev: false`). The hostname and the account reach the deploy from
   its environment (`HQ_INBOUND_HOSTNAME`, `CLOUDFLARE_ACCOUNT_ID`), never
   from this repository.
+- The Worker runs only for its routes and its socket, which `wrangler.jsonc`
+  names (`assets.run_worker_first`). Any other request is answered by
+  Cloudflare from `worker/public/`, static pages HQ renders once for nobody
+  signed in (`manage.py inbound_worker`), and a path with no page gets its
+  `404.html`. Those pages hold no secret, token or reading, and the Worker
+  holds no binding to them.
 - A webhook's body is read only when its `Content-Length` is within the
   largest its provider's route declares (GitHub's 25 MB, Tailscale's 1 MB).
   Its signature is checked over the raw body before anything parses it, by
@@ -717,7 +723,20 @@ path from the public internet. Setting it up is
   compared in constant time, and tagged with the token's SHA-256. An event
   goes only to the sockets tagged with the token the Worker holds now, and
   closes every other, so a rotation evicts a socket opened with the old
-  token, which a hibernated socket would otherwise outlive.
+  token, which a hibernated socket would otherwise outlive. A socket of
+  another token reaching the Durable Object is closed at once.
+- The Durable Object logs each event it sends in its SQLite storage, under an
+  id that only grows: the contract's members of the event (provider, event,
+  subject, delivery id, time), the names the socket already carries, never a
+  body. It keeps a window of the newest by count and by age (`LOG_EVENTS`
+  and `LOG_AGE_MS` in `worker/src/hub.ts`), cut from the oldest end, so an
+  id it holds has every event after it. A listener that reconnects presents the last id it handled (`Last-Event-ID`, a number) and
+  is sent exactly the events after it; one whose id the log no longer holds,
+  or that holds none (0), is told so and HQ reads everything again. A
+  listener of the release before the log, which sends no header, is sent
+  each event as it is, since the Worker deploys apart from HQ's release. Only a
+  socket of the current token is sent the log, so the log adds nothing a
+  socket could not already hear.
 - Every event a verified request carries is forwarded, one HQ takes or not,
   so a provider's test event shows on Events; HQ records one it does not
   take as ignored and reads nothing for it. An event forwards its names alone
@@ -737,11 +756,23 @@ path from the public internet. Setting it up is
   is refused once its window passes. Its delivery names no ID, so each event
   is named by the body's SHA-256 and its place in the body: a body sent again
   is the events already stored.
+- Cloudflare's notifications carry the destination's secret itself in
+  `cf-webhook-auth`, signing nothing, so the Worker compares it with
+  `CLOUDFLARE_WEBHOOK_SECRET` in constant time, over the two values' SHA-256
+  digests so neither length shows. A holder of the secret can send any body
+  and send one again; each is a name that asks a coalesced read, and a body
+  sent again, named by its SHA-256, is the event already stored.
 - Workers Logs records each request as its method, path and status, which
   the Worker logs itself. Invocation logs are off, since they keep the
   request's headers, the bearer among them.
-- Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET` and
-  `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
+- Each answer is also one Analytics Engine data point of its path and
+  status alone, in the `hq_events` dataset. HQ's `cloudflare.worker` reading
+  counts it by route through the SQL API, under the Account Analytics Read
+  it already holds. A route that refused every request of the last hour,
+  three or more, for its signature or token raises
+  `events-worker-refusing`, naming the secret to check.
+- Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET`,
+  `CLOUDFLARE_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
   listener holds the same
   `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
   are Worker secrets, set by `mise run worker:deploy --with-secrets` from the
@@ -772,9 +803,11 @@ HQ's side of the socket is `severino-hq-listener.service`
   the tailnet. The unit starting it holds no more than the controller's, to
   load that table.
 - It sends nothing on the socket but pings. What it hears is held to the
-  contract's `InboundArrival`; anything else is dropped. A reconnect makes HQ
-  read again every reading the Worker's providers name, at most once a
-  minute, so a gap is repaired by reading and nothing is replayed.
+  contract's `InboundArrival`; anything else is dropped. It holds the id of
+  the last event HQ took, in memory, and presents it on each reconnect. Only
+  when the Worker no longer holds every event after it, or the listener has
+  just started, does HQ read again every reading the Worker's providers
+  name, at most once a minute.
 
 `severino-hq-events.service` tells HQ of a container's change on its host
 and of each start job systemd ended there, as the contract's `HostJobResult`
@@ -806,7 +839,12 @@ since every deploy keeps them bound, attach a custom domain on any of the
 account's zones, and replace any Worker on the account. So it is held as
 the Worker's secrets are, on the one environment only `main` deploys from.
 A deploy with no terminal replaces any DNS record already on that hostname,
-so the name is kept for the Worker alone.
+so the name is kept for the Worker alone; `--strict` does not hold that
+replace, since wrangler asks nothing before it. What `--strict` refuses is a
+deploy over the Worker as the dashboard or the script API last changed it, so
+a setting changed outside `wrangler.jsonc` is declared there or undone before
+the next deploy. Each deploy turns off the workers.dev address and preview
+URLs, which are public and name the account.
 
 ## A leaked GitHub App credential
 

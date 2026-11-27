@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
@@ -236,12 +238,51 @@ func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 		HstsEnabled:           new(npmapi.Flag(spec.HSTSEnabled)),
 		HstsSubdomains:        new(npmapi.Flag(spec.HSTSSubdomains)),
 		TrustForwardedProto:   new(npmapi.Flag(spec.TrustForwardedProto)),
-		AdvancedConfig:        new(spec.AdvancedConfig),
+		AdvancedConfig:        new(npmAdvanced(spec)),
 		AllowWebsocketUpgrade: new(npmapi.Flag(spec.Websocket)),
 		SslForced:             new(npmapi.Flag(spec.ForceSSL)),
 		Http2Support:          new(npmapi.Flag(spec.HTTP2)),
 		Enabled:               new(npmapi.Flag(spec.Serving)),
 	}
+}
+
+// NPM has no field for the largest request a proxy host takes, so HQ's own
+// is written into the host's advanced config as nginx's directive, on its
+// first line, and read back out of it as the field again.
+var npmBodyLimit = regexp.MustCompile(`(?im)^[ \t]*client_max_body_size[ \t]+(\d+)([kmg]?)[ \t]*;[ \t]*(?:\r?\n|$)`)
+
+// npmAdvanced is the advanced config NPM is given for spec: its body limit
+// in MiB, nginx's m, where it sets one (0 lets any size through, as nginx
+// reads it), then what the spec holds as advanced config.
+func npmAdvanced(spec NPMProxyHostSpec) string {
+	if spec.ClientMaxBodySize == nil {
+		return spec.AdvancedConfig
+	}
+	line := fmt.Sprintf("client_max_body_size %dm;", *spec.ClientMaxBodySize)
+	if spec.AdvancedConfig == "" {
+		return line
+	}
+	return line + "\n" + spec.AdvancedConfig
+}
+
+// npmSplitAdvanced is the body limit an advanced config sets, in MiB rounded
+// up (nil for none, and 0, as nginx reads it, for any size), and the config
+// without that directive.
+func npmSplitAdvanced(config string) (*int, string) {
+	at := npmBodyLimit.FindStringSubmatchIndex(config)
+	if at == nil {
+		return nil, config
+	}
+	size, err := strconv.Atoi(config[at[2]:at[3]])
+	if err != nil {
+		return nil, config
+	}
+	per := map[string]int{"": 1 << 20, "k": 1 << 10, "m": 1, "g": 0}[strings.ToLower(config[at[4]:at[5]])]
+	mib := size * 1024
+	if per > 0 {
+		mib = (size + per - 1) / per
+	}
+	return &mib, config[:at[0]] + config[at[1]:]
 }
 
 // npmHeld is the request that would leave a proxy host as NPM holds it.
@@ -446,6 +487,7 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 		if len(host.DomainNames) == 0 {
 			continue
 		}
+		bodyLimit, advanced := npmSplitAdvanced(host.AdvancedConfig)
 		found = append(found, NPMProxyHostRecord{
 			DomainNames:           host.DomainNames,
 			ForwardScheme:         string(host.ForwardScheme),
@@ -457,7 +499,8 @@ func (r *Registry) npmInventory(ctx context.Context) ([]any, error) {
 			CachingEnabled:        bool(host.CachingEnabled),
 			BlockExploits:         bool(host.BlockExploits),
 			AccessListID:          int(host.AccessListId),
-			AdvancedConfig:        host.AdvancedConfig,
+			AdvancedConfig:        advanced,
+			ClientMaxBodySize:     bodyLimit,
 			HSTSEnabled:           bool(host.HstsEnabled),
 			HSTSSubdomains:        bool(host.HstsSubdomains),
 			TrustForwardedProto:   bool(host.TrustForwardedProto),

@@ -291,6 +291,15 @@ class AddressCacheTests(TestCase):
         self.assertEqual(self.calls, [])
         self.assertEqual(again["allocation"], {})
 
+    def test_a_failed_refresh_keeps_who_the_registry_said_holds_it(self):
+        first = self._look()
+
+        again = look_up_address(
+            _address(GLOBAL, refresh=True), principal=OPERATOR, resolver=self._resolver, allocations=_fails
+        )
+
+        self.assertEqual(again["allocation"]["organization"], first["allocation"]["organization"])
+
 
 @override_settings(SEVERINO_RDAP_ENDPOINT="https://rdap.example.test")
 class RegistryRedirectTests(SimpleTestCase):

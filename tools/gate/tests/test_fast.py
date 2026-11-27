@@ -89,7 +89,7 @@ class HandedFilesTests(SimpleTestCase):
         self.assertEqual(checked[-4:], ["example:files", "hq/example.py", ":::", "example:whole"])
         self.assertEqual(fixing, ["example:files", "hq/example.py"])
         # A gate in the heavy turn is handed them too, and told the base they changed from.
-        self.assertIn(f"{fast.BASE}=example-base", heavy)
+        self.assertIn(f"{fast.FAST_BASE}=example-base", heavy)
         at = heavy.index("example:files")
         self.assertEqual(heavy[at : at + 4], ["example:files", "static/example.css", ":::", "example:whole"])
 

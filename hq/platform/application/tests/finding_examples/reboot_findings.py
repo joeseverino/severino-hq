@@ -2,7 +2,6 @@ from datetime import timedelta
 
 from hq.platform.core.testing import connection
 
-from ...finding_steps import Run
 from ...freshness import stale_after
 from . import NOW, Ago, Example, Examples, ago, stored
 
@@ -13,25 +12,6 @@ OUT_OF_DATE = stale_after(KIND) + timedelta(minutes=10)
 
 
 AT_ELEVEN = "Jan\xa015, 11\xa0AM"
-
-
-def on(machine: str, command: str) -> str:
-    return f'ssh {machine} "sudo {command}"'
-
-
-def what_waits(machine: str) -> Run:
-    return Run("See what waits on the restart", on(machine, "cat /run/reboot-required.pkgs"))
-
-
-def restarted(machine: str = "example-controller") -> tuple[Run, ...]:
-    return (
-        what_waits(machine),
-        Run(
-            "Schedule the restart for a quiet hour",
-            on(machine, "shutdown -r 03:00"),
-            ("HQ reads the time back and shows it here.",),
-        ),
-    )
 
 
 NEWER = "example-edge waits on a restart"

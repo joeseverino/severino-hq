@@ -25,16 +25,19 @@ from schemathesis.hook_specs import flatmap_case, map_case
 from werkzeug.test import Client
 
 from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.capabilities import CapabilitySpec
 from hq.platform.application.command_fields import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.host_sections import load
+from hq.platform.application.input_errors import takes
 from hq.platform.application.integration_specs import STALE_WRITE_KEYWORD
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import compile_integration_graph
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
+from hq.platform.application.reading_records import record_filter
 from hq.platform.application.security import host_capabilities
 from hq.platform.application.stored_columns import ROW_RULES
 from hq.platform.core import seeds
@@ -163,6 +166,19 @@ def as_issued(context, case):
             stored = load(records_of(kind).model).objects.values_list("slug", flat=True)[: len(sent)]
             for item, slug in zip(sent, stored, strict=False):
                 item["slug"] = slug
+    # So is a filter's member (`where[name]`, as sent), which only its kind's
+    # records take, as they type it: a query parameter's schema cannot depend
+    # on another's value (OAI/OpenAPI-Specification#256), so the document
+    # closes `where` to the fields of every kind, and its words say which are
+    # a kind's.
+    if isinstance(case.query, dict) and case.operation.path.endswith("/reading.records/"):
+        kind = case.query.get("kind")
+        model = record_filter(kind).model if kind in OBSERVATIONS else None
+        case.query = {
+            key: value
+            for key, value in case.query.items()
+            if not key.startswith("where[") or (model is not None and takes(model, key[6:-1], value))
+        }
     return case
 
 

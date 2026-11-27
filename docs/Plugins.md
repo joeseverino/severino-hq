@@ -114,9 +114,22 @@ domain; the SDK owns integration mechanics:
 | Kept reads and derivations | `hq_sdk.reads` |
 | References to other records | `hq_sdk.references` |
 | Calendar sources | `hq_sdk.calendar` |
+| A form field that takes files, with the largest it takes | `hq_sdk.forms` |
 | Tables, forms, UI projections, money, global search | the matching `hq_sdk.*` module |
 | Moving rows the host keeps under a renamed capability | `hq_sdk.migrations` |
 | Synthetic siblings and style checks | `hq_sdk.testing` |
+
+A form that takes files names each field `hq_sdk.forms.FileField` (or
+`MultipleFileField`) with the largest file it takes, and its view names the
+form as `form_class`. The page refuses a larger file before sending it, the
+field refuses one sent anyway. A command field that takes a file in JSON, or a
+list's items that each are one, carries `hq_sdk.capabilities.Upload` with the
+largest file it takes, and a list says how many with `Field(max_length=...)`:
+every door refuses a larger file as sent, and a call's body is held to the
+files it may carry. HQ holds the proxy in front of it to the
+largest request any composed form or command takes
+(`hq.platform.application.uploads`), raising `proxy-refuses-uploads` when it
+is lower.
 
 Imports from `application`, `core` or another host app are unsupported: they
 tie an extension to the host's implementation details. The extension check
@@ -771,16 +784,15 @@ runs under a principal its spec permits, or in HQ's own derivation, whose
 results each reader sees only as far as `readable_by` allows. It reads local
 state, and never makes a network request because someone opened discovery.
 
-An instance may carry status, safe endpoint text, granted scope names, targets,
-dependencies and small facts. It never carries tokens, credentials,
-authorization headers, secret values or private URL parts. URL userinfo, query
+An instance may carry status, safe endpoint text, the scope names its service
+granted or refused, targets, dependencies and small facts. It never carries
+tokens, credentials, authorization headers, secret values or private URL parts. URL userinfo, query
 strings and fragments are rejected outright, rather than filtered by a list of
 secret parameter names.
 
 `observed_at` is a `datetime` and serializes as ISO 8601. HQ says an
 instance's state in its lifecycle's one word on every page, derived from its
-`status`, `observed_at` and the evidence behind its abilities; `status_label`
-is shown nowhere. An instance that leaves `status` and `observed_at` unsaid is
+`status`, `observed_at` and the evidence behind its abilities. An instance that leaves `status` and `observed_at` unsaid is
 dated by the readings HQ declares came through its `kind` where any do. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
 anonymously, rather than hiding it.

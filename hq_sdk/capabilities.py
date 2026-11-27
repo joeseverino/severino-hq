@@ -2,6 +2,7 @@
 
 A command is a frozen dataclass or a TypedDict: HQ closes it to the fields it names.
 A field's rule is ``Checked`` with a ``Reason``, the one way a value is refused.
+A field that is a file, or a list's items that are, carries ``Upload``.
 """
 
 from hq.platform.application.capabilities import (
@@ -19,6 +20,7 @@ from hq.platform.application.command_fields import (
     Reason,
     Refers,
     RequiredText,
+    Upload,
     checked,
 )
 from hq.platform.application.contracts import Effect
@@ -55,6 +57,7 @@ __all__ = [
     "RecordNotFound",
     "Refers",
     "RequiredText",
+    "Upload",
     "as_sent",
     "checked",
     "cli_principal",

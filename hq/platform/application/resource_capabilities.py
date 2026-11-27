@@ -14,6 +14,7 @@ from typing import NamedTuple
 lazy from django.conf import settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.observations.host import UNIT_KIND
 from hq.domains.control_plane.provider_spec import ControllerActionPolicy
 from hq.domains.control_plane.providers import (
     PROVIDERS,
@@ -22,15 +23,16 @@ from hq.domains.control_plane.providers import (
 )
 
 from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
+from .finding_steps import ByHand, Why
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
-lazy from .finding_model import on_machine
+lazy from .facts import inventory_records
 lazy from .machines import connections_inside, container_context
 lazy from .pages import PageAction
 
 # Actions a person starts from a resource's page, in the order they lead.
-PAGE_VERBS = ("start", "stop", "restart", "reconcile", "renew")
-LIFECYCLE_VERBS = frozenset({"start", "stop", "restart"})
+PAGE_VERBS = ("start", "stop", "restart", "reset-failed", "enable", "reconcile", "renew")
+LIFECYCLE_VERBS = frozenset({"start", "stop", "restart", "reset-failed", "enable"})
 CREATE_CAPABILITY = "infrastructure.resource.create"
 # The create's mode on a machine the tailnet's device declaration already names.
 MACHINE_DETAILS = "machine_details"
@@ -265,8 +267,29 @@ def removals_pending(resource_ids=None) -> frozenset[str]:
 
 def _running_verbs(resource: ManagedResource) -> tuple[str, ...]:
     spec = resource.spec or {}
+    if resource.kind == UNIT_KIND:
+        return next(
+            (
+                _unit_verbs(record)
+                for _, record in inventory_records(UNIT_KIND)
+                if record.get("unit") == spec.get("unit")
+            ),
+            (),
+        )
     running = (container_context(spec.get("host", ""), spec.get("name", "")) or {}).get("running")
     return tuple(running.verbs) if running else ()
+
+
+def _unit_verbs(record: Mapping[str, object]) -> tuple[str, ...]:
+    """The lifecycle verbs a unit's state, as last read, allows."""
+
+    active = record.get("active")
+    return (
+        *(("start",) if active in ("inactive", "failed") else ()),
+        *(("restart",) if active == "active" else ()),
+        *(("reset-failed",) if active == "failed" else ()),
+        *(("enable",) if record.get("file_state") == "disabled" else ()),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,9 +303,9 @@ class ConnectionInside:
     connection_ref: str
     machines: tuple[str, ...]
     carries_its_verbs: bool
-    # How the owner starts it again on its machine; "" when no command can be
-    # written for that machine's name.
-    start_command: str
+    # How the owner starts it again on its machine; None when no command can
+    # be written for that machine's name.
+    start: ByHand | None
 
 
 def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
@@ -299,11 +322,18 @@ def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
     # A container its unit runs is started by starting the unit, which also
     # starts what the unit runs first.
     supervised = resource_operations.supervision(resource)
-    start_command = on_machine(
-        host,
-        f"sudo systemctl start {shlex.quote(supervised.unit)}"
-        if supervised is not None
-        else f"docker start {shlex.quote(name)}",
+    start = next(
+        iter(
+            ByHand.on(
+                host,
+                f"Start it again on {host}",
+                f"systemctl start {shlex.quote(supervised.unit)}"
+                if supervised is not None
+                else f"docker start {shlex.quote(name)}",
+                Why.CHANNEL,
+            )
+        ),
+        None,
     )
     inside = (rows for (on, named), rows in connections_inside().items() if (on.lower(), named) == (host.lower(), name))
     return tuple(
@@ -311,7 +341,7 @@ def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
             connection_ref=row.connection_ref,
             machines=tuple(dict.fromkeys(str(item) for item in row.reaches or () if item)),
             carries_its_verbs=row.provider in acts_through and own_ref in ("", row.connection_ref),
-            start_command=start_command,
+            start=start,
         )
         for rows in inside
         for row in rows

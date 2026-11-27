@@ -1,5 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Not found{% endblock %}
 {% block content %}
-{% include "partials/_error_page.html" with code="404" title="Page not found" body="The link may be old, or what it pointed to was deleted." search=user.is_authenticated only %}
+{% include "partials/_error_page.html" with code="404" title="Page not found" body="The link may be old, or what it pointed to was deleted." search=user.is_authenticated back=back only %}
 {% endblock %}

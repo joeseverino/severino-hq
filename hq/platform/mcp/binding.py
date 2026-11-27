@@ -6,15 +6,16 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from difflib import get_close_matches
 from functools import partial
-from typing import Annotated, Any
+from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from pydantic import BaseModel, TypeAdapter, ValidationError
-from pydantic_core import InitErrorDetails, PydanticCustomError
+from pydantic import BaseModel, ValidationError
+from pydantic_core import InitErrorDetails
 
 from hq.platform.application import agent_admission
 from hq.platform.application.access import ANYONE
+from hq.platform.application.input_errors import misnamed, takes
 from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.resources import name_refusal
@@ -130,14 +131,13 @@ def _renamed(model: type[BaseModel], arguments: Mapping[str, Any], exc: Validati
         sent = str(error["loc"][0])
         free = [name for name in unsent if name not in moved.values()]
         for name in (*(name for name in missing if name in free), *get_close_matches(sent, free, n=1)):
-            if _takes(model, name, arguments[sent]):
+            if takes(model, name, arguments[sent]):
                 moved[sent] = name
                 break
     if not moved:
         return None
     said: list[InitErrorDetails] = [
-        {"type": PydanticCustomError("misnamed", _MISNAMED, {"name": name}), "loc": (sent,), "input": arguments[sent]}
-        for sent, name in moved.items()
+        {"type": misnamed(name), "loc": (sent,), "input": arguments[sent]} for sent, name in moved.items()
     ]
     told = {*(("missing", name) for name in moved.values()), *(("extra_forbidden", sent) for sent in moved)}
     kept: list[InitErrorDetails] = []
@@ -149,22 +149,6 @@ def _renamed(model: type[BaseModel], arguments: Mapping[str, Any], exc: Validati
             details["ctx"] = error["ctx"]
         kept.append(details)
     return ValidationError.from_exception_data(exc.title, [*said, *kept], hide_input=True)
-
-
-# What a misnamed argument is told, naming the argument that takes it.
-_MISNAMED = "is not a known field; send it as {name}"
-
-
-def _takes(model: type[BaseModel], name: str, value: Any) -> bool:
-    """Whether argument ``name`` of ``model`` takes ``value``, as a call's validation reads it."""
-
-    taken = model.model_fields[name]
-    kind: Any = Annotated[taken.annotation, *taken.metadata] if taken.metadata else taken.annotation
-    try:
-        TypeAdapter(kind).validate_python(value, strict=True)
-    except ValidationError:
-        return False
-    return True
 
 
 def _held(handler: Callable[..., Any], requires: Requirement, **arguments: Any) -> Any:

@@ -1,5 +1,6 @@
 """The events page: what HQ was told happened outside it, whether each
-channel that tells it is listening, and every event it takes."""
+channel that tells it is listening, the Worker that hears providers as
+Cloudflare runs it, and every event it takes."""
 
 from typing import override
 
@@ -7,12 +8,13 @@ from django.template.loader import render_to_string
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import InboundEvent, InboundSource
-from hq.platform.application.inbound_events import channel_standing, setup_guide, taken
+from hq.platform.application.inbound_events import channel_standing, events_worker, setup_guide, taken
 from hq.platform.application.inbound_reads import INBOUND_EVENTS
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction
+from hq.platform.application.problems import About, problems_of
 from hq.platform.application.routes import reverse
-from hq.platform.application.security import Capability
+from hq.platform.application.security import Capability, web_principal
 from hq.platform.application.tables import DataTable
 
 from .inbound_tables import EVENT_COLUMNS, grouped, taken_table
@@ -49,4 +51,8 @@ class InboundEventListView(ListPageMixin, TemplateView):
         channels = [(label, standing, setup_guide(standing)) for label, standing in standings]
         context["page_facts"] = render_to_string("control_plane/_inbound_summary.html", {"channels": channels})
         context["taken"] = taken_table(taken())
+        context["worker"] = events_worker()
+        # About no record with a page: each problem whose fix is read here.
+        here = About(under=(reverse("control_plane:events"),))
+        context["problems"] = problems_of(here, web_principal(self.request.user))
         return context

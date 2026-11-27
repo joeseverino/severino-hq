@@ -7,14 +7,20 @@ from django.views import View
 from django.views.generic import TemplateView
 lazy from django.template.loader import render_to_string
 
+from hq.domains.control_plane.observations.host import SECRETS_UNIT
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, read_now_payload
 from hq.platform.application.connection_context import connections_context
+from hq.platform.application.finding_steps import ByHand, Why
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+from hq.platform.application.unit_findings import on_unit
 lazy from hq.platform.application.asks import Ask, AskMixin, WatchView
+lazy from hq.platform.application.findings import offered
 
 from .connection_tables import connections_table, setup_fields
+
+READ_VAULT = "Read the vault now"
 
 
 class ConnectionListView(PageMixin, TemplateView):
@@ -59,6 +65,10 @@ class ConnectionListView(PageMixin, TemplateView):
         context["connections"] = self._connections
         context["table"] = connections_table(self._connections, self.request)
         context["setup_fields"] = setup_fields((*self._connections.setups, *self._connections.again))
+        # Reading the vault now is starting the refresh unit.
+        by_hand = ByHand(READ_VAULT, f"sudo systemctl start {SECRETS_UNIT}", Why.NOT_GRANTED)
+        fixes = on_unit("infrastructure.resource.start", SECRETS_UNIT, (by_hand,), intent=READ_VAULT)
+        context["read_vault"] = offered(fixes, web_principal(self.request.user))
         context["page_facts"] = render_to_string("control_plane/_connection_summary.html", context)
         return context
 

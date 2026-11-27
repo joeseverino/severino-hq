@@ -119,19 +119,16 @@ def _subclasses(cls: type) -> set[type]:
 
 @tag("source", "tree")
 class RefusalTextTests(SimpleTestCase):
-    """A capability answers with a refusal's text, so every refusal is built from a sentence HQ wrote."""
+    """The checker lint:refusal-text runs reads every refusal under hq/ and every kind of refusal declared."""
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         cls.checked = checked(ROOT)
 
-    def test_every_refusal_is_built_from_a_sentence(self):
-        checked = self.checked
-
-        self.assertEqual(checked.problems, [])
-        self.assertTrue(checked.refusals_built, "no refusal was found under hq/")
-        self.assertTrue(checked.carried, "no sentence was carried to a refusal under hq/")
+    def test_the_checker_reads_the_refusals_of_hq(self):
+        self.assertTrue(self.checked.refusals_built, "no refusal was found under hq/")
+        self.assertTrue(self.checked.carried, "no sentence was carried to a refusal under hq/")
 
     def test_every_kind_of_refusal_is_read(self):
         """Read from the source, so a kind is checked the day it is declared; here, every kind Python knows."""
@@ -249,6 +246,14 @@ class RefusalCheckerTests(SimpleTestCase):
 
         self.assertEqual(checked.problems, [])
         self.assertTrue(checked.carried)
+
+    def test_a_check_narrowed_to_a_changed_module_reads_each_module_that_imports_it(self):
+        from .refusal_text import importing
+
+        sources = _planted(next(iter(PLANTED.values())))
+
+        self.assertTrue(check(sources, importing(sources, ["hq/example/errors.py"])).problems)
+        self.assertEqual(check(sources, importing(sources, ["hq/example/unread.py"])).problems, [])
 
     def test_each_planted_violation_is_found(self):
         for name, case in PLANTED.items():

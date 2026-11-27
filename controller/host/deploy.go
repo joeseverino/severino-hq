@@ -85,7 +85,16 @@ type Deployer struct {
 	Free func(path string) (uint64, error)
 	// Rehearsal is where a release rehearses itself before it is installed.
 	Rehearsal Rehearsal
+	// Lock is the deploy lock (DeployLock), held from the hold to the
+	// deploy's end so the unit socket starts nothing the hold stopped.
+	Lock string
 }
+
+// deployLockWait bounds how long a deploy waits out a unit request that
+// holds the deploy lock shared: past the longest one may run
+// (severino-hq-unit@'s RuntimeMaxSec), so the lock still held then is held by
+// something other than a request.
+const deployLockWait = 6 * time.Minute
 
 // verified refuses image unless root's cosign finds it signed by the
 // source's compose workflow. image is pinned by digest, so what is verified
@@ -191,11 +200,13 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	if err := d.rehearse(ctx, image); err != nil {
 		return err
 	}
-	held, err := d.hold(ctx)
+	held, release, err := d.hold(ctx)
 	if err != nil {
 		d.restart(held)
 		return err
 	}
+	// Deferred first, so it is released after a rollback restarts what was held.
+	defer release()
 	units, err := d.SnapshotUnits()
 	if err != nil {
 		d.restart(held)
@@ -251,10 +262,11 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return fmt.Errorf("the new image did not become healthy: %w", err)
 	}
 	fmt.Fprintln(d.Out, "HQ is healthy on the new image.")
+	// The whole setup starts every unit the release ships, what was held
+	// among them, and what starts a controller pass last.
 	if err := d.Setup(ctx, runner, d.Lib); err != nil {
 		return err
 	}
-	d.restart(held)
 	// The release stands, so the copy is not needed; the backups hold that state.
 	if err := os.Remove(kept); err != nil && !errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintf(d.Out, "The database kept before migrating is still at %s: %v\n", kept, err)
@@ -403,11 +415,22 @@ func (d *Deployer) restoreSchema(ctx context.Context, kept string) error {
 
 // hold stops every timer and path unit the tree ships that is active, so
 // nothing starts against a half-replaced release, and waits for the runs
-// they already started. It returns what it stopped.
-func (d *Deployer) hold(ctx context.Context) ([]string, error) {
+// they already started. It takes the deploy lock first and returns what it
+// stopped, with the lock's release.
+func (d *Deployer) hold(ctx context.Context) ([]string, func(), error) {
+	// The tmpfiles rule makes the lock's directory at boot; a deploy makes it
+	// on a host whose rule predates it.
+	if err := ownDirectory(filepath.Dir(d.Lock)); err != nil {
+		return nil, nil, err
+	}
+	release, err := Lock{Path: d.Lock, Wait: deployLockWait}.Exclusive(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	shipped, err := Shipped(d.UnitDir())
 	if err != nil {
-		return nil, err
+		release()
+		return nil, nil, err
 	}
 	var held []string
 	for _, name := range shipped {
@@ -421,22 +444,23 @@ func (d *Deployer) hold(ctx context.Context) ([]string, error) {
 	deadline := time.Now().Add(d.Drain)
 	for time.Now().Before(deadline) {
 		if !d.active(ctx, ControllerUnit) && !d.active(ctx, GlanceUnit) && !d.active(ctx, SecretsUnit) {
-			return held, nil
+			return held, release, nil
 		}
 		select {
 		case <-ctx.Done():
-			return held, ctx.Err()
+			release()
+			return held, nil, ctx.Err()
 		case <-time.After(d.Poll):
 		}
 	}
 	fmt.Fprintln(d.Out, "A run started before the deploy is still going; it fails against the new image and the next one retries.")
-	return held, nil
+	return held, release, nil
 }
 
+// restart releases the hold of a deploy that ends before its whole setup,
+// which would have. The deploy's own error is the one it returns.
 func (d *Deployer) restart(held []string) {
-	for _, name := range held {
-		_ = d.run(context.Background(), "systemctl", "start", name)
-	}
+	_ = d.start(context.Background(), d.UnitDir(), held)
 }
 
 func (d *Deployer) backupTree() (string, error) {

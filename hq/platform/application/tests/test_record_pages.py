@@ -38,12 +38,13 @@ class RecordPageTests(TestCase):
             view = route.view
             with self.subTest(view.__name__):
                 response = self.client.get(reverse(route.name))
-                listed = list_resource(view.resource, principal=principal, fields=list(view.fields) or None)
-                self.assertTrue(listed["items"])
+                # The page draws the whole list, which may run past one page of the read.
+                listed = every_item(view.resource, principal=principal, fields=list(view.fields) or None)
+                self.assertTrue(listed)
                 # A row may carry what only the page draws (its actions), beside every field the read answers.
                 drawn = response.context[view.context_object_name]
-                kept = [{key: row[key] for key in item} for row, item in zip(drawn, listed["items"], strict=True)]
-                self.assertEqual(kept, listed["items"])
+                kept = [{key: row[key] for key in item} for row, item in zip(drawn, listed, strict=True)]
+                self.assertEqual(kept, listed)
 
     def test_a_whole_list_is_read_page_after_page(self):
         principal = web_principal(self.owner)

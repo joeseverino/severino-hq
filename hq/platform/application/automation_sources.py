@@ -163,12 +163,12 @@ def judged(procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return found
 
 
-def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourceProposal:
-    """Store what one scan found, held to the bridge contract at its door."""
+def proposal(catalog: dict[str, Any]) -> SourceProposal:
+    """What one scan found, held to the bridge contract at its door, as HQ
+    judges it, unsaved."""
 
     verification = catalog["verification"]
-    return models.SourceProposal.objects.create(
-        operation=operation,
+    return models.SourceProposal(
         repository=catalog["repository"],
         branch=catalog["branch"],
         revision=catalog["revision"],
@@ -180,6 +180,15 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
         unpinned=catalog["unpinned"],
         reaches=catalog["reaches"],
     )
+
+
+def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourceProposal:
+    """Store what one scan found."""
+
+    found = proposal(catalog)
+    found.operation = operation
+    found.save(force_insert=True)
+    return found
 
 
 def _source(principal: Principal) -> ManagedResource:
@@ -414,8 +423,8 @@ def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> 
     """What a person may do about the commit waiting to be adopted, in the
     order the Playbooks page and its scan's audit entry draw them: View diff
     (on the Playbooks page, ``diff``, for a reader of the audit log), Adopt
-    all when HQ can adopt every change that waits, and Reject all. Nothing
-    when no commit waits."""
+    all, or Adopt all HQ can while it can't adopt some, and Reject all.
+    Nothing when no commit waits."""
 
     if pending is None or not pending.pending:
         return ()
@@ -424,8 +433,10 @@ def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> 
     shown: list[PageAction | None] = []
     if diff and principal.permits(Capability.READ_AUDIT_LOG):
         shown.append(pages.PageAction("View diff", entry_url(proposal)))
-    if not pending.refused and adopts:
-        shown.append(pages.PageAction.command(automation_adoption.ADOPT, proposal.pk, variant="all"))
+    adoptable = not pending.unplaced and any(not change.problems for change in pending.changes)
+    if adoptable and adopts:
+        variant = automation_adoption.ADOPTABLE if pending.refused else "all"
+        shown.append(pages.PageAction.command(automation_adoption.ADOPT, proposal.pk, variant=variant))
     if rejects:
         shown.append(pages.PageAction.command(automation_adoption.REJECT, proposal.pk, variant="all"))
     return tuple(action for action in shown if action is not None)

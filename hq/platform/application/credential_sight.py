@@ -10,17 +10,17 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory, attempted_at
 from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from hq.domains.control_plane.providers import PROVIDERS, Read, provider_reads
+from hq.domains.control_plane.providers import PROVIDERS, Read, keyless_reads, provider_reads
 from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts
 
-from . import readings
 from .projection import read_once
 from .tone import Tone, TonedChoices
+lazy from .connections import connection_rows
 lazy from .facts import records_through, stored_snapshots
 lazy from .freshness import STALE, Freshness, freshness
 lazy from .ui import counted
@@ -53,6 +53,9 @@ class Sight:
     state: str
     records: int = 0
     observed_at: datetime | None = None
+    # When it was last tried, read or not: a failed try leaves ``observed_at``
+    # at the last read that answered, or unset where none has.
+    tried_at: datetime | None = None
     error: str = ""
     requires: str = ""
     # One of REFUSALS when the provider refused the read.
@@ -74,8 +77,10 @@ class Sight:
     def missing(self) -> tuple[str, ...]:
         """The permissions to add: the kind's, or its refused parts'."""
 
+        # A resource kind's permissions are its parts', which a refusal of the
+        # whole kind does not name.
         if self.state == REFUSED and self.refusal == PERMISSION_REFUSAL:
-            return self.permissions
+            return self.permissions if self.source == "reading" else ()
         return tuple(dict.fromkeys(name for part in self.parts for name in part.missing))
 
     @property
@@ -198,6 +203,13 @@ class ProviderSight:
         return tuple(sorted({name for sight in self.refused_permission for name in sight.missing}))
 
     @property
+    def granted(self) -> tuple[str, ...]:
+        """Each permission a read through it proves its credential holds, sorted."""
+
+        read = (sight for sight in self.sights if sight.state in (READABLE, PARTIAL))
+        return tuple(sorted({name for sight in read for name in sight.permissions if name not in sight.missing}))
+
+    @property
     def more_scope(self) -> tuple[str, ...]:
         """One ``Sight.more_scope`` line per reading a permission would open."""
 
@@ -235,6 +247,7 @@ def sight(
             source,
             NOT_CONNECTED,
             observed_at=row.observed_at,
+            tried_at=attempted_at(row.observed_at, row.updated_at),
             requires=requires,
             permissions=permissions,
         )
@@ -248,6 +261,7 @@ def sight(
             source,
             REFUSED if refusal else UNREADABLE,
             observed_at=row.observed_at,
+            tried_at=attempted_at(row.observed_at, row.updated_at),
             # A refused credential is said once for the provider, not per kind.
             error="" if refusal == CREDENTIAL_REFUSAL else row.error,
             requires=requires,
@@ -262,6 +276,7 @@ def sight(
         PARTIAL if refused else READABLE,
         records=len(row.records or ()) if records is None else records,
         observed_at=row.observed_at,
+        tried_at=attempted_at(row.observed_at, row.updated_at),
         requires=requires,
         permissions=permissions,
         parts=refused,
@@ -442,63 +457,44 @@ def _fed(provider: str) -> tuple[Read, ...]:
 
     if provider not in CONNECTION_CREDENTIALS:
         return ()
-    return tuple(read for read in provider_reads().get(provider, ()) if read.kept is None)
+    return provider_reads().get(provider, ())
 
 
 def read_through(provider: str, label: str) -> ProviderSight | None:
     """What came through a connection HQ reaches itself, with no credential:
-    each reading HQ takes through it, as stored. None when none does."""
+    each reading taken through it, as stored. None when none is."""
 
     def load() -> ProviderSight | None:
         inventory = _inventory()
         sights = [
-            _kept(read.kept, read.kept.through[provider])
-            if read.kept is not None
-            else sight(read.kind, read.label, "reading", inventory.get(read.kind))
-            for read in provider_reads().get(provider, ())
-            if read.by == "hq"
+            sight(read.kind, read.label, "reading", inventory.get(read.kind))
+            for read in keyless_reads().get(provider, ())
         ]
         return ProviderSight(provider, label, tuple(sorted(sights, key=lambda seen: seen.label))) if sights else None
 
     return read_once(f"credential_sight.through:{provider}", load)
 
 
-def _kept(kept: readings.Kept, answered) -> Sight:
-    """One kind of kept reading through one connection: read when any stored
-    value says the connection answered, and as of the newest that does."""
+def sight_by_connection() -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
+    """What each reported connection sees, by ref, and the providers with no
+    connection, once per projection. With nothing connected at all no
+    controller has reported, so no provider is said to be missing one."""
 
-    stored = kept.stored()
-    good = [item.observed_at for item in stored if answered(item.value)]
-    if good:
-        return Sight(kept.cadence, kept.label, "reading", READABLE, records=len(good), observed_at=max(good))
-    if stored:
-        return Sight(
-            kept.cadence, kept.label, "reading", UNREADABLE, observed_at=max(item.observed_at for item in stored)
+    def load() -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
+        connections = {row.connection_ref: row.provider for row in connection_rows()}
+        inventory = _inventory()
+        by_ref = {
+            connection_ref: found
+            for connection_ref, provider in connections.items()
+            for found in credential_sight(connection_ref, inventory=inventory)
+            if found.provider == provider
+        }
+        connected = set(connections.values())
+        return (
+            by_ref,
+            tuple(found for found in credential_sight(inventory=inventory) if found.provider not in connected)
+            if connected
+            else (),
         )
-    return Sight(kept.cadence, kept.label, "reading", NEVER_SWEPT)
 
-
-def sight_by_connection(
-    connections: dict[str, str],
-) -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
-    """What each connection sees, by ref, and the providers with no connection.
-
-    ``connections`` maps each connection ref to its provider. With nothing
-    connected at all no controller has reported, so no provider is said to be
-    missing one.
-    """
-
-    inventory = _inventory()
-    by_ref = {
-        connection_ref: found
-        for connection_ref, provider in connections.items()
-        for found in credential_sight(connection_ref, inventory=inventory)
-        if found.provider == provider
-    }
-    connected = set(connections.values())
-    return (
-        by_ref,
-        tuple(found for found in credential_sight(inventory=inventory) if found.provider not in connected)
-        if connected
-        else (),
-    )
+    return read_once("credential_sight.by_connection", load)

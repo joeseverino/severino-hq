@@ -63,10 +63,23 @@ class Caller:
 OPERATOR = None
 
 
-def _query(arguments: Mapping[str, Any]) -> str:
-    """Arguments as a query string carries them: text as it is, any other value as its JSON."""
+def _text(value: Any) -> str:
+    return value if isinstance(value, str) else json.dumps(value)
 
-    text = {name: value if isinstance(value, str) else json.dumps(value) for name, value in arguments.items()}
+
+def _query(arguments: Mapping[str, Any]) -> str:
+    """Arguments as a query string carries them: text as it is, a list
+    comma-separated, an object member by member (``where[branch]``), and any
+    other value as its JSON."""
+
+    text: dict[str, str] = {}
+    for name, value in arguments.items():
+        if isinstance(value, Mapping):
+            text |= {f"{name}[{member}]": _text(held) for member, held in value.items()}
+        elif isinstance(value, list):
+            text[name] = ",".join(map(_text, value))
+        else:
+            text[name] = _text(value)
     return f"?{urlencode(text)}" if text else ""
 
 
@@ -137,7 +150,9 @@ def _path(tool: str, arguments: dict[str, Any]) -> str:
     if tool == "get_resource":
         return f"/api/v2/resources/{arguments.pop('name')}/{arguments.pop('identifier')}/{_query(arguments)}"
     if tool == "list_resource":
-        return f"/api/v2/resources/{arguments.pop('name')}/{_query(arguments)}"
+        # The API takes a list's filters as parameters beside its paging.
+        name, filters = arguments.pop("name"), arguments.pop("filters", None) or {}
+        return f"/api/v2/resources/{name}/{_query({**filters, **arguments})}"
     paths = {
         "describe_resources": "resources",
         "describe_capabilities": "capabilities",

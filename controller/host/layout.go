@@ -101,6 +101,14 @@ const (
 	// controller's container mounts it, at the same path.
 	UnitSocketDir = "/run/severino-hq-unit"
 	UnitSocket    = UnitSocketDir + "/unit.sock"
+	// DeployLockDir is root's alone and mounted nowhere (Lock), and the
+	// tmpfiles rule makes the lock in it at boot, since the socket's service
+	// sees /run read-only.
+	DeployLockDir = "/run/severino-hq-deploy"
+	// DeployLock is held exclusively while a deploy replaces the release and
+	// holds its timers, and shared by the unit socket while it acts on a unit
+	// the release ships, so HQ never starts one a deploy stopped on purpose.
+	DeployLock = DeployLockDir + "/deploy.lock"
 	// ACMEDir is the controller's certificate state on the host.
 	ACMEDir = "/opt/apps/severino-hq/secrets/acme"
 	// SealDir holds the private keys HQ's web seals secrets to: the
@@ -142,6 +150,10 @@ const (
 	// timeout outlasts it (tested).
 	AutomationBound = 90 * time.Minute
 )
+
+// IdentityLock is the renderer's lock on the connections document and the
+// identities, held shared while a run copies them.
+var IdentityLock = Lock{Path: hostcore.SecretDir + "/ssh.lock", Wait: time.Minute}
 
 // Renderers names each secret renderer on the host and its status document
 // in SecretDir. The name, one HQ declares with the unit that runs it, is all

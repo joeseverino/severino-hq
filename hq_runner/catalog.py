@@ -566,6 +566,20 @@ def scan(
     bridge contract's ``SourceCatalog`` holds it."""
 
     tip = procedures.tip(project, scratch=scratch, token=token)
+    return {
+        "repository": project.repository,
+        **read(tip, role_spec=role_spec, modules=modules),
+        "verification": dict(verify(tip.revision)),
+        "reaches": [{"machine": machine, "profile": profile} for machine, profile in sorted(reaches())][:MOST_REACHES],
+    }
+
+
+def read(tip: procedures.Tip, *, role_spec: RoleSpec, modules: Modules) -> dict[str, Any]:
+    """What the commit ``tip`` holds of a catalog: its branch and revision,
+    each procedure, every file and each path Ansible would read unpinned.
+    A repository of playbooks checks its own commit with it
+    (``tools/pipeline/check_playbooks.py``)."""
+
     if len(tip.files) > MOST_FILES:
         raise Refused("TooLarge", f"The repository has {len(tip.files)} files, over the limit of {MOST_FILES}.")
     paths = tuple(path for path, _ in tip.files)
@@ -575,14 +589,11 @@ def scan(
     files = frozenset(paths)
     known = frozenset(modules()) if sidecars else frozenset()
     return {
-        "repository": project.repository,
         "branch": tip.branch,
         "revision": tip.revision,
-        "verification": dict(verify(tip.revision)),
         "procedures": [procedure(tip.project_dir, sidecar, files, role_spec, known) for sidecar in sidecars],
         "files": [{"path": path, "object": name} for path, name in tip.files],
         "unpinned": unpinned(paths),
-        "reaches": [{"machine": machine, "profile": profile} for machine, profile in sorted(reaches())][:MOST_REACHES],
     }
 
 

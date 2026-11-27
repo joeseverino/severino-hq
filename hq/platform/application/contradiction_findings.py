@@ -23,19 +23,17 @@ from .finding_model import (
     CANNOT_EDIT_COMPOSE,
     Finding,
     FindingEstate,
-    FindingRemedy,
     FindingRule,
     distinct,
     fact_values,
-    on_machine,
     opens,
 )
-from .finding_steps import Do, told
+from .finding_steps import Advice, ByHand, Do, Does, Why
 from .references import Kind
 from .tone import Tone
 from .ui import agreed, counted
 lazy from . import exposure, zones
-lazy from .containers import containers
+lazy from .containers import container_watchers, containers
 lazy from .facts import inventory_records
 lazy from .infrastructure import enabled_resources
 lazy from .path_model import Route
@@ -49,8 +47,8 @@ UPDATE_CAPABILITY = "infrastructure.resource.update"
 SERVICE_FAULT = "service-fault"
 
 
-def _update(key: str, *, intent: str) -> FindingRemedy:
-    return FindingRemedy(capability=UPDATE_CAPABILITY, target=key, intent=intent)
+def _update(key: str, *, intent: str) -> Does:
+    return Does(UPDATE_CAPABILITY, key, intent=intent)
 
 
 def _claims(hostname: str, facet_ids: Iterable[str] = ()) -> tuple[Any, ...]:
@@ -124,8 +122,8 @@ def _answered_by_nothing(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Proxy route", "none"),
                         ("Container on a web port", "none"),
                     ),
-                    remedies=tuple(_update(key, intent="Change where it points") for key in keys),
-                    steps=(
+                    fixes=(
+                        *(_update(key, intent="Change where it points") for key in keys),
                         Do(
                             f"Remove the public record for {name} if nothing should answer "
                             f"there, or add the proxy route on {last.name} that serves it."
@@ -168,6 +166,19 @@ def _said(state: str) -> str:
     return {"exited": "stopped", "dead": "stopped", "created": "not started"}.get(state, state)
 
 
+def _start(machine: str, container: str) -> tuple[Advice, ...]:
+    """Start a container HQ watches through its own command; one it does not
+    watch is started by hand."""
+
+    by_hand = ByHand.on(
+        machine, f"Start {container} on {machine}", f"docker start {shlex.quote(container)}", Why.NOT_GRANTED
+    )
+    watcher = container_watchers().get((machine, container), ("", False))[0]
+    if watcher:
+        return (Does("infrastructure.resource.start", watcher, by_hand=next(iter(by_hand), None)),)
+    return by_hand or (Do(f"Start {container} on {machine}"),)
+
+
 def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
     containers = _containers_by_place()
     found = []
@@ -179,8 +190,7 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                     title = f"{name} leads to {container} on {machine}, which is {_said(state)}"
                     said = f"Requests fail until {container} runs again."
                     shown = ("Container", _said(state))
-                    start = on_machine(machine, f"docker start {shlex.quote(container)}")
-                    steps = (told(f"Start {container} on {machine}", start),)
+                    steps: tuple[Advice, ...] = _start(machine, container)
                 else:
                     title = f"{name} forwards to an unpublished port on {machine}"
                     said = "Requests fail unless something outside Docker answers there."
@@ -193,8 +203,7 @@ def _routed_to_stopped(estate: FindingEstate) -> tuple[Finding, ...]:
                         severity=Tone.SERIOUS if container else Tone.ATTENTION,
                         explanation=said,
                         evidence=(("Name", entity_link("service", name)), ("Path", route.line), shown),
-                        remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
-                        steps=steps,
+                        fixes=(*(_update(key, intent="Change where it points") for key in proxies), *steps),
                     )
                 )
     return distinct(found)
@@ -226,7 +235,7 @@ def _gates_guarding_nothing(_estate: FindingEstate) -> tuple[Finding, ...]:
                         severity=Tone.NEUTRAL,
                         explanation="Published again, it would get this rule unreviewed.",
                         evidence=(("Access rule", f"{spec.label} {title}"), ("Name", entity_link("service", name))),
-                        steps=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
+                        fixes=(Do(f"Remove {name} from {title}", notes=((console,) if console else ())),),
                     )
                 )
     return distinct(found)
@@ -278,11 +287,9 @@ def _split_horizon_finding(
         severity=Tone.ATTENTION,
         explanation="Unless meant, one record is out of date.",
         evidence=tuple(("Path", route.line) for route in routes),
-        remedies=(
+        fixes=(
             *(_update(key, intent="Change the internal record") for key in _declared(name, _dns_kinds(public=False))),
             *(_update(key, intent="Change the public record") for key in _declared(name, _dns_kinds(public=True))),
-        ),
-        steps=(
             Do(f"Point the internal record for {name} at the machine the public one reaches, or the other way round."),
         ),
     )
@@ -321,7 +328,7 @@ def _unfronted_ports(_estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Published", item.running.published),
                     ("Open to the internet", ", ".join(str(port) for port in open_ports)),
                 ),
-                steps=(
+                fixes=(
                     Do(
                         f"Bind {item.running.name}'s ports to 127.0.0.1 in its compose file, "
                         "or put a proxy route in front of it.",
@@ -365,13 +372,7 @@ def _served_not_held(_estate: FindingEstate) -> tuple[Finding, ...]:
                     )
                     for item in wrong
                 ),
-                remedies=(
-                    FindingRemedy(
-                        capability="infrastructure.resource.reconcile",
-                        target=resource.key,
-                        intent="Install it again",
-                    ),
-                ),
+                fixes=(Does("infrastructure.resource.reconcile", resource.key, intent="Install it again"),),
             )
         )
     return distinct(found)

@@ -38,7 +38,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -345,7 +344,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		RebootRequired: hostcore.RebootRequired,
 		Born:           born.At,
 		Connections:    requireConnections,
-		Lock:           host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
+		Lock:           host.IdentityLock.Shared,
 		LookPath:       exec.LookPath,
 		Now:            time.Now,
 		Stdout:         stdout, Stderr: stderr,
@@ -388,7 +387,7 @@ func automation(stdout, stderr io.Writer) *host.Automation {
 		Bound:       host.AutomationBound,
 		TokenPoll:   time.Minute,
 		Connections: requireConnections,
-		Lock:        host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
+		Lock:        host.IdentityLock.Shared,
 		Stdout:      stdout, Stderr: stderr,
 	}
 }
@@ -432,6 +431,7 @@ func deployer(stdout io.Writer) *host.Deployer {
 			SecretDir: hostcore.SecretDir, ACME: host.ACMEDir,
 			LookPath: exec.LookPath, Poll: time.Second,
 		},
+		Lock: host.DeployLock,
 	}
 }
 

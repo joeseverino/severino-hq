@@ -33,7 +33,7 @@ def connected(readings=READ, raises: tuple[Raised | str, ...] = (), expires_in: 
 EXAMPLES = (
     Examples(
         "credential-missing-permissions",
-        fires=(connected(SOME_REFUSED, raises=("example-api's token is missing 9 permissions",)),),
+        fires=(connected(SOME_REFUSED, raises=("example-api's token is missing 12 permissions",)),),
         # Refused outright is a credential refused, said by connection-not-answering.
         quiet=(connected(), connected({PAGES: REFUSED})),
     ),

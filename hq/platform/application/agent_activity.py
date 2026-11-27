@@ -14,6 +14,7 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, Coalesce, RowNumber
 from django.utils import timezone
 
+from hq.platform.core import source
 from hq.platform.core.audit import audited_labels
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
@@ -37,7 +38,7 @@ SHOWN = 5
 
 # How a provider's permission list is written from HQ's catalog, which the
 # page's steps for adding an agent and a missing permission's fix point at.
-CLIENT_SETUP = "https://github.com/joeseverino/severino-hq/blob/main/docs/API.md#setting-up-a-client"
+CLIENT_SETUP = source.in_repository("docs/API.md#setting-up-a-client")
 
 DENIED = Q(action=AuditLog.Action.DENIED)
 

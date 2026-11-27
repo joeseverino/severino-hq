@@ -215,22 +215,36 @@ func githubLimited(why string, resets, now time.Time) error {
 	return &ProviderError{Message: why + ": " + until + ", the last reading stands", Limited: true}
 }
 
-// githubRateLimited is a refusal GitHub gave for an allowance, primary or
-// secondary, as the limit and when it lifts; any other answer passes as it
-// came. GitHub answers a spent allowance with 403 or 429, and says which by an
-// allowance left at zero, a wait to keep, or its message.
-func githubRateLimited(header http.Header, err error, now time.Time) error {
-	answered, ok := errors.AsType[*ProviderError](err)
-	if !ok || (answered.HTTPStatus != http.StatusForbidden && answered.HTTPStatus != http.StatusTooManyRequests) {
-		return err
-	}
+// githubSaid is GitHub's own words in a refusal's body, "" where it gave none.
+func githubSaid(body []byte) string {
 	var said struct {
 		Message string `json:"message"`
 	}
-	_ = json.Unmarshal(answered.Body, &said)
-	spent := header.Get("X-RateLimit-Remaining") == "0"
-	if !spent && header.Get("Retry-After") == "" && !strings.Contains(strings.ToLower(said.Message), "rate limit") {
+	_ = json.Unmarshal(body, &said)
+	return strings.TrimSpace(said.Message)
+}
+
+// githubRefusal is a refusal GitHub gave, in its own words: a plan that lacks
+// a feature or a setting that leaves one off is GitHub's to say, never a
+// status for HQ to guess at. One for an allowance, primary or secondary, is
+// the limit and when it lifts. GitHub answers a spent allowance with 403 or
+// 429, and says which by an allowance left at zero, a wait to keep, or its
+// message.
+func githubRefusal(header http.Header, err error, now time.Time) error {
+	answered, ok := errors.AsType[*ProviderError](err)
+	if !ok || answered.HTTPStatus == 0 {
 		return err
+	}
+	said := githubSaid(answered.Body)
+	spent := header.Get("X-RateLimit-Remaining") == "0"
+	limits := answered.HTTPStatus == http.StatusForbidden || answered.HTTPStatus == http.StatusTooManyRequests
+	if !limits || (!spent && header.Get("Retry-After") == "" && !strings.Contains(strings.ToLower(said), "rate limit")) {
+		if said == "" {
+			return err
+		}
+		worded := *answered
+		worded.Message = said
+		return &worded
 	}
 	why := "GitHub refused the request for a secondary rate limit"
 	if spent {
@@ -266,7 +280,7 @@ func (r *Registry) githubSpending(token string, reads bool, call func() (runtime
 	if budget != nil {
 		budget.note(answer.Header, err, r.Now())
 	}
-	return answer, githubRateLimited(answer.Header, err, r.Now())
+	return answer, githubRefusal(answer.Header, err, r.Now())
 }
 
 // githubQuery is one GraphQL query under token, which passes the fuse as a

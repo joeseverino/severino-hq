@@ -10,14 +10,12 @@ from pydantic import TypeAdapter, ValidationError
 
 from hq.domains.control_plane.models import OperationRequest
 
-from .finding_model import PLAYBOOK_INVESTIGATION
+from .finding_model import PLAYBOOK_INVESTIGATION, LookInto
 lazy from . import automation_runs
 lazy from .findings import estate_findings, finding_key, rule_for, rule_of
 
 if TYPE_CHECKING:
     from .security import Principal
-
-_SERVICE_UNIT = "service_unit"
 
 
 def finding_run(capability: str, key: str, principal: Principal) -> dict[str, Any] | None:
@@ -32,7 +30,7 @@ def finding_run(capability: str, key: str, principal: Principal) -> dict[str, An
         for offer in finding.offers:
             if offer.name == PLAYBOOK_INVESTIGATION and offer.capability == capability and not offer.refusal:
                 hosts = parse_qs(urlsplit(offer.url).query)["hosts"]
-                return _investigation_fields(capability, hosts, finding.service_unit)
+                return _investigation_fields(capability, hosts, finding.look_into)
     return None
 
 
@@ -54,10 +52,8 @@ def run_again(capability: str, run_id: str) -> dict[str, Any]:
     return {}
 
 
-def _investigation_fields(capability: str, hosts: list[str], service: str) -> dict[str, Any]:
+def _investigation_fields(capability: str, hosts: list[str], look_into: LookInto) -> dict[str, Any]:
     initial: dict[str, Any] = {"hosts": hosts}
-    if not service:
-        return initial
     manifest = next(
         (
             each
@@ -66,9 +62,11 @@ def _investigation_fields(capability: str, hosts: list[str], service: str) -> di
         ),
         None,
     )
-    if manifest and (field := manifest.input_type.model_fields.get(_SERVICE_UNIT)):
-        with suppress(ValidationError):
-            initial[f"parameters.{_SERVICE_UNIT}"] = TypeAdapter(field.rebuild_annotation()).validate_python(
-                service, strict=True
-            )
+    declared = manifest.input_type.model_fields if manifest else {}
+    for name, value in look_into.inputs.items():
+        if field := declared.get(name):
+            with suppress(ValidationError):
+                initial[f"parameters.{name}"] = TypeAdapter(field.rebuild_annotation()).validate_python(
+                    value, strict=True
+                )
     return initial

@@ -3249,6 +3249,53 @@
         "type": "object",
         "description": "One cloudflare.access_service_token record: Access service token."
       },
+      "CloudflareAlertRecord": {
+        "description": "One notification Cloudflare sent for the account, as its alert history keeps it. Its body and the address it went to are never kept.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "alert_type": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "policy_id": {
+            "default": "",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "mechanism_type": {
+            "default": "",
+            "type": "string"
+          },
+          "sent": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "CloudflareCAAValue": {
         "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$",
         "type": "string",
@@ -3641,6 +3688,137 @@
         },
         "required": [
           "hostname"
+        ],
+        "type": "object"
+      },
+      "CloudflareWorkerRecord": {
+        "description": "One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day and, for a version that binds HQ's answers dataset, its answers by route and status.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "deployment_id": {
+            "default": "",
+            "type": "string"
+          },
+          "deployed_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "versions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareWorkerWorkerVersionRecord"
+            },
+            "type": "array"
+          },
+          "requests": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "errors": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "cpu_time_p50_us": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "cpu_time_p99_us": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/CloudflareWorkerWorkerAnswersRecord"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CloudflareWorkerWorkerAnswersRecord": {
+        "description": "How many requests to one route the Worker answered with one status.",
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "last_hour": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "route",
+          "status",
+          "requests",
+          "last_hour"
+        ],
+        "type": "object"
+      },
+      "CloudflareWorkerWorkerVersionRecord": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "percentage": {
+            "default": 100,
+            "type": "number"
+          },
+          "tag": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -5879,11 +6057,13 @@
         "type": "string",
         "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
         "enum": [
+          "cloudflare_api",
           "github_app",
           "host",
           "tailscale"
         ],
         "x-enum-varnames": [
+          "InboundProviderCloudflareAPI",
           "InboundProviderGitHubApp",
           "InboundProviderHost",
           "InboundProviderTailscale"
@@ -6771,6 +6951,7 @@
           "",
           "access",
           "acl_management",
+          "answers",
           "apps",
           "avatar",
           "branch_rules",
@@ -6787,6 +6968,7 @@
           "filtering",
           "https",
           "images",
+          "invocations",
           "job_logs",
           "leaked_credentials",
           "page_rules",
@@ -6810,6 +6992,7 @@
           "PartWhole",
           "PartAccess",
           "PartACLManagement",
+          "PartAnswers",
           "PartApps",
           "PartAvatar",
           "PartBranchRules",
@@ -6826,6 +7009,7 @@
           "PartFiltering",
           "PartHTTPS",
           "PartImages",
+          "PartInvocations",
           "PartJobLogs",
           "PartLeakedCredentials",
           "PartPageRules",
@@ -6909,6 +7093,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.alert",
           "cloudflare.contact_inbox",
           "cloudflare.contact_submission",
           "cloudflare.d1_database",
@@ -6917,7 +7102,9 @@
           "cloudflare.pages_project",
           "cloudflare.redirect",
           "cloudflare.tunnel",
+          "cloudflare.worker",
           "cloudflare.zone",
+          "dns.reverse",
           "github.allowance",
           "github.dashboard_box",
           "github.delivery",
@@ -6938,6 +7125,7 @@
           "host.unit",
           "hq.request_path",
           "machine",
+          "machine.telemetry",
           "network",
           "npm.access_list",
           "npm.certificate",
@@ -6945,6 +7133,7 @@
           "npm.proxy_host",
           "npm.redirect",
           "npm.stream",
+          "nws.forecast",
           "pki.authority",
           "portainer.compose_project",
           "portainer.container",
@@ -6979,6 +7168,7 @@
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",
+          "ResourceKindCloudflareAlert",
           "ResourceKindCloudflareContactInbox",
           "ResourceKindCloudflareContactSubmission",
           "ResourceKindCloudflareD1Database",
@@ -6987,7 +7177,9 @@
           "ResourceKindCloudflarePagesProject",
           "ResourceKindCloudflareRedirect",
           "ResourceKindCloudflareTunnel",
+          "ResourceKindCloudflareWorker",
           "ResourceKindCloudflareZone",
+          "ResourceKindDNSReverse",
           "ResourceKindGitHubAllowance",
           "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
@@ -7008,6 +7200,7 @@
           "ResourceKindHostUnit",
           "ResourceKindHQRequestPath",
           "ResourceKindMachine",
+          "ResourceKindMachineTelemetry",
           "ResourceKindNetwork",
           "ResourceKindNPMAccessList",
           "ResourceKindNPMCertificate",
@@ -7015,6 +7208,7 @@
           "ResourceKindNPMProxyHost",
           "ResourceKindNPMRedirect",
           "ResourceKindNPMStream",
+          "ResourceKindNwsForecast",
           "ResourceKindPKIAuthority",
           "ResourceKindPortainerComposeProject",
           "ResourceKindPortainerContainer",
@@ -7081,6 +7275,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.alert",
           "cloudflare.contact_submission",
           "cloudflare.d1_database",
           "cloudflare.dns_record",
@@ -7088,6 +7283,7 @@
           "cloudflare.pages_project",
           "cloudflare.redirect",
           "cloudflare.tunnel",
+          "cloudflare.worker",
           "cloudflare.zone",
           "github.allowance",
           "github.delivery",
@@ -7133,6 +7329,7 @@
           "SweptCaddyRoute",
           "SweptCloudflareAccessApp",
           "SweptCloudflareAccessServiceToken",
+          "SweptCloudflareAlert",
           "SweptCloudflareContactSubmission",
           "SweptCloudflareD1Database",
           "SweptCloudflareDNSRecord",
@@ -7140,6 +7337,7 @@
           "SweptCloudflarePagesProject",
           "SweptCloudflareRedirect",
           "SweptCloudflareTunnel",
+          "SweptCloudflareWorker",
           "SweptCloudflareZone",
           "SweptGitHubAllowance",
           "SweptGitHubDelivery",
@@ -7416,6 +7614,16 @@
         ],
         "type": "object",
         "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to."
+      },
+      "WorkerAnswersDataset": {
+        "type": "string",
+        "description": "The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.",
+        "enum": [
+          "hq_events"
+        ],
+        "x-enum-varnames": [
+          "WorkerAnswersDatasetHQEvents"
+        ]
       }
     }
   }

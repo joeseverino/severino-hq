@@ -11,7 +11,7 @@ from hq.platform.core.testing import operator
 from ..attention import raised
 from ..dashboard import work_queue
 from ..derivation_testing import frozen
-from ..finding_steps import Run
+from ..finding_steps import ByHand
 from ..findings import finding_key
 from ..freshness import stale_after
 from ..github_estate import ALERT_PAGES, Repository, repository_for, workflow_run
@@ -73,7 +73,7 @@ class EstateTests(TestCase):
 
 
 def commands(item) -> list[str]:
-    return [step.command for step in item.steps if isinstance(step, Run)]
+    return [step.command for step in item.steps if isinstance(step, ByHand)]
 
 
 class FailingRunTests(TestCase):

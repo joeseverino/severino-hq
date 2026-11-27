@@ -416,6 +416,8 @@ type githubRepository struct {
 	name        string
 	owner, repo string
 	api         *githubapi.ClientWithResponses
+	// archived is what GitHub said of the repository, which leaves its parts unread.
+	archived bool
 	// updater is githubBot, read once: a sweep shares one across every
 	// repository it reads.
 	updater func() (string, error)
@@ -447,12 +449,17 @@ func (r *Registry) githubRepository(ctx context.Context, c githubConnection, nam
 	return g
 }
 
-// part reads one refusable part: what it read, or ok false with the refusal reported.
+// part reads one refusable part: what it read, or ok false with the refusal
+// reported. An archived repository's parts are not read: GitHub keeps it
+// read-only and scans it no more, and HQ measures nothing of it.
 func part[T any](ctx context.Context, g *githubRepository, name runtime.ReadingPartName, read func() (T, error)) (T, bool) {
+	var zero T
+	if g.archived {
+		return zero, false
+	}
 	found, err := read()
 	if err != nil {
 		refuse(ctx, name, g.c.ref, g.name, asRepositoryRefusal(err))
-		var zero T
 		return zero, false
 	}
 	return found, true
@@ -463,11 +470,18 @@ func part[T any](ctx context.Context, g *githubRepository, name runtime.ReadingP
 // so a 403 is a feature the repository does not offer, never a permission to grant.
 // A part is read from a repository the token already reached, so its 404 is the
 // same: GitHub answers a feature that is off (code scanning never set up) as not found.
+// GitHub's own words say which (a plan without it, a setting left off); an
+// answer with none is said as either.
 func asRepositoryRefusal(err error) error {
 	failure, _, _ := runtime.Classify(err)
 	answered, _ := errors.AsType[*ProviderError](err)
 	if failure != runtime.FailureClassPermission && (answered == nil || answered.HTTPStatus != http.StatusNotFound) {
 		return err
+	}
+	if answered != nil {
+		if said := githubSaid(answered.Body); said != "" {
+			return &ProviderError{Message: said}
+		}
 	}
 	return &ProviderError{Message: "not available on this repository (its plan or settings leave it off)"}
 }
@@ -486,6 +500,7 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 		return record, runs, pulls, err
 	}
 	repo := deref(reply.JSON200)
+	g.archived = repo.Archived
 	branch := orDefault(repo.DefaultBranch, "main")
 	commit, err := json200(g.api.ReposGetCommitWithResponse(ctx, g.owner, g.repo, branch))
 	if err != nil {

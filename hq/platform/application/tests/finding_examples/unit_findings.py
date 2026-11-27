@@ -1,3 +1,5 @@
+from hq.platform.core.testing import declare
+
 from ...tone import Tone
 from . import NOW, Example, Examples, Raised, ago, stored
 from .render_status_findings import KIND as RENDERED, read
@@ -98,7 +100,7 @@ def raising(*records: dict, raises: tuple[Raised | str, ...], **fields) -> Examp
 
 STALLED = f"{TIMER} on example-controller is not starting its job"
 LOOPING = "“Example upload” keeps restarting on example-controller"
-UNREAD = "HQ cannot check the background jobs on example-controller"
+UNREAD = "HQ cannot check its units on example-controller"
 
 
 # Units that run: a job, its timer, a template's instance, the controller
@@ -157,14 +159,14 @@ EXAMPLES = (
                 failed(),
                 timer(),
                 failed("severino-hq-example-web.service"),
-                raises=("2 background jobs failed on example-controller",),
+                raises=("2 HQ units failed on example-controller",),
             ),
             # Every failed unit on a machine is one finding.
             raising(
                 failed(),
                 failed(TIMER, result="resources"),
                 failed("severino-hq-example-job@example.work.service"),
-                raises=("3 background jobs failed on example-controller",),
+                raises=("3 HQ units failed on example-controller",),
             ),
             # A looping service that failed is a failed one, called by its title.
             raising(
@@ -225,14 +227,29 @@ EXAMPLES = (
                 timer("severino-hq-example-idle.timer", active="inactive", sub="dead"),
                 {**timer("severino-hq-example-idle.path"), "sub": "waiting", "active": "inactive"},
                 timer(),
-                raises=("5 background jobs are not set up on example-controller",),
+                raises=("5 HQ units are not set up on example-controller",),
+            ),
+            # A unit HQ declares is turned on by its verbs, pressed.
+            Example(
+                readings={
+                    KIND: (
+                        timer("severino-hq-example-off.timer", file_state="disabled", active="inactive", sub="dead"),
+                    )
+                },
+                given=lambda: declare("example-off-timer", KIND, {"unit": "severino-hq-example-off.timer"}),
+                raises=(
+                    Raised(
+                        title="severino-hq-example-off.timer is not set up on example-controller",
+                        presses=("infrastructure.resource.enable", "infrastructure.resource.start"),
+                    ),
+                ),
             ),
             # A socket not listening and a mount not mounted are not started.
             raising(
                 service(),
                 socket("severino-hq-example.socket", active="inactive", sub="dead"),
                 socket("run-example.mount", activates="", active="inactive", sub="dead"),
-                raises=("2 background jobs are not set up on example-controller",),
+                raises=("2 HQ units are not set up on example-controller",),
             ),
             # A failed job of HQ's follows from a deploy that stopped short of it.
             SHORT_DEPLOY,

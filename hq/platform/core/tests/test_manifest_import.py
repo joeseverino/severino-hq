@@ -2,7 +2,6 @@
 
 import json
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -32,16 +31,6 @@ class ManifestUploadTests(SignedInTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("not UTF-8", text(response))
-
-    def test_an_oversized_manifest_is_refused_before_it_is_read(self):
-        from hq.domains.docs_index.forms import MAX_MANIFEST_BYTES
-
-        with patch("hq.domains.docs_index.forms.MAX_MANIFEST_BYTES", 8):
-            response = self.upload(b"[" + b" " * 16 + b"]")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "A manifest is at most")
-        self.assertGreater(MAX_MANIFEST_BYTES, 8)
 
 
 class ExportSmokeTests(SignedInTestCase):

@@ -668,7 +668,7 @@ class TheCallerReachesTheToolTests(TestCase):
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ}))
         seen = {}
 
-        def capture(*, principal):
+        def capture(*, principal, name):
             seen["actor"] = principal.actor
             return {"connections": []}
 

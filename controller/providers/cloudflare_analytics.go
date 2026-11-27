@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -93,29 +95,12 @@ type analyticsAnswer struct {
 // cloudflareGraphQL answers 200 with an errors array rather than a status, so a
 // failed query must not read as a site nobody visited.
 func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variables any, ref string) (json.RawMessage, error) {
-	held, base, doer := r.cloudflareDoer(runtime.ConnectionProviderCloudflareAPI, ref)
-	if doer.err != nil {
-		return nil, doer.err
-	}
-	if err := r.cloudflareBreaker(held); err != nil {
-		return nil, err
-	}
-	delete(doer.headers, "Accept")
-	raw, err := r.HTTP.Request(ctx, base+"graphql", "POST", doer.headers, struct {
+	held, raw, err := r.cloudflareAnalyticsPost(ctx, ref, "graphql", nil, struct {
 		Query     string `json:"query"`
 		Variables any    `json:"variables"`
-	}{query, variables})
+	}{query, variables}, cloudflareErrors)
 	if err != nil {
-		var answered *ProviderError
-		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
-			return nil, r.cloudflareRefused(held, fmt.Sprintf("cloudflare analytics refused the query (HTTP %d)", answered.HTTPStatus), cloudflareErrors(answered.Body), answered.HTTPStatus, func() bool {
-				return r.cloudflareVerified(ctx, runtime.ConnectionProviderCloudflareAPI, ref)
-			})
-		}
-		return nil, fmt.Errorf("cloudflare analytics: %w", err)
-	}
-	if !present(raw) {
-		return nil, &ProviderError{Message: "cloudflare analytics answered with no body"}
+		return nil, err
 	}
 	payload, err := cloudflareDecode[struct {
 		Errors []cfMessage     `json:"errors"`
@@ -129,6 +114,51 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 		return nil, r.cloudflareRefused(held, "cloudflare analytics rejected the query", message, 0, nil)
 	}
 	return payload.Data, nil
+}
+
+// cloudflareSQL is one Analytics Engine SQL query's rows (analytics-engine-sql-query-post
+// in Cloudflare's spec): the query is the plain-text body, its FORMAT JSON
+// answer an object whose data holds the rows, and a refusal plain text.
+func (r *Registry) cloudflareSQL(ctx context.Context, account, query, ref string) (json.RawMessage, error) {
+	_, raw, err := r.cloudflareAnalyticsPost(ctx, ref, "accounts/"+url.PathEscape(account)+"/analytics_engine/sql", map[string]string{"Content-Type": "text/plain"}, query, func(body []byte) string {
+		return cmp.Or(strings.TrimSpace(string(body)), "no reason given")
+	})
+	if err != nil {
+		return nil, err
+	}
+	answer, err := cloudflareDecode[struct {
+		Data json.RawMessage `json:"data"`
+	}](raw, "Analytics Engine answer")
+	return answer.Data, err
+}
+
+// cloudflareAnalyticsPost is one POST to an analytics API of the account
+// credential, a refusal classified by its status and the words `reason`
+// reads from its body. It answers the credential's ref and the body.
+func (r *Registry) cloudflareAnalyticsPost(ctx context.Context, ref, path string, headers map[string]string, payload any, reason func([]byte) string) (string, json.RawMessage, error) {
+	held, base, doer := r.cloudflareDoer(runtime.ConnectionProviderCloudflareAPI, ref)
+	if doer.err != nil {
+		return held, nil, doer.err
+	}
+	if err := r.cloudflareBreaker(held); err != nil {
+		return held, nil, err
+	}
+	delete(doer.headers, "Accept")
+	maps.Copy(doer.headers, headers)
+	raw, err := r.HTTP.Request(ctx, base+path, "POST", doer.headers, payload)
+	if err != nil {
+		var answered *ProviderError
+		if errors.As(err, &answered) && answered.HTTPStatus != 0 {
+			return held, nil, r.cloudflareRefused(held, fmt.Sprintf("cloudflare analytics refused the query (HTTP %d)", answered.HTTPStatus), reason(answered.Body), answered.HTTPStatus, func() bool {
+				return r.cloudflareVerified(ctx, runtime.ConnectionProviderCloudflareAPI, ref)
+			})
+		}
+		return held, nil, fmt.Errorf("cloudflare analytics: %w", err)
+	}
+	if !present(raw) {
+		return held, nil, &ProviderError{Message: "cloudflare analytics answered with no body"}
+	}
+	return held, raw, nil
 }
 
 // cloudflareAnalyticsAccount is the one account this credential reads,

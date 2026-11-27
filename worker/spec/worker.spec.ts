@@ -2,19 +2,25 @@ import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import arrival from "../src/generated/arrival.json";
 import routes from "../src/generated/routes.json";
-import { SOCKET_PATH } from "../src/hub";
+import { LAST_EVENT_ID, LOG_AGE_MS, LOG_EVENTS, type InboundEvent, type Logged, type Opening } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
 import ping from "./fixtures/ping.json";
 import push from "./fixtures/push.json";
 import tailscaleEvents from "./fixtures/tailscale.json";
+import cloudflareNotifications from "./fixtures/cloudflare.json";
 
 const github = routes.providers.find((route) => route.provider === "github_app")!;
 const tailscale = routes.providers.find((route) => route.provider === "tailscale")!;
+const cloudflare = routes.providers.find((route) => route.provider === "cloudflare_api")!;
 const ORIGIN = "https://example.com";
 
-/** A listener: each message its socket has been sent, in order. */
+/** A listener: the Hub's opening, then each event its socket has been sent, in order. */
 interface Listener {
-  next(): Promise<unknown>;
+  opening: Opening;
+  /** The next event, under its id. */
+  logged(): Promise<Logged>;
+  /** The next event's names. */
+  next(): Promise<InboundEvent>;
 }
 
 const open: WebSocket[] = [];
@@ -24,11 +30,20 @@ afterEach(() => {
 });
 
 function upgrade(headers: Record<string, string>): Promise<Response> {
-  return exports.default.fetch(`${ORIGIN}${SOCKET_PATH}`, { headers: { Upgrade: "websocket", ...headers } });
+  return exports.default.fetch(`${ORIGIN}${routes.socket}`, { headers: { Upgrade: "websocket", ...headers } });
 }
 
-async function listen(): Promise<Listener> {
-  const response = await upgrade({ Authorization: `Bearer ${env.SOCKET_TOKEN}` });
+type HubStub = ReturnType<Env["HUB"]["getByName"]>;
+
+/**
+ * A listener connected with the current token, presenting `lastEventId` (0,
+ * none, unless given), through the Worker or straight to `hub`, a Hub of its own.
+ */
+async function listen(lastEventId: number | string = 0, hub?: HubStub): Promise<Listener> {
+  const headers = { Authorization: `Bearer ${env.SOCKET_TOKEN}`, [LAST_EVENT_ID]: String(lastEventId) };
+  const response = hub
+    ? await hub.fetch(`${ORIGIN}${routes.socket}`, { headers: { Upgrade: "websocket", ...headers } })
+    : await upgrade(headers);
   expect(response.status).toBe(101);
   const socket = response.webSocket!;
   socket.accept();
@@ -41,9 +56,10 @@ async function listen(): Promise<Listener> {
     if (waiter) waiter(data);
     else arrived.push(data);
   });
-  return {
-    next: () => (arrived.length ? Promise.resolve(arrived.shift()) : new Promise((resolve) => waiting.push(resolve))),
-  };
+  const take = () => (arrived.length ? Promise.resolve(arrived.shift()) : new Promise((resolve) => waiting.push(resolve)));
+  const opening = (await take()) as Opening;
+  const logged = async () => (await take()) as Logged;
+  return { opening, logged, next: async () => (await logged()).arrival };
 }
 
 /** The HMAC-SHA256 of `message` under `secret`, in hex. */
@@ -233,6 +249,68 @@ describe("a Tailscale delivery", () => {
   });
 });
 
+/**
+ * POSTs `notification` as Cloudflare sends a generic webhook (Notifications,
+ * Webhook payload schema): one JSON object, the destination's secret in
+ * cf-webhook-auth unless `secret` gives another or null for none.
+ */
+async function cloudflareDelivery(notification: unknown, secret: string | null = env.CLOUDFLARE_WEBHOOK_SECRET) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (secret !== null) headers[cloudflare.scheme.header] = secret;
+  return exports.default.fetch(`${ORIGIN}${cloudflare.path}`, { method: "POST", headers, body: JSON.stringify(notification) });
+}
+
+describe("a Cloudflare notification", () => {
+  const [test, alert] = cloudflareNotifications;
+
+  it("reaches a listener by its alert type and account alone", async () => {
+    const listener = await listen();
+
+    const response = await cloudflareDelivery(alert);
+
+    expect(response.status).toBe(202);
+    expect(await listener.next()).toStrictEqual({
+      provider: "cloudflare_api",
+      event: "dedicated_ssl_certificate_event_type",
+      subject: "0123abcd",
+      delivery_id: expect.any(String),
+      received_at: expect.any(String),
+    });
+  });
+
+  it("with no alert type, as the test message a destination is saved with, is answered 202 as the unnamed event", async () => {
+    const listener = await listen();
+
+    const response = await cloudflareDelivery(test);
+
+    expect(response.status).toBe(202);
+    expect(await listener.next()).toMatchObject({ event: cloudflare.unnamed_event, subject: "" });
+  });
+
+  it("sent again is the event it first was", async () => {
+    const listener = await listen();
+
+    await cloudflareDelivery(alert);
+    const first = await listener.next();
+    await cloudflareDelivery(alert);
+
+    expect(await listener.next()).toMatchObject({ delivery_id: first.delivery_id });
+  });
+
+  it.each<[string, string | null]>([
+    ["another secret", "another-cloudflare-secret"],
+    ["no secret", null],
+  ])("with %s never reaches a listener", async (_, secret) => {
+    const listener = await listen();
+
+    const refused = await cloudflareDelivery(alert, secret);
+    await cloudflareDelivery({ ...alert, alert_type: "tunnel_health_event" });
+
+    expect(refused.status).toBe(401);
+    expect(await listener.next()).toMatchObject({ event: "tunnel_health_event" });
+  });
+});
+
 describe("a listener's socket", () => {
   it.each([
     ["no bearer token", {}],
@@ -245,30 +323,153 @@ describe("a listener's socket", () => {
     expect(response.webSocket).toBeNull();
   });
 
-  it("opened with a token since rotated is closed at the next event and hears nothing", async () => {
+  it("opened with a token since rotated is closed at once and is sent nothing of the log", async () => {
+    const current = await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-before-rotation" });
+    const { id } = await current.logged();
+    await deliver({ event: "push", payload: push, id: "delivery-missed" });
     // The Hub as a new version finds it: a socket the Worker let through
-    // under the token it held before.
-    const opened = await env.HUB.getByName("hub").fetch(`${ORIGIN}${SOCKET_PATH}`, {
-      headers: { Upgrade: "websocket", Authorization: "Bearer example-rotated-token" },
+    // under the token it held before, presenting an id the log holds.
+    const opened = await env.HUB.getByName("hub").fetch(`${ORIGIN}${routes.socket}`, {
+      headers: { Upgrade: "websocket", Authorization: "Bearer example-rotated-token", [LAST_EVENT_ID]: String(id) },
     });
     const stale = opened.webSocket!;
-    stale.accept();
-    open.push(stale);
     const heard: unknown[] = [];
     stale.addEventListener("message", (message) => heard.push(message.data));
     const closed = new Promise<number>((resolve) => stale.addEventListener("close", (close) => resolve(close.code)));
-    const current = await listen();
+    stale.accept();
+    open.push(stale);
 
-    await deliver({ event: "push", payload: push, id: "delivery-rotated" });
-
-    expect(await current.next()).toMatchObject({ delivery_id: "delivery-rotated" });
     expect(await closed).toBe(1008);
     expect(heard).toStrictEqual([]);
   });
 });
 
+/** Sends `event` through `hub` as the Worker does once it has verified it. */
+const broadcast = (event: InboundEvent, hub: HubStub = env.HUB.getByName("hub")) => hub.broadcast(event);
+
+const named = (delivery_id: string, received_at = new Date().toISOString()): InboundEvent => ({
+  provider: "github_app",
+  event: "push",
+  subject: "example/hq",
+  delivery_id,
+  received_at,
+});
+
+describe("a listener that reconnects", () => {
+  it("naming the last event it handled is sent exactly the events after it, then the live ones", async () => {
+    const before = await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-handled" });
+    const handled = await before.logged();
+    await deliver({ event: "push", payload: push, id: "delivery-missed-1" });
+    await deliver({ event: "pull_request", payload: pullRequest, id: "delivery-missed-2" });
+    const missed = [await before.logged(), await before.logged()];
+
+    const after = await listen(handled.id);
+    await deliver({ event: "push", payload: push, id: "delivery-live" });
+
+    expect(after.opening).toStrictEqual({ last_event_id: missed[1]!.id, resumed: true });
+    expect([await after.logged(), await after.logged()]).toStrictEqual(missed);
+    expect(await after.next()).toMatchObject({ delivery_id: "delivery-live" });
+  });
+
+  it("naming the newest event is sent only the live ones", async () => {
+    const before = await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-newest" });
+    const { id } = await before.logged();
+
+    const after = await listen(id);
+    await deliver({ event: "push", payload: push, id: "delivery-next" });
+
+    expect(after.opening).toStrictEqual({ last_event_id: id, resumed: true });
+    expect(await after.next()).toMatchObject({ delivery_id: "delivery-next" });
+  });
+
+  it("naming an event the log has let go of for its age is told to read again, and sent the live ones", async () => {
+    // A Hub of its own, whose log holds only these events.
+    const hub = env.HUB.getByName("example-aged");
+    const watching = await listen(0, hub);
+    const aged = new Date(Date.now() - LOG_AGE_MS - 60_000).toISOString();
+    await broadcast(named("delivery-aged-1", aged), hub);
+    await broadcast(named("delivery-aged-2", aged), hub);
+    await broadcast(named("delivery-fresh"), hub);
+    const { id } = await watching.logged();
+    const newest = [await watching.logged(), await watching.logged()][1]!;
+
+    const after = await listen(id, hub);
+    await broadcast(named("delivery-live"), hub);
+
+    expect(after.opening).toStrictEqual({ last_event_id: newest.id, resumed: false });
+    expect(await after.next()).toMatchObject({ delivery_id: "delivery-live" });
+  });
+
+  it("naming an event the log has let go of for its count is told to read again", async () => {
+    const hub = env.HUB.getByName("example-counted");
+    await broadcast(named("delivery-first"), hub);
+    const { last_event_id: first } = (await listen(0, hub)).opening;
+    for (let sent = 1; sent <= LOG_EVENTS + 1; sent++) await broadcast(named(`delivery-${sent}`), hub);
+
+    const { opening } = await listen(first, hub);
+
+    expect(opening).toStrictEqual({ last_event_id: first + LOG_EVENTS + 1, resumed: false });
+  });
+
+  it.each<[string, (newest: number) => string]>([
+    ["no event held", () => "0"],
+    ["an id the log never gave", (newest) => String(newest + 1)],
+    ["an id that is not one", () => "0x10"],
+  ])("with %s is told to read again", async (_, presenting) => {
+    await broadcast(named("delivery-logged"));
+    const { last_event_id: newest } = (await listen()).opening;
+
+    const { opening } = await listen(presenting(newest));
+
+    expect(opening).toStrictEqual({ last_event_id: newest, resumed: false });
+  });
+});
+
+describe("a listener of the release before the log", () => {
+  it("presenting no id is sent each event as it is, and no opening", async () => {
+    const response = await upgrade({ Authorization: `Bearer ${env.SOCKET_TOKEN}` });
+    const socket = response.webSocket!;
+    const heard: unknown[] = [];
+    const first = new Promise((resolve) =>
+      socket.addEventListener("message", (message) => resolve(heard.push(JSON.parse(String(message.data))))),
+    );
+    socket.accept();
+    open.push(socket);
+
+    await deliver({ event: "push", payload: push, id: "delivery-unlogged" });
+    await first;
+
+    expect(heard).toStrictEqual([
+      {
+        provider: github.provider,
+        event: "push",
+        subject: "example/hq",
+        delivery_id: "delivery-unlogged",
+        received_at: expect.any(String),
+      },
+    ]);
+  });
+});
+
 describe("a request's log", () => {
   afterEach(() => vi.restoreAllMocks());
+
+  it("counts each answer by its route and status alone, a refused signature among them", async () => {
+    const counted = vi.spyOn(env.ANSWERS, "writeDataPoint");
+
+    await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-counted" });
+    await deliver({ event: "push", payload: push, id: "delivery-refused", signature: null });
+
+    expect(counted.mock.calls).toStrictEqual([
+      [{ indexes: [routes.socket], blobs: [routes.socket], doubles: [101] }],
+      [{ indexes: [github.path], blobs: [github.path], doubles: [202] }],
+      [{ indexes: [github.path], blobs: [github.path], doubles: [401] }],
+    ]);
+  });
 
   it("is its method, path and status alone, never a header", async () => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -277,7 +478,7 @@ describe("a request's log", () => {
     await deliver({ event: "push", payload: push, id: "delivery-logged" });
 
     expect(logged.mock.calls).toStrictEqual([
-      [{ method: "GET", path: SOCKET_PATH, status: 101 }],
+      [{ method: "GET", path: routes.socket, status: 101 }],
       [{ method: "POST", path: github.path, status: 202 }],
     ]);
   });

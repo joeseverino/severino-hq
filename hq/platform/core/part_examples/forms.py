@@ -4,7 +4,7 @@ from typing import override
 
 from django import forms
 
-from hq.platform.application.forms import ChoiceCards, SuffixedInput
+from hq.platform.application.forms import ChoiceCards, MultipleFileField, SuffixedInput
 from hq.platform.core.template_parts import Example
 
 
@@ -33,7 +33,9 @@ class ExampleChoices(forms.Form):
 
 
 class ExampleFiles(forms.Form):
-    exports = forms.FileField(label="Example exports", help_text="An example of the files it takes.")
+    exports = MultipleFileField(
+        label="Example exports", help_text="An example of the files it takes.", max_bytes=32 * 1024 * 1024, max_files=8
+    )
 
 
 class _ExampleWhole(forms.Form):

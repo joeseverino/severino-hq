@@ -159,6 +159,14 @@ def _unadoptable(owner) -> None:
     example_estate.automation.unadoptable()
 
 
+def _partly_adoptable(owner) -> None:
+    """The example estate once a later scan read a commit HQ can adopt all
+    but one playbook of, so the Playbooks page offers adopting the rest."""
+
+    _estate(owner)
+    example_estate.automation.partly_adoptable()
+
+
 def _unattended(owner) -> None:
     """The example estate once its playbook worker stopped reporting, so the
     Playbooks page and the run that waits say what is missing."""
@@ -179,6 +187,15 @@ def _worker_image_missing(owner) -> None:
 def _short_release() -> None:
     example_estate.automation.unattended()
     example_estate.work.worker_image_missing()
+
+
+def _readings_aged(owner) -> None:
+    """The example estate with a reading out of date, one failing and one
+    read with a part refused, so each standing the Controller page lists a
+    reading in is drawn."""
+
+    _estate(owner)
+    example_estate.work.readings_aged()
 
 
 def _glance_aged(owner) -> None:
@@ -300,6 +317,7 @@ SEEDS: dict[str, Seed] = {
     "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "unadoptable": Seed(_unadoptable, _SET_UP),
+    "partly-adoptable": Seed(_partly_adoptable, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
@@ -309,6 +327,7 @@ SEEDS: dict[str, Seed] = {
     # The same on a fresh install, so the dashboard's Needs you card holds what it raises.
     "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
+    "readings-aged": Seed(_readings_aged, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),

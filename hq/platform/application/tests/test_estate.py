@@ -22,7 +22,6 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from .. import readings
 from ..attention import infrastructure
 from ..command_center import command_center
 from ..estate import cards, estate_reading, overview
@@ -35,7 +34,7 @@ from ..public_registry import wanted_addresses
 from ..resources import get_resource
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
-from .glance_readings import HOST, reported_hour, reported_machine, reported_weather
+from .glance_readings import HOST, keep_machine, keep_weather, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
@@ -433,15 +432,10 @@ class StaleGlanceTests(TestCase):
 
         DashboardMachine.objects.create(machine=machine_spec, position=0)
         connection("ssh", "example-ssh", controller_id="example-host")
-        readings.record(
-            readings.machine_telemetry("example-host"),
-            reported_machine("example-host", host=HOST),
-            observed_at=timezone.now() - timedelta(days=26),
-        )
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
+        keep_machine(reported_machine("example-host", host=HOST), at=timezone.now() - timedelta(days=26))
+        keep_weather(
             reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            observed_at=timezone.now() - timedelta(minutes=1),
+            at=timezone.now() - timedelta(minutes=1),
         )
         machine = f"machine-{machine_spec.pk}"
 

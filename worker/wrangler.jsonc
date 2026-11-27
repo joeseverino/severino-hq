@@ -8,6 +8,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-23",
   "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "dependencies_instrumentation": {
+    "enabled": false
+  },
+  "limits": {
+    "cpu_ms": 1000
+  },
   "exports": {
     "Hub": {
       "type": "durable-object",
@@ -22,17 +30,37 @@
       }
     ]
   },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANSWERS",
+      "dataset": "hq_events"
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
     "logs": {
       "invocation_logs": false
+    },
+    "issues": {
+      "enabled": true
     }
+  },
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/github",
+      "/tailscale",
+      "/cloudflare",
+      "/socket"
+    ]
   },
   "secrets": {
     "required": [
       "GITHUB_WEBHOOK_SECRET",
       "TAILSCALE_WEBHOOK_SECRET",
+      "CLOUDFLARE_WEBHOOK_SECRET",
       "SOCKET_TOKEN"
     ]
   }

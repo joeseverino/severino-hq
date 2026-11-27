@@ -34,12 +34,16 @@ output-options:
     - dns-records-for-a-zone-delete-dns-record
     - dns-records-for-a-zone-list-dns-records
     - dns-records-for-a-zone-update-dns-record
+    - getWorkerVersion
     - getZoneRuleset
     - listZoneRulesets
+    - notification-history-list-history
     - page-rules-list-page-rules
     - pages-project-get-projects
     - registrar-domain-registration-list
     - user-api-tokens-verify-token
     - web-analytics-list-sites
+    - worker-deployments-list-deployments
+    - worker-script-list-workers
     - zone-settings-get-single-setting
     - zones-get

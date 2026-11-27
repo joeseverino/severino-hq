@@ -14,6 +14,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.names import normalized_hostname
+from hq.domains.control_plane.observations.glance import MACHINE_KIND as TELEMETRY_KIND
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
@@ -30,11 +31,11 @@ from .services import CONTAINER_KIND
 from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
 from .tone import Tone, Toned
-lazy from . import connections, derived_reads, readings
+lazy from . import connections, derived_reads
 lazy from .connection_lifecycle import WORKING
 lazy from .connections import connection_rows, connection_standing
 lazy from .entity_links import entity_link
-lazy from .facts import Subject, snapshots_of
+lazy from .facts import Subject, kept_by, record_read_at, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
 lazy from .machine_records import MachineRecord, MachineRow
 lazy from .machine_roles import role_context, roles_of
@@ -495,16 +496,16 @@ def _declarations() -> dict[str, Declared]:
         for resource in enabled_resources()
         if resource.kind == MACHINE_KIND and resource.spec.get("name")
     ]
-    telemetry = readings.stored_many(readings.machine_telemetry(key) for key, _ in declared)
+    telemetry = kept_by(TELEMETRY_KIND, "key")
     result = {}
     for key, spec in declared:
-        reading = telemetry.get(readings.machine_telemetry(key))
+        reading = telemetry.get(key)
         result[str(spec["name"])] = Declared(
             role=str(spec.get("role", "")),
             key=key,
             addresses=tuple(spec.get("addresses") or ()),
-            telemetry=dict(reading.value) if reading else {},
-            telemetry_observed_at=reading.observed_at if reading else None,
+            telemetry=dict(reading) if reading else {},
+            telemetry_observed_at=record_read_at(reading) if reading else None,
         )
     return result
 

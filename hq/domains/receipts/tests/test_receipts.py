@@ -5,17 +5,14 @@ from decimal import Decimal
 from unittest import mock
 
 from django.core.files.base import ContentFile
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
-from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
 from hq.platform.application.markup_testing import elements, links, select, text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.record_errors import InputError
 from hq.platform.core.testing import operator
 
 
@@ -97,17 +94,6 @@ class ReceiptLinkTests(TestCase):
 
         self.assertIn(("scan.pdf", reverse("receipts:file", args=[receipt.pk])), links(response))
         self.assertNotContains(response, "/_internal-media/")
-
-
-class ReceiptFileRuleTests(SimpleTestCase):
-    def test_a_file_over_the_limit_is_refused_in_megabytes(self):
-        upload = SimpleUploadedFile("big.pdf", b"", content_type="application/pdf")
-        upload.size = MAX_RECEIPT_BYTES + 1024 * 1024
-
-        with self.assertRaises(InputError) as refused:
-            validate_receipt_file(upload)
-
-        self.assertEqual(refused.exception.reason, "This file is 16 MB. The limit is 15 MB.")
 
 
 class ReceiptEditTests(TestCase):

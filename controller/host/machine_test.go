@@ -210,7 +210,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	f.ship("severino-hq-secrets.service.d/10-root-owned-exec.conf", "[Service]\n")
 	f.ship("severino-hq-secrets.timer", "[Timer]\nOnBootSec=30s\n")
 	f.ship("severino-hq-controller.service", "[Service]\nExecStart=/bin/true\n")
-	f.ship("severino-hq-controller.path", "[Path]\nPathChanged=/run/severino-hq/controller-doorbell\n")
+	f.ship("severino-hq-controller.path", "[Path]\nPathExists=/run/severino-hq/controller-doorbell\nUnit=severino-hq-controller.service\n")
 	f.ship("severino-hq-connect.conf.example", "[Service]\n")
 	if err := os.MkdirAll(filepath.Join(lib, "deploy", "tmpfiles"), 0o755); err != nil {
 		t.Fatal(err)

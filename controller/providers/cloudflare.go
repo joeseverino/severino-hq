@@ -33,6 +33,8 @@ func (r *Registry) admitCloudflare() {
 	r.reader(runtime.ResourceKindCloudflareTunnel, r.cloudflareTunnels)
 	r.reader(runtime.ResourceKindCloudflareEdgeCertificate, r.cloudflareEdgeCertificates)
 	r.reader(runtime.ResourceKindCloudflareRedirect, r.cloudflareRedirects)
+	r.reader(runtime.ResourceKindCloudflareWorker, r.cloudflareWorkers)
+	r.reader(runtime.ResourceKindCloudflareAlert, r.cloudflareAlerts)
 	r.probe(runtime.ConnectionProviderCloudflareDNS, r.cloudflareDNSProbe)
 	r.probe(runtime.ConnectionProviderCloudflareAPI, r.cloudflareAPIProbe)
 }

@@ -231,7 +231,7 @@ def _records() -> Iterable[dict[str, dict[str, Any]]]:
     """Every record a controller reports, from the model HQ validates it with."""
 
     for kind, spec in OBSERVATIONS.items():
-        if spec.read_by != "controller":
+        if not swept(kind):
             continue
         name = record_name(kind)
         described = " ".join((spec.record.__doc__ or "").split())

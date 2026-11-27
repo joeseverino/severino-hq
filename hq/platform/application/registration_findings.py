@@ -58,7 +58,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),
-                steps=(Do(ended(f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}")),),
+                fixes=(Do(ended(f"Renew {domain} or turn on auto-renew at {registrar or 'its registrar'}")),),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))

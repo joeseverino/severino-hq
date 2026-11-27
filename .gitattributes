@@ -10,9 +10,11 @@
 /docs/Shared-UI.md linguist-generated
 /hq/config/controller-connections.json linguist-generated
 /hq/platform/api/hq-api.openapi.json linguist-generated
-/hq/platform/application/hq-procedure.schema.json linguist-generated
 /policy/plugin-admission-v1.json linguist-generated
 /static/fonts/inter/inter-variable-latin.woff2 linguist-generated
+/worker/public/404.html linguist-generated
+/worker/public/index.html linguist-generated
 /worker/src/generated/arrival.json linguist-generated
+/worker/src/generated/deploy-tag linguist-generated
 /worker/src/generated/routes.json linguist-generated
 /worker/wrangler.jsonc linguist-generated

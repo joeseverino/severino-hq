@@ -17,7 +17,9 @@ eval "set -- ${usage_files:-}"
 for path do
     shift
     case "${path}" in
-        *.css | *.html) set -- "$@" "${path}" ;;
+        # Its sources' stylesheets and templates, never another .html (a page
+        # rendered from them, such as the inbound-events Worker's).
+        static/css/*.css | templates/*.html) set -- "$@" "${path}" ;;
     esac
 done
 if [ "$#" -eq 0 ]; then

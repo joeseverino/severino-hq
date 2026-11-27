@@ -92,9 +92,7 @@ class WaitingTests(TestCase):
         self.assertIn("linux-image-example", evidence(finding).get("Packages", ""))
         self.assertIn("example-edge waits on a restart", text(page.content.decode()))
         self.assertContains(page, "linux-image-example")
-        # Its steps run on the edge, the machine that waits.
-        commands = steps()
-        self.assertEqual(len(commands), 2)
-        self.assertTrue(all("example-edge" in command for command in commands), commands)
-        self.assertIn("/run/reboot-required.pkgs", commands[0])
-        self.assertIn("shutdown -r", commands[1])
+        # Its step runs on the edge, the machine that waits.
+        (command,) = steps()
+        self.assertIn("example-edge", command)
+        self.assertIn("shutdown -r", command)

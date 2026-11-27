@@ -8,7 +8,6 @@ act: ``adopt_playbooks`` is held only at the operator's own interfaces
 """
 
 import json
-import re
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
@@ -23,18 +22,11 @@ from django.db import DatabaseError, transaction
 from django.utils import timezone
 from django.utils.text import capfirst
 from pydantic import (
-    BaseModel,
-    ConfigDict,
     Field,
     Strict,
-    StrictBool,
-    StrictFloat,
-    StrictInt,
-    StrictStr,
     StringConstraints,
     TypeAdapter,
     ValidationError,
-    create_model,
 )
 
 from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
@@ -42,10 +34,11 @@ from hq.platform.core.digests import digest
 
 from . import automation_sources
 from .answer_fields import CallMessage
+from .automation_inputs import INPUT_NAME, AdoptedInput, input_type, procedure_inputs
 from .automation_manifest import AUTHORED, PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
-from .automation_sources import InputBound, ProcedureDeclaration
+from .automation_sources import ProcedureDeclaration
 from .command_fields import Describe, RequiredText
-from .contracts import Closed, Effect
+from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .quoted import Quoted
@@ -63,11 +56,11 @@ lazy from .ui import ended
 lazy from .work_runs import wording
 
 ADOPT = "automation.source.adopt"
+# Adopt's words for every change that waits while some of them HQ can't adopt.
+ADOPTABLE = "adoptable"
 REJECT = "automation.source.reject"
 # What a playbook HQ can't adopt is, at a glance, on its row of a comparison.
 CANT_ADOPT = "HQ can't adopt it"
-# The names an input may have, as a sidecar's ``inputs`` keys them.
-INPUT_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
 # The kinds of a path a proposal may carry and still be adopted. A
 # configuration or a plugin directory is code no procedure's review reads.
 REFUSED_KINDS = {
@@ -79,31 +72,6 @@ ROLES = "roles"
 
 # The most characters of an object id a comparison shows: enough to tell two apart.
 SHOWN_OBJECT = 12
-
-# Ansible's own types, as an argument spec names them, that a closed input
-# may be; ``type`` left out is a string, as Ansible reads it. The free-form
-# ones (``dict``, ``raw``, ``json``, ``jsonarg``) and the ones a run has no
-# use taking (``bits``, ``bytes``, ``sid``) are refused.
-SCALARS = {"str": StrictStr, "path": StrictStr, "int": StrictInt, "float": StrictFloat, "bool": StrictBool}
-TEXT = frozenset({"str", "path"})
-type Scalar = Literal["str", "path", "int", "float", "bool"]
-
-
-class AdoptedInput(Closed):
-    """One input of a playbook, as adopted: its argument spec's terms, and
-    the sidecar's limit on a text input."""
-
-    model_config = ConfigDict(frozen=True, strict=True)
-
-    type: Literal["str", "path", "int", "float", "bool", "list"]
-    elements: Scalar | None = None
-    required: bool = False
-    default: (
-        StrictStr | StrictInt | StrictFloat | StrictBool | tuple[StrictStr | StrictInt | StrictFloat, ...] | None
-    ) = None
-    choices: tuple[StrictStr | StrictInt | StrictFloat, ...] = ()
-    description: Annotated[str, StringConstraints(max_length=1000), AUTHORED] = ""
-    bound: InputBound | None = None
 
 
 class AdoptedProcedure(ProcedureTerms):
@@ -274,111 +242,7 @@ def manifest(procedure: AdoptedProcedure) -> OperationManifest:
     )
 
 
-def _scalar(kind: str, choices: tuple[Any, ...], bound: InputBound | None) -> Any:
-    if choices:
-        return Literal[choices]
-    if kind in TEXT:
-        if bound is None:
-            raise ValueError("a text input needs its choices or a bound")
-        return Annotated[StrictStr, StringConstraints(pattern=bound.pattern, max_length=bound.max_length)]
-    return SCALARS[kind]
-
-
-class _Inputs(Closed):
-    """A procedure's parameters, fixed once read."""
-
-    model_config = ConfigDict(frozen=True)
-
-
-def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[BaseModel]:
-    """The closed model a procedure's parameters are validated with, from its
-    inputs as adopted: each by its Ansible type, its choices or its bound."""
-
-    fields: dict[str, Any] = {}
-    for name, spec in inputs.items():
-        if spec.type == "list":
-            if spec.elements is None:
-                raise ValueError(f"the list input {name} names no type for its elements")
-            annotation: Any = tuple[_scalar(spec.elements, spec.choices, spec.bound), ...]
-        else:
-            annotation = _scalar(spec.type, spec.choices, spec.bound)
-        described = Annotated[annotation, Describe(spec.description)] if spec.description else annotation
-        if spec.required:
-            fields[name] = (described, ...)
-        elif spec.default is None:
-            fields[name] = (described | None, None)
-        else:
-            fields[name] = (described, Field(default=spec.default, validate_default=True))
-    title = "".join(part.title() for part in operation_id.replace(".", "_").split("_"))
-    model: type[BaseModel] = create_model(f"{title}Inputs", __base__=_Inputs, __module__=__name__, **fields)
-    return model
-
-
 # ------------------------------------------------------------ judging a commit
-
-
-def _description(value: Any) -> str:
-    text = " ".join(value) if isinstance(value, list) else value if isinstance(value, str) else ""
-    return text[:1000]
-
-
-def _inputs(found: Mapping[str, Any], bounds: Mapping[str, InputBound], refused: list[str]) -> dict:
-    """The inputs every role of one procedure declares, each once, bounded as
-    its sidecar says, with each problem among them added to ``refused``."""
-
-    options: dict[str, Mapping[str, Any]] = {}
-    for role in found["roles"]:
-        spec = role.get("argument_spec") or {}
-        for option, terms in (spec.get("options") or {}).items():
-            if option in options and options[option] != terms:
-                refused.append(f"Two of its roles declare the input {option} differently.")
-            options.setdefault(option, terms if isinstance(terms, Mapping) else {})
-    refused.extend(
-        f"Its sidecar limits the input {unknown}, which none of its roles takes."
-        for unknown in sorted(set(bounds) - set(options))
-    )
-    inputs: dict[str, AdoptedInput] = {}
-    for option, terms in sorted(options.items()):
-        problem = _input(option, terms, bounds.get(option), inputs)
-        if problem:
-            refused.append(problem)
-    return inputs
-
-
-def _input(option: str, terms: Mapping[str, Any], bound: InputBound | None, inputs: dict[str, AdoptedInput]) -> str:
-    """Adds ``option`` to ``inputs`` as Ansible's terms and its sidecar's
-    ``bound`` say, or answers why it cannot run."""
-
-    kind = terms.get("type", "str")
-    if not INPUT_NAME.fullmatch(option):
-        return f"The input name {option} isn't allowed; use lowercase letters, digits and underscores."
-    if kind not in (*SCALARS, "list") or terms.get("elements") not in (None, *SCALARS):
-        return f"The input {option} takes {kind}, a free-form type; name each value it allows."
-    # A run's command is published with each input's words, and a model
-    # filling one in has only them to go by.
-    if not _description(terms.get("description")).strip():
-        return f"The input {option} says nothing of what it is; give it a description in its argument_specs."
-    try:
-        adopted = AdoptedInput.model_validate_json(
-            json.dumps(
-                {
-                    "type": kind,
-                    "elements": terms.get("elements"),
-                    "required": bool(terms.get("required", False)),
-                    "default": terms.get("default"),
-                    "choices": terms.get("choices") or [],
-                    "description": _description(terms.get("description")),
-                    "bound": bound.model_dump() if bound is not None else None,
-                }
-            )
-        )
-    except ValidationError as exc:
-        return f"The input {option} cannot be read ({exc.errors(include_url=False)[0]['msg']})."
-    inputs[option] = adopted
-    text = adopted.elements if kind == "list" else kind
-    if text in TEXT and not adopted.choices and bound is None:
-        return f"The text input {option} needs its choices, or a pattern and length in its sidecar."
-    return ""
 
 
 def _role_files(playbook: str, roles: Iterable[str], paths: Iterable[str]) -> set[str]:
@@ -415,11 +279,19 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
     found: dict[str, AdoptedProcedure] = {}
     unadoptable: dict[str, _Unadoptable] = {}
     sidecars: dict[str, str] = {}
+    # What each playbook's play asserts after its work, by its id: also the
+    # verification of a change it settles (``settled_by``), whose run HQ
+    # holds until this read reports.
+    asserted = {
+        scanned["declaration"]["id"]: tuple(scanned["verification"])
+        for scanned in proposal.procedures
+        if isinstance(scanned["declaration"], dict) and isinstance(scanned["declaration"].get("id"), str)
+    }
     for scanned in proposal.procedures:
         name = scanned["sidecar"]
         declared = scanned["declaration"].get("id") if isinstance(scanned["declaration"], dict) else None
         problems = list(scanned["problems"])
-        procedure = None if problems else _procedure(proposal, scanned, objects, used[name], shared, problems)
+        procedure = None if problems else _procedure(proposal, scanned, objects, used[name], shared, asserted, problems)
         if problems or procedure is None:
             unadoptable[name] = _Unadoptable(
                 declared if isinstance(declared, str) else name,
@@ -442,8 +314,9 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
 
 def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure]) -> str:
     """Why the read ``procedure`` names to settle it cannot, or "": it is a
-    read of this catalog, on the same kinds of target, taking the same
-    revision input, so HQ can ask it of the held run's machines at its revision."""
+    read of this catalog, on the same kinds of target, taking every revision
+    its revision input takes, so HQ can ask it of the held run's machines at
+    its revision. Whether the read requires one, and its words, are its own."""
 
     if procedure.settled_by is None:
         return ""
@@ -452,7 +325,9 @@ def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure
         return f"Its sidecar's settled_by names {procedure.settled_by}, which is no read of this commit."
     if read.target_kinds != procedure.target_kinds:
         return f"Its sidecar's settled_by names {read.id}, which runs on other kinds of target."
-    if REVISION_INPUT not in procedure.inputs or read.inputs.get(REVISION_INPUT) != procedure.inputs[REVISION_INPUT]:
+    given, taken = procedure.inputs.get(REVISION_INPUT), read.inputs.get(REVISION_INPUT)
+    takes = ("type", "elements", "choices", "bound")
+    if given is None or taken is None or taken.model_dump(include=set(takes)) != given.model_dump(include=set(takes)):
         return f"Its sidecar's settled_by names {read.id}, which does not take its {REVISION_INPUT} input."
     return ""
 
@@ -470,25 +345,28 @@ def _procedure(
     objects: Mapping[str, str],
     used: set[str],
     shared: Mapping[str, str],
+    asserted: Mapping[str, tuple[str, ...]],
     problems: list[str],
 ) -> AdoptedProcedure | None:
-    """The playbook ``scanned`` as HQ would adopt it, with each problem that
-    keeps it from being adopted added to ``problems``."""
+    """The playbook ``scanned`` as HQ would adopt it, verified by its own
+    post_tasks and those of the read that settles it (``asserted``), with
+    each problem that keeps it from being adopted added to ``problems``."""
 
     try:
         declaration = ProcedureDeclaration.model_validate_json(json.dumps(scanned["declaration"]))
+        settling = asserted.get(declaration.settled_by, ()) if declaration.settled_by else ()
         problems.extend(
             f"Its sidecar's readings names {kind}, which is no reading HQ declares."
             for kind in declaration.readings
             if wording(kind) is None
         )
-        inputs = _inputs(scanned, declaration.inputs, problems)
+        inputs = procedure_inputs(scanned, declaration.inputs, problems)
         procedure = AdoptedProcedure(
             **declaration.model_dump(include=set(ProcedureTerms.model_fields)),
             playbook=scanned["playbook"],
             title=scanned["title"],
             preconditions=tuple(scanned["preconditions"]),
-            verification=tuple(scanned["verification"]),
+            verification=(*scanned["verification"], *settling),
             inputs=inputs,
             revision=proposal.revision,
             files={path: objects[path] for path in sorted(used) if path in objects},
@@ -651,12 +529,32 @@ def _commit_refusals(proposal: SourceProposal) -> list[str]:
     refused = []
     if not proposal.verified or proposal.verification_reason != "valid":
         refused.append(f"GitHub did not verify the commit's signature ({proposal.verification_reason}).")
-    refused.extend(
+    return [*refused, *_carried(proposal)]
+
+
+def _carried(proposal: SourceProposal) -> list[str]:
+    """Why HQ will not adopt the commit for a file it carries."""
+
+    return [
         ended(f"{path['path']} is {REFUSED_KINDS[path['kind']]}")
         for path in proposal.unpinned
         if path["kind"] in REFUSED_KINDS
+    ]
+
+
+def refusals(catalog: dict[str, Any]) -> tuple[str, ...]:
+    """Every reason HQ would not adopt a commit a scan read (``catalog``, the
+    bridge contract's ``SourceCatalog``), or each of its playbooks, with the
+    catalog adopted now empty; all but its signature, which GitHub says of a
+    commit only once it is pushed. A repository of playbooks checks its own
+    commit with it before it merges (``tools/pipeline/check_playbooks.py``)."""
+
+    proposal = automation_sources.proposal(catalog)
+    _found, unadoptable = _procedures(proposal)
+    return (
+        *_carried(proposal),
+        *(Quoted(f"{sidecar}: {problem}") for sidecar, found in unadoptable.items() for problem in found.problems),
     )
-    return refused
 
 
 def _changes(
@@ -779,11 +677,16 @@ def judged(proposal_id: int) -> AdoptionPlan:
 def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
     """What adopting the proposal would do, or the refusal that lists every
     reason HQ will not adopt it: of the commit, then of ``playbook`` when one
-    is named, else of every playbook whose change waits."""
+    is named, else of every playbook whose change waits while none of them
+    can be adopted."""
 
     planned = judged(proposal_id)
     named = next((change for change in planned.changes if change.key == playbook), None)
-    refused = (*planned.unplaced, *(named.problems if named else ())) if playbook else planned.refused
+    if playbook:
+        refused = (*planned.unplaced, *(named.problems if named else ()))
+    else:
+        adoptable = any(not change.problems for change in planned.changes)
+        refused = planned.unplaced if adoptable or not planned.changes else planned.refused
     if refused:
         raise PolicyError(
             "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push.",
@@ -819,7 +722,10 @@ class AdoptProposal:
     proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
-        Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
+        Describe(
+            "The playbook whose change to adopt, by its id; left out, every change that waits and HQ can adopt "
+            "is adopted."
+        ),
     ] = None
 
 
@@ -847,11 +753,12 @@ def _decided(planned: AdoptionPlan, playbook: str | None) -> tuple[PlaybookChang
 @transaction.atomic
 def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     """Adopt the change the proposal makes to one playbook, or every change
-    that waits, so each runs from the proposal's commit; every other playbook
-    stays as it was adopted."""
+    that waits and HQ can adopt, so each runs from the proposal's commit;
+    every other playbook stays as it was adopted, and one HQ can't adopt
+    still waits."""
 
     planned = plan(command.proposal, command.playbook or "")
-    chosen = _decided(planned, command.playbook)
+    chosen = tuple(change for change in _decided(planned, command.playbook) if not change.problems)
     current = adopted()
     if not chosen:
         return {
@@ -956,8 +863,8 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             ADOPT,
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
-            "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
-            "directory, is refused. Only an operator adopts, and never through an agent.",
+            "change that waits and HQ can adopt. A commit GitHub did not verify, or one carrying an ansible.cfg "
+            "or a plugins directory, is refused. Only an operator adopts, and never through an agent.",
             Effect.INFRASTRUCTURE_CHANGE,
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
@@ -965,14 +872,14 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             adopt,
             execution_notes=(
                 "Refuse a commit GitHub did not verify or one carrying an ansible.cfg or a plugins directory.",
-                "Refuse a playbook HQ can't run, and every change at once while one waits.",
+                "Refuse a playbook HQ can't run; every change at once leaves it waiting.",
                 "Compare it, playbook by playbook, with the adopted playbooks.",
                 "Each playbook adopted runs from this commit from now on; every other stays as adopted.",
                 "A run of a changed playbook that waits for approval can no longer be approved.",
             ),
             label="Adopt the playbooks",
             verb="Adopt",
-            variants=(("all", "Adopt all"),),
+            variants=(("all", "Adopt all"), (ADOPTABLE, "Adopt all HQ can")),
             home=automation_sources.PLAYBOOKS,
         ),
         CapabilitySpec(

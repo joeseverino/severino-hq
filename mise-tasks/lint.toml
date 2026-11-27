@@ -63,6 +63,12 @@ hide = true
 extends = "hk"
 vars = { step = "sentence-ends" }
 
+["lint:refusal-text"]
+description = "Every refusal a capability answers with is built from a sentence HQ wrote, never text a request or a record carried (hq/platform/application/tests/refusal_text.py)"
+hide = true
+extends = "hk"
+vars = { step = "refusal-text" }
+
 ["lint:source-scans"]
 description = "No tracked text file holds a form tools/source_scans.py refuses: a git file list read by line, a mise trust that leaves its records in the Mac's state, a reachable endpoint"
 hide = true
@@ -321,7 +327,6 @@ sources = [
 ]
 outputs = []
 depends = ["setup:worker-tools"]
-env = { WRANGLER_SEND_METRICS = "false" }
 run = "cd worker && ./node_modules/.bin/wrangler types >/dev/null && ./node_modules/.bin/tsc -p ."
 
 # The Go controller's static half: format, generated types, the vendor slicer,
@@ -394,17 +399,11 @@ hide = true
 extends = "drift"
 vars = { command = "posture_reference", writes = "docs/Posture.md" }
 
-["lint:drift-procedure-schema"]
-description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
-hide = true
-extends = "drift"
-vars = { command = "procedure_schema", writes = "hq/platform/application/hq-procedure.schema.json" }
-
 ["lint:drift-inbound-worker"]
-description = "The inbound-events Worker's wrangler.jsonc and routes.json are what the providers' INBOUND declares, and its arrival.json the bridge contract's InboundArrival"
+description = "The inbound-events Worker's wrangler.jsonc, routes.json, pages and deploy tag are what the providers' INBOUND declares, and its arrival.json the bridge contract's InboundArrival"
 hide = true
 extends = "drift"
-vars = { command = "inbound_worker", writes = "worker/wrangler.jsonc worker/src/generated/routes.json worker/src/generated/arrival.json" }
+vars = { command = "inbound_worker", writes = "worker/wrangler.jsonc worker/src/generated/routes.json worker/src/generated/arrival.json worker/public/index.html worker/public/404.html worker/src/generated/deploy-tag" }
 
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"

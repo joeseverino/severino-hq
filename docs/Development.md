@@ -490,11 +490,14 @@ changed, and so does `lint:imports`, which reads the import graph in about a
 second whenever a Python file changes.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
-`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
+`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:refusal-text`, `lint:file-rules`,
+`lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
-the Lint job runs it, it reads the whole tree.
+the Lint job runs it, it reads the whole tree. A check that reads the whole
+tree to judge part of it is a step too: `lint:refusal-text` indexes every
+module and holds those it is handed and the modules that import one.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the
@@ -507,6 +510,15 @@ every entry when such a rule names neither (an element, `:root`, a token).
 `tools/gate/look_entries.py` names each file's reach in the look's output,
 and leaves out a file that reaches every entry: that look is the whole
 catalog, CI's Browser job, as is any look of a Python-only change.
+
+A change to what the extensions' contract check reads (a template under
+`templates/partials/`, the template contract and its tag libraries, plugin
+validation, the file rules, `hq_sdk`, the check itself and the pins) selects
+`fast:extensions`, which runs in the heavy turn beside the tests: the check
+(`plugin:check`) of each extension package this checkout composes, as
+`tools/lib/extension-set.sh` picks the set, side by side, each line
+naming its package and how long it took. Where none is composed it says so
+and passes.
 
 The generated API cases (`test:api-properties`) stay CI's Test job and
 `mise run check`'s: every change Django loads reaches every operation, and

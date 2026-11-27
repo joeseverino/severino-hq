@@ -367,9 +367,9 @@ class ReadRequest(TimestampedModel):
 
 class InboundSource(models.TextChoices):
     """Who told HQ an event happened: the listener on the Worker's socket, or
-    HQ's own host jobs."""
+    HQ's own host jobs. Each label is what every page calls the channel."""
 
-    WORKER = "worker", "Worker"
+    WORKER = "worker", "Event listener"
     HOST = "host", "Host"
 
 
@@ -563,6 +563,10 @@ class OperationRequest(TimestampedModel):
         RESTART = "restart", "Restart"
         START = "start", "Start"
         STOP = "stop", "Stop"
+        # A unit's own lifecycle: clearing what systemd holds against a
+        # failed one, and having it start at boot.
+        RESET_FAILED = "reset-failed", "Clear failure"
+        ENABLE = "enable", "Enable"
         # Consent, not convergence. A route a machine advertises is inert until
         # the tailnet approves it, and approving is a decision about trusting
         # that machine to carry that traffic, so it is asked for once, by an

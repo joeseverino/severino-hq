@@ -504,6 +504,13 @@ def inventory_records(kind: str) -> tuple[tuple[Any, Mapping[str, Any]], ...]:
     )
 
 
+def kept_by(kind: str, key: str) -> dict[str, Mapping[str, Any]]:
+    """Each record of a reading kept per subject (one machine, one address),
+    by its ``key`` field (``inventory.keep``)."""
+
+    return {str(record.get(key, "")): record for row in _stored().get(kind, ()) for record in row.records}
+
+
 def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str, Any]], ...]:
     """``(snapshot, record)`` for each record of one resource kind joined to ``subject``.
 

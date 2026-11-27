@@ -218,7 +218,7 @@ def _live_connection_item(group, connection) -> DiscoveryItem:
             *(ability.name for ability in abilities),
             *(ability.label for ability in abilities),
             *(ability.summary for ability in abilities),
-            *(scope for state in connection.abilities for scope in state.missing_scopes),
+            *connection.missing_scopes,
         ),
     )
 

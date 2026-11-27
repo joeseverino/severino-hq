@@ -5,6 +5,9 @@ from pathlib import Path
 
 lazy from django.template.autoreload import get_template_directories
 
+ROOT = Path(__file__).resolve().parents[4]
+
+
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.
 NOT_SOURCE = {

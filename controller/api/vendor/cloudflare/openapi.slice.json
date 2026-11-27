@@ -122,6 +122,57 @@
     }
    }
   },
+  "/accounts/{account_id}/alerting/v3/history": {
+   "get": {
+    "operationId": "notification-history-list-history",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of items per page.",
+       "type": "number",
+       "maximum": 1000,
+       "minimum": 5,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "schema": {
+       "description": "Limit the returned results to history records newer than the specified date. This must be a timestamp that conforms to RFC3339.",
+       "type": "string",
+       "example": "2022-05-19T20:29:58.679897Z",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List History response"
+     }
+    }
+   }
+  },
   "/accounts/{account_id}/cfd_tunnel": {
    "get": {
     "operationId": "cloudflare-tunnel-list-cloudflare-tunnels",
@@ -451,6 +502,90 @@
     "responses": {
      "200": {
       "description": "List of Web Analytics sites."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/workers/scripts": {
+   "get": {
+    "operationId": "worker-script-list-workers",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Workers response."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/workers/scripts/{script_name}/deployments": {
+   "get": {
+    "operationId": "worker-deployments-list-deployments",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "script_name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Deployments response."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id}": {
+   "get": {
+    "operationId": "getWorkerVersion",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "worker_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "version_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get version success."
      }
     }
    }
@@ -807,6 +942,77 @@
  },
  "components": {
   "schemas": {
+   "aaa_components-schemas-description": {
+    "description": "Description of the notification policy (if present).",
+    "type": "string",
+    "example": "Universal Certificate validation status, issuance, renewal, and expiration notices"
+   },
+   "aaa_history": {
+    "type": "object",
+    "properties": {
+     "alert_type": {
+      "$ref": "#/components/schemas/aaa_schemas-alert_type"
+     },
+     "description": {
+      "$ref": "#/components/schemas/aaa_components-schemas-description"
+     },
+     "id": {
+      "$ref": "#/components/schemas/aaa_uuid"
+     },
+     "mechanism_type": {
+      "$ref": "#/components/schemas/aaa_mechanism_type"
+     },
+     "name": {
+      "$ref": "#/components/schemas/aaa_schemas-name"
+     },
+     "policy_id": {
+      "$ref": "#/components/schemas/aaa_policy-id"
+     },
+     "sent": {
+      "$ref": "#/components/schemas/aaa_sent"
+     }
+    }
+   },
+   "aaa_mechanism_type": {
+    "description": "The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.",
+    "type": "string",
+    "example": "email",
+    "enum": [
+     "email",
+     "pagerduty",
+     "webhook"
+    ]
+   },
+   "aaa_policy-id": {
+    "description": "The unique identifier of a notification policy",
+    "type": "string",
+    "example": "0da2b59ef118439d8097bdfb215203c9",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "aaa_schemas-alert_type": {
+    "description": "Type of notification that has been dispatched.",
+    "type": "string",
+    "example": "universal_ssl_event_type"
+   },
+   "aaa_schemas-name": {
+    "description": "Name of the policy.",
+    "type": "string",
+    "example": "SSL Notification Event Policy",
+    "x-auditable": true
+   },
+   "aaa_sent": {
+    "description": "Timestamp of when the notification was dispatched in ISO 8601 format.",
+    "type": "string",
+    "example": "2021-10-08T17:52:17.571336Z"
+   },
+   "aaa_uuid": {
+    "description": "UUID",
+    "type": "string",
+    "example": "f174e90afafe4643bbbc4a0ed4fc8415",
+    "maxLength": 32,
+    "x-auditable": true
+   },
    "access_client_id": {
     "description": "The Client ID for the service token. Access will check for this value in the `CF-Access-Client-ID` request header.",
     "type": "string",
@@ -3356,6 +3562,215 @@
     "description": "The cloudflared version used to establish this connection.",
     "type": "string",
     "example": "2022.7.1"
+   },
+   "workers_Version": {
+    "type": "object",
+    "properties": {
+     "annotations": {
+      "description": "Metadata about the version.",
+      "type": "object",
+      "properties": {
+       "workers/message": {
+        "description": "Human-readable message about the version. Truncated to 1000 bytes if longer.",
+        "type": "string",
+        "example": "Fixed bug.",
+        "maxLength": 1000,
+        "x-auditable": true
+       },
+       "workers/tag": {
+        "description": "User-provided identifier for the version. Maximum 100 bytes.",
+        "type": "string",
+        "example": "v1.0.1",
+        "maxLength": 100,
+        "x-auditable": true
+       },
+       "workers/triggered_by": {
+        "description": "Operation that triggered the creation of the version.",
+        "type": "string",
+        "example": "upload",
+        "x-auditable": true
+       }
+      }
+     },
+     "bindings": {
+      "$ref": "#/components/schemas/workers_bindings"
+     },
+     "id": {
+      "description": "Version identifier.",
+      "type": "string",
+      "x-auditable": true
+     },
+     "number": {
+      "description": "The integer version number, starting from one.",
+      "type": "integer",
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "id",
+     "number"
+    ]
+   },
+   "workers_binding_item": {
+    "description": "A binding to allow the Worker to communicate with resources.",
+    "type": "object",
+    "discriminator": {
+     "mapping": {
+      "ai": "#/components/schemas/workers_binding_kind_ai",
+      "ai_search": "#/components/schemas/workers_binding_kind_ai_search",
+      "ai_search_namespace": "#/components/schemas/workers_binding_kind_ai_search_namespace",
+      "analytics_engine": "#/components/schemas/workers_binding_kind_analytics_engine",
+      "artifacts": "#/components/schemas/workers_binding_kind_artifacts",
+      "assets": "#/components/schemas/workers_binding_kind_assets",
+      "browser": "#/components/schemas/workers_binding_kind_browser",
+      "d1": "#/components/schemas/workers_binding_kind_d1",
+      "data_blob": "#/components/schemas/workers_binding_kind_data_blob",
+      "dispatch_namespace": "#/components/schemas/workers_binding_kind_dispatch_namespace",
+      "durable_object_namespace": "#/components/schemas/workers_binding_kind_durable_object_namespace",
+      "flagship": "#/components/schemas/workers_binding_kind_flagship",
+      "hyperdrive": "#/components/schemas/workers_binding_kind_hyperdrive",
+      "images": "#/components/schemas/workers_binding_kind_images",
+      "inherit": "#/components/schemas/workers_binding_kind_inherit",
+      "json": "#/components/schemas/workers_binding_kind_json",
+      "k2": "#/components/schemas/workers_binding_kind_k2",
+      "kv_namespace": "#/components/schemas/workers_binding_kind_kv_namespace",
+      "media": "#/components/schemas/workers_binding_kind_media",
+      "messaging": "#/components/schemas/workers_binding_kind_messaging",
+      "mtls_certificate": "#/components/schemas/workers_binding_kind_mtls_certificate",
+      "pipelines": "#/components/schemas/workers_binding_kind_pipelines",
+      "plain_text": "#/components/schemas/workers_binding_kind_plain_text",
+      "queue": "#/components/schemas/workers_binding_kind_queue",
+      "r2_bucket": "#/components/schemas/workers_binding_kind_r2_bucket",
+      "ratelimit": "#/components/schemas/workers_binding_kind_ratelimit",
+      "secret_key": "#/components/schemas/workers_binding_kind_secret_key",
+      "secret_text": "#/components/schemas/workers_binding_kind_secret_text",
+      "secrets_store_secret": "#/components/schemas/workers_binding_kind_secrets_store_secret",
+      "send_email": "#/components/schemas/workers_binding_kind_send_email",
+      "service": "#/components/schemas/workers_binding_kind_service",
+      "text_blob": "#/components/schemas/workers_binding_kind_text_blob",
+      "vectorize": "#/components/schemas/workers_binding_kind_vectorize",
+      "version_metadata": "#/components/schemas/workers_binding_kind_version_metadata",
+      "vpc_network": "#/components/schemas/workers_binding_kind_vpc_network",
+      "vpc_service": "#/components/schemas/workers_binding_kind_vpc_service",
+      "wasm_module": "#/components/schemas/workers_binding_kind_wasm_module",
+      "workflow": "#/components/schemas/workers_binding_kind_workflow"
+     },
+     "propertyName": "type"
+    },
+    "oneOf": [
+     {
+      "$ref": "#/components/schemas/workers_binding_kind_analytics_engine"
+     }
+    ]
+   },
+   "workers_binding_kind_analytics_engine": {
+    "type": "object",
+    "properties": {
+     "dataset": {
+      "description": "The name of the dataset to bind to.",
+      "type": "string",
+      "example": "some_dataset",
+      "x-auditable": true
+     },
+     "name": {
+      "$ref": "#/components/schemas/workers_binding_name"
+     },
+     "type": {
+      "description": "The kind of resource that the binding provides.",
+      "type": "string",
+      "enum": [
+       "analytics_engine"
+      ],
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "name",
+     "type",
+     "dataset"
+    ]
+   },
+   "workers_binding_name": {
+    "description": "A JavaScript variable name for the binding.",
+    "type": "string",
+    "example": "myBinding",
+    "x-auditable": true
+   },
+   "workers_bindings": {
+    "description": "List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.",
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/workers_binding_item"
+    },
+    "example": [
+     {
+      "name": "MY_ENV_VAR",
+      "text": "my_data",
+      "type": "plain_text"
+     }
+    ]
+   },
+   "workers_deployment": {
+    "type": "object",
+    "properties": {
+     "created_on": {
+      "type": "string",
+      "x-auditable": true
+     },
+     "id": {
+      "type": "string",
+      "x-auditable": true
+     },
+     "versions": {
+      "description": "Worker versions included in this deployment. Each object must contain a `version_id` UUID and a `percentage`; percentages across all objects must total 100. In the `cf` CLI, pass the entire array as one JSON value to `--versions`, either inline, for example `--versions '[{\"version_id\":\"023e105f-2a42-4f8b-a1c1-73f6a2a30c0f\",\"percentage\":100}]'`, or from a JSON file with `--versions @versions.json`.",
+      "type": "array",
+      "items": {
+       "properties": {
+        "percentage": {
+         "description": "Percentage of traffic served by this version.",
+         "type": "number",
+         "example": 100,
+         "maximum": 100,
+         "minimum": 0.01,
+         "x-auditable": true
+        },
+        "version_id": {
+         "description": "Identifier of the Worker Version.",
+         "type": "string",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "version_id",
+        "percentage"
+       ],
+       "type": "object"
+      },
+      "example": [
+       {
+        "percentage": 100,
+        "version_id": "023e105f-2a42-4f8b-a1c1-73f6a2a30c0f"
+       }
+      ],
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "id",
+     "versions",
+     "created_on"
+    ]
+   },
+   "workers_script-response": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "description": "The name used to identify the script.",
+      "type": "string",
+      "example": "my-workers-script",
+      "x-auditable": true
+     }
+    }
    },
    "zones_identifier": {
     "description": "Identifier",

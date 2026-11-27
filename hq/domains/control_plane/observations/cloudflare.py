@@ -9,6 +9,8 @@ stored as a part refusal, never in a record.
 from collections.abc import Mapping
 from typing import Any
 
+from pydantic import Field
+
 from ..certificate_authorities import authority_name
 from ..consoles import cloudflare_dashboard, cloudflare_zero_trust
 from ..names import normalized_hostname
@@ -16,6 +18,12 @@ from ..permissions import Cloudflare
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 CONTACT_SUBMISSION_KIND = "cloudflare.contact_submission"
+WORKER_KIND = "cloudflare.worker"
+PAGES_PROJECT_KIND = "cloudflare.pages_project"
+ACCESS_SERVICE_TOKEN_KIND = "cloudflare.access_service_token"  # noqa: S105 - a reading's kind, never a token
+TUNNEL_KIND = "cloudflare.tunnel"
+EDGE_CERTIFICATE_KIND = "cloudflare.edge_certificate"
+ALERT_KIND = "cloudflare.alert"
 
 
 def _present(*values: Any) -> tuple[str, ...]:
@@ -79,6 +87,72 @@ class ContactSubmissionRecord(ObservationRecord):
     user_agent: str = ""
     source_url: str = ""
     turnstile: str = ""
+
+
+class WorkerVersionRecord(ObservationRecord):
+    id: str
+    number: int | None = None
+    # The share of the Worker's requests it serves, in percent.
+    percentage: float = 100
+    # What the deploy tagged it with (`wrangler deploy --tag`).
+    tag: str = ""
+
+
+# The Analytics Engine dataset HQ's events Worker writes one data point to for
+# each request it answers: the route's path its first blob and only index,
+# the status its first double.
+ANSWERS_DATASET = "hq_events"
+
+
+class WorkerAnswersRecord(ObservationRecord):
+    """How many requests to one route the Worker answered with one status."""
+
+    route: str
+    status: int
+    # Over the last day, and the last hour of it.
+    requests: int
+    last_hour: int
+
+
+# A count a part reads: the controller holds it behind a pointer, so a part
+# refused or not read sends none and a zero is a zero.
+_INVOCATIONS = Field(default=None, json_schema_extra={"x-go-type-skip-optional-pointer": False})
+
+
+class WorkerRecord(ObservationRecord):
+    """One Worker script and the deployment serving it, with what Workers
+    analytics counted of it over the last day and, for a version that binds
+    HQ's answers dataset, its answers by route and status."""
+
+    connection_ref: str = ""
+    account_id: str = ""
+    name: str
+    deployment_id: str = ""
+    deployed_at: Stamp = None
+    versions: tuple[WorkerVersionRecord, ...] = ()
+    requests: int | None = _INVOCATIONS
+    errors: int | None = _INVOCATIONS
+    # CPU time per invocation, in microseconds.
+    cpu_time_p50_us: float | None = _INVOCATIONS
+    cpu_time_p99_us: float | None = _INVOCATIONS
+    answers: tuple[WorkerAnswersRecord, ...] | None = _INVOCATIONS
+
+
+class AlertRecord(ObservationRecord):
+    """One notification Cloudflare sent for the account, as its alert history
+    keeps it. Its body and the address it went to are never kept."""
+
+    connection_ref: str = ""
+    account_id: str = ""
+    id: str
+    alert_type: str = ""
+    # The policy that sent it, and its description.
+    name: str = ""
+    policy_id: str = ""
+    description: str = ""
+    # email, pagerduty or webhook.
+    mechanism_type: str = ""
+    sent: Stamp = None
 
 
 class AccessPolicyRecord(ObservationRecord):
@@ -203,7 +277,7 @@ def _origin_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
-        "cloudflare.pages_project",
+        PAGES_PROJECT_KIND,
         "cloudflare_api",
         "Pages project",
         PagesProjectRecord,
@@ -225,6 +299,36 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("name", "")),
         relation="Backed by D1 database",
         console=lambda record: cloudflare_dashboard(record, "workers", "d1", "databases", str(record.get("uuid", ""))),
+    ),
+    ObservationSpec(
+        WORKER_KIND,
+        "cloudflare_api",
+        "Worker",
+        WorkerRecord,
+        requires=(Cloudflare.WORKERS_SCRIPTS_READ, Cloudflare.ACCOUNT_ANALYTICS_READ),
+        parts=(
+            ReadingPart("invocations", "Worker invocations", (Cloudflare.ACCOUNT_ANALYTICS_READ,)),
+            # The Analytics Engine SQL API takes the same permission
+            # (x-api-token-group of analytics-engine-sql-query-post).
+            ReadingPart("answers", "Worker answers by route", (Cloudflare.ACCOUNT_ANALYTICS_READ,)),
+        ),
+        title=lambda record: str(record.get("name", "")),
+        relation="Runs on Worker",
+        at=lambda record: str(record.get("deployed_at", "") or ""),
+        console=lambda record: cloudflare_dashboard(
+            record, "workers", "services", "view", str(record.get("name", "")), "production"
+        ),
+    ),
+    ObservationSpec(
+        ALERT_KIND,
+        "cloudflare_api",
+        "Cloudflare alert",
+        AlertRecord,
+        requires=(Cloudflare.NOTIFICATIONS_READ,),
+        title=lambda record: str(record.get("name", "")),
+        describe=lambda record: str(record.get("alert_type", "")),
+        relation="Alerted on",
+        at=lambda record: str(record.get("sent", "") or ""),
     ),
     ObservationSpec(
         CONTACT_SUBMISSION_KIND,
@@ -255,7 +359,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         console=lambda record: cloudflare_zero_trust(record, "access", "apps"),
     ),
     ObservationSpec(
-        "cloudflare.access_service_token",
+        ACCESS_SERVICE_TOKEN_KIND,
         "cloudflare_api",
         "Access service token",
         AccessServiceTokenRecord,
@@ -266,7 +370,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         expires=lambda record: str(record.get("expires_at", "")),
     ),
     ObservationSpec(
-        "cloudflare.tunnel",
+        TUNNEL_KIND,
         "cloudflare_api",
         "Tunnel",
         TunnelRecord,
@@ -286,7 +390,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         console=lambda record: cloudflare_zero_trust(record, "networks", "tunnels"),
     ),
     ObservationSpec(
-        "cloudflare.edge_certificate",
+        EDGE_CERTIFICATE_KIND,
         "cloudflare_api",
         "Edge certificate",
         EdgeCertificateRecord,

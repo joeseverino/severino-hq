@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import (
     ManagedResource,
+    OperationRequest,
     ProviderConnection,
     ProviderInventory,
 )
@@ -31,7 +32,6 @@ from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
 from hq.platform.core.digests import canonical
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
-lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 
 from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts
@@ -117,6 +117,28 @@ def _record_carried(kind: str, report: dict[str, Any], controller_id: str, obser
             refused_parts=parts, controller_id=controller_id, updated_at=observed_at
         )
     return bool(parts)
+
+
+@transaction.atomic
+def keep(kind: str, key: str, record: Mapping[str, Any], *, read_at: datetime, failed: str = "") -> None:
+    """Store one subject's record of a reading kept per subject (one machine,
+    one address), named by its ``key`` field, beside the others' records.
+
+    ``failed`` is why this read did not answer. The row keeps the moment of
+    the last read that did, and is unreadable only while none has, so one
+    subject failing never hides the others' records.
+    """
+
+    found, refused = OBSERVATIONS[kind].clean([{**record, "read_at": read_at.isoformat()}])
+    if refused:
+        raise ValueError(f"A {kind} record is not the shape its reading declares.")
+    row = ProviderInventory.objects.filter(kind=kind).first()
+    others = [held for held in (row.records if row else ()) if held.get(key) != found[0][key]]
+    answered = {"observed_at": read_at} if not failed else {}
+    reachable = not failed or (row is not None and row.observed_at is not None)
+    ProviderInventory.objects.update_or_create(
+        kind=kind, defaults={"records": [*others, *found], "reachable": reachable, "error": failed[:500], **answered}
+    )
 
 
 def _record_report(kind: str, report: dict[str, Any], controller_id: str, observed_at: datetime) -> ProviderInventory:
@@ -329,36 +351,44 @@ def _observe(resource: ManagedResource, found: dict[str, Any], seen: datetime) -
 
 
 def retire_departed(payload: dict[str, Any]) -> list[str]:
-    """Forget containers a complete listing of their machine no longer holds.
+    """Forget declarations a complete listing of their part of the estate no
+    longer holds, for each kind a sweep lists whole (``listed_whole``).
 
-    The listing includes stopped containers, so one missing from it was
-    deleted, not stopped. HQ cannot create a container (its compose file
-    defines it), so a declaration of one that is gone can never be met and
-    only raises a finding nobody can clear. The sweep that adopts what appears
-    forgets what departs, and one that returns under its name is adopted again.
+    A container's listing includes stopped ones, so one missing from it was
+    deleted, not stopped; HQ cannot create it again (its compose file defines
+    it), so its declaration could never be met. A unit missing from the unit
+    reading left the release. The sweep that adopts what appears forgets what
+    departs, and one that returns under its name is adopted again.
     """
 
-    report = payload.get(CONTAINER_KIND)
-    if report is None or not report["ok"] or report.get("refused_parts") or not report["records"]:
-        return []
-    specs = [record_spec(CONTAINER_KIND, record) for record in report["records"]]
-    if None in specs:
-        # A listing with a record HQ cannot read is not known to be complete,
-        # and only a complete one may say a container is gone.
-        return []
-    listed = {record_identity(CONTAINER_KIND, spec) for spec in specs if spec is not None}
-    hosts = {identity[0] for identity in listed}
     retired = []
-    for resource in ManagedResource.objects.filter(kind=CONTAINER_KIND):
-        identity = record_identity(CONTAINER_KIND, resource.spec)
-        # Only machines this sweep listed: an unreachable one lists nothing and
-        # retires nothing. A container marked on demand is kept, being declared
-        # precisely because it comes and goes.
-        if identity[0] not in hosts or identity in listed or resource.spec.get("on_demand"):
+    for kind, provider in PROVIDERS.items():
+        report = payload.get(kind)
+        part = provider.listed_whole
+        if part is None or report is None or not report["ok"] or report.get("refused_parts") or not report["records"]:
             continue
-        retired.append(resource.key)
-        resource.audit_gone = f"Forgot {resource.key}: no longer on its machine"
-        resource.delete()
+        specs = [record_spec(kind, record) for record in report["records"]]
+        if None in specs:
+            # A listing with a record HQ cannot read is not known to be
+            # complete, and only a complete one may say a record is gone.
+            continue
+        listed = {record_identity(kind, spec) for spec in specs if spec is not None}
+        parts = {part(spec) for spec in specs if spec is not None}
+        for resource in ManagedResource.objects.filter(kind=kind):
+            # Only parts this sweep listed: an unreachable machine lists
+            # nothing and retires nothing.
+            within = part(resource.spec)
+            if within is None or within not in parts or record_identity(kind, resource.spec) in listed:
+                continue
+            # Its finished operations go with it, each act already in the
+            # audit log; one still queued or running keeps it until it ends.
+            operations = resource.operations.all()
+            if operations.filter(state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)).exists():
+                continue
+            operations.delete()
+            retired.append(resource.key)
+            resource.audit_gone = f"Forgot {resource.key}: no longer on its machine"
+            resource.delete()
     return retired
 
 

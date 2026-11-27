@@ -36,6 +36,7 @@ class DerivedFileCommand(BaseCommand):
             if committed == current:
                 self.stdout.write(f"{name} is current.")
             elif not options["check"]:
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text(current, encoding="utf-8")
                 self.stdout.write(f"Wrote {name}.")
             else:

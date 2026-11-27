@@ -18,10 +18,11 @@ from hq.platform.application.routes import reverse
 from .contracts import Effect, route_url
 from .references import Kind
 from .security import Principal
-from .ui import counted
+from .ui import ended
 from .url_query import with_query
 from .workflow_contracts import ActionLink
 lazy from . import capabilities, outbound_work
+lazy from .connection_catalog import permissions_missing
 lazy from .pages import command_reach
 
 
@@ -361,7 +362,7 @@ def recommend_connection_action(
 
     if missing_scope_count:
         label = "Review access"
-        reason = f"Missing {counted(missing_scope_count, 'permission')} it needs."
+        reason = ended(permissions_missing(missing_scope_count))
     elif unhealthy:
         label = "See the problem"
         reason = "The last read through this connection failed."

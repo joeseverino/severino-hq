@@ -24,11 +24,10 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    LookInto,
     cannot_run_commands,
-    journal_step,
-    machine_step,
 )
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Fix, Why
 from .freshness import missed
 from .moments import duration, moment, since_when, when
 from .projection import iso
@@ -36,6 +35,7 @@ from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
+lazy from .unit_findings import on_unit
 
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
@@ -191,29 +191,29 @@ def _run_again(
     renderings: tuple[Rendering, ...],
     label: str,
     notes: tuple[str, ...] = (),
-) -> tuple[Run, ...]:
+) -> tuple[Fix, ...]:
     """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in machine_step(label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes)
-    )
-
-
-def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Run, ...]:
-    return tuple(
-        step
-        for rendering in renderings
-        if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in journal_step(
-            "See why" + _job(rendering, renderings),
-            node.label,
+        for step in on_unit(
+            "infrastructure.resource.start",
             unit,
-            ("Look for the line with event=secrets.render.failed. The lines above it say what was refused.",),
+            ByHand.on(
+                node.label, label + _job(rendering, renderings), f"systemctl start {unit}", Why.NOT_GRANTED, notes
+            ),
+            intent="Run the refresh job now",
         )
     )
+
+
+def _look_into(renderings: tuple[Rendering, ...]) -> LookInto:
+    """The refresh job's unit, where the renderings name one."""
+
+    units = {unit for rendering in renderings if (unit := RENDERER_UNITS.get(rendering.renderer))}
+    return LookInto(service_unit=next(iter(units)) if len(units) == 1 else "")
 
 
 def _why(rendering: Rendering) -> str:
@@ -264,8 +264,9 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Last refreshed", when(rendering.confirmed_at, estate.now)),
                     )
                 ),
-                steps=_journal(node, failed) + _run_again(node, failed, "Run it again"),
+                fixes=_run_again(node, failed, "Run it again"),
                 no_help_reason=cannot_run_commands(node.label),
+                look_into=_look_into(failed),
             )
         )
     return tuple(found)
@@ -326,19 +327,9 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                     ("Due", f"Every {duration(RENDER_EVERY)}, in full every {duration(FULL_READ_EVERY)}"),
                 ),
-                steps=tuple(
-                    step
-                    for rendering in stale
-                    if (unit := RENDERER_UNITS.get(rendering.renderer))
-                    for step in machine_step(
-                        "See when it last ran and is next due" + _job(rendering, stale),
-                        node.label,
-                        f"systemctl list-timers {unit.removesuffix('.service')}.timer",
-                    )
-                )
-                + _journal(node, stale)
-                + _run_again(node, stale, "Run it now"),
+                fixes=_run_again(node, stale, "Run it now"),
                 no_help_reason=cannot_run_commands(node.label),
+                look_into=_look_into(stale),
             )
         )
     return tuple(found)
@@ -377,7 +368,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Connect last read", when(rendering.sync_read_at, estate.now)),
                     )
                 ),
-                steps=(
+                fixes=(
                     Do(
                         f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
@@ -425,7 +416,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         ),
                     )
                 ),
-                steps=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
+                fixes=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )

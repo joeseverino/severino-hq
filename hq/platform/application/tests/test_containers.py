@@ -16,7 +16,7 @@ from ..container_findings import ADVISORY, UPDATE
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, containers, tally
 from ..derivation_testing import uncached
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
-from ..finding_steps import Do, Run
+from ..finding_steps import ByHand, Do, Why
 from ..findings import finding_key, rule_of
 from ..github_estate import Repository
 from .test_github_estate import store
@@ -218,10 +218,12 @@ class StandingTests(TestCase):
                     "On example-box, set the image of kuma in /opt/apps/kuma/compose.override.yaml.",
                     value="image: docker.io/example/kuma:2",
                 ),
-                Run(
+                ByHand(
                     "Then start it again",
                     'ssh example-box "sudo docker compose -f /opt/apps/kuma/compose.yaml '
                     '-f /opt/apps/kuma/compose.override.yaml up -d kuma-web"',
+                    Why.NOT_GRANTED,
+                    "example-box",
                 ),
             ),
         )

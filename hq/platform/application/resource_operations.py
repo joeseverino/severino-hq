@@ -62,7 +62,7 @@ from .record_errors import PolicyError, RecordNotFound, Sentence
 from .record_saves import Created, row
 from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
-lazy from . import tailnet
+lazy from . import tailnet, uploads
 lazy from .capabilities import Consent, Consented, capability_words, consent
 lazy from .containers import Running
 lazy from .history import asked_by
@@ -163,6 +163,12 @@ class DeclarationForgotten(TypedDict):
 
 class ObservedAccepted(ResourceSaved):
     """The record as saved from what its provider holds, and why that was asked."""
+
+    reason: OperationReason
+
+
+class UploadsAllowed(ResourceSaved):
+    """The proxy as saved letting through the largest request HQ takes, and why that was asked."""
 
     reason: OperationReason
 
@@ -573,16 +579,16 @@ def _forget_declaration(
 
 
 @transaction.atomic
-def _request_lifecycle(
+def request_lifecycle(
     command: OperationCommand,
     *,
     consented: Consented,
     current_key: str,
     action: str,
 ) -> OperationAsked:
-    """Ask the controller to start, stop or restart what a declaration names.
+    """Ask the controller for one of a declaration's lifecycle verbs.
 
-    Not reconciliation: cycling a container is asked for once, about something
+    Not reconciliation: cycling a container or a unit is asked for once, about something
     already exactly as declared, so it neither bumps the generation nor waits
     on one.
     """
@@ -637,26 +643,10 @@ def unit_gap(resource: ManagedResource) -> Sentence:
     return UNIT_OUT_OF_REACH if found is not None and not found.reachable else ""
 
 
-def request_restart(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
-    return _request_lifecycle(
-        command, consented=consented, current_key=current_key, action=OperationRequest.Action.RESTART
-    )
-
-
-def request_start(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
-    return _request_lifecycle(
-        command, consented=consented, current_key=current_key, action=OperationRequest.Action.START
-    )
-
-
-def request_stop(command: OperationCommand, *, consented: Consented, current_key: str) -> OperationAsked:
-    return _request_lifecycle(
-        command, consented=consented, current_key=current_key, action=OperationRequest.Action.STOP
-    )
-
-
 # The variant of reconcile that a record only reporting on itself offers: reading it again.
 READS_AGAIN = "reads_again"
+# Sets a proxy's body limit to the largest request HQ takes (``allow_uploads``).
+ALLOW_UPLOADS = "infrastructure.resource.uploads.allow"
 
 # The capability that asks for each verb, so a page asks for one by its verb
 # and runs it through the capability runner like every other caller. A run is
@@ -668,6 +658,8 @@ ACTION_CAPABILITY = {
     OperationRequest.Action.RESTART: "infrastructure.resource.restart",
     OperationRequest.Action.START: "infrastructure.resource.start",
     OperationRequest.Action.STOP: "infrastructure.resource.stop",
+    OperationRequest.Action.RESET_FAILED: "infrastructure.resource.reset_failed",
+    OperationRequest.Action.ENABLE: "infrastructure.resource.enable",
     OperationRequest.Action.APPROVE_ROUTES: "tailnet.routes.approve",
     OperationRequest.Action.MERGE: "app_update.approve",
 }
@@ -705,6 +697,32 @@ def accept_observed(
         current_key=resource.key,
     )
     return {**result, "reason": command.reason}
+
+
+def allow_uploads(
+    command: OperationCommand,
+    *,
+    consented: Consented,
+    current_key: str,
+) -> UploadsAllowed:
+    """Set a proxy's body limit to the largest request HQ takes, and apply it.
+
+    The limit is derived from every file field composed (``uploads``), so
+    an upload HQ accepts is never refused by the proxy in front of it.
+    """
+
+    resource = _resource_for_operation(current_key)
+    field = PROVIDERS[resource.kind].body_limit
+    if not field or resource.key not in uploads.proxies_in_front():
+        raise PolicyError("This record is no proxy in front of HQ.")
+    spec = {**resource.spec, field: uploads.proxy_body_mib()}
+    saved = save_managed_resource(
+        ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=spec, enabled=resource.enabled),
+        consented=consented,
+        current_key=resource.key,
+        sent=frozenset({"spec"}),
+    )
+    return {**saved, "reason": command.reason}
 
 
 def request_removal(

@@ -14,9 +14,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.expenses.models import Expense
-from hq.domains.receipts import validation
 from hq.domains.receipts.models import Receipt
-from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS
 from hq.platform.application.capabilities import Ran, execute_capability
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
@@ -98,25 +96,6 @@ class UploadCapabilityTests(_PrivateMedia):
         for row in kept:
             self.assertNotIn(ENCODED, row)
             self.assertNotIn("example-receipt-bytes", row)
-
-    def test_base64_longer_than_the_limit_encodes_to_is_refused_before_it_is_decoded(self):
-        with mock.patch.object(base64, "b64decode", wraps=base64.b64decode) as decode:
-            result = self.upload(a_file(content="A" * (MAX_RECEIPT_BASE64_CHARS + 4)))
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        decode.assert_not_called()
-        self.assertFalse(Receipt.objects.exists())
-
-    def test_the_limit_holds_the_decoded_size(self):
-        content = b"%PDF-1.4 x"
-        with mock.patch.object(validation, "MAX_RECEIPT_BYTES", len(content)):
-            within = self.upload(a_file(content=base64.b64encode(content).decode()))
-            over = self.upload(a_file(content=base64.b64encode(content + b"x").decode()))
-
-        # The encoded text of each is longer than the limit; only the bytes count.
-        self.assertTrue(within["ok"], within)
-        self.assertEqual(over["error"], {"code": "invalid_input", "message": "This file is 11 B. The limit is 10 B."})
-        self.assertEqual(Receipt.objects.count(), 1)
 
     def test_a_file_a_receipt_cannot_be_is_refused_in_the_hosts_words(self):
         for file, said in (

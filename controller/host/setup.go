@@ -19,7 +19,8 @@ import (
 // The host's own setup is the playbook SetupPlaybook, which the tree carries,
 // run by the Ansible of the runner image the release pins (AutomationImage).
 // Applied, it installs the release's units and tmpfiles rule, renders what
-// host.json decides, and enables and starts the units; checked, it says what
+// host.json decides, and enables the units and starts all but those that
+// start a controller pass, which Setup starts last; checked, it says what
 // an apply would change, which is the unit half of verify.
 //
 // Its security properties:
@@ -60,6 +61,7 @@ type setupVars struct {
 	SudoersDir     string   `json:"sudoers_dir"`
 	Shipped        []string `json:"shipped"`
 	Verified       []string `json:"verified"`
+	PassStarters   []string `json:"pass_starters"`
 	UnitPatterns   []string `json:"unit_patterns"`
 	SecretsUnit    string   `json:"secrets_unit"`
 	WebUnit        string   `json:"web_unit"`
@@ -95,13 +97,17 @@ func (m *Machine) setupVars(tree string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	starters, err := passStarters(units)
+	if err != nil {
+		return "", err
+	}
 	patterns := make([]string, len(unitSuffixes))
 	for i, suffix := range unitSuffixes {
 		patterns[i] = "severino-hq*" + suffix
 	}
 	vars, err := json.Marshal(setupVars{
 		Tree: tree, SystemdDir: m.Systemd, TmpfilesDir: m.Tmpfiles, SudoersDir: m.Sudoers,
-		Shipped: shipped, Verified: Verified(units, shipped), UnitPatterns: patterns,
+		Shipped: shipped, Verified: Verified(units, shipped), PassStarters: starters, UnitPatterns: patterns,
 		SecretsUnit: SecretsUnit, WebUnit: hostcore.WebUnit, AutomationUnit: AutomationUnit,
 		HostProgram: HostProgram, Container: hostcore.Container,
 		Host: hostVars{
@@ -136,7 +142,8 @@ func pinnedRunner(tree string) (string, error) {
 }
 
 // Setup applies the playbook in tree with image, tags narrowing it, its output
-// in the private log. Its container acts on the host as root.
+// in the private log. Its container acts on the host as root. A whole apply
+// then starts what starts a controller pass, which the playbook leaves to it.
 func (m *Machine) Setup(ctx context.Context, image, tree string, tags ...string) error {
 	label, play := "Host setup", []string{"--connection", "community.docker.nsenter"}
 	if len(tags) > 0 {
@@ -145,9 +152,18 @@ func (m *Machine) Setup(ctx context.Context, image, tree string, tags ...string)
 	}
 	playbook := filepath.Join(tree, filepath.Dir(SetupPlaybook))
 	confine := []string{"--privileged", "--pid", "host", "--mount", readOnly(playbook, playbook), "--env", "ANSIBLE_REMOTE_TMP=" + setupTmp}
-	return m.setupRun(ctx, image, tree, confine, play, func(ctx context.Context, args []string) error {
+	err := m.setupRun(ctx, image, tree, confine, play, func(ctx context.Context, args []string) error {
 		return m.private(ctx, label, "setup", "docker", args...)
 	})
+	if err != nil || len(tags) > 0 {
+		return err
+	}
+	units := filepath.Join(tree, "deploy", "systemd")
+	starters, err := passStarters(units)
+	if err != nil {
+		return err
+	}
+	return m.start(ctx, units, starters)
 }
 
 // CheckSetup runs the playbook in tree in check mode, in a container that reads

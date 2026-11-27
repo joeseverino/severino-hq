@@ -18,7 +18,7 @@ from .integrations import held_graph
 from .json_schemas import fields
 from .projection import MAX_PAGE_SIZE
 from .record_errors import RecordNotFound
-from .resources import ResourceError, get_resource, list_resource
+from .resources import ResourceError, get_resource, list_resource, resource_registry
 from .security import AuthorizationError, Principal
 lazy from . import references
 lazy from .domains import domain_navigation
@@ -191,9 +191,14 @@ def with_requested_target(
     item = detail.get("resource", detail)
     if not isinstance(item, dict):
         return options
-    wanted = dict(spec.target_query)
-    if any(item.get(field) != value for field, value in wanted.items()):
-        return options
+    listing = resource_registry()[spec.subject_resource].listing
+    # A filter the listing declares keeps any of its comma-separated values of its lookup.
+    lookups = {each.name: each.lookup for each in listing.filters} if listing else {}
+    for field, value in spec.target_query:
+        if field in lookups and item.get(lookups[field]) not in str(value).split(","):
+            return options
+        if field not in lookups and item.get(field) != value:
+            return options
     return (_option(item, target), *options)
 
 

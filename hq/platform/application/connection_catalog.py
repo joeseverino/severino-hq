@@ -34,6 +34,7 @@ from .moments import when
 from .projection import read_once
 from .security import Principal
 from .tone import Tone
+from .ui import counted
 lazy from .connection_records import AbilityPart
 lazy from .connections import connection_standings
 lazy from .credential_sight import PARTIAL, READABLE, REFUSED, UNREADABLE, read_through
@@ -97,6 +98,12 @@ AUTHORITY_LABELS = {
 QUIET_AUTHORITY = frozenset({"whole_account"})
 
 
+def permissions_missing(count: int) -> str:
+    """How many permissions a credential lacks, in the words every row and its action say."""
+
+    return counted(count, "permission missing", "permissions missing")
+
+
 def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> tuple[str, tuple[str, ...]]:
     """What proves this connection may perform this ability, and what is absent.
 
@@ -111,13 +118,15 @@ def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> 
     # because it is the opposite of least privilege.
     if ability.grant == "coarse" or instance.credential_model == "coarse":
         return "coarse", ()
-    # Only a scoped requirement is checked scope by scope, and only when the
-    # provider reported grants.
-    if ability.required_scopes:
-        if not instance.scopes_known:
-            return "unknown", ()
-        missing = tuple(scope for scope in ability.required_scopes if scope not in instance.granted_scopes)
-        return ("missing", missing) if missing else ("verified", ())
+    # Only a scoped requirement is checked scope by scope (one that needs none
+    # holds): against every grant listed, else against what was granted and refused.
+    if ability.required_scopes or ability.grant == "scoped":
+        granted = set(instance.granted_scopes)
+        if granted.issuperset(ability.required_scopes):
+            return "verified", ()
+        lacked = set(ability.required_scopes) - granted if instance.scopes_known else set(instance.refused_scopes)
+        missing = tuple(scope for scope in ability.required_scopes if scope in lacked)
+        return ("missing", missing) if missing else ("unknown", ())
     # What is left is a requirement nobody declared: unverified when the
     # provider could have been asked, undeclared when nothing is known.
     if instance.credential_model == "scoped":
@@ -210,26 +219,38 @@ class ConnectionView:
         """
 
         observed = self.instance.observed_at
+        if self.says_missing:
+            return permissions_missing(len(self.missing_scopes))
         if self.lifecycle == Lifecycle.UNREPORTED:
             return f"Last reported {when(observed)}" if observed else ""
-        if self.lifecycle == Lifecycle.REVOKED:
+        if self.lifecycle in (Lifecycle.REVOKED, Lifecycle.UNAUTHORIZED):
             return ""
         if self.lifecycle == Lifecycle.STALE:
             return last_read(observed)
         if self.lifecycle == Lifecycle.UNREACHABLE:
             return f"Last tried {when(observed)}" if observed else ""
-        if self.lifecycle == Lifecycle.UNAUTHORIZED:
-            missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
-            return f"Needs {', '.join(missing)}" if missing else ""
         if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
             return ""
         return AUTHORITY_LABELS[self.authority]
 
     @property
+    def missing_scopes(self) -> tuple[str, ...]:
+        """Every permission its credential lacks, once."""
+
+        lacked = (scope for state in self.abilities for scope in state.missing_scopes)
+        return tuple(dict.fromkeys((*self.instance.refused_scopes, *lacked)))
+
+    @property
+    def says_missing(self) -> bool:
+        """Whether ``state_line`` is the permissions it lacks, drawn as a fault."""
+
+        return bool(self.missing_scopes) and (self.lifecycle in WORKING or self.lifecycle == Lifecycle.UNAUTHORIZED)
+
+    @property
     def state_line_quiet(self) -> bool:
         """Whether ``state_line`` is shown only in the expanded row."""
 
-        return self.lifecycle in WORKING and self.authority in QUIET_AUTHORITY
+        return not self.says_missing and self.lifecycle in WORKING and self.authority in QUIET_AUTHORITY
 
     @property
     def name_link(self):
@@ -311,10 +332,12 @@ def _check_reading(instance: ConnectionInstance) -> None:
 def _check_grants(instance: ConnectionInstance) -> None:
     """The credential a connection holds and the scopes it reports granted."""
 
-    scopes = instance.granted_scopes
-    if len(scopes) != len(set(scopes)) or any(not SCOPE_NAME.fullmatch(scope) for scope in scopes):
-        raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
-    if instance.credential_model == "none" and (scopes or instance.scopes_known):
+    for scopes in (instance.granted_scopes, instance.refused_scopes):
+        if len(scopes) != len(set(scopes)) or any(not SCOPE_NAME.fullmatch(scope) for scope in scopes):
+            raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
+    if instance.credential_model == "none" and any(
+        (instance.granted_scopes, instance.refused_scopes, instance.scopes_known)
+    ):
         raise ImproperlyConfigured(f"Connection {instance.id!r} is keyless but reports grants.")
 
 
@@ -434,18 +457,15 @@ def _connection_view(
             actions = (*actions, state.action)
     instance = _read_through(instance)
     authority = connection_authority(state.evidence for state in states)
-    lifecycle = instance_standing(instance, authority)
-    return ConnectionView(
-        instance,
-        states,
-        recommend_connection_action(
+    view = ConnectionView(instance, states, (), instance_standing(instance, authority), authority)
+    return replace(
+        view,
+        actions=recommend_connection_action(
             actions,
-            unhealthy=lifecycle not in WORKING,
-            missing_scope_count=sum(len(state.missing_scopes) for state in states),
+            unhealthy=view.lifecycle not in WORKING,
+            missing_scope_count=len(view.missing_scopes),
             unknown_scope_count=sum(state.available is None for state in states),
         ),
-        lifecycle,
-        authority,
     )
 
 
@@ -457,7 +477,7 @@ def _read_through(instance: ConnectionInstance) -> ConnectionInstance:
     found = read_through(instance.kind, instance.label) if instance.observed_at is None else None
     if found is None:
         return instance
-    failed = [seen.observed_at for seen in found.sights if seen.state in (REFUSED, UNREADABLE) and seen.observed_at]
+    failed = [seen.tried_at for seen in found.sights if seen.state in (REFUSED, UNREADABLE) and seen.tried_at]
     read = [seen.observed_at for seen in found.sights if seen.state in (READABLE, PARTIAL) and seen.observed_at]
     if not failed and not read:
         return instance

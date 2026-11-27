@@ -14,12 +14,14 @@ from dataclasses import replace
 from django.template.loader import render_to_string
 from django.utils.html import escape
 
+from hq.domains.control_plane import inbound_worker
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.core.template_contract import parts
 from hq.platform.core.template_parts import Example, Part
 from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 from hq.platform.core.tests.browser.catalog.common import alone, head_of, page as entry_page, part_page
 from hq.platform.core.tests.browser.catalog.families import chart, form, graph, status, table, value
+lazy from hq.platform.core.tests.browser.serving import NONCE
 
 
 def default_name(each: Part) -> str:
@@ -58,9 +60,13 @@ def _assembled(*families) -> dict[str, Example]:
 CATALOG = _assembled(chart, form, graph, status, table, value)
 
 # Every entry on one page (`gallery_body`), held by the survey as each entry
-# is (`layout.CatalogLayoutTests`), and the pages the catalog draws.
+# is (`layout.CatalogLayoutTests`).
 GALLERY = "gallery"
-PAGES = (*CATALOG, GALLERY)
+# The events Worker's static pages, which HQ draws for no request
+# (`inbound_worker.pages`), each held by the survey as an entry is.
+WORKER = {f"worker/{file.removesuffix('.html')}": file for file in (inbound_worker.ROOT, inbound_worker.MISSING)}
+# The pages the catalog draws.
+PAGES = (*CATALOG, GALLERY, *WORKER)
 # The axe rules the gallery leaves out, with why, held everywhere else.
 GALLERY_LEAVES_OUT = {
     "landmark-unique": "each entry is held to it on its own page; the gallery repeats parts by design",
@@ -147,7 +153,16 @@ def _gallery_page() -> str:
 def page(name) -> str:
     """The page ``name`` of ``PAGES`` is drawn on."""
 
+    if name in WORKER:
+        return _worker_pages()[WORKER[name]]
     return _gallery_page() if name == GALLERY else entry_page(CATALOG[name], name)
+
+
+@functools.cache
+def _worker_pages() -> dict[str, str]:
+    """The Worker's pages, with the nonce a page a test puts together carries."""
+
+    return inbound_worker.pages(inbound_worker.routes(), csp_nonce=NONCE)
 
 
 def left_out_on(name) -> tuple[str, ...]:

@@ -2,3 +2,5 @@
 # them before it typechecks) and its local state.
 worker-configuration.d.ts
 .wrangler/
+# HQ's static files, which worker:deploy copies beside the pages they serve.
+/public/static/

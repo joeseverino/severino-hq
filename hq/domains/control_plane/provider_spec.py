@@ -212,27 +212,40 @@ class ConnectionKind:
 
 @dataclass(frozen=True, slots=True)
 class SignatureScheme:
-    """How a provider signs the request that carries an event, as the Worker
-    verifies it before anything else is read (``worker/src/verify.ts``).
+    """How a provider proves the request that carries an event is its own, as
+    the Worker checks it before anything else is read (``worker/src/verify.ts``).
 
-    The signature is an HMAC-SHA256 in hex, keyed by the route's secret, in a
-    header of comma-separated ``key=value`` parts.
+    An ``hmac`` signature is an HMAC-SHA256 in hex, keyed by the route's
+    secret, in a header of comma-separated ``key=value`` parts. A
+    ``shared-secret`` header holds the route's secret itself: it proves who
+    sent the request and signs nothing, so its body and a request replayed
+    are taken as any event is, as a name that asks a read.
     """
 
     header: str
     # The part that holds a digest. Several are any one matching, as a sender
     # rotating its secret signs with both.
-    digest: str
+    digest: str = ""
     # The part that holds the Unix time it was signed at, which is then
     # signed too, as ``<time>.<body>``; none signs the body alone.
     timestamp: str = ""
     # How far that time may be from the Worker's clock before the request is
     # refused as a replay.
     window_seconds: int = 0
+    form: Literal["hmac", "shared-secret"] = "hmac"
 
     def __post_init__(self) -> None:
-        if not (self.header and self.digest) or bool(self.timestamp) != (self.window_seconds > 0):
+        if self.form == "shared-secret":
+            if not self.header or self.digest or self.timestamp or self.window_seconds:
+                raise ValueError("A shared secret names its header alone.")
+        elif not (self.header and self.digest) or bool(self.timestamp) != (self.window_seconds > 0):
             raise ValueError("A signature names its header and digest, and a signed time with its window.")
+
+    @property
+    def proof(self) -> str:
+        """What a request presents to be taken, in a word."""
+
+        return "secret" if self.form == "shared-secret" else "signature"
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +273,9 @@ class InboundSpec:
     # Where the event's name is: a header, or a JSON pointer into the event.
     event_header: str = ""
     event_pointer: str = ""
+    # The name an event with nothing at ``event_pointer`` is given, where the
+    # provider sends one: Cloudflare's test message carries no alert type.
+    unnamed_event: str = ""
     # JSON pointers into the event.
     action_pointer: str = ""
     subject_pointer: str = ""
@@ -287,6 +303,8 @@ class InboundSpec:
             raise ValueError(
                 f"The route {self.path!r} names its scheme, its secret, its largest body and where an event's name is."
             )
+        if self.unnamed_event and not self.event_pointer:
+            raise ValueError("Only an event named in its body can arrive with no name.")
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due: its own entry, else its name's
@@ -606,6 +624,10 @@ class ProviderSpec:
     # Headers a proxy of this kind adds to corroborate the forwarded client
     # and scheme, in that order.
     forwarding_headers: tuple[str, str] | tuple[()] = ()
+    # The spec field holding the largest request body a proxy of this kind
+    # lets through, in MiB, 0 for the proxy's own limit. A proxy serving HQ
+    # is held to the largest request HQ takes (``proxy_findings``).
+    body_limit: str = ""
     # The certificate declaration an ingress serves its names with, by
     # resource key, or "" when it names none. A covering certificate applies
     # to a name only where the ingress that serves it names that certificate.
@@ -619,6 +641,12 @@ class ProviderSpec:
     # connection HQ was given created them. A kind that can also see things
     # nobody declared anywhere says which of its records are safe to adopt.
     adopts: Callable[[dict[str, Any]], bool] | None = None
+    # Where a sweep lists every record of this kind, the part of the estate a
+    # declaration is listed in (its machine), or None for one kept when it is
+    # missing. A declaration a complete listing of its part no longer holds is
+    # gone, and is forgotten (``inventory.retire_departed``). None: a record
+    # missing from a listing is not known to be gone.
+    listed_whole: Callable[[dict[str, Any]], str | None] | None = None
     # What sorts of connection stand behind this, matching what the controller
     # calls them. This is the join between a declaration and the credentials
     # that would carry it out: it tells a form which connections to offer, and

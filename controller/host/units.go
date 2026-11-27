@@ -1,6 +1,8 @@
 package host
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -59,4 +61,57 @@ func Verified(dir string, shipped []string) []string {
 		}
 	}
 	return units
+}
+
+// passStarters is each shipped timer and path unit under dir that starts a
+// controller pass: the unit its Unit= names, or else the service of its own
+// name, as systemd reads it (systemd.timer(5), systemd.path(5)).
+func passStarters(dir string) ([]string, error) {
+	shipped, err := Shipped(dir)
+	if err != nil {
+		return nil, err
+	}
+	var starters []string
+	for _, name := range shipped {
+		base, found := strings.CutSuffix(name, ".timer")
+		if !found {
+			base, found = strings.CutSuffix(name, ".path")
+		}
+		if !found || strings.Contains(name, "/") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return nil, err
+		}
+		started := base + ".service"
+		for line := range strings.Lines(string(data)) {
+			if value, ok := strings.CutPrefix(strings.TrimSpace(line), "Unit="); ok {
+				started = strings.TrimSpace(value)
+			}
+		}
+		if started == ControllerUnit {
+			starters = append(starters, name)
+		}
+	}
+	return starters, nil
+}
+
+// start starts each of names, those that start a controller pass under the
+// unit directory units last: a pass reads the state of every unit HQ ships,
+// so one that began while the rest were still stopped would report them so.
+func (m *Machine) start(ctx context.Context, units string, names []string) error {
+	starters, err := passStarters(units)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, last := range []bool{false, true} {
+		for _, name := range names {
+			if slices.Contains(starters, name) == last {
+				errs = append(errs, m.run(ctx, "systemctl", "start", name))
+			}
+		}
+	}
+	return errors.Join(errs...)
 }

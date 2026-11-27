@@ -20,7 +20,7 @@ lazy from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.providers import PROVIDERS, provider_reads
+lazy from hq.domains.control_plane.providers import PROVIDERS, keyless_reads
 lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
@@ -75,7 +75,7 @@ def age_of(reading: Freshness | None = None, *, at: datetime | None = None, unre
         if reading.observed_at is None:
             return Age(reading.state, note=reading.label)
         stale = reading.stale
-        return Age(reading.state, reading.observed_at, f"{reading.label.lower()}{reading.cadence}" * stale, stale)
+        return Age(reading.state, reading.observed_at, f"{reading.label.lower()}; {reading.cadence}" * stale, stale)
     if at is not None:
         return Age("read", at)
     return Age(NEVER, note=capfirst(unread))
@@ -89,15 +89,10 @@ def reading_age(reading: Freshness | None = None, *, at: datetime | None = None,
 
 
 # Cadence names for readings that are not observation kinds.
-DASHBOARD_GLANCE = "dashboard.glance"
 SSH_PROBE = "connection.ssh_probe"
 PAGE_VISIT = "page.visit"
 FIRST_SEEN = "attention.first-seen"
 AVATAR = "auth.avatar"
-
-# A dashboard reading costs a trip to a machine, so it is re-read when the
-# dashboard is opened and older than this.
-GLANCE_EVERY = timedelta(minutes=5)
 
 # What a page about one thing is assembled from is re-read when that page is
 # opened and older than this. A provider API call, not a trip to a machine, so
@@ -150,7 +145,6 @@ def on_open(every: timedelta) -> ReadCadence:
 # The cadences the host names itself, each read as its kind is judged; an
 # observation kind is the host's too.
 _NAMED: Mapping[str, Callable[[], ReadCadence]] = {
-    DASHBOARD_GLANCE: lambda: on_open(GLANCE_EVERY),
     PAGE_VISIT: lambda: on_open(VISIT_EVERY),
     SSH_PROBE: lambda: missed(ssh_probe_interval(), 2),
     # A look at what is open derives the whole queue, so a report is followed
@@ -216,7 +210,7 @@ def cadence(kind: str = "") -> ReadCadence:
         return named()
     spec = OBSERVATIONS.get(kind)
     if spec is not None and spec.every is not None:
-        return missed(spec.every, 2)
+        return on_open(spec.every) if spec.on_open else missed(spec.every, 2)
     if spec is None and (read := _read_through().get(kind)):
         # A connection HQ reaches itself is judged by the readings through it:
         # by the slowest it reads on a clock, else by one asked for on open.
@@ -237,13 +231,9 @@ def cadence(kind: str = "") -> ReadCadence:
 
 @cache
 def _read_through() -> dict[str, tuple[str, ...]]:
-    """The kinds of reading HQ takes itself, by the connection they come through."""
+    """The kinds of reading through each connection HQ reaches with no credential."""
 
-    return {
-        provider: kinds
-        for provider, reads in provider_reads().items()
-        if (kinds := tuple(read.kind for read in reads if read.by == "hq"))
-    }
+    return {provider: tuple(read.kind for read in reads) for provider, reads in keyless_reads().items()}
 
 
 def stale_after(kind: str = "") -> timedelta:
@@ -290,10 +280,10 @@ class Freshness:
 
     @property
     def cadence(self) -> str:
-        """How often its kind is read, as the words an out-of-date age ends with."""
+        """How often its kind is read, in words: what an out-of-date age ends with."""
 
         # One of a unit is said as the unit alone; the count and its unit hold on a non-breaking space.
-        return f"; read every {duration(self.every).removeprefix('1\xa0')}"
+        return f"read every {duration(self.every).removeprefix('1\xa0')}"
 
     @property
     def label(self) -> str:

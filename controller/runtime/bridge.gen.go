@@ -565,14 +565,17 @@ func (e HostService) Valid() bool {
 
 // Defines values for InboundProvider.
 const (
-	InboundProviderGitHubApp InboundProvider = "github_app"
-	InboundProviderHost      InboundProvider = "host"
-	InboundProviderTailscale InboundProvider = "tailscale"
+	InboundProviderCloudflareAPI InboundProvider = "cloudflare_api"
+	InboundProviderGitHubApp     InboundProvider = "github_app"
+	InboundProviderHost          InboundProvider = "host"
+	InboundProviderTailscale     InboundProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the InboundProvider enum.
 func (e InboundProvider) Valid() bool {
 	switch e {
+	case InboundProviderCloudflareAPI:
+		return true
 	case InboundProviderGitHubApp:
 		return true
 	case InboundProviderHost:
@@ -663,6 +666,7 @@ func (e ReadProfile) Valid() bool {
 const (
 	PartACLManagement     ReadingPartName = "acl_management"
 	PartAccess            ReadingPartName = "access"
+	PartAnswers           ReadingPartName = "answers"
 	PartApps              ReadingPartName = "apps"
 	PartAvatar            ReadingPartName = "avatar"
 	PartBranchRules       ReadingPartName = "branch_rules"
@@ -679,6 +683,7 @@ const (
 	PartFiltering         ReadingPartName = "filtering"
 	PartHTTPS             ReadingPartName = "https"
 	PartImages            ReadingPartName = "images"
+	PartInvocations       ReadingPartName = "invocations"
 	PartJobLogs           ReadingPartName = "job_logs"
 	PartLeakedCredentials ReadingPartName = "leaked_credentials"
 	PartPageRules         ReadingPartName = "page_rules"
@@ -706,6 +711,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartACLManagement:
 		return true
 	case PartAccess:
+		return true
+	case PartAnswers:
 		return true
 	case PartApps:
 		return true
@@ -738,6 +745,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartHTTPS:
 		return true
 	case PartImages:
+		return true
+	case PartInvocations:
 		return true
 	case PartJobLogs:
 		return true
@@ -889,6 +898,7 @@ const (
 	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
 	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
 	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
+	ResourceKindCloudflareAlert              ResourceKind = "cloudflare.alert"
 	ResourceKindCloudflareContactInbox       ResourceKind = "cloudflare.contact_inbox"
 	ResourceKindCloudflareContactSubmission  ResourceKind = "cloudflare.contact_submission"
 	ResourceKindCloudflareD1Database         ResourceKind = "cloudflare.d1_database"
@@ -897,7 +907,9 @@ const (
 	ResourceKindCloudflarePagesProject       ResourceKind = "cloudflare.pages_project"
 	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
+	ResourceKindCloudflareWorker             ResourceKind = "cloudflare.worker"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
+	ResourceKindDNSReverse                   ResourceKind = "dns.reverse"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
 	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
@@ -918,6 +930,7 @@ const (
 	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
 	ResourceKindMachine                      ResourceKind = "machine"
+	ResourceKindMachineTelemetry             ResourceKind = "machine.telemetry"
 	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
 	ResourceKindNPMCertificate               ResourceKind = "npm.certificate"
 	ResourceKindNPMDeadHost                  ResourceKind = "npm.dead_host"
@@ -925,6 +938,7 @@ const (
 	ResourceKindNPMRedirect                  ResourceKind = "npm.redirect"
 	ResourceKindNPMStream                    ResourceKind = "npm.stream"
 	ResourceKindNetwork                      ResourceKind = "network"
+	ResourceKindNwsForecast                  ResourceKind = "nws.forecast"
 	ResourceKindPKIAuthority                 ResourceKind = "pki.authority"
 	ResourceKindPortainerComposeProject      ResourceKind = "portainer.compose_project"
 	ResourceKindPortainerContainer           ResourceKind = "portainer.container"
@@ -971,6 +985,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindCloudflareAccessServiceToken:
 		return true
+	case ResourceKindCloudflareAlert:
+		return true
 	case ResourceKindCloudflareContactInbox:
 		return true
 	case ResourceKindCloudflareContactSubmission:
@@ -987,7 +1003,11 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindCloudflareTunnel:
 		return true
+	case ResourceKindCloudflareWorker:
+		return true
 	case ResourceKindCloudflareZone:
+		return true
+	case ResourceKindDNSReverse:
 		return true
 	case ResourceKindGitHubAllowance:
 		return true
@@ -1029,6 +1049,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindMachine:
 		return true
+	case ResourceKindMachineTelemetry:
+		return true
 	case ResourceKindNPMAccessList:
 		return true
 	case ResourceKindNPMCertificate:
@@ -1042,6 +1064,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindNPMStream:
 		return true
 	case ResourceKindNetwork:
+		return true
+	case ResourceKindNwsForecast:
 		return true
 	case ResourceKindPKIAuthority:
 		return true
@@ -1163,6 +1187,7 @@ const (
 	SweptCaddyRoute                   SweptKind = "caddy.route"
 	SweptCloudflareAccessApp          SweptKind = "cloudflare.access_app"
 	SweptCloudflareAccessServiceToken SweptKind = "cloudflare.access_service_token"
+	SweptCloudflareAlert              SweptKind = "cloudflare.alert"
 	SweptCloudflareContactSubmission  SweptKind = "cloudflare.contact_submission"
 	SweptCloudflareD1Database         SweptKind = "cloudflare.d1_database"
 	SweptCloudflareDNSRecord          SweptKind = "cloudflare.dns_record"
@@ -1170,6 +1195,7 @@ const (
 	SweptCloudflarePagesProject       SweptKind = "cloudflare.pages_project"
 	SweptCloudflareRedirect           SweptKind = "cloudflare.redirect"
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
+	SweptCloudflareWorker             SweptKind = "cloudflare.worker"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
 	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
@@ -1225,6 +1251,8 @@ func (e SweptKind) Valid() bool {
 		return true
 	case SweptCloudflareAccessServiceToken:
 		return true
+	case SweptCloudflareAlert:
+		return true
 	case SweptCloudflareContactSubmission:
 		return true
 	case SweptCloudflareD1Database:
@@ -1238,6 +1266,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareRedirect:
 		return true
 	case SweptCloudflareTunnel:
+		return true
+	case SweptCloudflareWorker:
 		return true
 	case SweptCloudflareZone:
 		return true
@@ -1409,6 +1439,21 @@ func (e UnpinnedPathKind) Valid() bool {
 	case Plugins:
 		return true
 	case Variables:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkerAnswersDataset.
+const (
+	WorkerAnswersDatasetHQEvents WorkerAnswersDataset = "hq_events"
+)
+
+// Valid indicates whether the value is a known member of the WorkerAnswersDataset enum.
+func (e WorkerAnswersDataset) Valid() bool {
+	switch e {
+	case WorkerAnswersDatasetHQEvents:
 		return true
 	default:
 		return false
@@ -1638,6 +1683,19 @@ type CloudflareAccessServiceTokenRecord struct {
 	Name          string                                     `json:"name,omitempty"`
 }
 
+// CloudflareAlertRecord One notification Cloudflare sent for the account, as its alert history keeps it. Its body and the address it went to are never kept.
+type CloudflareAlertRecord struct {
+	AccountID     string `json:"account_id,omitempty"`
+	AlertType     string `json:"alert_type,omitempty"`
+	ConnectionRef string `json:"connection_ref,omitempty"`
+	Description   string `json:"description,omitempty"`
+	ID            string `json:"id"`
+	MechanismType string `json:"mechanism_type,omitempty"`
+	Name          string `json:"name,omitempty"`
+	PolicyID      string `json:"policy_id,omitempty"`
+	Sent          string `json:"sent,omitempty"`
+}
+
 // CloudflareCAAValue A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.
 type CloudflareCAAValue = string
 
@@ -1743,6 +1801,37 @@ type CloudflareTunnelTunnelConnectionRecord struct {
 type CloudflareTunnelTunnelIngressRecord struct {
 	Hostname string `json:"hostname"`
 	Service  string `json:"service,omitempty"`
+}
+
+// CloudflareWorkerRecord One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day and, for a version that binds HQ's answers dataset, its answers by route and status.
+type CloudflareWorkerRecord struct {
+	AccountID     string                                 `json:"account_id,omitempty"`
+	Answers       *[]CloudflareWorkerWorkerAnswersRecord `json:"answers,omitempty"`
+	ConnectionRef string                                 `json:"connection_ref,omitempty"`
+	CPUTimeP50Us  *float32                               `json:"cpu_time_p50_us,omitempty"`
+	CPUTimeP99Us  *float32                               `json:"cpu_time_p99_us,omitempty"`
+	DeployedAt    string                                 `json:"deployed_at,omitempty"`
+	DeploymentID  string                                 `json:"deployment_id,omitempty"`
+	Errors        *int                                   `json:"errors,omitempty"`
+	Name          string                                 `json:"name"`
+	Requests      *int                                   `json:"requests,omitempty"`
+	Versions      []CloudflareWorkerWorkerVersionRecord  `json:"versions,omitempty"`
+}
+
+// CloudflareWorkerWorkerAnswersRecord How many requests to one route the Worker answered with one status.
+type CloudflareWorkerWorkerAnswersRecord struct {
+	LastHour int    `json:"last_hour"`
+	Requests int    `json:"requests"`
+	Route    string `json:"route"`
+	Status   int    `json:"status"`
+}
+
+// CloudflareWorkerWorkerVersionRecord defines model for CloudflareWorkerWorkerVersionRecord.
+type CloudflareWorkerWorkerVersionRecord struct {
+	ID         string  `json:"id"`
+	Number     int     `json:"number,omitempty"`
+	Percentage float32 `json:"percentage,omitempty"`
+	Tag        string  `json:"tag,omitempty"`
 }
 
 // CommitVerification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
@@ -3307,6 +3396,9 @@ type Verification struct {
 	IntervalSeconds int `json:"interval_seconds"`
 	TimeoutSeconds  int `json:"timeout_seconds"`
 }
+
+// WorkerAnswersDataset The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.
+type WorkerAnswersDataset string
 
 // AnalyticsParams defines parameters for Analytics.
 type AnalyticsParams struct {

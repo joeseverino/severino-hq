@@ -44,6 +44,22 @@ class LowerFirstTests(SimpleTestCase):
         self.assertEqual(lower_first(""), "")
 
 
+class OneTests(SimpleTestCase):
+    def test_the_article_follows_the_first_sound(self):
+        from ..labels import one
+
+        for noun, said in (
+            ("asset", "an asset"),
+            ("receipt", "a receipt"),
+            ("HQ unit", "an HQ unit"),
+            ("TLS certificate", "a TLS certificate"),
+            ("unit", "a unit"),
+            ("uploaded certificate", "an uploaded certificate"),
+        ):
+            with self.subTest(noun=noun):
+                self.assertEqual(one(noun), said)
+
+
 class DottedTests(SimpleTestCase):
     def test_each_dot_is_held_to_the_part_before_it(self):
         # A no-break space before the dot: no line starts with one or holds one alone.

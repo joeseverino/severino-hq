@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.examples import examples, own
 from demo.serve import serving
+from hq.platform.core.source import REPOSITORY, in_repository
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
 
@@ -69,8 +70,6 @@ def _open_items(page: str) -> list[str]:
 
 
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
-# The repository the About dialog links into.
-_SOURCE = "https://github.com/joeseverino/severino-hq"
 # The one link the dialog makes outside the repository: who made it.
 _AUTHOR = "https://jseverino.com"
 
@@ -547,20 +546,20 @@ class DemoSiteTests(unittest.TestCase):
         self.assertEqual(len(marks), 1, "the corner control is a link")
         inside = [found["href"] for found, dialogs in anchors if "modal-demo-about" in dialogs and "href" in found]
         links = [*marks, *inside]
-        self.assertIn(_SOURCE, links)
+        self.assertIn(REPOSITORY, links)
         self.assertIn(_AUTHOR, links)
         pages = [link for link in inside if link.startswith("/")]
         self.assertTrue(pages, "the things to try lead to pages")
         for link in links:
             with self.subTest(link=link):
-                if link in (_SOURCE, _AUTHOR):
+                if link in (REPOSITORY, _AUTHOR):
                     continue
                 if link in pages:
                     path = urlsplit(link).path
                     self.assertTrue((OUT / path.lstrip("/") / "index.html").is_file(), f"{path} is a page of the demo")
                     continue
-                self.assertTrue(link.startswith(f"{_SOURCE}/blob/main/"), link)
-                file = link.removeprefix(f"{_SOURCE}/blob/main/")
+                self.assertTrue(link.startswith(in_repository("")), link)
+                file = link.removeprefix(in_repository(""))
                 self.assertTrue((_ROOT / file).is_file(), f"{file} is in the repository")
         # The day it was saved, written the way HQ writes a day.
         self.assertRegex(about.group(0), r'saved <time datetime="[^"]+" title="[^"]+">[^<]+</time>')
