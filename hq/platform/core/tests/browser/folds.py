@@ -81,6 +81,29 @@ def _sorted_fold() -> DataTable:
     )
 
 
+# A reason held across the table under the row it folds beneath, far wider
+# than any table has room for on one line.
+REASON = " ".join(["Example reason, read from example.com and refused"] * 40)
+# The widths of the table's tracks past its own columns, its line names left out.
+SPARE = r"""(columns) => getComputedStyle(document.querySelector('main .data-table'))
+  .gridTemplateColumns.replace(/\[[^\]]*\] */g, "").split(" ").slice(columns).map(parseFloat)"""
+
+
+def _folded_reason() -> DataTable:
+    """A row of four columns heading a fold, and a long reason across the
+    table under it."""
+
+    columns = (TableColumn("Name"), TableColumn("State"), TableColumn("Read"), TableColumn("When"))
+    return DataTable(
+        "Readings",
+        columns,
+        (
+            Row((Cell("Example connection", fold=True), Cell("Ok"), Cell("12"), Cell("Nov 1")), folds="example"),
+            Row((Cell(REASON),), folded="example", across=True),
+        ),
+    )
+
+
 class FoldBrowserTests(LayoutBrowserTests):
     """The fold stands where the row's own toggle would, so it opens both."""
 
@@ -124,3 +147,15 @@ class FoldBrowserTests(LayoutBrowserTests):
 
         self.page.evaluate(CLOSE_OPENED)
         self.assertEqual(self.page.evaluate(CLOSED), 2)
+
+    @with_script
+    def test_a_row_across_the_table_adds_no_width_to_its_columns_closed_or_open(self):
+        """The name column keeps the room left over, so the columns reach the
+        table's end, with the fold closed and with it open."""
+
+        self.pages = {**self.pages, "reason-probe": probe("{% data_table table %}", table=_folded_reason())}
+        self.open("reason-probe", WIDE)
+        self.assertEqual(set(self.page.evaluate(SPARE, 4)), {0})
+
+        self.page.evaluate(PRESS_FOLD, "example")
+        self.assertEqual(set(self.page.evaluate(SPARE, 4)), {0})
