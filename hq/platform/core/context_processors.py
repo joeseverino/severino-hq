@@ -2,6 +2,7 @@ from django.conf import settings
 lazy from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.domains import domain_navigation
+from hq.platform.core import source
 lazy from hq.platform.application.agent_access import agents_paused
 lazy from hq.platform.application.appearance import THEME_CHOICES, theme_for
 lazy from hq.platform.application.pages import offering_for
@@ -14,6 +15,7 @@ def site(_request):
     return {
         "SITE_NAME": settings.SEVERINO_SITE_NAME,
         "SITE_HOST": settings.SEVERINO_SITE_HOST,
+        "HQ_REPOSITORY": source.REPOSITORY,
     }
 
 
