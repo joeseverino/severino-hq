@@ -119,6 +119,28 @@ def _record_carried(kind: str, report: dict[str, Any], controller_id: str, obser
     return bool(parts)
 
 
+@transaction.atomic
+def keep(kind: str, key: str, record: Mapping[str, Any], *, read_at: datetime, failed: str = "") -> None:
+    """Store one subject's record of a reading kept per subject (one machine,
+    one address), named by its ``key`` field, beside the others' records.
+
+    ``failed`` is why this read did not answer. The row keeps the moment of
+    the last read that did, and is unreadable only while none has, so one
+    subject failing never hides the others' records.
+    """
+
+    found, refused = OBSERVATIONS[kind].clean([{**record, "read_at": read_at.isoformat()}])
+    if refused:
+        raise ValueError(f"A {kind} record is not the shape its reading declares.")
+    row = ProviderInventory.objects.filter(kind=kind).first()
+    others = [held for held in (row.records if row else ()) if held.get(key) != found[0][key]]
+    answered = {"observed_at": read_at} if not failed else {}
+    reachable = not failed or (row is not None and row.observed_at is not None)
+    ProviderInventory.objects.update_or_create(
+        kind=kind, defaults={"records": [*others, *found], "reachable": reachable, "error": failed[:500], **answered}
+    )
+
+
 def _record_report(kind: str, report: dict[str, Any], controller_id: str, observed_at: datetime) -> ProviderInventory:
     """Store what one kind's report says, keeping the last records when the
     provider could not be reached, and log a change in records worth one."""

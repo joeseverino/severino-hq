@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import provider_reads
 
 from ..labels import dotted
@@ -51,9 +52,13 @@ class HqSight:
 
     @property
     def never(self) -> int:
-        """Listed kinds no sweep has read yet."""
+        """Listed kinds no sweep has read yet. One read when a person opens it
+        is owed nothing until someone does."""
 
-        return sum(row.sight.state == NEVER_SWEPT for row in self.rows)
+        return sum(
+            row.sight.state == NEVER_SWEPT and not ((spec := OBSERVATIONS.get(row.sight.kind)) and spec.on_open)
+            for row in self.rows
+        )
 
     @property
     def failing(self) -> int:
@@ -136,7 +141,7 @@ def _sight() -> HqSight:
     # Each inventory kind once, under the provider that reads it whole.
     for provider, reads in provider_reads().items():
         for read in reads:
-            if read.source == "part" or read.kept is not None:
+            if read.source == "part":
                 continue
             seen = sight_of(read.kind, read.label, read.source, stored.get(read.kind), permissions=read.permissions)
             groups.setdefault(CONNECTION_LABELS.get(provider, KEYLESS), []).append(Standing.of(seen))

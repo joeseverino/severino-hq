@@ -8,16 +8,17 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderInventory,
 )
+from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, REVERSE_DNS_KIND
 from hq.domains.projects.models import Project
 from hq.platform.core.testing import connection
 
-from .. import readings
 from ..capabilities import command_spec, execute_capability
 from ..field_masks import WHOLE_RECORD
 from ..integrations import held_graph
+from ..inventory import keep
 from ..resources import list_resource
 from ..security import Capability, Principal
-from .glance_readings import reported_weather
+from .glance_readings import keep_weather, reported_weather
 from .writers import keyed
 
 OPERATOR = Principal(
@@ -62,13 +63,16 @@ class GatewayConnectionTests(TestCase):
             observed_at=timezone.now(),
         )
         connection("cloudflare_api", "example-cloudflare", manages=True)
-        readings.record(
-            readings.weather("41.8781,-87.6298"),
-            reported_weather("41.8781,-87.6298", city="Chicago", state="IL"),
-            observed_at=timezone.now(),
-        )
+        keep_weather(reported_weather("41.8781,-87.6298", city="Chicago", state="IL"), at=timezone.now())
         # An address RDAP answered for and the resolver did not.
-        readings.record(readings.public_address("192.0.2.1"), {"address": "192.0.2.1", "allocation": {"name": "NET"}})
+        keep(
+            REVERSE_DNS_KIND,
+            "address",
+            {"address": "192.0.2.1", "unread": "Down"},
+            read_at=timezone.now(),
+            failed="Down",
+        )
+        keep(ADDRESS_KIND, "address", {"address": "192.0.2.1", "network": "NET"}, read_at=timezone.now())
 
     def test_host_gateways_emit_from_the_domain_registry(self):
         names = set(held_graph().connections)

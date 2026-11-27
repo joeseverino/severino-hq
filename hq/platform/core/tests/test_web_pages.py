@@ -16,7 +16,6 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
 from hq.platform.application.asks import REFRESHING
 from hq.platform.application.cadence_testing import controller_arrived
@@ -24,7 +23,7 @@ from hq.platform.application.labels import DOT
 from hq.platform.application.markup_testing import elements, hrefs, select, text, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resources import get_resource
-from hq.platform.application.tests.glance_readings import HOST, reported_machine
+from hq.platform.application.tests.glance_readings import HOST, keep_machine, reported_machine
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.testing import READER, SignedInTestCase, connection, declare
 from hq_sdk.testing import plain
@@ -223,11 +222,7 @@ class DashboardWorkflowTests(SignedInTestCase):
     def test_dashboard_and_machine_page_share_the_machine_observation(self):
         observed = timezone.now()
         machine = declare("example-host", "machine", {"name": "example-host"})
-        readings.record(
-            readings.machine_telemetry("example-host"),
-            reported_machine("example-host", host=HOST),
-            observed_at=observed,
-        )
+        keep_machine(reported_machine("example-host", host=HOST), at=observed)
         DashboardMachine.objects.create(machine=machine)
 
         dashboard = self.client.get("/")

@@ -129,16 +129,7 @@ def wanted_domains() -> tuple[str, ...]:
 
 
 def read_address(address: str, allocations: Callable[..., dict] = registry) -> dict[str, Any]:
-    held = allocations(address)
-    allocation = allocation_of(held)
-    return {
-        "address": address,
-        "organization": allocation["organization"],
-        "network": allocation["name"],
-        "handle": allocation["handle"],
-        "country": allocation["country"],
-        "range": allocation["range"],
-    }
+    return {"address": address, **allocation_of(allocations(address))}
 
 
 def read_domain(domain: str, registrations: Callable[..., dict] = domain_registry) -> dict[str, Any]:

@@ -898,6 +898,7 @@ const (
 	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
+	ResourceKindDNSReverse                   ResourceKind = "dns.reverse"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
 	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
@@ -918,6 +919,7 @@ const (
 	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
 	ResourceKindMachine                      ResourceKind = "machine"
+	ResourceKindMachineTelemetry             ResourceKind = "machine.telemetry"
 	ResourceKindNPMAccessList                ResourceKind = "npm.access_list"
 	ResourceKindNPMCertificate               ResourceKind = "npm.certificate"
 	ResourceKindNPMDeadHost                  ResourceKind = "npm.dead_host"
@@ -925,6 +927,7 @@ const (
 	ResourceKindNPMRedirect                  ResourceKind = "npm.redirect"
 	ResourceKindNPMStream                    ResourceKind = "npm.stream"
 	ResourceKindNetwork                      ResourceKind = "network"
+	ResourceKindNwsForecast                  ResourceKind = "nws.forecast"
 	ResourceKindPKIAuthority                 ResourceKind = "pki.authority"
 	ResourceKindPortainerComposeProject      ResourceKind = "portainer.compose_project"
 	ResourceKindPortainerContainer           ResourceKind = "portainer.container"
@@ -989,6 +992,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindCloudflareZone:
 		return true
+	case ResourceKindDNSReverse:
+		return true
 	case ResourceKindGitHubAllowance:
 		return true
 	case ResourceKindGitHubDashboardBox:
@@ -1029,6 +1034,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindMachine:
 		return true
+	case ResourceKindMachineTelemetry:
+		return true
 	case ResourceKindNPMAccessList:
 		return true
 	case ResourceKindNPMCertificate:
@@ -1042,6 +1049,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindNPMStream:
 		return true
 	case ResourceKindNetwork:
+		return true
+	case ResourceKindNwsForecast:
 		return true
 	case ResourceKindPKIAuthority:
 		return true

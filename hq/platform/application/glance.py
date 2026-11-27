@@ -16,10 +16,10 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+from hq.domains.control_plane.observations.glance import MACHINE_KIND, NWS, WEATHER_KIND, MachineReading, WeatherReading
 from hq.platform.application.url_query import with_query
 lazy from hq.platform.application.routes import reverse
 
-from . import readings
 from .answer_fields import CallMessage
 from .asks import FAILED, REFRESHING, RUNNING, Standing
 from .card_items import Kpi
@@ -27,13 +27,14 @@ from .command_fields import Checked, Describe, Reason, stored_in
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .container_state import ContainerCount
 from .contracts import Effect
-from .freshness import DASHBOARD_GLANCE, freshness
+from .freshness import freshness
 from .labels import dotted, human_bytes
 from .moments import clock
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
 from .ui import MISSING, counted, measured, severity_tone
+lazy from .facts import kept_by, record_read_at
 lazy from .glance_refresh import refresh_ask
 lazy from .machines import machine as machine_named
 lazy from .projection import read_once
@@ -51,7 +52,7 @@ def connection_specs():
             ConnectionInstance(
                 id="national-weather-service",
                 label="National Weather Service",
-                kind=readings.NWS,
+                kind=NWS,
                 detail="Weather for the dashboard. Public, no key needed.",
                 endpoint=NWS_API,
                 credential_model="none",
@@ -340,6 +341,7 @@ def save_dashboard_settings(command: DashboardSettingsCommand, *, principal: Pri
 
 def _panel(
     spec: DashboardPanelSpec,
+    kind: str,
     *,
     payload: dict[str, Any],
     observed_at: Any,
@@ -359,7 +361,7 @@ def _panel(
 
     shown = tuple(_glance_reading(metric, spec) for metric in payload.get("metrics", []))
     awaited, asked_at = pending or (False, None)
-    found = freshness(DASHBOARD_GLANCE, observed_at, asked_at=asked_at, failed=bool(payload.get("refresh_failed")))
+    found = freshness(kind, observed_at, asked_at=asked_at, failed=bool(payload.get("refresh_failed")))
     return {
         "id": spec.id,
         "label": spec.label,
@@ -545,7 +547,7 @@ def stored_reading[Shape: BaseModel](shape: type[Shape], value: Any) -> Shape | 
 def machine_metrics(telemetry: Any) -> list[dict[str, str]]:
     """A machine's stored telemetry as the metrics its page lists."""
 
-    machine = stored_reading(Machine, telemetry)
+    machine = stored_reading(MachineReading, telemetry)
     return machine_words(machine)["metrics"] if machine else []
 
 
@@ -576,11 +578,8 @@ def dashboard_panels(
     machine_resources = dashboard_machines()
     routes = machine_routes(machine_resources) if machine_resources else {}
     point = configuration.weather_point
-    weather_key = readings.weather(point) if point else ""
-    stored = readings.stored_many(
-        [*(readings.machine_telemetry(resource.key) for resource in machine_resources), weather_key]
-    )
-    weather = stored.get(weather_key)
+    telemetry = kept_by(MACHINE_KIND, "key")
+    weather = kept_by(WEATHER_KIND, "point").get(point) if point else None
     # Each panel a reading is on its way for: whether a person waits on it, and when it was asked.
     pending = {
         panel_id: (awaited, asked_at)
@@ -591,7 +590,7 @@ def dashboard_panels(
     panels = []
     for resource in machine_resources:
         panel_id = f"machine-{resource.pk}"
-        reading = stored.get(readings.machine_telemetry(resource.key))
+        reading = telemetry.get(resource.key)
         # Several machines' readings read alike, so each head names its own.
         name = str(resource.spec.get("name") or resource.key) if len(machine_resources) > 1 else ""
         spec = replace(
@@ -604,15 +603,16 @@ def dashboard_panels(
                 else "HQ has no way to read this machine yet."
             ),
         )
-        machine = stored_reading(Machine, reading.value if reading else None)
+        machine = stored_reading(MachineReading, reading)
         found = machine_named(str(resource.spec.get("name") or resource.key))
         panels.append(
             _panel(
                 spec,
+                MACHINE_KIND,
                 payload=machine_words(machine, found.container_count if found and found.containers else None)
                 if machine
                 else {},
-                observed_at=reading.observed_at if reading else None,
+                observed_at=record_read_at(reading) if reading else None,
                 # A request nothing can answer is not a refresh in progress.
                 pending=pending.get(panel_id) if resource.pk in routes else None,
                 refreshable=resource.pk in routes,
@@ -622,12 +622,13 @@ def dashboard_panels(
     # Nothing empty takes space: with no machine chosen there is no machine
     # reading to draw, and Get started's step is what asks for one.
     if "weather" in specs:
-        forecast = stored_reading(Weather, weather.value if weather else None)
+        forecast = stored_reading(WeatherReading, weather)
         panels.append(
             _panel(
                 specs["weather"],
+                WEATHER_KIND,
                 payload=weather_words(forecast) if forecast else {},
-                observed_at=weather.observed_at if weather else None,
+                observed_at=record_read_at(weather) if weather else None,
                 pending=pending.get("weather") if routes else None,
                 # Weather rides with a machine's refresh, so it can be asked
                 # for only when a controller reaches one of them.

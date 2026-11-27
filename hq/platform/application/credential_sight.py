@@ -10,15 +10,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory, attempted_at
 from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from hq.domains.control_plane.providers import PROVIDERS, Read, provider_reads
+from hq.domains.control_plane.providers import PROVIDERS, Read, keyless_reads, provider_reads
 from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts
 
-from . import readings
 from .projection import read_once
 from .tone import Tone, TonedChoices
 lazy from .facts import records_through, stored_snapshots
@@ -53,6 +52,9 @@ class Sight:
     state: str
     records: int = 0
     observed_at: datetime | None = None
+    # When a read that failed was tried, which a read that never answered
+    # has in place of ``observed_at``.
+    tried_at: datetime | None = None
     error: str = ""
     requires: str = ""
     # One of REFUSALS when the provider refused the read.
@@ -248,6 +250,7 @@ def sight(
             source,
             REFUSED if refusal else UNREADABLE,
             observed_at=row.observed_at,
+            tried_at=attempted_at(row.observed_at, row.updated_at),
             # A refused credential is said once for the provider, not per kind.
             error="" if refusal == CREDENTIAL_REFUSAL else row.error,
             requires=requires,
@@ -442,40 +445,22 @@ def _fed(provider: str) -> tuple[Read, ...]:
 
     if provider not in CONNECTION_CREDENTIALS:
         return ()
-    return tuple(read for read in provider_reads().get(provider, ()) if read.kept is None)
+    return provider_reads().get(provider, ())
 
 
 def read_through(provider: str, label: str) -> ProviderSight | None:
     """What came through a connection HQ reaches itself, with no credential:
-    each reading HQ takes through it, as stored. None when none does."""
+    each reading taken through it, as stored. None when none is."""
 
     def load() -> ProviderSight | None:
         inventory = _inventory()
         sights = [
-            _kept(read.kept, read.kept.through[provider])
-            if read.kept is not None
-            else sight(read.kind, read.label, "reading", inventory.get(read.kind))
-            for read in provider_reads().get(provider, ())
-            if read.by == "hq"
+            sight(read.kind, read.label, "reading", inventory.get(read.kind))
+            for read in keyless_reads().get(provider, ())
         ]
         return ProviderSight(provider, label, tuple(sorted(sights, key=lambda seen: seen.label))) if sights else None
 
     return read_once(f"credential_sight.through:{provider}", load)
-
-
-def _kept(kept: readings.Kept, answered) -> Sight:
-    """One kind of kept reading through one connection: read when any stored
-    value says the connection answered, and as of the newest that does."""
-
-    stored = kept.stored()
-    good = [item.observed_at for item in stored if answered(item.value)]
-    if good:
-        return Sight(kept.cadence, kept.label, "reading", READABLE, records=len(good), observed_at=max(good))
-    if stored:
-        return Sight(
-            kept.cadence, kept.label, "reading", UNREADABLE, observed_at=max(item.observed_at for item in stored)
-        )
-    return Sight(kept.cadence, kept.label, "reading", NEVER_SWEPT)
 
 
 def sight_by_connection(

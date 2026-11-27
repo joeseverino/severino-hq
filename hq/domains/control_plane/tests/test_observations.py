@@ -37,12 +37,12 @@ class ContractTests(SimpleTestCase):
         self.assertEqual(kept, [{"name": "b"}])
         self.assertEqual(refused, 2)
 
-    def test_hq_readers_and_readings_are_the_same_set(self):
+    def test_hq_readers_and_the_readings_on_its_clock_are_the_same_set(self):
         from hq.platform.application.public_registry import READERS
 
         self.assertEqual(
             sorted(READERS),
-            sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "hq"),
+            sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "hq" and not s.on_open),
         )
 
     def test_no_record_schema_carries_an_unread_marker_from_a_credential_read(self):

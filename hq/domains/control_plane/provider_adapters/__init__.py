@@ -8,7 +8,7 @@ what admitting one takes, is docs/Architecture.md#providers.
 from collections.abc import Collection, Iterable, Mapping
 from typing import Any
 
-from ..observations import host, hq, public_registry
+from ..observations import glance, host, hq, public_registry
 from ..observations.contract import ObservationSpec, registry
 from ..provider_spec import ConnectionKind, InboundSpec
 from . import (
@@ -42,6 +42,7 @@ ADMITTED = (
     r2,
     automation,
     host,
+    glance,
     hq,
     public_registry,
 )

@@ -21,18 +21,37 @@ UPSTREAM_KIND = "registry.upstream"
 DIGEST_KIND = "registry.digest"
 VULNERABILITY_KIND = "registry.vulnerabilities"
 
+REVERSE_DNS_KIND = "dns.reverse"
+
 # The keyless RDAP service, through which who holds an address or a domain is read.
 RDAP = "rdap"
+# The keyless public resolver, through which an address's reverse DNS is read.
+PUBLIC_DNS = "public_dns"
 
 
 class AddressHolderRecord(ObservationRecord):
     address: str
-    # The organization the allocation names, and the network's own name.
+    # The organization the allocation names, and the network's own name: an
+    # RDAP answer as ``lookup.allocation_of`` keeps it.
     organization: str = ""
-    network: str = ""
+    name: str = ""
     handle: str = ""
     country: str = ""
+    type: str = ""
     range: str = ""
+    prefixes: tuple[str, ...] = ()
+    read_at: Stamp = None
+    unread: str = ""
+
+
+class ReverseDnsRecord(ObservationRecord):
+    address: str
+    # The names its PTR records give it, its reverse DNS name, and the
+    # resolver that answered; ``note`` is what the resolver said beside them.
+    hostnames: tuple[str, ...] = ()
+    arpa: str = ""
+    resolver: str = ""
+    note: str = ""
     read_at: Stamp = None
     unread: str = ""
 
@@ -162,11 +181,25 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Address owner",
         AddressHolderRecord,
         addresses=_address,
-        title=lambda record: organization_name(str(record.get("organization") or record.get("network") or "")),
+        title=lambda record: organization_name(str(record.get("organization") or record.get("name") or "")),
         relation="On the network of",
         facet="network",
         read_by="hq",
         every=_WEEK,
+    ),
+    # Read when a person looks an address up, never on the registry's clock:
+    # asking again spends a stranger's rate limit and tells them which
+    # addresses HQ cares about.
+    ObservationSpec(
+        REVERSE_DNS_KIND,
+        PUBLIC_DNS,
+        "Reverse DNS",
+        ReverseDnsRecord,
+        title=lambda record: str(record.get("address", "")),
+        relation="Reverse DNS of",
+        read_by="hq",
+        every=_WEEK,
+        on_open=True,
     ),
     ObservationSpec(
         DOMAIN_KIND,

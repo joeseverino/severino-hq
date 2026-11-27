@@ -54,7 +54,7 @@ def declared_choices():
             queue_sources(),
         ),
         ("infrastructure", "kind", list(PROVIDERS)),
-        ("readings", "provider", {spec.provider for spec in OBSERVATIONS.values()}),
+        ("readings", "provider", {spec.provider for spec in OBSERVATIONS.values()} - {None}),
     )
 
 

@@ -863,7 +863,9 @@ def controller_registry() -> dict[str, Any]:
         "connection_providers": {
             kind: list(provider.connection_providers) for kind, provider in sorted(PROVIDERS.items())
         },
-        "observations": {kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items())},
+        "observations": {
+            kind: reading.provider for kind, reading in sorted(OBSERVATIONS.items()) if reading.provider is not None
+        },
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
         "logging_in": sorted(LOGGING_IN),
         "extensions": [dict(source) for source in admitted_sources()],

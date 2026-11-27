@@ -36,9 +36,9 @@ from hq.domains.control_plane.observations.public_registry import (
     VULNERABILITY_KIND,
 )
 from hq.domains.projects.models import Project
-from hq.platform.application import readings
 from hq.platform.application.approvals import is_held
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.facts import record_read_at
 from hq.platform.application.inventory_testing import store
 from hq.platform.application.payload_words import changed_words
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
@@ -46,6 +46,7 @@ from hq.platform.application.references import Kind
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
+from hq.platform.application.tests.glance_readings import keep_machine, keep_weather, kept_weather
 from hq.platform.application.tests.writers import keyed, runbook
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.records import SERVER_ASSET
@@ -443,12 +444,10 @@ def _glance():
     now = timezone.now()
     for position, key in enumerate(("example-primary-host", "example-edge-host"), start=1):
         DashboardMachine.objects.create(machine=ManagedResource.objects.get(key=key), position=position)
-        readings.record(
-            readings.machine_telemetry(key),
+        keep_machine(
             {
                 "key": key,
                 "docker": {
-                    "containers": 14,
                     "cpu_percent": 37.0,
                     "cores": 8,
                     "memory_used": 13_900_000_000,
@@ -456,14 +455,14 @@ def _glance():
                     "storage": 64_000_000_000,
                 },
             },
-            observed_at=now,
+            at=now,
         )
-    forecast = readings.stored(readings.weather(DashboardConfiguration.objects.get().weather_point))
+    forecast = kept_weather(DashboardConfiguration.objects.get().weather_point)
     alerts = [
         {"event": "Heat Advisory", "headline": "Heat Advisory until evening", "severity": "Severe"},
         {"event": "Air Quality Alert", "severity": "Moderate"},
     ]
-    readings.record(forecast.key, {**forecast.value, "alerts": alerts}, observed_at=forecast.observed_at)
+    keep_weather({**forecast, "alerts": alerts}, at=record_read_at(forecast))
 
 
 def _due_on_opening():

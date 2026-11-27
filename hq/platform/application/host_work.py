@@ -161,9 +161,9 @@ def _own(name: str, label: str, run: Any, every: timedelta | None = None, **read
 
 
 def _read_here() -> tuple[str, ...]:
-    """The readings HQ takes itself, each from a public registry (``read_by``)."""
+    """The readings HQ takes itself on its clock, each from a public registry (``read_by``)."""
 
-    return tuple(kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "hq")
+    return tuple(kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "hq" and not spec.on_open)
 
 
 def outbound() -> tuple[OutboundWork, ...]:

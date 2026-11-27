@@ -1,7 +1,15 @@
 """Dashboard readings as the controller reports them (glance_shapes), for the
-tests that store one."""
+tests that store one, and the store they are kept in."""
 
+from datetime import datetime
 from typing import Any
+
+from django.utils import timezone
+
+from hq.domains.control_plane.observations.glance import MACHINE_KIND, WEATHER_KIND
+
+from ..facts import kept_by
+from ..inventory import keep
 
 # A machine read over SSH: 9% of its CPU, a quarter of its memory and half its
 # disk in use.
@@ -44,3 +52,27 @@ def reported_weather(point: str, *hours: dict[str, Any], **fields: Any) -> dict[
     """The forecast at ``point``."""
 
     return {"point": point, "hours": list(hours), **fields}
+
+
+def keep_machine(reading: dict[str, Any], *, at: datetime | None = None) -> None:
+    """Store a machine's reading, read ``at`` (now by default)."""
+
+    keep(MACHINE_KIND, "key", reading, read_at=at or timezone.now())
+
+
+def keep_weather(reading: dict[str, Any], *, at: datetime | None = None) -> None:
+    """Store the forecast at a point, read ``at`` (now by default)."""
+
+    keep(WEATHER_KIND, "point", reading, read_at=at or timezone.now())
+
+
+def kept_machine(key: str) -> Any:
+    """The stored reading of one machine, or None."""
+
+    return kept_by(MACHINE_KIND, "key").get(key)
+
+
+def kept_weather(point: str) -> Any:
+    """The stored forecast at ``point``, or None."""
+
+    return kept_by(WEATHER_KIND, "point").get(point)

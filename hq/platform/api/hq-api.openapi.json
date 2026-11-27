@@ -25651,8 +25651,15 @@
             ]
           },
           "provider": {
-            "description": "The service it is read from, such as `adguard`.",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The service it is read from, such as `adguard`; null where no one connection reads it."
           },
           "records": {
             "description": "How many records the last read stored.",
@@ -29881,6 +29888,7 @@
           "cloudflare.redirect",
           "cloudflare.tunnel",
           "cloudflare.zone",
+          "dns.reverse",
           "github.allowance",
           "github.dashboard_box",
           "github.delivery",
@@ -29901,6 +29909,7 @@
           "host.unit",
           "hq.request_path",
           "machine",
+          "machine.telemetry",
           "network",
           "npm.access_list",
           "npm.certificate",
@@ -29908,6 +29917,7 @@
           "npm.proxy_host",
           "npm.redirect",
           "npm.stream",
+          "nws.forecast",
           "pki.authority",
           "portainer.compose_project",
           "portainer.container",
@@ -29952,6 +29962,7 @@
           "cloudflare.redirect": "Redirect",
           "cloudflare.tunnel": "Tunnel",
           "cloudflare.zone": "Domain",
+          "dns.reverse": "Reverse DNS",
           "github.allowance": "GitHub hourly allowance",
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
@@ -29972,6 +29983,7 @@
           "host.unit": "Background jobs",
           "hq.request_path": "Requests reaching HQ",
           "machine": "Machine",
+          "machine.telemetry": "Machine figures",
           "network": "Network",
           "npm.access_list": "NPM access list",
           "npm.certificate": "NPM certificate",
@@ -29979,6 +29991,7 @@
           "npm.proxy_host": "Proxy host",
           "npm.redirect": "NPM redirect",
           "npm.stream": "NPM stream",
+          "nws.forecast": "Weather forecast",
           "pki.authority": "Certificate authority",
           "portainer.compose_project": "Compose project",
           "portainer.container": "Container",
@@ -42696,8 +42709,10 @@
                 "hq",
                 "image_registry",
                 "npm",
+                "nws",
                 "osv",
                 "portainer",
+                "public_dns",
                 "r2",
                 "rdap",
                 "ssh",

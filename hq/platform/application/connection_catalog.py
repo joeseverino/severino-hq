@@ -477,7 +477,7 @@ def _read_through(instance: ConnectionInstance) -> ConnectionInstance:
     found = read_through(instance.kind, instance.label) if instance.observed_at is None else None
     if found is None:
         return instance
-    failed = [seen.observed_at for seen in found.sights if seen.state in (REFUSED, UNREADABLE) and seen.observed_at]
+    failed = [seen.tried_at for seen in found.sights if seen.state in (REFUSED, UNREADABLE) and seen.tried_at]
     read = [seen.observed_at for seen in found.sights if seen.state in (READABLE, PARTIAL) and seen.observed_at]
     if not failed and not read:
         return instance

@@ -93,15 +93,15 @@ provider credentials.
 ### The dashboard glance
 
 The page-head glance is a projection, never an owner. Whole-host CPU, memory
-and storage are stored as the machine's telemetry reading
-(`machine-telemetry:<key>`, `hq/platform/application/readings.py`), so the
+and storage are the machine's record of the `machine.telemetry` reading, so the
 machine page, the resource API and the dashboard summarize one timestamped
 fact. The operator picks the machine with "Show on dashboard" on its edit form;
 the choice lives in `DashboardConfiguration`. Weather is the configured point's
-reading (`weather:<point>`), the point edited in the dashboard's Settings popover.
-Every value HQ reads from outside is an `UpstreamReading` under a key that
-`readings.py` names, and `test_readings.py` fails a model that keeps one of
-its own.
+record of the `nws.forecast` reading, the point edited in the dashboard's
+Settings popover. Every value HQ reads from outside is an observation kind's,
+stored in the inventory; one kept per subject (a machine, a point, an address)
+is written a subject at a time by `inventory.keep`
+(`hq/domains/control_plane/observations/glance.py`).
 
 `GET /dashboard/glance/` only reads. A refresh is a CSRF-protected POST to the
 same address:
@@ -109,7 +109,7 @@ same address:
 | Who asks | For what |
 |---|---|
 | The refresh button | every panel |
-| The dashboard, opening on a reading older than five minutes (`freshness.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
+| The dashboard, opening on a reading older than five minutes (`observations.glance.GLANCE_EVERY`), or on an ask that went unanswered | the due panels only (`scope=stale`) |
 
 Either way HQ records a credential-free `DashboardRefreshRequest` and rings the
 glance doorbell. That starts a glance pass, the only reader of a dashboard

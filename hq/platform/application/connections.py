@@ -615,7 +615,7 @@ ReadingQuery = create_model(
     "ReadingQuery",
     __base__=BoundedQuery,
     provider=(
-        one_of(sorted({spec.provider for spec in OBSERVATIONS.values()})) | None,
+        one_of(sorted({spec.provider for spec in OBSERVATIONS.values() if spec.provider is not None})) | None,
         Field(default=None, description="Only the readings from this service; absent, every service's."),
     ),
 )

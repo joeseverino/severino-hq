@@ -101,8 +101,9 @@ READERS: tuple[str, ...] = get_args(Reader)
 @dataclass(frozen=True, slots=True)
 class ObservationSpec:
     kind: str
-    # The connection provider whose credential reads it.
-    provider: str
+    # The connection provider whose credential reads it, or None where no one
+    # connection does: a controller's report gathered through several.
+    provider: str | None
     label: str
     record: type[ObservationRecord]
     # The permissions the read needs, from its provider's table (``permissions``).
@@ -152,6 +153,9 @@ class ObservationSpec:
     # when it is this old or somebody asks, and carried by every sweep between.
     # None for a controller's reads on every sweep.
     every: timedelta | None = None
+    # Read when a page that shows it opens and it is older than ``every``,
+    # never on a sweep or a clock.
+    on_open: bool = False
     # The provider console page for a record, built only from ids the record
     # stores (an account id, a name). Blank when the record lacks them.
     console: Callable[[Mapping[str, Any]], str] = _blank
@@ -196,6 +200,8 @@ class ObservationSpec:
             raise ValueError(f"{self.kind!r}: a request's reading keeps no clock.")
         if self.every is None and self.read_by == "hq":
             raise ValueError(f"{self.kind!r}: a reading HQ takes itself declares how often.")
+        if self.on_open and self.every is None:
+            raise ValueError(f"{self.kind!r}: a reading taken when a page opens declares how old it may get.")
         if self.connects is not None and self.containers is _none:
             raise ValueError(f"{self.kind!r}: connects needs the containers it names.")
         names = [part.name for part in self.parts]

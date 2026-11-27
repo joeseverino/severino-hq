@@ -344,7 +344,7 @@ def _reading(kind: str, row: ProviderInventory | None) -> ReadingItem:
         "kind": kind,
         "label": spec.label,
         "provider": spec.provider,
-        "provider_label": provider_label(spec.provider),
+        "provider_label": provider_label(spec.provider) if spec.provider else "",
         "read_by": spec.read_by,
         "facet": spec.facet,
         "relation": spec.relation,

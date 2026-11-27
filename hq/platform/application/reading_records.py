@@ -14,7 +14,9 @@ from .ui import ended
 class ReadingRow(TypedDict):
     kind: Annotated[str, Describe("The reading's type, such as `adguard.client`, which a read of one names it by.")]
     label: Annotated[str, Describe("The reading's name, in words.")]
-    provider: Annotated[str, Describe("The service it is read from, such as `adguard`.")]
+    provider: Annotated[
+        str | None, Describe("The service it is read from, such as `adguard`; null where no one connection reads it.")
+    ]
     state: Annotated[str, Describe(ended(f"How its last read went: {listed(SightState)}"))]
     records: Annotated[int, Describe("How many records the last read stored.")]
     observed_at: ObservedAt | None

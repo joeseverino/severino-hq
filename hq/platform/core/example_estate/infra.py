@@ -10,12 +10,14 @@ from hq.domains.control_plane.models import (
     DashboardMachine,
     DashboardRefreshRequest,
     ManagedResource,
+    ProviderInventory,
 )
+from hq.domains.control_plane.observations.glance import MACHINE_KIND as MACHINE_TELEMETRY, WEATHER_KIND
 from hq.domains.control_plane.observations.r2 import BACKUP_KIND
-from hq.platform.application import cadence, readings
+from hq.platform.application import cadence
 from hq.platform.application.conditions import READY
+from hq.platform.application.inventory import keep
 from hq.platform.application.report_testing import report_connections
-from hq.platform.core.models import UpstreamReading
 
 from . import doors, network, work
 from .names import (
@@ -268,7 +270,7 @@ def host():
         {
             "address": PUBLIC,
             "organization": "Prairie Fiber",
-            "network": "PRAIRIE-RESIDENTIAL",
+            "name": "PRAIRIE-RESIDENTIAL",
             "handle": "NET-198-51-100-0-1",
             "country": "US",
             "range": "198.51.100.0/24",
@@ -308,8 +310,14 @@ def host():
     DashboardMachine.objects.create(machine=ManagedResource.objects.get(key=MACHINE), position=0)
     # The machine read through its Docker environment, as the controller
     # reports it: what its running containers take of it.
-    readings.record(
-        readings.machine_telemetry(MACHINE),
+    _telemetry(now())
+    _weather()
+
+
+def _telemetry(read_at):
+    keep(
+        MACHINE_TELEMETRY,
+        "key",
         {
             "key": MACHINE,
             "docker": {
@@ -320,9 +328,8 @@ def host():
                 "storage": 41_000_000_000,
             },
         },
-        observed_at=now(),
+        read_at=read_at,
     )
-    _weather()
 
 
 # The hours ahead, as the weather service lists its periods: a showery
@@ -369,30 +376,22 @@ def _weather():
         for index, (degrees, chance, forecast) in enumerate(_HOURS)
     ]
     hours[0]["name"] = "This Afternoon"
-    readings.record(
-        readings.weather(point),
-        {"point": point, "city": "Fairview", "state": "IL", "hours": hours},
-        observed_at=observed,
-    )
+    keep(WEATHER_KIND, "point", {"point": point, "city": "Fairview", "state": "IL", "hours": hours}, read_at=observed)
 
 
 def glance_aged():
     """The machine's reading 22 minutes old, as the dashboard finds it when
     nobody has looked since: due again, and no fault."""
 
-    UpstreamReading.objects.filter(key=readings.machine_telemetry(MACHINE)).update(
-        observed_at=now() - timedelta(minutes=22)
-    )
+    _telemetry(now() - timedelta(minutes=22))
 
 
 def glance_asked():
     """The machine's reading a day old and the forecast never read, each
     with a refresh the dashboard asked for itself still under way."""
 
-    UpstreamReading.objects.filter(key=readings.machine_telemetry(MACHINE)).update(
-        observed_at=now() - timedelta(days=1)
-    )
-    UpstreamReading.objects.filter(key=readings.weather(_POINT)).delete()
+    _telemetry(now() - timedelta(days=1))
+    ProviderInventory.objects.filter(kind=WEATHER_KIND).delete()
     machine = ManagedResource.objects.get(key=MACHINE)
     cadence.ask(panels={f"machine-{machine.pk}": "Asked for a due reading", "weather": "Asked for a due reading"})
 

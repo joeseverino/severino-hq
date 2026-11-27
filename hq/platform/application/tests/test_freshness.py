@@ -15,7 +15,6 @@ from hq.platform.core.testing import connection, operator
 from ..entity_links import entity_link
 from ..freshness import (
     CURRENT,
-    DASHBOARD_GLANCE,
     DUE,
     NEVER,
     PAGE_VISIT,
@@ -45,7 +44,7 @@ class FreshnessTests(TestCase):
 
     def test_a_reading_taken_on_open_is_out_of_date_only_when_its_ask_goes_unanswered(self):
         now = timezone.now()
-        for kind in (DASHBOARD_GLANCE, PAGE_VISIT):
+        for kind in ("machine.telemetry", PAGE_VISIT):
             with self.subTest(kind=kind):
                 every, within = cadence(kind).every, cadence(kind).stale_after
                 # Its age only says how long nobody looked: due, never stale.
@@ -60,7 +59,7 @@ class FreshnessTests(TestCase):
 
     def test_a_reading_minutes_old_is_never_out_of_date(self):
         now = timezone.now()
-        for kind in (DASHBOARD_GLANCE, SSH_PROBE, "host.perimeter", "registry.domain"):
+        for kind in ("machine.telemetry", SSH_PROBE, "host.perimeter", "registry.domain"):
             with self.subTest(kind=kind):
                 found = freshness(kind, now - timedelta(minutes=7), now)
                 self.assertFalse(found.stale)
@@ -145,7 +144,7 @@ class ExtensionCadenceTests(TestCase):
     def test_a_kind_the_host_declares_or_two_extensions_claim_is_refused(self):
         weekly = every(7, 7)
         cases = {
-            "the host's": (declaring("example.alpha", {DASHBOARD_GLANCE: weekly}),),
+            "the host's": (declaring("example.alpha", {SSH_PROBE: weekly}),),
             "twice": (
                 declaring("example.alpha", {EXAMPLE_KIND: weekly}),
                 declaring("example.beta", {EXAMPLE_KIND: weekly}),

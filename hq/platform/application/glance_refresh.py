@@ -16,10 +16,11 @@ from hq.domains.control_plane.models import (
     ManagedResource,
     ProviderConnection,
 )
+from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.observations.glance import MACHINE_KIND, WEATHER_KIND
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.platform.application.routes import reverse
 
-from . import readings
 from .asks import QUEUED, REFRESHING, Ask, Asked, AskedAnswer, Standing
 from .cadence import ask
 from .command_fields import Describe
@@ -36,6 +37,8 @@ from .glance import (
 from .moments import moment
 from .security import Principal
 lazy from .capabilities import capability_words, command_spec
+lazy from .facts import kept_by, record_read_at
+lazy from .inventory import keep
 lazy from .projection import iso
 
 DASHBOARD_REFRESH = "dashboard.panels.refresh"
@@ -208,9 +211,12 @@ def _record_machine_readings(
         if resource is None:
             continue
         matched = True
-        reading_key = readings.machine_telemetry(resource.key)
         _keep(
-            reading_key, machine, worked=lambda kept: kept.host is not None or kept.docker is not None, now=observed_at
+            MACHINE_KIND,
+            "key",
+            machine,
+            worked=lambda kept: kept.host is not None or kept.docker is not None,
+            now=observed_at,
         )
         _answer(f"machine-{resource.pk}", as_of=as_of, observed_at=observed_at)
     if not matched:
@@ -223,7 +229,7 @@ def _record_weather_reading(
     weather = observation.weather
     if weather is None or weather.point != configuration.weather_point:
         raise ValueError("Weather was reported without a configured point.")
-    _keep(readings.weather(weather.point), weather, worked=lambda kept: bool(kept.hours), now=observed_at)
+    _keep(WEATHER_KIND, "point", weather, worked=lambda kept: bool(kept.hours), now=observed_at)
     _answer("weather", as_of=as_of, observed_at=observed_at)
 
 
@@ -256,7 +262,9 @@ def record_dashboard_observations(payload: list[dict[str, Any]], *, admitted: Ad
     return {"ok": True, "recorded": stored, "observed_at": iso(now)}
 
 
-def _keep[Shape: (Machine, Weather)](key: str, reading: Shape, *, worked: Callable[[Shape], bool], now: Any) -> None:
+def _keep[Shape: (Machine, Weather)](
+    kind: str, key: str, reading: Shape, *, worked: Callable[[Shape], bool], now: Any
+) -> None:
     """Store a panel's reading, as the controller reported it.
 
     A failed refresh never replaces a reading that worked. The last good reading
@@ -265,10 +273,11 @@ def _keep[Shape: (Machine, Weather)](key: str, reading: Shape, *, worked: Callab
     the failure itself.
     """
 
-    previous = readings.stored(key)
-    kept = stored_reading(type(reading), previous.value if previous else None)
-    if reading.refresh_failed and previous is not None and kept is not None and worked(kept):
-        kept = kept.model_copy(update={"refresh_failed": reading.refresh_failed})
-        readings.record(key, kept.model_dump(mode="json", exclude_defaults=True), observed_at=previous.observed_at)
+    failed = reading.refresh_failed
+    previous = kept_by(kind, key).get(getattr(reading, key))
+    last = stored_reading(OBSERVATIONS[kind].record, previous)
+    if failed and previous is not None and last is not None and worked(last):
+        carried = {**previous, "refresh_failed": failed}
+        keep(kind, key, carried, read_at=record_read_at(previous) or now, failed=failed)
         return
-    readings.record(key, reading.model_dump(mode="json", exclude_defaults=True), observed_at=now)
+    keep(kind, key, reading.model_dump(mode="json", exclude_defaults=True), read_at=now, failed=failed)

@@ -1024,8 +1024,8 @@ sweeps is not listed. Each kind is one of:
 
 A connection HQ reaches itself with no credential (a public registry, the
 weather service) folds in the same way what came through it: each reading
-whose `ObservationSpec.provider` or `readings.Kept.through` names its kind
-(`credential_sight.read_through`). Its state and age are those readings', and
+whose `ObservationSpec.provider` names its kind, taken on HQ's clock or when
+a page opens (`providers.keyless_reads`, `credential_sight.read_through`). Its state and age are those readings', and
 its cadence the slowest of theirs read on a clock.
 
 A readable kind older than its cadence allows reads **Out of date**

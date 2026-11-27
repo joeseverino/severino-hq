@@ -282,6 +282,7 @@ class ProjectionTests(TestCase):
     def test_a_reading_that_needs_no_connection_is_listed_and_never_called_unconnected(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 
+        from ..credential_sight import NEVER_SWEPT
         from ..hq_context import KEYLESS
 
         seen = self.context().sight
@@ -291,6 +292,10 @@ class ProjectionTests(TestCase):
         self.assertEqual(seen.groups[-1][0], KEYLESS)
         self.assertLessEqual(set(seen.unconnected), set(CONNECTION_LABELS.values()))
         self.assertGreaterEqual(seen.never, 1)
+        # Reverse DNS is listed unread, but owed nothing until an address is looked up.
+        unread = {row.sight.kind for row in seen.rows if row.sight.state == NEVER_SWEPT}
+        self.assertIn("dns.reverse", unread)
+        self.assertLess(seen.never, len(unread))
         (tile,) = (tile for tile in self.context().tiles if tile.label == "Sees")
         self.assertIn(f"{seen.never} never read", tile.detail)
 

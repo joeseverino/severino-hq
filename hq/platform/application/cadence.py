@@ -477,7 +477,7 @@ def swept(kind: str) -> bool:
 
     reading = OBSERVATIONS.get(kind)
     if reading is not None:
-        return reading.read_by == "controller"
+        return reading.read_by == "controller" and not reading.on_open
     declared = PROVIDERS.get(kind)
     return declared is not None and declared.sweeps
 

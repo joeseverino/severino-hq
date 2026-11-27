@@ -12,13 +12,12 @@ from hq.domains.control_plane.models import (
     DashboardMachine,
     DashboardRefreshRequest,
 )
-from hq.platform.application import readings
 from hq.platform.application.glance import DASHBOARD_SETTINGS
 from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
-from hq.platform.application.tests.glance_readings import HOST
+from hq.platform.application.tests.glance_readings import HOST, keep_machine
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, declare, operator
 
@@ -84,11 +83,7 @@ class DashboardRefreshTests(TestCase):
         machine = declare("app-server", "machine", {"name": "app"})
         connection("ssh", "app-ssh", controller_id="app-server", endpoint="100.64.0.10", reaches=["app"])
         DashboardMachine.objects.create(machine=machine)
-        readings.record(
-            readings.machine_telemetry(machine.key),
-            {"key": machine.key, "host": HOST},
-            observed_at=timezone.now() - timedelta(hours=1),
-        )
+        keep_machine({"key": machine.key, "host": HOST}, at=timezone.now() - timedelta(hours=1))
         self.panel = f"machine-{machine.pk}"
 
     def refresh(self, **fields):
