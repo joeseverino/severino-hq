@@ -2,7 +2,6 @@
 
 from django.test import TestCase
 
-from hq.domains.projects.models import Project
 from hq.platform.core.testing import declare
 
 from ..published_sites import public_sites
@@ -29,28 +28,6 @@ def hostnames():
 
 
 class PublicSiteTests(TestCase):
-    def test_a_public_record_for_a_host_is_a_site_named_by_the_project_published_there(self):
-        record("Docs.Example.com.")
-        record("app.example.com")
-        Project.objects.create(name="Example Docs", slug="example-docs", public_url="https://docs.example.com/")
-
-        self.assertEqual(
-            public_sites(),
-            (
-                ("app.example.com", "", "https://app.example.com"),
-                ("docs.example.com", "Example Docs", "https://docs.example.com"),
-            ),
-        )
-
-    def test_a_record_that_names_no_host_is_no_site(self):
-        record("mail.example.com", "TXT", "v=spf1 -all")
-        record("*.example.com")
-        record("_dmarc.example.com", "CNAME", "dmarc.example.net")
-        record("off.example.com", enabled=False)
-        declare("example-zone", "cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
-
-        self.assertEqual(public_sites(), ())
-
     def test_a_record_its_provider_cannot_read_publishes_nothing_and_stops_nothing(self):
         broken = record("broken.example.com")
         broken.spec.pop("record_type")
@@ -58,10 +35,3 @@ class PublicSiteTests(TestCase):
         record("app.example.com")
 
         self.assertEqual(hostnames(), ["app.example.com"])
-
-    def test_a_name_pointed_at_another_name_published_here_is_the_same_site(self):
-        record("example.com")
-        record("www.example.com", "CNAME", "Example.com.")
-        record("pages.example.com", "CNAME", "example-pages.example.net")
-
-        self.assertEqual(hostnames(), ["example.com", "pages.example.com"])

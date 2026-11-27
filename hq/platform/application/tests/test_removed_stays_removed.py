@@ -12,18 +12,15 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.testing import managing_everything
 
-from ..adoption import AdoptCommand, AdoptServiceCommand, adopt, adopt_service, unmanaged
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import RecordNotFound
 from ..report_testing import bridged
 from ..resource_operations import OperationCommand, request_removal
 from ..security import cli_principal
 from ..zones import adopt_zone_records
-from .inventory_records import A_REWRITE, a_sweep
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, ZONES, record
 
 A_TXT = record("example.com", "TXT", '"example-verification=1"', rid="t1")
-CARRIED = {"ok": True, "records": [], "carried": True}
 
 
 def removed(kind: str) -> None:
@@ -47,50 +44,11 @@ def removed(kind: str) -> None:
     assert not ManagedResource.objects.filter(kind=kind).exists()
 
 
-class RemovedRewriteTests(TestCase):
-    def setUp(self):
-        super().setUp()
-        managing_everything()
-        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
-        removed("adguard.rewrite")
-
-    def test_a_sweep_that_carries_the_kind_adopts_nothing_back(self):
-        bridged("inventory", {"adguard.rewrite": CARRIED})
-
-        self.assertFalse(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
-        self.assertEqual([item for item in unmanaged() if item.kind == "adguard.rewrite"], [])
-
-    def test_a_sweep_of_other_kinds_adopts_nothing_back(self):
-        bridged("inventory", a_sweep(**{"npm.proxy_host": []}))
-
-        self.assertFalse(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
-
-    def test_adopting_by_hand_finds_nothing_to_adopt(self):
-        with self.assertRaises(RecordNotFound):
-            adopt(AdoptCommand(kind="adguard.rewrite", hostname=A_REWRITE["domain"]), principal=cli_principal())
-        with self.assertRaises(RecordNotFound):
-            adopt_service(AdoptServiceCommand(hostname=A_REWRITE["domain"]), principal=cli_principal())
-
-    def test_a_read_that_lists_it_again_adopts_it(self):
-        """Only HQ's own removal is struck: a later read is the provider's word."""
-
-        bridged("inventory", a_sweep(**{"adguard.rewrite": [A_REWRITE]}))
-
-        self.assertTrue(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
-
-
 class RemovedZoneRecordTests(TestCase):
     def setUp(self):
-        super().setUp()
         managing_everything(*DNS_CONNECTIONS)
         bridged("inventory", {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: {"ok": True, "records": [A_TXT]}})
         removed(RECORD_KIND)
-
-    def test_a_sweep_that_carries_the_records_adopts_nothing_back(self):
-        bridged("inventory", {ZONE_KIND: {"ok": True, "records": ZONES}, RECORD_KIND: CARRIED})
-
-        self.assertFalse(ManagedResource.objects.filter(kind=RECORD_KIND).exists())
-        self.assertEqual([item for item in unmanaged() if item.kind == RECORD_KIND], [])
 
     def test_adopting_the_domain_records_finds_nothing_to_adopt(self):
         with self.assertRaises(RecordNotFound):

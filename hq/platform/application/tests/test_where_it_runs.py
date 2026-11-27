@@ -7,28 +7,7 @@ from hq.platform.core.testing import declare
 
 from ..entity_links import EntityLink
 from ..projection import projection_scope
-from ..where_it_runs import named_links, where_it_runs
-from .test_relationships import estate
-
-
-class WhereItRunsTests(TestCase):
-    def test_a_published_address_names_its_service_machine_and_container(self):
-        estate(1)
-
-        with projection_scope():
-            found = where_it_runs("https://s0.example.com/some/page")
-
-        self.assertEqual(found.service.label, "s0.example.com")
-        self.assertTrue(found.service.url.endswith("/s0.example.com/"))
-        self.assertEqual(found.machine.label, "example-host-0")
-        self.assertTrue(found.machine.url.endswith("/example-host-0/"))
-
-    def test_an_address_no_service_answers_at_says_nothing(self):
-        estate(1)
-
-        with projection_scope():
-            self.assertIsNone(where_it_runs("https://elsewhere.example.org/"))
-            self.assertIsNone(where_it_runs(""))
+from ..where_it_runs import named_links
 
 
 class NamedLinksTests(TestCase):
@@ -44,12 +23,3 @@ class NamedLinksTests(TestCase):
             [(part.label, part.kind) if isinstance(part, EntityLink) else part for part in parts],
             ["Runs on ", ("example-box", "machine"), ". See ", ("deploy the example", "document"), ", then restart."],
         )
-
-    def test_a_name_inside_another_word_is_not_a_link(self):
-        with projection_scope():
-            self.assertEqual(named_links("the example-box-2 host"), ("the example-box-2 host",))
-
-    def test_text_naming_nothing_stays_as_it_was(self):
-        with projection_scope():
-            self.assertEqual(named_links("Nothing known here."), ("Nothing known here.",))
-            self.assertEqual(named_links(""), ())

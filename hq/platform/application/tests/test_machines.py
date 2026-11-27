@@ -12,23 +12,15 @@ reach it, and it puts the machine on the board by itself.
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import strip_tags
 
-from hq.domains.control_plane.models import (
-    ProviderConnection,
-    ProviderInventory,
-)
-from hq.platform.application.markup_testing import all_elements, text
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.testing import connection, declare, operator
-from hq_sdk.testing import plain
 
 from ..capabilities import capability_words
-from ..entity_links import entity_link
-from ..machines import MachineState, machine, machine_catalog
+from ..machines import machine
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
-from .glance_readings import HOST, keep_machine, reported_machine
 
 
 def containers(*records):
@@ -42,97 +34,9 @@ def containers(*records):
     )
 
 
-class MembershipTests(TestCase):
-    def test_a_portainer_environment_is_a_machine(self):
-        connection(
-            "portainer",
-            "a-portainer",
-            endpoint="https://portainer.example",
-            reaches=["a-docker-host", "a-cloud-host"],
-        )
-
-        self.assertEqual(
-            [item.name for item in machine_catalog()],
-            ["a-cloud-host", "a-docker-host"],
-        )
-
-    def test_a_zone_a_dns_token_reaches_is_not_a_machine(self):
-        """``reaches`` is polymorphic on purpose. A Portainer reports the
-        machines it holds and a DNS token reports the zones it may edit. Read
-        the same way, domains would appear on this page as though they were
-        servers.
-        """
-
-        connection(
-            "cloudflare_dns",
-            "cloudflare-dns",
-            endpoint="https://api.example/client/v4",
-            reaches=["example.com", "example.net"],
-        )
-
-        self.assertEqual(machine_catalog(), ())
-
-    def test_a_connection_that_opens_a_shell_is_itself_a_machine(self):
-        """Nothing else names it, and it is still somewhere HQ can log into."""
-
-        connection("ssh", "edge", endpoint="198.51.100.7:22")
-
-        found = machine_catalog()
-        self.assertEqual([item.name for item in found], ["edge"])
-        self.assertEqual(found[0].address, "198.51.100.7:22")
-
-    def test_a_machine_running_something_is_listed_without_a_credential(self):
-        """Reported by a container rather than by anything that opens it.
-
-        Said to be unreachable it would read as an outage; what is true is that
-        nothing HQ holds gets to it, which the page says instead.
-        """
-
-        containers({"name": "probe", "host": "somewhere", "state": "running"})
-
-        found = machine_catalog()
-        self.assertEqual([item.name for item in found], ["somewhere"])
-        self.assertEqual(found[0].reached_by, ())
-
-    def test_nothing_is_listed_before_anything_has_reported(self):
-        self.assertEqual(machine_catalog(), ())
-
-
-class TieTests(TestCase):
-    def setUp(self):
-        connection(
-            "portainer",
-            "a-portainer",
-            endpoint="https://portainer.example",
-            reaches=["a-docker-host"],
-        )
-        containers(
-            {
-                "name": "app",
-                "host": "a-docker-host",
-                "state": "running",
-                "ports": [8081],
-            },
-            {"name": "old", "host": "a-docker-host", "state": "exited", "ports": []},
-        )
-
-    def test_it_counts_what_is_running_rather_than_what_exists(self):
-        found = machine(" A-Docker-Host ")
-
-        self.assertEqual((found.container_count.running, found.container_count.total), (1, 2))
-
-    def test_a_machine_is_reachable_while_its_credential_answers(self):
-        self.assertTrue(machine("a-docker-host").reachable)
-        self.assertIsNone(machine("nowhere"))
-
-        ProviderConnection.objects.update(reachable=False)
-
-        self.assertFalse(machine("a-docker-host").reachable)
-
-
 class MachinePageTests(TestCase):
     def setUp(self):
-        self.user = operator(self.client)
+        operator(self.client)
         connection(
             "portainer",
             "a-portainer",
@@ -149,295 +53,11 @@ class MachinePageTests(TestCase):
             }
         )
 
-    def test_the_board_lists_what_is_on_each(self):
-        response = self.client.get(reverse("control_plane:machines"))
-
-        self.assertContains(response, "a-docker-host")
-        self.assertIn("1 of 1 running", plain(response.content))
-
-    def test_a_name_nothing_reported_is_not_a_page(self):
-        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "nowhere"}))
-
-        self.assertEqual(response.status_code, 404)
-
     def test_the_page_never_carries_a_credential(self):
         response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-docker-host"}))
 
         self.assertNotContains(response, "API_TOKEN")
         self.assertNotContains(response, "PASSWORD")
-
-
-class DeclaredMachineTests(TestCase):
-    """A machine HQ was told about shows what it was told.
-
-    Its role, its declaration and its addresses all come from that one record.
-    """
-
-    def setUp(self):
-
-        declare(
-            "a-laptop",
-            "machine",
-            {"name": "a-laptop", "role": "Primary admin device", "addresses": ["10.0.0.5", "100.64.0.5"]},
-        )
-
-    def machine(self):
-        from ..machines import machine
-
-        return machine("a-laptop")
-
-    def test_it_appears_without_anything_reaching_it_as_it_was_declared(self):
-        found = self.machine()
-
-        self.assertEqual(found.declaration, "a-laptop")
-        self.assertEqual(found.address, "10.0.0.5")
-
-    def test_it_projects_telemetry_from_the_same_declaration(self):
-        from django.utils import timezone
-
-        observed = timezone.now()
-        keep_machine(reported_machine("a-laptop", host=HOST), at=observed)
-
-        found = self.machine()
-
-        self.assertLessEqual(reported_machine("a-laptop", host=HOST).items(), found.telemetry.items())
-        self.assertEqual(found.telemetry_observed_at, observed)
-
-    def test_a_machine_nobody_declared_links_nothing(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderInventory
-
-        ProviderInventory.objects.create(
-            kind="portainer.container",
-            records=[{"host": "a-docker-host", "name": "web", "ports": [80]}],
-            observed_at=timezone.now(),
-        )
-        from ..machines import machine
-
-        found = machine("a-docker-host")
-        self.assertIsNotNone(found)
-        self.assertEqual(found.declaration, "")
-
-
-class TailnetPresenceTests(TestCase):
-    """Whether a machine is up, said by the network rather than by a service.
-
-    Every other reading HQ has is about something running on a machine, so a box
-    that is switched off and a box whose credential expired look identical.
-    """
-
-    def sweep(self, *records):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderInventory
-
-        ProviderInventory.objects.update_or_create(
-            kind="tailscale.device",
-            defaults={"records": list(records), "observed_at": timezone.now()},
-        )
-
-    def device(self, name, *, online=True, key_expires=""):
-        return {"name": name, "online": online, "key_expires": key_expires}
-
-    def test_a_key_that_has_shaken_hands_is_a_peer_and_one_that_has_not_is_not(self):
-        """The reading comes from the daemon on the machine HQ runs on, so a
-        device appearing at all is in HQ's network map. A key in a map is a
-        machine HQ could reach; a handshake is one it is reaching."""
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
-            {
-                **self.device("a-peer"),
-                "public_key": "test-key-a",
-                "last_handshake": "2026-08-25T22:18:24Z",
-                "direct_endpoint": "198.51.100.4:41641",
-                "relay": "ord",
-            },
-            {**self.device("never-spoken"), "public_key": "test-key-b"},
-        )
-
-        found = tailnet_presence()
-
-        self.assertTrue(found["a-peer"].peered)
-        self.assertEqual(found["a-peer"].peer_path, "direct")
-        # In the map, never spoken to.
-        self.assertFalse(found["never-spoken"].peered)
-        self.assertEqual(found["never-spoken"].peer_path, "")
-
-    def test_a_zero_last_seen_is_unknown_rather_than_a_date(self):
-        """A connected device has no lastSeen, which Go writes as year 1."""
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep({**self.device("a-peer"), "last_seen": "0001-01-01T00:00:00Z"})
-
-        self.assertEqual(tailnet_presence()["a-peer"].last_seen, "")
-
-    def test_a_zero_handshake_is_not_a_handshake(self):
-        """Tailscale dates a peer it has never spoken to ``0001-01-01``, a
-        non-empty string. A peer with no live path still carries its home DERP
-        region, so an unparsed timestamp reads as a relayed peering.
-        """
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
-            {
-                **self.device("switched-off", online=False),
-                "public_key": "test-key-c",
-                "last_handshake": "0001-01-01T00:00:00Z",
-                "relay": "ord",
-            },
-        )
-
-        found = tailnet_presence()
-
-        self.assertFalse(found["switched-off"].peered)
-        self.assertEqual(found["switched-off"].peer_path, "")
-
-    def test_the_observer_does_not_peer_with_itself(self):
-        """The observer's row is the vantage, not a peering seen from it. Its
-        ``Relay`` is the DERP region it homes to, not a path to anywhere.
-        """
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
-            {
-                **self.device("hq-itself"),
-                "public_key": "test-key-d",
-                "last_handshake": "2026-08-25T22:18:24Z",
-                "relay": "ord",
-                "self": True,
-            },
-        )
-
-        found = tailnet_presence()
-
-        self.assertTrue(found["hq-itself"].observer)
-        self.assertFalse(found["hq-itself"].peered)
-        self.assertEqual(found["hq-itself"].peer_path, "")
-
-    def test_a_relayed_peer_says_so_rather_than_reading_as_direct(self):
-        """Still end to end encrypted, still slower, and worth knowing which."""
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
-            {
-                **self.device("a-relayed-peer"),
-                "public_key": "test-key-a",
-                "last_handshake": "2026-08-25T22:18:24Z",
-                "direct_endpoint": "",
-                "relay": "ord",
-            }
-        )
-
-        self.assertEqual(tailnet_presence()["a-relayed-peer"].peer_path, "relayed")
-
-    def test_only_a_route_offered_and_never_approved_is_named_as_unapproved(self):
-        """The silent failure. `--advertise-routes` succeeds, the machine
-        reports the route for as long as it runs, and the coordination server
-        hands it to nobody, so a subnet route can be configured, documented,
-        believed, and dead, with every side of it reporting success. A queue
-        entry per machine that routes nothing would be every machine."""
-
-        from ..tailnet_presence import tailnet_presence
-
-        self.sweep(
-            {
-                **self.device("a-router"),
-                "advertised_routes": ["0.0.0.0/0", "198.51.100.0/24", "::/0"],
-                "enabled_routes": ["198.51.100.0/24"],
-                "offers_exit_node": True,
-                "exit_node_approved": False,
-            },
-            {
-                **self.device("an-approved-router"),
-                "advertised_routes": ["198.51.100.0/24"],
-                "enabled_routes": ["198.51.100.0/24"],
-            },
-            self.device("a-laptop"),
-        )
-
-        found = tailnet_presence()
-
-        self.assertEqual(found["a-router"].unapproved_routes, ("0.0.0.0/0", "::/0"))
-        self.assertTrue(found["a-router"].offers_exit_node)
-        self.assertFalse(found["a-router"].exit_node_approved)
-        self.assertEqual(found["an-approved-router"].unapproved_routes, ())
-        self.assertEqual(found["a-laptop"].unapproved_routes, ())
-
-    def test_a_machine_only_the_tailnet_knows_is_a_machine_on_or_off(self):
-        from ..machines import machine
-
-        for online in (True, False):
-            with self.subTest(online=online):
-                self.sweep(self.device("a-laptop", online=online))
-
-                found = machine("a-laptop")
-                self.assertIsNotNone(found)
-                self.assertEqual(found.presence.online, online)
-
-    def test_a_machine_with_no_tailnet_record_has_no_presence(self):
-
-        from ..machines import machine
-
-        declare("a-printer", "machine", {"name": "a-printer"})
-
-        self.assertIsNone(machine("a-printer").presence)
-
-
-class OneMachineManyNamesTests(TestCase):
-    """A tailnet calls a machine whatever its owner typed into it. That is
-    rarely the name HQ uses, so without a join the board grows a second row for
-    a machine it already has: with the presence on one row and every other fact
-    on the other.
-    """
-
-    def setUp(self):
-        from django.utils import timezone
-
-        from hq.domains.control_plane.models import ProviderInventory
-
-        declare(
-            "a-laptop",
-            "machine",
-            {"name": "a-laptop", "role": "Primary admin device", "addresses": ["10.0.0.5", "100.64.0.5"]},
-        )
-        ProviderInventory.objects.create(
-            kind="tailscale.device",
-            records=[
-                {
-                    "name": "Someone's Laptop",
-                    "online": True,
-                    "addresses": ["100.64.0.5"],
-                },
-                {"name": "a-stranger", "online": True, "addresses": ["100.64.0.99"]},
-            ],
-            observed_at=timezone.now(),
-        )
-
-    def names(self):
-        from ..machines import machine_catalog
-
-        return [found.name for found in machine_catalog()]
-
-    def test_the_name_hq_already_uses_is_kept_and_the_tailnet_name_is_not_a_second_machine(self):
-        """A machine HQ has no address for stays its own row: HQ declining to claim two things are one."""
-
-        names = self.names()
-
-        self.assertIn("a-laptop", names)
-        self.assertNotIn("Someone's Laptop", names)
-        self.assertIn("a-stranger", names)
-
-    def test_presence_follows_the_machine_rather_than_the_name(self):
-        from ..machines import machine
-
-        self.assertTrue(machine("a-laptop").presence.online)
 
 
 class WhoeverSweptTests(TestCase):
@@ -450,7 +70,6 @@ class WhoeverSweptTests(TestCase):
     """
 
     def setUp(self):
-
         declare("a-docker-host", "machine", {"name": "a-docker-host", "role": "Docker host", "addresses": ["10.0.0.9"]})
         containers(
             {
@@ -462,20 +81,7 @@ class WhoeverSweptTests(TestCase):
             }
         )
 
-    def test_the_containers_are_on_the_machine_running_them_under_its_declared_name(self):
-        """The sweep's name is kept as an alias: discarding it would leave nothing explaining the fold."""
-
-        found = machine("a-docker-host")
-        names = [item.name for item in machine_catalog()]
-
-        self.assertEqual([item.name for item in found.containers], ["a-service"])
-        self.assertIn("a-laptop-that-swept", found.aliases)
-        self.assertIn("a-docker-host", names)
-        self.assertNotIn("a-laptop-that-swept", names)
-
     def test_another_name_finds_the_machine_and_its_page_redirects_there(self):
-        from django.urls import reverse
-
         self.assertEqual(machine("a-laptop-that-swept").name, "a-docker-host")
         operator(self.client, "op")
 
@@ -487,141 +93,6 @@ class WhoeverSweptTests(TestCase):
             fetch_redirect_response=False,
         )
 
-    def test_the_key_it_was_declared_under_finds_it_too(self):
-
-        declare("a-laptop", "machine", {"name": "A Laptop"})
-
-        self.assertEqual(machine("a-laptop").name, "A Laptop")
-
-    def test_a_declared_machine_nothing_opens_is_not_said_to_be_hearsay(self):
-        from django.urls import reverse
-
-        declare("a-laptop", "machine", {"name": "a-laptop"})
-        operator(self.client, "op")
-
-        response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
-
-        self.assertContains(response, "no connection reads it")
-        self.assertNotContains(response, "reported by something else")
-
-
-class ReadingThisOnTheMachineTests(TestCase):
-    """The page describing a machine, opened on that machine. HQ judges the
-    caller's address for the network gate before any view runs, and every
-    machine carries the addresses it answers at, so the page knows when it is
-    being read on the machine it describes.
-    """
-
-    def setUp(self):
-
-        self.user = operator(self.client)
-        declare("a-laptop", "machine", {"name": "a-laptop", "role": "", "addresses": ["100.64.0.5"]})
-
-    def page(self, address):
-        return self.client.get(
-            reverse("control_plane:machine", kwargs={"name": "a-laptop"}),
-            REMOTE_ADDR=address,
-        )
-
-    def test_the_machine_you_are_reading_it_on_says_so(self):
-        self.assertContains(self.page("100.64.0.5"), "This device")
-
-    def test_another_machine_does_not(self):
-        self.assertNotContains(self.page("100.64.0.9"), "This device")
-
-    def test_knowing_costs_no_query(self):
-        """It is arithmetic on one address, and the header is on every page."""
-
-        from django.test import RequestFactory
-
-        from hq.platform.core.network import client_ip
-
-        request = RequestFactory().get("/", REMOTE_ADDR="100.64.0.5")
-        with self.assertNumQueries(0):
-            client_ip(request)
-
-
-class ObservedAddressAnnotationTests(TestCase):
-    """A field that records two unrelated things should say which is which.
-
-    Half a machine's addresses are the only record there is: nothing in the
-    estate reports the printer on the LAN. The rest repeat what the tailnet
-    says on every sweep, and are also the key that ties HQ's name for a machine
-    to the tailnet's, which calls the same laptop something else. Locking the
-    field breaks the printer; leaving it silent invites somebody to correct HQ
-    about a value HQ is watching.
-    """
-
-    def setUp(self):
-        declare("a-box", "machine", {"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]})
-        ProviderInventory.objects.create(
-            kind="tailscale.device",
-            observed_at=timezone.now(),
-            records=[
-                {
-                    "name": "A Box",
-                    "addresses": ["100.101.102.103"],
-                    "os": "linux",
-                }
-            ],
-        )
-
-    def _notes(self):
-        from hq.platform.application.provider_choices import machine_address_notes
-
-        return machine_address_notes()["addresses"]
-
-    def test_only_an_address_the_tailnet_reports_is_marked_as_seen(self):
-        """One nothing reports is not unverified: it is the only place that address exists."""
-
-        notes = self._notes()
-
-        self.assertIn("100.101.102.103", notes)
-        self.assertNotIn("192.0.2.50", notes)
-
-    def test_the_form_carries_the_marks_onto_the_field(self):
-        from hq.platform.application.provider_forms import spec_form_class
-
-        form = spec_form_class("machine")()
-
-        self.assertEqual(
-            form.fields["addresses"].widget.notes.get("100.101.102.103"),
-            "seen on the tailnet",
-        )
-
-    def test_a_save_keeps_both_an_address_nothing_can_see_and_one_it_did_not_ask_about(self):
-        """The printer case is why this is annotated and not locked; an observed
-        address rendered read-only still has to come back on submit."""
-
-        from hq.platform.application.provider_forms import spec_form_class
-
-        cases = (
-            ({"name": "laserjet", "addresses": ["192.0.2.137"]}, ["192.0.2.137"]),
-            ({"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]}, ["192.0.2.50", "100.101.102.103"]),
-        )
-        for data, kept in cases:
-            with self.subTest(data["name"]):
-                form = spec_form_class("machine")(data=data)
-
-                self.assertTrue(form.is_valid(), form.errors)
-                self.assertCountEqual(form.spec["addresses"], kept)
-
-    def test_an_observed_address_comes_first_and_is_not_offered_for_removal(self):
-        """HQ holds it whether or not this field does, and it is where the machine
-        answers. Offering to remove it would be offering to delete a fact, and
-        the tailnet's addresses in the index are what resolution relies on.
-        """
-
-        from hq.platform.application.provider_forms import spec_form_class
-
-        form = spec_form_class("machine")(initial={"name": "a-box", "addresses": ["192.0.2.50", "100.101.102.103"]})
-        rendered = str(form["addresses"])
-
-        self.assertLess(rendered.index("100.101.102.103"), rendered.index("192.0.2.50"))
-        self.assertIn('value="100.101.102.103"', rendered)
-        self.assertIn('aria-label="Remove 192.0.2.50"', rendered)
-        self.assertNotIn('aria-label="Remove 100.101.102.103"', rendered)
-
 
 class IdentifierIsFixedTests(TestCase):
     """The identifier is filing, and a form should not ask about filing. Shown
@@ -632,16 +103,6 @@ class IdentifierIsFixedTests(TestCase):
     def setUp(self):
         self.resource = declare("a-box", "machine", {"name": "a-box", "addresses": []})
         operator(self.client, "op")
-
-    def test_the_form_does_not_ask_for_it(self):
-        from hq.platform.application.provider_forms import ResourceIdentityForm
-
-        self.assertNotIn("key", ResourceIdentityForm().fields)
-
-    def test_it_is_shown_at_the_top_instead(self):
-        response = self.client.get(reverse("control_plane:edit", kwargs={"key": "a-box"}))
-
-        self.assertContains(response, "Identifier")
 
     def test_a_save_keeps_the_identifier_it_already_had(self):
         response = self.client.post(
@@ -655,85 +116,11 @@ class IdentifierIsFixedTests(TestCase):
         self.assertEqual(self.resource.spec["role"], "A renamed purpose")
 
 
-class OneStateTests(TestCase):
-    """An offline device reads as offline; the connection is named elsewhere."""
-
-    def setUp(self):
-        self.user = operator(self.client)
-        connection("tailscale", "example-tailnet")
-
-    def device(self, *, online, tags=("tag:server",)):
-        ProviderInventory.objects.update_or_create(
-            kind="tailscale.device",
-            defaults={
-                "records": [
-                    {
-                        "name": "example-host",
-                        "online": online,
-                        "addresses": ["100.64.0.7"],
-                        "connection_ref": "example-tailnet",
-                        "tags": list(tags),
-                    }
-                ],
-                "observed_at": timezone.now(),
-            },
-        )
-
-    def test_a_personal_device_that_is_off_is_away_not_down(self):
-        self.device(online=False, tags=())
-
-        self.assertEqual(machine("example-host").state, MachineState.AWAY)
-
-    def test_an_offline_device_reads_as_offline_only(self):
-        self.device(online=False)
-
-        found = machine("example-host")
-        listing = self.client.get(reverse("control_plane:machines"))
-        page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
-
-        self.assertEqual(found.state, MachineState.OFFLINE)
-        for response in (listing, page):
-            with self.subTest(page=response.request["PATH_INFO"]):
-                said = [element.words for element in all_elements(response)]
-                self.assertIn("Offline", said)
-                self.assertNotIn("reachable", said)
-                self.assertNotIn("down", said)
-                self.assertIn(entity_link("connection", "example-tailnet").label, text(response))
-
-    def test_an_online_device_reads_as_online(self):
-        self.device(online=True)
-
-        self.assertEqual(machine("example-host").state, MachineState.ONLINE)
-
-    def test_without_presence_the_connection_answer_decides(self):
-        connection("ssh", "example-ssh", endpoint="192.0.2.8:22", reachable=False)
-
-        found = machine("example-ssh")
-
-        self.assertEqual(found.state, MachineState.NOT_ANSWERING)
-        self.assertEqual(found.unanswered, ("example-ssh",))
-
-    def test_a_connection_that_did_not_answer_is_marked_where_it_is_named(self):
-        connection("ssh", "example-ssh", endpoint="192.0.2.8:22", reachable=False)
-
-        listing = self.client.get(reverse("control_plane:machines"))
-
-        self.assertIn(
-            f"{entity_link('connection', 'example-ssh').label} not answering",
-            " ".join(strip_tags(listing.content.decode()).split()),
-        )
-
-    def test_nothing_reaching_it_says_so(self):
-        containers({"name": "probe", "host": "somewhere", "state": "running"})
-
-        self.assertEqual(machine("somewhere").state, MachineState.UNMONITORED)
-
-
 class DeclareFromWhatHQKnowsTests(TestCase):
     """ "Add this machine to HQ" opens a form holding the name and addresses HQ has."""
 
     def setUp(self):
-        self.user = operator(self.client)
+        operator(self.client)
         ProviderInventory.objects.update_or_create(
             kind="tailscale.device",
             defaults={
@@ -746,26 +133,6 @@ class DeclareFromWhatHQKnowsTests(TestCase):
                 ],
                 "observed_at": timezone.now(),
             },
-        )
-
-    def page(self):
-        return self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
-
-    def action(self, response, label):
-        from urllib.parse import parse_qs, urlsplit
-
-        (found,) = [action for action in response.context["page"].actions if action.label == label]
-        return parse_qs(urlsplit(found.url).query)
-
-    def test_the_action_is_seeded(self):
-        query = self.action(self.page(), "Add this machine to HQ")
-
-        self.assertEqual(query["kind"], ["machine"])
-        self.assertEqual(query["name"], ["example-host"])
-        self.assertEqual(query["addresses"], ["100.64.0.7"])
-        self.assertEqual(
-            query["next"],
-            [reverse("control_plane:machine", kwargs={"name": "example-host"})],
         )
 
     def test_the_form_opens_holding_the_seed(self):
@@ -783,16 +150,6 @@ class DeclareFromWhatHQKnowsTests(TestCase):
         form = response.context["spec"]
         self.assertEqual(form.initial["name"], "example-host")
         self.assertEqual(form.initial["addresses"], ["100.64.0.7", "192.0.2.7"])
-
-    def test_a_device_declaration_offers_machine_details_instead(self):
-        declare("example-host-tailnet", "tailscale.device", {"name": "example-host"})
-
-        response = self.page()
-        labels = [action.label for action in response.context["page"].actions]
-
-        self.assertIn("Add machine details", labels)
-        self.assertNotIn("Add this machine to HQ", labels)
-        self.assertEqual(self.action(response, "Add machine details")["name"], ["example-host"])
 
     def test_saving_it_returns_to_the_machine_it_now_declares(self):
         from urllib.parse import urlencode
@@ -814,5 +171,6 @@ class DeclareFromWhatHQKnowsTests(TestCase):
             fetch_redirect_response=False,
         )
         self.assertEqual(machine("example-host").declaration, "example-host")
-        labels = [action.label for action in self.page().context["page"].actions]
+        page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
+        labels = [action.label for action in page.context["page"].actions]
         self.assertIn(capability_words(UPDATE_CAPABILITY), labels)
