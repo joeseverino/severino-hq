@@ -38257,6 +38257,7 @@
                 "automation-worker-absent",
                 "offsite-backup-late",
                 "event-channel-silent",
+                "events-worker-behind",
                 "deploy-running",
                 "machine-offline",
                 "content-drafts",
