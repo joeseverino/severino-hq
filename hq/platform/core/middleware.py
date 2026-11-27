@@ -20,7 +20,7 @@ from hq.platform.application import request_context
 from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import DEMO_SESSION_KEY, demo_scope
-from hq.platform.core import bindings, speculation, tracing
+from hq.platform.core import bindings, live, speculation, tracing
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
 lazy from hq.platform.application import automation_adoption, hq_self
@@ -120,6 +120,9 @@ class RequestContextMiddleware:
             note_activity()
             note_arrival(request)
         started = monotonic()
+        # Taken before anything is read, so a page's stream hears every
+        # change its reads could have missed (``core.live``).
+        request.live_seen = live.now()
         with (
             request_context.bind(request),
             request_operation(request.path_info, operation_id=request_id),

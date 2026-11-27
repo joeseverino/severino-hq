@@ -82,7 +82,7 @@ class OpenUpdateTests(TestCase):
         store(compose=["compose/app/compose.yaml"], held_branches=[HELD])
         before = self.container_page()
         press = before.context["container"]["act"]
-        self.assertNotIn("data-fragment-poll", tag_of(before, 'id="upgrade"'))
+        self.assertNotIn("data-fragment-live", tag_of(before, 'id="upgrade"'))
 
         answered = self.client.post(press.url, {"__retry_key": "example-open-1"}, follow=True)
 
@@ -92,8 +92,8 @@ class OpenUpdateTests(TestCase):
         container = page.context["container"]
         self.assertIsNone(container["act"])
         self.assertTrue(container["state"].standing.live)
-        # Its card is asked again until it ends.
-        self.assertIn("data-fragment-poll", tag_of(page, 'id="upgrade"'))
+        # Its card is drawn again as it moves, until it ends.
+        self.assertIn("data-fragment-live", tag_of(page, 'id="upgrade"'))
         again = self.press(key="example-open-2")
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])

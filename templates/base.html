@@ -19,7 +19,7 @@
   {% include "scripts/head.html" %}
   {% block head_extra %}{% endblock %}
 </head>
-<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}">
+<body data-sign-in="{% url 'login' %}" data-ask-refreshing="{% refreshing %}" data-live="{% live_stream %}">
   {% include "partials/_site_header.html" %}
 
   {% page_main %}

@@ -56,19 +56,6 @@ SHOW_NEWER = "Show the reading"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
 
-# How often a part of a page whose work is under way asks its page again, in
-# seconds (``data-fragment-poll``): a queue row, a card.
-FOLLOW_SECONDS = 4
-
-
-def following(live: bool) -> dict[str, str]:
-    """The ``data-`` hooks of a part that asks its page again while ``live``
-    (fragment.js), found by its id in each answer; none once the server
-    stops drawing them, which ends the asking."""
-
-    return {"fragment": "", "fragment-poll": str(FOLLOW_SECONDS)} if live else {}
-
-
 _WATCH_SALT = "hq.platform.application.asks.watch"
 # Longer than any read request lives, so a page left open can still learn that
 # its request went unanswered.

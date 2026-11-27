@@ -189,7 +189,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     if (demo.unanswered) unanswered();
     if (demo.answeredAs) answeredAs();
-    document.querySelectorAll("[data-fragment-poll]").forEach((region) => region.removeAttribute("data-fragment-poll"));
 
     // Re-apply saved dismissals.
     const state = read();

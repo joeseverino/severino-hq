@@ -24,7 +24,7 @@ lazy from hq.domains.control_plane.bridge_application import (
 )
 lazy from hq.platform.application import agent_admission, tokens
 lazy from hq.platform.application.security import MCP_INTERFACE, MCP_OPERATION
-lazy from hq.platform.core import doorbell, unix_server
+lazy from hq.platform.core import doorbell, live, unix_server
 lazy from hq.platform.core.ahead import keeping
 lazy from hq.platform.core.attribution import BoundDoor
 lazy from hq.platform.core.compression import Compressed
@@ -169,6 +169,8 @@ async def lifespan(_app):
             # Derived answers asked again as their inputs change, so a
             # request finds its answer stored.
             keeping(),
+            # What commits, heard by the pages open on HQ (``core.live``).
+            live.listening(),
             doorbell.ringing_when_due(),
             # The identity provider's signing keys, read outside every request.
             tokens.keeping_keys(),

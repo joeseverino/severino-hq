@@ -11,7 +11,7 @@ from django.utils.text import slugify
 
 from hq.platform.application import action_items
 from hq.platform.application.action_links import read_now_link
-from hq.platform.application.asks import Ask, following
+from hq.platform.application.asks import Ask
 from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.decisions import decision
 from hq.platform.application.moments import duration
@@ -19,6 +19,7 @@ from hq.platform.application.security import Principal
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
 from hq.platform.application.url_query import with_query
+from hq.platform.core import live
 from hq.platform.core.included_queue import ICON_LINKS, INSIGHT_FACTS, OPERATOR_STEPS, ORIGIN_PANEL
 from hq.platform.core.templatetags.action_tags import remedies, triage
 from hq.platform.core.templatetags.status_tags import origin_tip, urgency_tone
@@ -109,8 +110,8 @@ def _rows(context: Any, items: Iterable[Mapping[str, Any]], where: Where, *, fol
             actions=tuple(remedies(context, item["actions"])),
             put_away=away,
             id=_id(item, where),
-            # A row HQ is acting on asks again until that work ends.
-            data={"attention-item": "", **following(bool(item.get("under_way")))},
+            # A row HQ is acting on is drawn again as that work moves, until it ends.
+            data={"attention-item": "", **live.region("queue", bool(item.get("under_way")))},
             folded=folded,
         )
 

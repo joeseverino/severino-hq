@@ -492,7 +492,7 @@ again.
 | `data-fragment="<url>"` | a region, and the address that answers it; empty for the page it is on |
 | `data-fragment-name="<part>"` | the part asked for by name, sent as `X-Fragment` |
 | `data-fragment-load` | a placeholder, fetched when the page is up or when the disclosure or dialog around it opens |
-| `data-fragment-poll="<seconds>"` | asked again for as long as the server keeps drawing the attribute |
+| `data-fragment-live="<set>"` | asked again when a change to that read set commits, for as long as the server keeps drawing the attribute |
 | `data-fragment-part="<key>"` | inside a region: replaced one by one, and only when changed |
 | `data-fragment-links` | links and forms inside that lead to the region's own page are answered in place |
 | `data-fragment-history="replace"` | an in-place answer replaces the address; a region given another value is not answered in place, since nothing restores its entry on Back |
@@ -507,6 +507,15 @@ answers the page and the region is found in it by its id, so a region never
 depends on its server having been taught about it. A view may compose only
 what the part shows (the dashboard does for its calendar and links). A part
 whose inputs are known by revision answers an unchanged question with 304.
+
+A live region names the read set it is drawn from, one that
+`hq/platform/core/live.py` declares, through the `live` filter or
+`live.region` in Python. The page holds one stream, `/live/`, while it is
+visible and shows a live region. Each event names the sets a commit changed
+since the change the page was drawn after, and nothing else, so each live
+region of those sets is asked for again, those one address answers in one
+question. A stream HQ refused or could not answer is opened again on the one
+loop, less often each time.
 
 A part's root carries `data-fragment` and its name as its placeholder did, so
 it is still the region once in place. A region draws no
@@ -529,7 +538,7 @@ and the region is `aria-busy` while it waits. A newer question for a region
 ends the older one. A question that fails falls back to the link or form it
 enhanced; a post is never sent twice, and says what went wrong beside the
 form. A session that ended says so and offers the way back in. A hidden tab
-is not polled, and a region that fails is asked less often.
+holds no stream, and one brought back hears what changed while it was away.
 
 Script that needs a part calls `hqFragment.swap(region, {url})`; script that
 needs to ask again calls `hqEvery(work, {ms})`. After a swap the new content

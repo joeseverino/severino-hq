@@ -641,7 +641,7 @@ class GlanceEndpointTests(TestCase):
         )
         # Nobody pressed for it: the region follows the reading, and the panel
         # keeps the one it has without saying a refresh is under way.
-        self.assertTrue(select(response, "data-fragment-poll"))
+        self.assertTrue(select(response, "data-fragment-live"))
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
         self.assertNotIn(REFRESHING, part.text)
 
@@ -659,7 +659,7 @@ class GlanceEndpointTests(TestCase):
 
                 self.assertEqual(DashboardRefreshRequest.objects.get(panel_id=panel).requested_at > asked, asked_again)
                 # Followed while it is on its way again.
-                self.assertTrue(select(response, "data-fragment-poll"))
+                self.assertTrue(select(response, "data-fragment-live"))
 
     def test_an_ask_left_unanswered_is_followed_no_longer(self):
         DashboardRefreshRequest.objects.create(
@@ -669,7 +669,7 @@ class GlanceEndpointTests(TestCase):
 
         response = self.client.get(reverse("dashboard_glance"))
 
-        self.assertFalse(select(response, "data-fragment-poll"))
+        self.assertFalse(select(response, "data-fragment-live"))
         self.assertContains(response, 'data-reading-age="stale"')
 
     def test_a_stale_post_asks_for_the_weather_never_read(self):

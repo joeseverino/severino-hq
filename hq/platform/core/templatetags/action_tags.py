@@ -14,6 +14,7 @@ lazy from dataclasses import asdict, is_dataclass
 from django import template
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
@@ -31,7 +32,8 @@ lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.application.ui import button_classes
-lazy from hq.platform.core import queue_table as queue_tables
+lazy from hq.platform.application.url_query import with_query
+lazy from hq.platform.core import live as live_reads, queue_table as queue_tables
 lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     OUTSIDE_LINK,
@@ -497,11 +499,21 @@ def newer_reading():
 
 
 @register.filter
-def follow_every(live):
-    """``{{ live|follow_every }}``: the ``data-fragment-poll`` of a part
-    whose work is under way (``asks.following``), "" once it is not."""
+def live(drawn, name):
+    """``{{ drawn|live:"estate" }}``: the ``data-fragment-live`` of a part
+    drawn from that read set (``core.live``) while ``drawn``, "" once it is not."""
 
-    return asks.following(bool(live)).get("fragment-poll", "")
+    return live_reads.region(name, bool(drawn)).get("fragment-live", "")
+
+
+@answers(register, takes_context=True)
+def live_stream(context):
+    """``{% live_stream %}``: where the page hears what commits, from the
+    change it was drawn after (``core.live``)."""
+
+    request = context.get("request")
+    seen = getattr(request, "live_seen", "") or live_reads.now()
+    return with_query(reverse("live"), {"after": seen})
 
 
 @answers(register)

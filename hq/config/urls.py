@@ -28,6 +28,7 @@ from hq.platform.core.dashboard_views import (
 )
 from hq.platform.core.dev_sign_in import scratch_sign_in
 from hq.platform.core.health_views import health_live, health_ready
+from hq.platform.core.live import stream as live_stream
 from hq.platform.core.oidc import HANDSHAKE
 from hq.platform.core.oidc_logout import backchannel_logout
 from hq.platform.core.speculation import rules_document
@@ -93,6 +94,7 @@ urlpatterns = [
     # Beside the library's handshake, outside its urlconf: the provider's own server posts here.
     path("oidc/backchannel-logout/", backchannel_logout, name="oidc_backchannel_logout"),
     path("speculation-rules.json", rules_document, name="speculation_rules"),
+    path("live/", live_stream, name="live"),
     path("favicon.ico", root_icon("img/favicon.ico")),
     path("apple-touch-icon.png", root_icon("img/apple-touch-icon.png")),
     path("apple-touch-icon-precomposed.png", root_icon("img/apple-touch-icon.png")),

@@ -8,27 +8,19 @@ what is true: a request that comes first derives for itself.
 """
 
 import logging
-import re
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from time import monotonic
-from typing import Any
 
-from django.db import connections, transaction
-from django.db.backends.signals import connection_created
 from django.utils import timezone
 
 from hq.platform.application import derivations
+from hq.platform.core import live
 from hq.platform.core.outside_requests import connections_of_its_own
 
 logger = logging.getLogger("severino.ahead")
 
-# The table a statement writes, as Django and this repository's own SQL quote it.
-_WRITTEN = re.compile(
-    r'\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+"(\w+)"',
-    re.IGNORECASE,
-)
 # A pass started by an answer's moment is no closer than this to the last one,
 # in seconds, so an answer that cannot be kept is not derived in a loop.
 RESTS = 1.0
@@ -119,56 +111,28 @@ class _Keeper:
 KEEPER = _Keeper()
 
 
-def note_write(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
-    """Run the statement; if it wrote a table a remembered question reads, say
-    so when its transaction commits."""
+def _written(table: str) -> None:
+    """A committed write: news when a remembered question reads its table."""
 
-    result = execute(sql, params, many, context)
-    found = _WRITTEN.match(sql)
-    if found is not None and derivations.asked_of(found[1]):
-        connection = context["connection"]
-        try:
-            transaction.on_commit(KEEPER.wake, using=connection.alias)
-        except transaction.TransactionManagementError:
-            # Autocommit is off and no atomic block is open: the commit is the
-            # caller's to make, and the pass reads only what has committed.
-            KEEPER.wake()
-    return result
-
-
-def _watch(connection: Any, **kwargs: Any) -> None:
-    # First in the list, not last: ``connection.execute_wrapper()`` removes the
-    # last one when its block ends, and a connection can open inside one.
-    if note_write not in connection.execute_wrappers:
-        connection.execute_wrappers.insert(0, note_write)
-
-
-def _unwatch() -> None:
-    connection_created.disconnect(dispatch_uid="hq.ahead")
-    for connection in connections.all(initialized_only=True):
-        if note_write in connection.execute_wrappers:
-            connection.execute_wrappers.remove(note_write)
+    if derivations.asked_of(table):
+        KEEPER.wake()
 
 
 @contextmanager
 def keeping(*, inline: bool = False) -> Iterator[None]:
     """Keep derived answers current until the block ends.
 
-    Every connection opened inside it is watched for writes. ``inline`` derives
-    in the writer's own thread once its transaction commits, and starts no
-    thread.
+    It hears each committed write (``live.heard``). ``inline`` derives in the
+    writer's own thread once its transaction commits, and starts no thread.
     """
 
-    connection_created.connect(_watch, dispatch_uid="hq.ahead", weak=False)
-    for connection in connections.all(initialized_only=True):
-        _watch(connection)
     KEEPER.inline = inline
     if not inline:
         KEEPER.start()
     try:
-        yield
+        with live.heard(_written):
+            yield
     finally:
         if not inline:
             KEEPER.stop()
         KEEPER.inline = False
-        _unwatch()

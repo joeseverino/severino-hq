@@ -1,17 +1,20 @@
-"""Fragments in a real browser: a region fetched, refreshed and polled as fragment.js answers it."""
+"""Fragments in a real browser: a region fetched, refreshed and drawn again as fragment.js answers it."""
 
 import re
+import threading
+from datetime import UTC, datetime
 from typing import override
 from urllib.parse import parse_qsl, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connections, transaction
 from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
 from hq.platform.application.pages import PageAction, PageVisit
+from hq.platform.core.models import UpstreamReading
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -22,13 +25,14 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 _FRAGMENT_JS = render_to_string("scripts/fragment.html", {"csp_nonce": NONCE})
 _ASK_JS = render_to_string("scripts/ask.html", {"csp_nonce": NONCE})
 
-# A region that polls and names its parts, a disclosure and a menu, a
+# A live region that names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
-# whole page.
+# whole page. The page hears what commits from the change it was drawn after
+# (``_STREAM``, filled in as it is answered).
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-</head><body><main>
-<section data-fragment="/probe-strip/" data-fragment-poll="1">
+</head><body data-live="{{_STREAM}}"><main>
+<section data-fragment="/probe-strip/" data-fragment-live="estate">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
 <div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>as drawn</div></div>
 </section>
@@ -38,7 +42,7 @@ _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <div data-fragment="/probe-page/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
 </main></body></html>"""
 
-_PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
+_PROBE_STRIP = """<section data-fragment="/probe-strip/">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
 <div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>read again</div></div>
 </section>"""
@@ -85,9 +89,24 @@ _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 </main></body></html>"""
 
 
+def _stored():
+    """A reading stored and taken back, each committed, from a thread of its
+    own: Django refuses this one the database while Playwright's loop runs."""
+
+    def store():
+        try:
+            UpstreamReading.objects.create(key="example.live", value={}, observed_at=datetime.now(UTC))
+            UpstreamReading.objects.filter(key="example.live").delete()
+        finally:
+            connections.close_all()
+
+    writer = threading.Thread(target=store)
+    writer.start()
+    writer.join()
+
+
 # The probes whose answer never changes, by their address.
 _FIXED = {
-    "/probe/": _FRAGMENT_PROBE,
     "/probe-slot/": "<p>read when opened</p>",
     "/probe-page/": _FRAGMENT_PROBE,
     "/probe-form/": _FORM_PROBE,
@@ -177,7 +196,7 @@ _PROBE_STATE = """(failure) => ({
   firstOpen: document.querySelector('[data-fragment-part="first"]').open,
   second: document.querySelector('[data-fragment-part="second"]').textContent,
   secondOpen: document.querySelector('[data-fragment-part="second"] [popover]').matches(':popover-open'),
-  polling: document.querySelector('[data-fragment-poll]') !== null,
+  live: document.querySelector('[data-fragment-live]') !== null,
   slot: document.querySelector('[data-probe="fold"]').textContent,
   page: [...document.querySelectorAll(failure)].map((line) => line.textContent),
   titles: document.querySelectorAll('main title, main main').length,
@@ -326,7 +345,9 @@ class FragmentBrowserTests(BrowserGate):
     def start(self, **options):
         super().start(**options)
         self.asked = []
-        self.strip = [' data-fragment-poll="1"', ""]
+        # The page's stream, held open until a test answers it.
+        self.streams = []
+        self.drawn = ""
         self.asking, *self.panels = _asking_dialog_probe()
         self.heads = _asking_head_probe()
         self.visit = _VISIT_DONE
@@ -390,11 +411,14 @@ class FragmentBrowserTests(BrowserGate):
             return self.fulfill(route, _keyed_probe())
         if parts.path.startswith("/probe-keyed/"):
             return self.answer_keyed(route, parts.path.removeprefix("/probe-keyed/").strip("/"))
+        if parts.path == "/live/":
+            return self.streams.append(route)
+        if parts.path == "/probe/":
+            return self.fulfill(route, _FRAGMENT_PROBE.replace("{_STREAM}", f"/live/?after={self.drawn}"))
         if (fixed := _FIXED.get(parts.path)) is not None:
             return self.fulfill(route, fixed)
         if parts.path == "/probe-strip/":
-            poll = self.strip.pop(0) if self.strip else ""
-            return self.fulfill(route, _PROBE_STRIP.format(poll=poll))
+            return self.fulfill(route, _PROBE_STRIP)
         if parts.path == "/probe-dialog/":
             return self.fulfill(route, _dialog_probe())
         if parts.path == "/probe-asking-dialog/":
@@ -554,42 +578,35 @@ class FragmentBrowserTests(BrowserGate):
         ((sent_to, body),) = self.posted
         self.assertEqual((sent_to, body["action"]), ("/probe-rows/C/", "up"))
 
-    def test_a_polled_region_takes_only_what_changed_and_stops_when_told(self):
-        self.page.clock.install()
-        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
+    def test_a_live_region_is_drawn_again_when_a_change_to_it_commits(self):
+        from hq.platform.core import live
+
+        self.drawn = live.now()
+        with self.page.expect_request(lambda request: urlsplit(request.url).path == "/live/"):
+            self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.evaluate(
             "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
             " first.kept = true; first.open = true;"
             " document.querySelector('[data-fragment-part=\"second\"] [popovertarget]').click(); }"
         )
-        # Its first turn reads it again and keeps polling; the second is told to stop.
-        self.page.clock.run_for(1000)
+        (stream,) = self.streams
+        heard = dict(parse_qsl(urlsplit(stream.request.url).query))["after"]
+        with live.listening():
+            _stored()
+        stream.fulfill(headers={"Content-Type": "text/event-stream"}, body=live.said(*live.HUB.since(heard)))
         self.page.wait_for_function(
             "() => document.querySelector('[data-fragment-part=\"second\"]').textContent.includes('read again')"
         )
-        self.page.clock.run_for(1000)
-        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null")
         state = self.page.evaluate(_PROBE_STATE, self.css(SELECTORS["fragment_failure"]))
 
         # The part that did not change is the same node, still open; the one
-        # that did was replaced, its menu open as the reader left it.
+        # that did was replaced, its menu open as the reader left it. The
+        # answer no longer draws it live, so it is no longer.
         self.assertTrue(state["first"])
         self.assertTrue(state["firstOpen"])
         self.assertEqual(state["second"].strip(), "Secondread again")
         self.assertTrue(state["secondOpen"])
-        asked = self.asked.count(("/probe-strip/", ""))
-        self.page.clock.run_for(5000)
-        # A request after those turns is answered after any they made.
-        self.page.evaluate("() => fetch('/probe-slot/')")
-        self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
-
-    def test_a_region_drawn_under_way_for_minutes_is_followed_until_it_ends(self):
-        # A playbook's run takes minutes, its card drawn under way all that time.
-        self.page.clock.install()
-        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
-        self.page.clock.fast_forward(5 * 60 * 1000)
-        self.page.clock.run_for(1000)
-        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null", timeout=5000)
+        self.assertFalse(state["live"])
 
     def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")

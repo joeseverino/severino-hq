@@ -222,7 +222,7 @@ class DashboardQueueTests(SignedInTestCase):
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
             response = self.client.get("/action-items/")
 
-        (row,) = select(response, "data-fragment-poll")
+        (row,) = select(response, "data-fragment-live")
         self.assertIn("data-attention-item", row.attrs)
         # Asked again at its own address: the row is answered from the page by its id.
         self.assertTrue(row.attrs.get("id"))

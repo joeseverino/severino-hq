@@ -10,7 +10,7 @@ from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
-from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.expenses.models import Expense
@@ -354,23 +354,6 @@ class AskedTwiceTests(Remembering):
             self.assertIn(UpstreamReading._meta.db_table, whole.derivation.tables)
 
 
-class WrittenTests(SimpleTestCase):
-    def test_the_table_a_statement_writes_is_read_from_it(self):
-        statements = {
-            'INSERT INTO "core_upstreamreading" ("key") VALUES (%s)': "core_upstreamreading",
-            'INSERT OR IGNORE INTO "core_upstreamreading" ("key") VALUES (%s)': "core_upstreamreading",
-            'UPDATE "core_upstreamreading" SET "value" = %s': "core_upstreamreading",
-            'DELETE FROM "core_upstreamreading" WHERE "id" IN (%s)': "core_upstreamreading",
-            '  update "core_upstreamreading" set value = 1': "core_upstreamreading",
-        }
-        for sql, table in statements.items():
-            with self.subTest(sql=sql):
-                self.assertEqual(ahead._WRITTEN.match(sql)[1], table)
-        for sql in ('SELECT "key" FROM "core_upstreamreading"', "SAVEPOINT s1", "PRAGMA foreign_keys"):
-            with self.subTest(sql=sql):
-                self.assertIsNone(ahead._WRITTEN.match(sql))
-
-
 class KeptCurrentTests(Remembering):
     """A committed write to a table a remembered question reads derives it again."""
 
@@ -392,15 +375,15 @@ class KeptCurrentTests(Remembering):
                 self.assertEqual(read(), 1)
             self.assertEqual(dict(ran), {})
 
-    def test_a_write_to_a_table_no_question_reads_wakes_nothing(self):
-        with declared("test.kept.other", reads=(READING,)) as (register, _calls), ahead.keeping(inline=True):
+    def test_a_write_to_a_table_no_question_reads_derives_nothing(self):
+        with declared("test.kept.other", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
             self._asked(register)
 
-            with self.captureOnCommitCallbacks() as callbacks:
+            with self.captureOnCommitCallbacks(execute=True):
                 Expense.objects.all().delete()
                 connection.cursor().execute('DELETE FROM "expenses_expense"')
 
-        self.assertEqual(callbacks, [])
+        self.assertEqual(len(calls), 1)
 
     def test_a_write_that_is_rolled_back_derives_nothing(self):
         with declared("test.kept.rolled", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
@@ -415,25 +398,6 @@ class KeptCurrentTests(Remembering):
                 write_then_fail()
 
         self.assertEqual(len(calls), 1)
-
-    def test_a_wrapper_of_one_block_leaves_the_watch_in_place(self):
-        def passing(execute, sql, params, many, context):
-            return execute(sql, params, many, context)
-
-        with ahead.keeping(inline=True):
-            connection.execute_wrappers.remove(ahead.note_write)
-            with connection.execute_wrapper(passing):
-                # As when a connection opens inside the block.
-                ahead._watch(connection)
-
-            self.assertEqual(connection.execute_wrappers, [ahead.note_write])
-
-    def test_nothing_is_watched_once_keeping_ends(self):
-        with ahead.keeping(inline=True):
-            self.assertIn(ahead.note_write, connection.execute_wrappers)
-
-        self.assertNotIn(ahead.note_write, connection.execute_wrappers)
-        self.assertFalse(ahead.KEEPER.inline)
 
 
 class KeeperThreadTests(TransactionTestCase):

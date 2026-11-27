@@ -131,7 +131,7 @@ class LiveRunPageTests(TestCase):
             for element in all_elements(response.content.decode())
             if element.attrs.get("data-fragment-name") == "run_status"
         )
-        return bool(region.attrs.get("data-fragment-poll"))
+        return bool(region.attrs.get("data-fragment-live"))
 
     def test_a_run_s_status_is_asked_again_until_it_ends(self):
         from hq.platform.application.tests.procedures import approved_run, run_payload
