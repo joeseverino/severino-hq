@@ -63,6 +63,8 @@ lazy from .ui import ended
 lazy from .work_runs import wording
 
 ADOPT = "automation.source.adopt"
+# Adopt's words for every change that waits while some of them HQ can't adopt.
+ADOPTABLE = "adoptable"
 REJECT = "automation.source.reject"
 # What a playbook HQ can't adopt is, at a glance, on its row of a comparison.
 CANT_ADOPT = "HQ can't adopt it"
@@ -795,11 +797,16 @@ def judged(proposal_id: int) -> AdoptionPlan:
 def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
     """What adopting the proposal would do, or the refusal that lists every
     reason HQ will not adopt it: of the commit, then of ``playbook`` when one
-    is named, else of every playbook whose change waits."""
+    is named, else of every playbook whose change waits while none of them
+    can be adopted."""
 
     planned = judged(proposal_id)
     named = next((change for change in planned.changes if change.key == playbook), None)
-    refused = (*planned.unplaced, *(named.problems if named else ())) if playbook else planned.refused
+    if playbook:
+        refused = (*planned.unplaced, *(named.problems if named else ()))
+    else:
+        adoptable = any(not change.problems for change in planned.changes)
+        refused = planned.unplaced if adoptable or not planned.changes else planned.refused
     if refused:
         raise PolicyError(
             "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push.",
@@ -835,7 +842,10 @@ class AdoptProposal:
     proposal: Annotated[ScanResult, Field(title="Scan result")]
     playbook: Annotated[
         PlaybookKey | None,
-        Describe("The playbook whose change to adopt, by its id; left out, every change that waits is adopted."),
+        Describe(
+            "The playbook whose change to adopt, by its id; left out, every change that waits and HQ can adopt "
+            "is adopted."
+        ),
     ] = None
 
 
@@ -863,11 +873,12 @@ def _decided(planned: AdoptionPlan, playbook: str | None) -> tuple[PlaybookChang
 @transaction.atomic
 def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     """Adopt the change the proposal makes to one playbook, or every change
-    that waits, so each runs from the proposal's commit; every other playbook
-    stays as it was adopted."""
+    that waits and HQ can adopt, so each runs from the proposal's commit;
+    every other playbook stays as it was adopted, and one HQ can't adopt
+    still waits."""
 
     planned = plan(command.proposal, command.playbook or "")
-    chosen = _decided(planned, command.playbook)
+    chosen = tuple(change for change in _decided(planned, command.playbook) if not change.problems)
     current = adopted()
     if not chosen:
         return {
@@ -972,8 +983,8 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             ADOPT,
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
-            "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
-            "directory, is refused. Only an operator adopts, and never through an agent.",
+            "change that waits and HQ can adopt. A commit GitHub did not verify, or one carrying an ansible.cfg "
+            "or a plugins directory, is refused. Only an operator adopts, and never through an agent.",
             Effect.INFRASTRUCTURE_CHANGE,
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
@@ -981,14 +992,14 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             adopt,
             execution_notes=(
                 "Refuse a commit GitHub did not verify or one carrying an ansible.cfg or a plugins directory.",
-                "Refuse a playbook HQ can't run, and every change at once while one waits.",
+                "Refuse a playbook HQ can't run; every change at once leaves it waiting.",
                 "Compare it, playbook by playbook, with the adopted playbooks.",
                 "Each playbook adopted runs from this commit from now on; every other stays as adopted.",
                 "A run of a changed playbook that waits for approval can no longer be approved.",
             ),
             label="Adopt the playbooks",
             verb="Adopt",
-            variants=(("all", "Adopt all"),),
+            variants=(("all", "Adopt all"), (ADOPTABLE, "Adopt all HQ can")),
             home=automation_sources.PLAYBOOKS,
         ),
         CapabilitySpec(

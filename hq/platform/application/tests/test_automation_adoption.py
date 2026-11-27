@@ -532,26 +532,24 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
         self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
         self.assertIsNone(capability_spec("automation.example.other.run"))
 
-    def test_a_playbook_hq_cannot_run_is_refused_alone_and_the_one_beside_it_is_adopted(self):
+    def test_a_playbook_hq_cannot_run_is_refused_alone_and_adopting_all_adopts_the_ones_beside_it(self):
         self.adopt(self.proposed(catalog(procedure("check"))))
         unbounded = procedure("check")
         unbounded["roles"][0]["argument_spec"]["options"]["service"] = {"type": "dict"}
-        newer = self.proposed(catalog(unbounded, procedure("fresh"), revision=SECOND))
+        newer = self.proposed(catalog(unbounded, procedure("fresh"), procedure("other"), revision=SECOND))
 
-        every = self.adopt(newer, key="example-adopt-all")
         alone = self.adopt(newer, key="example-adopt-check", playbook="example.check")
-        fresh = self.adopt(newer, key="example-adopt-fresh", playbook="example.fresh")
+        every = self.adopt(newer, key="example-adopt-all")
 
-        self.assertIn("playbooks/check.hq.yml", " ".join(every["error"]["details"]["refused"]))
         self.assertIn("playbooks/check.hq.yml", " ".join(alone["error"]["details"]["refused"]))
-        self.assertTrue(fresh["adopted"], fresh)
+        self.assertTrue(every["adopted"], every)
         self.assertEqual(
             {key: found.revision for key, found in self.pinned().items()},
-            {
-                "example.check": FIRST,
-                "example.fresh": SECOND,
-            },
+            {"example.check": FIRST, "example.fresh": SECOND, "example.other": SECOND},
         )
+        self.assertEqual(self.waiting(newer), {"example.check": "changed"}, "the one HQ can't adopt still waits")
+        refused = self.adopt(newer, key="example-adopt-all-again")
+        self.assertIn("playbooks/check.hq.yml", " ".join(refused["error"]["details"]["refused"]))
 
     def test_a_playbook_the_scan_does_not_hold_is_not_found(self):
         newer = self.proposed(catalog(procedure("check")))

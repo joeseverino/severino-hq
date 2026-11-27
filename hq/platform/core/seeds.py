@@ -159,6 +159,14 @@ def _unadoptable(owner) -> None:
     example_estate.automation.unadoptable()
 
 
+def _partly_adoptable(owner) -> None:
+    """The example estate once a later scan read a commit HQ can adopt all
+    but one playbook of, so the Playbooks page offers adopting the rest."""
+
+    _estate(owner)
+    example_estate.automation.partly_adoptable()
+
+
 def _unattended(owner) -> None:
     """The example estate once its playbook worker stopped reporting, so the
     Playbooks page and the run that waits say what is missing."""
@@ -300,6 +308,7 @@ SEEDS: dict[str, Seed] = {
     "images-left": Seed(_images_left, _SET_UP),
     "rescanned": Seed(_rescanned, _SET_UP),
     "unadoptable": Seed(_unadoptable, _SET_UP),
+    "partly-adoptable": Seed(_partly_adoptable, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.

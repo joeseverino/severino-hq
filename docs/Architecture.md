@@ -2031,8 +2031,8 @@ whatever its commit. `plan()` refuses with every reason at once, in
 - an `ansible.cfg` or a directory Ansible loads code from, which a run would
   load beside every playbook;
 - a playbook with a problem the scan or HQ found, or an input no closed type
-  can take: that playbook's change alone, and every change at once while it
-  waits.
+  can take: that playbook's change alone. Every change at once adopts the
+  rest and leaves it waiting, and is refused only when none is left.
 
 Each change is compared file by file, and each way it lets a run do more is
 a widening. A widening is a playbook that may run on more machines or kinds
@@ -2059,7 +2059,7 @@ adoption, and says why the newest scan failed. While a commit waits, the table h
 for every playbook, adopted or brought by the commit, its last column the
 change table's Status, and each changed row its own Adopt and Reject
 (`automation_sources.playbook_rows`); the head carries View diff, Adopt all
-(when HQ can adopt every change that waits) and Reject all
+(Adopt all HQ can, while it can't adopt some) and Reject all
 (`automation_sources.decisions`). View diff opens the audit entry that records
 the scan's read (`automation_sources.entry_url`): the
 commit read and the commit adopted, the commit's own refusals, each changed

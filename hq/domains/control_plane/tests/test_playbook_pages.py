@@ -327,6 +327,34 @@ class PlaybooksPageTests(TestCase):
         self.assertIn(f"Rejected by {self.owner.get_username()}", text(scan))
         self.assertFalse({path for path in _posts(scan) if path.endswith(("/adopt/", "/reject/"))})
 
+    def test_a_commit_hq_can_adopt_all_but_one_of_offers_the_rest_in_one_press_and_keeps_that_one_waiting(self):
+        from hq.platform.application.automation_adoption import catch_up, judged
+        from hq.platform.core.example_estate import automation
+
+        automation.partly_adoptable()
+        newest = self.newest()
+        changes = judged(newest.pk).changes
+        (refused,) = [change for change in changes if change.problems]
+        self.assertGreater(len(changes), 2, "it holds changes HQ can adopt beside the one it can't")
+        head = {
+            urlsplit(element.attrs["formaction"]).path
+            for element in _head(self.page())
+            if "formaction" in element.attrs
+        }
+        self.assertIn(_adopt(newest.pk), head)
+
+        response = self.client.post(_adopt(newest.pk), _sent())
+
+        self.assertRedirects(response, reverse("control_plane:playbooks"), fetch_redirect_response=False)
+        catch_up()
+        self.assertEqual([change.key for change in judged(newest.pk).changes], [refused.key])
+        html = self.page()
+        self.assertEqual(set(_decisions(html)), {refused.key}, "only its Reject is left")
+        self.assertNotIn("Adopt", _decisions(html)[refused.key])
+        (row,) = [row for row in select(html, "data-change") if row.tag == "tr" and refused.title in row.words]
+        for problem in refused.problems:
+            self.assertIn(problem, row.words)
+
     def test_adopt_all_makes_the_proposal_the_catalog(self):
         newest = self.newest()
         response = self.client.post(_adopt(newest.pk), _sent())
