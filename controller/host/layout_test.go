@@ -81,22 +81,42 @@ func TestTheUnitsKeepTheBoundsABootNests(t *testing.T) {
 }
 
 // The image makes each directory a volume mounts over, owned by the account
-// HQ runs as, so a volume first mounted there takes that owner.
-func TestTheImageMakesEveryVolumesDirectory(t *testing.T) {
+// HQ runs as, so a volume first mounted there takes that owner, and installs
+// the controller where a pass runs it.
+func TestTheImageMakesWhatTheLayoutNames(t *testing.T) {
 	dockerfile, err := os.ReadFile(filepath.Join("..", "..", "Dockerfile"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var made string
+	var made, owned, private string
 	for line := range strings.SplitSeq(string(dockerfile), "\n") {
 		if after, ok := strings.CutPrefix(line, "RUN mkdir -p "); ok {
 			made = " " + after
+		}
+		if _, after, ok := strings.Cut(line, "chown -R severino:severino "); ok {
+			owned = " " + after + " "
+		}
+		if _, after, ok := strings.Cut(line, "chmod 0700 "); ok {
+			private = " " + after + " "
 		}
 	}
 	for _, volume := range Volumes {
 		if !strings.Contains(made, " "+volume.Target+" ") {
 			t.Errorf("the image does not make %s, where %s is mounted", volume.Target, volume.Name)
 		}
+	}
+	// A bridge socket's directory is the web account's alone from the image
+	// on, before any volume is mounted there.
+	for _, socket := range []string{BridgeSocket, AutomationBridgeSocket, EventsBridgeSocket} {
+		directory := " " + filepath.Dir(socket) + " "
+		if !strings.Contains(owned, directory) || !strings.Contains(private, directory) {
+			t.Errorf("the image does not give %s to the web account alone", filepath.Dir(socket))
+		}
+	}
+	// A pass runs the controller the image builds, where the launcher says.
+	if !strings.Contains(string(dockerfile), "FROM scratch AS programs\nCOPY --from=controller /out/ /\n") ||
+		!strings.Contains(string(dockerfile), "\nCOPY --from=programs /hq-controller "+ControllerProgram+"\n") {
+		t.Errorf("the image does not install the controller it builds at %s", ControllerProgram)
 	}
 }
 

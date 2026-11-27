@@ -70,6 +70,9 @@ const (
 	// EdgeProgram is the edge receiver, in the tree, which `hq-host
 	// edge-receiver` hands an administrator to install on an edge.
 	EdgeProgram = Lib + "/deploy/bin/hq-edge"
+	// ControllerProgram is the controller in the image, which a pass's
+	// container runs in place of HQ's own entrypoint.
+	ControllerProgram = "/usr/local/bin/hq-controller"
 
 	// WebSecretDir holds the application environment the web container binds.
 	WebSecretDir = hostcore.SecretDir + "/web"

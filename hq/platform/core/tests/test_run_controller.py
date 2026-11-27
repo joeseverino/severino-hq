@@ -1,45 +1,16 @@
-"""The controller container: its isolation, the binary it runs, and the environment it reads."""
+"""The web container's listener: the bridge socket is served beside it, never by it."""
 
 import re
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-ROOT = Path(__file__).resolve().parents[4]
-LAUNCHER = ROOT / "controller" / "host" / "controller.go"
-DOCKERFILE = ROOT / "Dockerfile"
+DOCKERFILE = Path(__file__).resolve().parents[4] / "Dockerfile"
 
 
-# The image is built without its Dockerfile, so these run from a checkout.
+# The image is built without its Dockerfile, so this runs from a checkout.
 @tag("source")
-class ControllerBinaryTests(SimpleTestCase):
-    """The container runs the Go controller the image builds, and reaches HQ over its socket."""
-
-    def test_the_entrypoint_is_the_binary_the_image_builds(self):
-        dockerfile = DOCKERFILE.read_text()
-        built = re.search(r"^COPY --from=programs /hq-controller (\S+)$", dockerfile, re.MULTILINE)
-
-        self.assertIn("FROM scratch AS programs\nCOPY --from=controller /out/ /\n", dockerfile)
-        self.assertIsNotNone(built)
-        self.assertIn(f'"--entrypoint", "{built.group(1)}"', LAUNCHER.read_text())
-
-
-@tag("source")
-class BridgeSocketDeliveryTests(SimpleTestCase):
-    """The bridge socket's directory is private from the image on; how it is mounted is controller/host's."""
-
-    def directory(self) -> str:
-        layout = (ROOT / "controller" / "host" / "layout.go").read_text()
-        socket = re.search(r'BridgeSocket = "(/[^"]+)"', layout)
-        self.assertIsNotNone(socket)
-        return socket.group(1).rsplit("/", 1)[0]
-
-    def test_the_image_makes_the_directory_this_accounts_alone(self):
-        directory = self.directory()
-        dockerfile = DOCKERFILE.read_text()
-        self.assertRegex(dockerfile, rf"chown -R severino:severino [^\n]*{re.escape(directory)}\b")
-        self.assertRegex(dockerfile, rf"chmod 0700 [^\n]*{re.escape(directory)}\b")
-
+class WebListenerTests(SimpleTestCase):
     def test_the_web_listener_is_not_the_socket(self):
         command = re.search(r"^CMD \[(.+?)\]$", DOCKERFILE.read_text(), re.MULTILINE | re.DOTALL).group(1)
         self.assertIn('"hq.config.serve"', command)

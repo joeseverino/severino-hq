@@ -375,7 +375,7 @@ func (r *rehearsing) plan(ctx context.Context) string {
 	args := []string{"run", "--rm", "--pull", "never", "--network", "host",
 		"--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges:true",
-		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev", "--entrypoint", "/usr/local/bin/hq-controller",
+		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev", "--entrypoint", ControllerProgram,
 		"--mount", readOnly(filepath.Join(plan, "connections.json"), controllerConnections),
 		"--mount", readOnly(filepath.Join(plan, "ssh"), controllerSSH),
 		"--mount", "type=bind,source=" + filepath.Join(plan, "acme") + ",target=" + controllerACME,

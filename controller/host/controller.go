@@ -176,7 +176,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		"--env", "HQ_CONTROLLER_RUNS=" + RunsDir,
 		"--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev",
-		"--entrypoint", "/usr/local/bin/hq-controller",
+		"--entrypoint", ControllerProgram,
 		"--mount", readOnly(filepath.Join(run, "connections.json"), controllerConnections),
 		"--mount", readOnly(filepath.Join(run, "ssh"), controllerSSH),
 		"--env", "HQ_CONTROLLER_CONNECTIONS=" + controllerConnections,
