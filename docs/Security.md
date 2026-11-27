@@ -732,7 +732,9 @@ path from the public internet. Setting it up is
   and `LOG_AGE_MS` in `worker/src/hub.ts`), cut from the oldest end, so an
   id it holds has every event after it. A listener that reconnects presents the last id it handled (`Last-Event-ID`, a number) and
   is sent exactly the events after it; one whose id the log no longer holds,
-  or that presents none, is told so and HQ reads everything again. Only a
+  or that holds none (0), is told so and HQ reads everything again. A
+  listener of the release before the log, which sends no header, is sent
+  each event as it is, since the Worker deploys apart from HQ's release. Only a
   socket of the current token is sent the log, so the log adds nothing a
   socket could not already hear.
 - Every event a verified request carries is forwarded, one HQ takes or not,

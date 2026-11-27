@@ -43,8 +43,15 @@ export async function tag(token: string): Promise<string> {
   return new Uint8Array(await crypto.subtle.digest("SHA-256", encoder.encode(token))).toHex();
 }
 
-/** The request header a reconnecting listener names the last event it handled by, as Server-Sent Events do. */
+/**
+ * The request header a listener names the last event it handled by, as
+ * Server-Sent Events do, 0 for none. A listener that sends it reads the log's
+ * messages (Opening, Logged); one that does not is sent each event as it is.
+ */
 export const LAST_EVENT_ID = "Last-Event-ID";
+
+/** The tag of a socket that reads the log's messages. */
+const LOG_READER = "log";
 
 /**
  * The log's window. HQ hears about fifty events an hour from its providers,
@@ -93,6 +100,9 @@ const ID = /^[1-9]\d{0,14}$/;
  * LOG_AGE_MS, and always the newest, so its ids keep growing; it is cut from
  * its oldest end alone, so an id within it has every event after it.
  *
+ * A listener of the release before the log presents no id and is sent each
+ * event as it is, since the Worker deploys apart from HQ's release.
+ *
  * A hibernated socket outlives a new version of the Worker, a rotated
  * SOCKET_TOKEN included, so each socket is tagged with the token it
  * presented, and the log and each event go only to the sockets of the token
@@ -109,24 +119,25 @@ export class Hub extends DurableObject<Env> {
       tag(bearer(request.headers.get("Authorization")) ?? ""),
       tag(this.env.SOCKET_TOKEN),
     ]);
+    const held = request.headers.get(LAST_EVENT_ID);
     const { 0: client, 1: server } = new WebSocketPair();
-    this.ctx.acceptWebSocket(server, [presented]);
+    this.ctx.acceptWebSocket(server, held === null ? [presented] : [presented, LOG_READER]);
     // Sent before anything else can run here, so no event falls between the
     // log and the live ones.
     if (presented !== current) server.close(1008, ROTATED);
-    else for (const message of this.since(request.headers.get(LAST_EVENT_ID))) server.send(message);
+    else if (held !== null) for (const message of this.since(held)) server.send(message);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   /** The opening, then the events after `presented` when the log holds every one. */
-  private since(presented: string | null): string[] {
+  private since(presented: string): string[] {
     this.trim();
     const { oldest, newest } = this.ctx.storage.sql
       .exec<{ oldest: number | null; newest: number | null }>(
         "SELECT (SELECT MIN(id) FROM log) AS oldest, (SELECT MAX(id) FROM log) AS newest",
       )
       .one();
-    const after = presented && ID.test(presented) ? Number(presented) : 0;
+    const after = ID.test(presented) ? Number(presented) : 0;
     const resumed = oldest !== null && newest !== null && after > 0 && after >= oldest - 1 && after <= newest;
     const opening: Opening = { last_event_id: newest ?? 0, resumed };
     if (!resumed) return [JSON.stringify(opening)];
@@ -159,8 +170,9 @@ export class Hub extends DurableObject<Env> {
     const message = logged(id, names);
     for (const socket of this.ctx.getWebSockets()) {
       try {
-        if (this.ctx.getTags(socket).includes(current)) socket.send(message);
-        else socket.close(1008, ROTATED);
+        const tags = this.ctx.getTags(socket);
+        if (!tags.includes(current)) socket.close(1008, ROTATED);
+        else socket.send(tags.includes(LOG_READER) ? message : names);
       } catch {
         // A socket closing as the event arrives misses it; the log sends it
         // when its listener reconnects.

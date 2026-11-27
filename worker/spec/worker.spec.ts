@@ -34,12 +34,11 @@ function upgrade(headers: Record<string, string>): Promise<Response> {
 type HubStub = ReturnType<Env["HUB"]["getByName"]>;
 
 /**
- * A listener connected with the current token, presenting `lastEventId` when
- * given, through the Worker or straight to `hub`, a Hub of its own.
+ * A listener connected with the current token, presenting `lastEventId` (0,
+ * none, unless given), through the Worker or straight to `hub`, a Hub of its own.
  */
-async function listen(lastEventId?: number | string, hub?: HubStub): Promise<Listener> {
-  const presented: Record<string, string> = lastEventId === undefined ? {} : { [LAST_EVENT_ID]: String(lastEventId) };
-  const headers = { Authorization: `Bearer ${env.SOCKET_TOKEN}`, ...presented };
+async function listen(lastEventId: number | string = 0, hub?: HubStub): Promise<Listener> {
+  const headers = { Authorization: `Bearer ${env.SOCKET_TOKEN}`, [LAST_EVENT_ID]: String(lastEventId) };
   const response = hub
     ? await hub.fetch(`${ORIGIN}${SOCKET_PATH}`, { headers: { Upgrade: "websocket", ...headers } })
     : await upgrade(headers);
@@ -325,7 +324,7 @@ describe("a listener that reconnects", () => {
   it("naming an event the log has let go of for its age is told to read again, and sent the live ones", async () => {
     // A Hub of its own, whose log holds only these events.
     const hub = env.HUB.getByName("example-aged");
-    const watching = await listen(undefined, hub);
+    const watching = await listen(0, hub);
     const aged = new Date(Date.now() - LOG_AGE_MS - 60_000).toISOString();
     await broadcast(named("delivery-aged-1", aged), hub);
     await broadcast(named("delivery-aged-2", aged), hub);
@@ -343,7 +342,7 @@ describe("a listener that reconnects", () => {
   it("naming an event the log has let go of for its count is told to read again", async () => {
     const hub = env.HUB.getByName("example-counted");
     await broadcast(named("delivery-first"), hub);
-    const { last_event_id: first } = (await listen(undefined, hub)).opening;
+    const { last_event_id: first } = (await listen(0, hub)).opening;
     for (let sent = 1; sent <= LOG_EVENTS + 1; sent++) await broadcast(named(`delivery-${sent}`), hub);
 
     const { opening } = await listen(first, hub);
@@ -351,8 +350,8 @@ describe("a listener that reconnects", () => {
     expect(opening).toStrictEqual({ last_event_id: first + LOG_EVENTS + 1, resumed: false });
   });
 
-  it.each<[string, (newest: number) => string | undefined]>([
-    ["no id", () => undefined],
+  it.each<[string, (newest: number) => string]>([
+    ["no event held", () => "0"],
     ["an id the log never gave", (newest) => String(newest + 1)],
     ["an id that is not one", () => "0x10"],
   ])("with %s is told to read again", async (_, presenting) => {
@@ -362,6 +361,32 @@ describe("a listener that reconnects", () => {
     const { opening } = await listen(presenting(newest));
 
     expect(opening).toStrictEqual({ last_event_id: newest, resumed: false });
+  });
+});
+
+describe("a listener of the release before the log", () => {
+  it("presenting no id is sent each event as it is, and no opening", async () => {
+    const response = await upgrade({ Authorization: `Bearer ${env.SOCKET_TOKEN}` });
+    const socket = response.webSocket!;
+    const heard: unknown[] = [];
+    const first = new Promise((resolve) =>
+      socket.addEventListener("message", (message) => resolve(heard.push(JSON.parse(String(message.data))))),
+    );
+    socket.accept();
+    open.push(socket);
+
+    await deliver({ event: "push", payload: push, id: "delivery-unlogged" });
+    await first;
+
+    expect(heard).toStrictEqual([
+      {
+        provider: github.provider,
+        event: "push",
+        subject: "example/hq",
+        delivery_id: "delivery-unlogged",
+        received_at: expect.any(String),
+      },
+    ]);
   });
 });
 

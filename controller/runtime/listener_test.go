@@ -38,16 +38,7 @@ func asLogged(id int, arrival string) []byte {
 // opened sends the Hub's opening, then each message, then holds the
 // connection until the listener leaves or drop closes.
 func opened(opening string, drop <-chan struct{}, messages ...[]byte) func(context.Context, *websocket.Conn) {
-	return func(ctx context.Context, conn *websocket.Conn) {
-		_ = conn.Write(ctx, websocket.MessageText, []byte(opening))
-		for _, message := range messages {
-			_ = conn.Write(ctx, websocket.MessageText, message)
-		}
-		select {
-		case <-ctx.Done():
-		case <-drop:
-		}
-	}
+	return sent(drop, append([][]byte{[]byte(opening)}, messages...)...)
 }
 
 // hub is the Worker's socket as a listener meets it: the bearer checked
@@ -181,10 +172,9 @@ func TestABurstOfEventsIsOneBatch(t *testing.T) {
 	for id := range 5 {
 		burst = append(burst, asLogged(id+1, pushEvent))
 	}
-	// Neither HQ's provider, nor the contract's shape, nor the log's: dropped,
-	// never posted.
+	// Neither HQ's provider nor the contract's shape: dropped, never posted.
 	burst = append(burst, asLogged(6, strings.Replace(pushEvent, "github_app", "example", 1)),
-		asLogged(7, `{"body":{"commits":[]}}`), []byte(pushEvent))
+		asLogged(7, `{"body":{"commits":[]}}`))
 	w := newHub(t, opened(unresumed, nil, burst...))
 	run(t, listenerFor(t, w, bridge))
 
@@ -288,9 +278,9 @@ func TestAnEventIsHeldToTheContractsBounds(t *testing.T) {
 // longer holds it is, and the listener then holds the newest id it named.
 func TestAReconnectResumesAfterTheLastEventHQTook(t *testing.T) {
 	bridge, batches := hq(t)
-	// Each of the first two connections is dropped once HQ has its events,
+	// Each of the first three connections is dropped once HQ has its posts,
 	// which a heartbeat after them says, as posts follow one another.
-	drops := []chan struct{}{make(chan struct{}), make(chan struct{})}
+	drops := []chan struct{}{make(chan struct{}), make(chan struct{}), make(chan struct{})}
 	var dials atomic.Int32
 	w := newHub(t, nil)
 	w.serve = func(ctx context.Context, conn *websocket.Conn) {
@@ -300,7 +290,7 @@ func TestAReconnectResumesAfterTheLastEventHQTook(t *testing.T) {
 		case 2:
 			opened(`{"last_event_id":9,"resumed":true}`, drops[1], asLogged(8, pushEvent), asLogged(9, pushEvent))(ctx, conn)
 		case 3:
-			opened(`{"last_event_id":12,"resumed":false}`, dropped())(ctx, conn)
+			opened(`{"last_event_id":12,"resumed":false}`, drops[2])(ctx, conn)
 		default:
 			holding(ctx, conn)
 		}
@@ -309,7 +299,7 @@ func TestAReconnectResumesAfterTheLastEventHQTook(t *testing.T) {
 	listener.Burst.Heartbeat = 10 * time.Millisecond
 	run(t, listener)
 
-	if presented := next(t, w.presented, "first dial"); presented != "" {
+	if presented := next(t, w.presented, "first dial"); presented != "0" {
 		t.Fatalf("a listener that heard nothing presented %q", presented)
 	}
 	if first := next(t, batches, "batch on connecting"); !first.Reconnected {
@@ -336,6 +326,8 @@ func TestAReconnectResumesAfterTheLastEventHQTook(t *testing.T) {
 	if batch := events(t, batches); !batch.Reconnected {
 		t.Fatalf("a connection the Hub could not resume began with %+v, not a read", batch)
 	}
+	heartbeat(t, batches)
+	close(drops[2])
 	if presented := next(t, w.presented, "fourth dial"); presented != "12" {
 		t.Fatalf("after reading again the reconnect presented %q, not the newest id the Hub named", presented)
 	}
@@ -357,6 +349,64 @@ func heartbeat(t *testing.T, batches <-chan InboundBatch) {
 	t.Helper()
 	if batch := next(t, batches, "heartbeat"); batch.Reconnected || len(batch.Events) != 0 {
 		t.Fatalf("a heartbeat was due, and %+v was posted", batch)
+	}
+}
+
+// A Worker of the release before the log, which deploys apart from HQ's,
+// sends each event as it is and no opening, before the listener holds an id
+// and after it does; each connection to it is heard, and HQ reads again.
+func TestAHubWithNoLogIsHeardAndHQReadsAgain(t *testing.T) {
+	bridge, batches := hq(t)
+	drops := []chan struct{}{make(chan struct{}), make(chan struct{})}
+	var dials atomic.Int32
+	w := newHub(t, nil)
+	w.serve = func(ctx context.Context, conn *websocket.Conn) {
+		switch dials.Add(1) {
+		case 1:
+			sent(drops[0], []byte(pushEvent))(ctx, conn)
+		case 2:
+			opened(unresumed, drops[1], asLogged(7, pushEvent))(ctx, conn)
+		default:
+			sent(nil, []byte(pushEvent))(ctx, conn)
+		}
+	}
+	listener := listenerFor(t, w, bridge)
+	listener.Burst.Heartbeat = 10 * time.Millisecond
+	run(t, listener)
+
+	for i, drop := range drops {
+		next(t, w.presented, "dial")
+		if batch := events(t, batches); !batch.Reconnected {
+			t.Fatalf("connection %d began with %+v, not a read", i+1, batch)
+		}
+		if batch := events(t, batches); len(batch.Events) != 1 {
+			t.Fatalf("connection %d posted the event as %+v", i+1, batch)
+		}
+		heartbeat(t, batches)
+		close(drop)
+	}
+	if presented := next(t, w.presented, "dial after the log"); presented != "7" {
+		t.Fatalf("the reconnect presented %q, not the event HQ took", presented)
+	}
+	if batch := events(t, batches); !batch.Reconnected {
+		t.Fatalf("a Hub with no log was not read again for: %+v", batch)
+	}
+	if batch := events(t, batches); len(batch.Events) != 1 {
+		t.Fatalf("the event was posted as %+v", batch)
+	}
+}
+
+// sent sends each message as a Hub with no log does, with no opening, then
+// holds the connection until the listener leaves or drop closes.
+func sent(drop <-chan struct{}, messages ...[]byte) func(context.Context, *websocket.Conn) {
+	return func(ctx context.Context, conn *websocket.Conn) {
+		for _, message := range messages {
+			_ = conn.Write(ctx, websocket.MessageText, message)
+		}
+		select {
+		case <-ctx.Done():
+		case <-drop:
+		}
 	}
 }
 
