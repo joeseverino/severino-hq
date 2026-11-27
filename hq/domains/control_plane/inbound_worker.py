@@ -49,12 +49,29 @@ SETTINGS = {
     "main": "src/index.ts",
     "compatibility_date": "2026-11-23",
     "workers_dev": False,
+    # Each version's preview URL is public and names the account. Left unset,
+    # a deploy keeps whatever the dashboard last set.
+    "preview_urls": False,
+    # wrangler reports neither its usage nor the Worker's package versions,
+    # for every command run against this file.
+    "send_metrics": False,
+    "dependencies_instrumentation": {"enabled": False},
+    # A runaway's ceiling, held well above what verifying and parsing the
+    # largest body a provider sends takes, since GitHub never retries a
+    # delivery the Worker drops.
+    "limits": {"cpu_ms": 1000},
     "exports": {"Hub": {"type": "durable-object", "storage": "sqlite"}},
     "durable_objects": {"bindings": [{"name": "HUB", "class_name": "Hub"}]},
     # Every request is logged, by the Worker's own line of its method, path
     # and status: invocation logs keep the request's headers, and Cloudflare
-    # documents no redaction of them in Workers Logs.
-    "observability": {"enabled": True, "head_sampling_rate": 1, "logs": {"invocation_logs": False}},
+    # documents no redaction of them in Workers Logs. Issues groups the
+    # Worker's exceptions and 5xx answers from those logs.
+    "observability": {
+        "enabled": True,
+        "head_sampling_rate": 1,
+        "logs": {"invocation_logs": False},
+        "issues": {"enabled": True},
+    },
 }
 
 # What the Worker never reads: HQ's readings for each event, which of them

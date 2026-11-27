@@ -8,6 +8,14 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-23",
   "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  "dependencies_instrumentation": {
+    "enabled": false
+  },
+  "limits": {
+    "cpu_ms": 1000
+  },
   "exports": {
     "Hub": {
       "type": "durable-object",
@@ -27,6 +35,9 @@
     "head_sampling_rate": 1,
     "logs": {
       "invocation_logs": false
+    },
+    "issues": {
+      "enabled": true
     }
   },
   "assets": {

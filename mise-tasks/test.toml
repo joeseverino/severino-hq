@@ -82,5 +82,4 @@ sources = [
 ]
 outputs = []
 depends = ["setup:worker-tools"]
-env = { WRANGLER_SEND_METRICS = "false" }
 run = "cd worker && ./node_modules/.bin/vitest run"

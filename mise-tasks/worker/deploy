@@ -8,13 +8,12 @@
 # The environment names what this public repository must not:
 # CLOUDFLARE_ACCOUNT_ID, which wrangler reads itself, and HQ_INBOUND_HOSTNAME,
 # the name on the operator's own zone the Worker answers on. wrangler.jsonc
-# turns off the workers.dev address, which names the account.
+# turns off the workers.dev address and preview URLs, which name the account.
 # CLOUDFLARE_API_TOKEN deploys; a dry run needs none.
 set -eu
 
 : "${CLOUDFLARE_ACCOUNT_ID:?worker:deploy needs CLOUDFLARE_ACCOUNT_ID, the Cloudflare account to deploy to}"
 : "${HQ_INBOUND_HOSTNAME:?worker:deploy needs HQ_INBOUND_HOSTNAME, the name on your own zone the Worker answers on}"
-export WRANGLER_SEND_METRICS=false
 
 cd worker
 # The pages in public/ link HQ's own stylesheet, font, icons and scripts by
@@ -24,8 +23,13 @@ mkdir public/static
 cp -R ../static/css ../static/fonts ../static/img ../static/js public/static/
 # The version is tagged with the digest of what HQ derived it from
 # (control_plane.inbound_worker.deploy_tag), so HQ can tell whether the
-# version Cloudflare runs is the one its declarations make.
-set -- deploy --domain "$HQ_INBOUND_HOSTNAME" --tag "$(cat src/generated/deploy-tag)"
+# version Cloudflare runs is the one its declarations make, and its message
+# names the commit it was built from. --strict refuses a deploy over a
+# setting changed outside wrangler.jsonc since the last one, which belongs in
+# the declaration or is undone first; the custom domain's DNS record is
+# replaced regardless (docs/Security.md).
+set -- deploy --domain "$HQ_INBOUND_HOSTNAME" --tag "$(cat src/generated/deploy-tag)" \
+    --message "commit $(git rev-parse HEAD)" --strict
 if [ "${usage_dry_run:-}" = true ]; then
     set -- "$@" --dry-run
 fi

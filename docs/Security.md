@@ -827,7 +827,12 @@ since every deploy keeps them bound, attach a custom domain on any of the
 account's zones, and replace any Worker on the account. So it is held as
 the Worker's secrets are, on the one environment only `main` deploys from.
 A deploy with no terminal replaces any DNS record already on that hostname,
-so the name is kept for the Worker alone.
+so the name is kept for the Worker alone; `--strict` does not hold that
+replace, since wrangler asks nothing before it. What `--strict` refuses is a
+deploy over the Worker as the dashboard or the script API last changed it, so
+a setting changed outside `wrangler.jsonc` is declared there or undone before
+the next deploy. Each deploy turns off the workers.dev address and preview
+URLs, which are public and name the account.
 
 ## A leaked GitHub App credential
 

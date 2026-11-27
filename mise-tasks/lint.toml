@@ -321,7 +321,6 @@ sources = [
 ]
 outputs = []
 depends = ["setup:worker-tools"]
-env = { WRANGLER_SEND_METRICS = "false" }
 run = "cd worker && ./node_modules/.bin/wrangler types >/dev/null && ./node_modules/.bin/tsc -p ."
 
 # The Go controller's static half: format, generated types, the vendor slicer,
