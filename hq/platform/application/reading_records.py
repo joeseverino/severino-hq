@@ -155,7 +155,11 @@ def record_filter(kind: str) -> RecordFilter:
     return RecordFilter(model, frozenset(listed), MappingProxyType(defaults))
 
 
-def _filtered(where: dict[str, Any] | None, info: ValidationInfo) -> dict[str, Any] | None:
+def _filtered(where: Any, info: ValidationInfo) -> dict[str, Any] | None:
+    """``where`` held to the fields of its ``kind``'s records, judged before
+    the shape every kind's fields share, so a name its kind lacks is told
+    the one nearest."""
+
     if not where:
         return None
     kind = info.data.get("kind")
@@ -194,17 +198,26 @@ _UNFILTERED = "is not a field {kind} records are filtered by; they are filtered 
 _NEEDS_KIND = Reason("records_need_kind", "needs the kind whose record fields it names")
 
 
+# Every record a reader may ask for, by its type.
+_LISTED = tuple(kind for kind, spec in OBSERVATIONS.items() if not spec.withheld)
+# The fields any kind's records are filtered by, and no other, each a value as
+# sent: the most the document can say, since a query parameter's schema cannot
+# depend on another's value. Which of them a kind takes is `_filtered`'s.
+_FILTERED_BY = one_of(sorted({name for kind in _LISTED for name in record_filter(kind).model.model_fields}))
+_Where = Annotated[dict[_FILTERED_BY, str | float | bool | None] | None, Checked(_filtered, mode="before")]
+
+
 RecordQuery = create_model(
     "RecordQuery",
     __base__=BoundedQuery,
     __doc__="Every record HQ holds of one type of reading, or of every type, narrowed by the values of their own "
     "fields.",
     kind=(
-        one_of(kind for kind, spec in OBSERVATIONS.items() if not spec.withheld) | None,
+        one_of(_LISTED) | None,
         Field(default=None, description="Only the records of this type of reading; absent, every type's."),
     ),
     where=(
-        Annotated[dict[str, str | float | bool | None] | None, Checked(_filtered)],
+        _Where,
         Field(
             default=None,
             description="Only the records whose fields hold these values, each a field of `kind`'s records: a "
