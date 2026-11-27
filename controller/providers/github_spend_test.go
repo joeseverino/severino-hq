@@ -25,11 +25,11 @@ import (
 // many requests GitHub counted against the installation for it.
 func repositorySweep(t *testing.T, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
 	t.Helper()
-	return toldSweep(t, t.Context(), h, held...)
+	return toldSweep(t.Context(), t, h, held...)
 }
 
 // toldSweep is repositorySweep for the pass ctx tells (runtime.Telling).
-func toldSweep(t *testing.T, ctx context.Context, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
+func toldSweep(ctx context.Context, t *testing.T, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
 	t.Helper()
 	done := h.r.BeginSnapshot()
 	defer done()
@@ -136,7 +136,7 @@ func TestAnEventsPassReadsOnlyItsRepository(t *testing.T) {
 		Kind: runtime.ResourceKindGitHubOpenPullRequest, Subject: "example/other",
 		Kinds: []runtime.ResourceKind{runtime.ResourceKindGitHubOpenPullRequest, runtime.ResourceKindGitHubRepository, runtime.ResourceKindGitHubWorkflowRun},
 	}})
-	report, spent := toldSweep(t, told, h, held...)
+	report, spent := toldSweep(told, t, h, held...)
 	if got := carried(report); !report.OK || len(got) != 1 || got[0] != "example/app" {
 		t.Fatalf("the told repository is read and the other carried: %v %+v", got, report)
 	}
