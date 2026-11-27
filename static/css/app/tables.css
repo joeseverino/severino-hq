@@ -195,23 +195,25 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 .data-table > tbody > tr { --control-rise: max(0px, (var(--control-compact) - 1lh) / 2); }
 .data-table > tbody > tr > [data-kind="control"]:not(.select-column) {
   white-space: nowrap; text-align: end;
-  & > :is(.btn, form) { vertical-align: top; }
-  & > * + * { margin-inline-start: var(--space-4); }
+  & .btn { vertical-align: top; }
+  /* A control stands apart from the one before it, its own box or the one in
+     what holds it (its form, its ask), which draws none. */
+  & > * + *, & > * + * > .btn { margin-inline-start: var(--space-4); }
   /* What a control cell says beside its controls wraps as words do, on a line of its own: a note, or the sentence linked to the setup a change needs (`_write_gap.html`), which is a link and no control's label. */
   & > :is(.muted, p, [data-write-gap]) { display: block; margin: 0; white-space: normal; }
   /* That sentence is long, so its cell keeps the measure a long value keeps. */
   &:has(> [data-write-gap]) { box-sizing: content-box; min-inline-size: min(var(--row-words), var(--share)); }
-  &:has(> :is(.btn, form, [data-ask])) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
+  &:has(.btn) { padding-block: calc(var(--row-pad) - var(--control-rise)); }
   /* An ask's cell keeps the line its note stands on under its controls (below). */
   &:has(> [data-ask]) { padding-block-end: calc(var(--row-pad) + 1lh); }
 }
 /* A control never stands on its frame's edge: the first row of a table with no headings keeps its whole pad above it, and a table's last row shown keeps its whole pad below, or an ask's the line its note stands on. The row's words move off that edge by the control's rise too, so they stay level with it and the frame's edges hold the same space. */
-.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] > :is(.btn, form)) {
-  & > [data-kind="control"]:has(> :is(.btn, form)) { padding-block-start: var(--row-pad); }
+.data-table:not(:has(> thead)) > tbody:first-of-type > tr:first-child:has(> [data-kind="control"] .btn) {
+  & > [data-kind="control"]:has(.btn) { padding-block-start: var(--row-pad); }
   & > :not([data-kind="control"]) { --row-content-start: calc(var(--row-pad) + var(--control-rise)); padding-block-start: var(--row-content-start); }
 }
-.data-table > tbody:last-of-type > tr:nth-last-child(1 of :not(.row-detail)):has(> [data-kind="control"] > :is(.btn, form)) {
-  & > [data-kind="control"]:has(> :is(.btn, form)):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
+.data-table > tbody:last-of-type > tr:nth-last-child(1 of :not(.row-detail)):has(> [data-kind="control"] .btn) {
+  & > [data-kind="control"]:has(.btn):not(:has(> [data-ask])) { padding-block-end: var(--row-pad); }
   & > :not([data-kind="control"]) { padding-block-end: calc(var(--row-pad) + var(--control-rise)); }
 }
 /* The tick-boxes' column is their box and the room beside it, no row control, so each box stands centered under the heading's; its width the table's `--row-lead`, in every engine, whose own margins around a checkbox differ. */
@@ -385,8 +387,8 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
 /* A narrow table whose rows hold labeled controls (any but a glyph), or the narrowest one whose rows hold any, gives its controls a line of their own: its name's track takes the room the others leave, and a row's controls take its last line, from where its name starts, rising past no words, so the row's whole pad stands under them; a control that wraps starts its line there too, and a quiet one opening it stands its pad out (page.css). The table and its rows name their controls again, which weighs these rules above a column's own width and display. */
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"])) { --controls: icons; }
 .table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not(.glyph)) { --controls: labeled; }
-/* A row of three controls, of any look, asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
-.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > .btn ~ .btn ~ .btn) { --controls: crowded; }
+/* A row of three controls, of any look and kind (each child of its cell but a note), asks a line of their own sooner, as a table of more columns lets them leave sooner (above). */
+.table-scroll:has(> .data-table > tbody > tr > [data-kind="control"] > :not(.muted, p, [data-write-gap]) ~ :not(.muted, p, [data-write-gap]) ~ :not(.muted, p, [data-write-gap])) { --controls: crowded; }
 @container table-region ((width < 36rem) and style(--controls: labeled)) or ((width < 48rem) and style(--controls: crowded)) or ((width < 20rem) and style(--controls: icons)) {
   .data-table:has(> tbody > tr > [data-kind="control"] :is(a, button, [role="button"]):not([hidden])) {
     grid-template-columns: var(--lead,) [name] minmax(auto, 1fr) repeat(var(--columns), auto);
@@ -395,7 +397,7 @@ a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-de
       --control-rise: 0px; grid-template-rows: repeat(4, auto);
       & > * { grid-row: 1 / -2; border-bottom-width: 0; }
       & > .select-column { grid-row: 1 / -1; border-bottom-width: 1px; }
-      & > [data-kind="control"]:not(.select-column, [data-field]) { grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + * { margin-inline-start: 0; } }
+      & > [data-kind="control"]:not(.select-column, [data-field]) { grid-area: -2 / name / -1 / -1; border-bottom-width: 1px; padding-block-start: 0; padding-inline-start: var(--row-inset, var(--cell-pad)); text-align: start; white-space: normal; display: flex; flex-wrap: wrap; align-content: start; gap: var(--space-3) var(--space-4); & > * + *, & > * + * > .btn { margin-inline-start: 0; } }
       /* Where a row's fields stand apart (above), they stand between its words and its controls. */
       @container table-region (width < 36rem) {
         &:has(> [data-field]) {

@@ -575,7 +575,9 @@ slotted(
         press its reader would be refused. `_page_action.html` draws one; a confirmation's is
         `PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
         with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
-        (`partials/_calendar_sources.html`).
+        (`partials/_calendar_sources.html`). What holds a button (a post's own form, an ask) draws no
+        box, so every kind of control is the same box in any container, and a container's rule reaches
+        the `.btn` through it, never the element a kind is drawn as.
 
         The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
         menu row, a toggle, a close mark) starts from nothing painted (`base.css`) and draws itself, so no

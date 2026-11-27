@@ -181,13 +181,17 @@
   @container page-head (width < 48rem) {
     .page-head .page-actions:where([data-many]) > :nth-child(n + 3):not(.overflow-menu) { display: none; }
     .page-head .page-actions:where([data-many]) .overflow-menu-copies { display: contents; }
-    .page-head .page-actions:where([data-many]) .overflow-menu-copies > :first-child { display: none; }
     .page-head .page-actions:where([data-many]) .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
+  }
+  /* The second control still stands beside the title here, so its copy is
+     left out only in this range: a copy is never shown by undoing a rule,
+     which would hand it back to the browser's own box for its element. */
+  @container page-head (30rem <= width < 48rem) {
+    .page-head .page-actions:where([data-many]) .overflow-menu-copies > :first-child { display: none; }
   }
   @container page-head (width < 30rem) {
     .page-head .page-actions > :nth-child(n + 2):not(.overflow-menu) { display: none; }
     .page-head .page-actions .overflow-menu-copies { display: contents; }
-    .page-head .page-actions .overflow-menu-copies > :first-child { display: revert; }
     .page-head .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
   }
 
@@ -300,7 +304,7 @@
 .section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
 /* A control after the words beside the heading stands as far from them as a
    row's controls stand apart. */
-.section-aside > * + :is(.btn, .ask) { margin-inline-start: var(--space-4); }
+.section-aside > * + .btn, .section-aside > * + * > .btn { margin-inline-start: var(--space-4); }
 /* An ask there (a queue's Refresh) says something under the heading only once
    there is something to say, as one beside a page's title does. */
 .section-aside > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }

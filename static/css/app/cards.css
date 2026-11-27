@@ -25,8 +25,11 @@
 :is(.pill, .tag) { line-height: 1.4; }
 
 
-/* A control that posts a form of its own (a posting `{% button %}` with `fields`) stands where a button would. */
-.post-form { display: inline-block; margin: 0; }
+/* A control that posts a form of its own (a posting `{% button %}` that sends
+   more than one value) draws no box of its own, as an ask draws none
+   (pages.css), so its button is the box wherever it stands, as every other
+   kind of control's is. */
+.post-form { display: contents; }
 
 /* A record list row's category as its color (`ListRow.category`), before
    its title; the row says the category in words too. */

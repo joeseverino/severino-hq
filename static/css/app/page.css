@@ -237,7 +237,7 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .btn.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
 /* A quiet control: words only until hovered. */
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); --control-lift: none; }
-/* A quiet compact button opening a row's controls stands its pad and border out, so its words start where a bordered button's edge would. */ [data-kind="control"] > .btn.ghost.compact:first-child { margin-inline-start: calc(-1 * var(--space-4) - 1px); }
+/* A quiet compact button opening a row's controls stands its pad and border out, so its words start where a bordered button's edge would. */ .btn.ghost.compact:is([data-kind="control"] > :first-child, [data-kind="control"] > :first-child > *) { margin-inline-start: calc(-1 * var(--space-4) - 1px); }
 @media (hover: hover) { .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; } }
 /* A destructive action that should not be the loudest thing in its row: the
    same surface and lift as its neighbors, in red. */
@@ -271,10 +271,11 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
 .btn:where(.bar) { block-size: var(--control-size); padding: 0 var(--space-5); border-color: var(--bar-control-line); background: var(--bar-control-bg); color: var(--ink-2); --control-lift: none; }
 @media (hover: hover) { .btn:where(.bar):hover { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); } }
 .btn:where(.bar):has(+ :popover-open) { background: var(--bar-control-bg-hover); color: var(--ink); }
-/* A row of a menu (connection.css draws the panel and its rows' type): a row
-   like the others, whichever look it has beside the title. Written after
-   every look, so it is the one that holds. Destructive keeps only its color. */
-.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; background: none; color: var(--muted); }
+/* A row of a menu (connection.css draws the panel): a row like the others,
+   whichever kind of control it is and whichever look it has beside the
+   title, at the menu's one inset. Written after every look, so it is the one
+   that holds. Destructive keeps only its color. */
+.btn.menu { display: flex; width: 100%; justify-content: flex-start; min-height: 0; padding: var(--space-3) var(--space-5); border-radius: var(--radius-sm); background: none; color: var(--muted); }
 @media (hover: hover) { .btn.menu:hover { color: var(--ink); background: var(--bg-tint); } }
 .btn.menu.danger { color: var(--danger); }
 /* A control that would be refused stands as a span, focusable for its reason
