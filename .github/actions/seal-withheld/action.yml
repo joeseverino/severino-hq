@@ -1,0 +1,38 @@
+name: Seal the withheld output
+description: >-
+  Seal what a failed job withheld from its public log ($WITHHELD_DIR) for the
+  operator, and upload it as the job's failure-logs artifact, which
+  `mise run failure-logs` opens.
+
+inputs:
+  job:
+    description: >-
+      The artifact's name after failure-logs-, apart for each job that can
+      fail in one run.
+    required: true
+
+outputs:
+  sealed:
+    description: true when there was output to seal.
+    value: ${{ steps.seal.outputs.sealed }}
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/host-tool
+      with:
+        host: .
+        tool: age
+
+    - id: seal
+      shell: bash
+      run: |
+        tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
+        if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
+
+    - if: steps.seal.outputs.sealed == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: failure-logs-${{ inputs.job }}
+        path: failure-logs.tar.age
+        retention-days: 14

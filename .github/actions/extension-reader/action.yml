@@ -1,0 +1,58 @@
+name: Extension reader
+description: >-
+  Read the composition set into composition-set.json, mask every name an
+  extension goes by for the rest of the job, and mint a token from HQ's app
+  that can only read the extensions' repositories.
+
+inputs:
+  extensions:
+    description: The COMPOSITION_EXTENSIONS secret.
+    required: true
+  app-client-id:
+    description: HQ's GitHub App client id.
+    required: true
+  app-private-key:
+    description: HQ's GitHub App private key.
+    required: true
+
+outputs:
+  token:
+    description: The reader token, which lapses within the hour.
+    value: ${{ steps.reader.outputs.token }}
+
+runs:
+  using: composite
+  steps:
+    # A secret, and never interpolated into the script body. Actions expands
+    # `${{ … }}` into the text of the step it echoes, and masks only secret
+    # values, so anything private reaches the log through the environment or
+    # not at all.
+    - name: Read the composition set
+      shell: bash
+      env:
+        COMPOSITION_EXTENSIONS: ${{ inputs.extensions }}
+      run: python3 -m tools.pipeline.composition_set write composition-set.json
+
+    # Every spelling of every extension, so no later step's output names one
+    # in this public log, including output from commands not yet written.
+    - name: Mask the extension names for the rest of the job
+      id: set
+      shell: bash
+      run: |
+        python3 -m tools.pipeline.composition_set mask composition-set.json
+        echo "repositories=$(jq -r '[.extensions[].repository | sub(".*/"; "")] | unique | join(",")' composition-set.json)" >> "$GITHUB_OUTPUT"
+
+    # Scoped to the extensions' repositories by their masked names, so the log
+    # shows only that repositories were named.
+    - name: Mint a token that can only read the extensions
+      id: reader
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+      with:
+        client-id: ${{ inputs.app-client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: ${{ github.repository_owner }}
+        repositories: ${{ steps.set.outputs.repositories }}
+        # Admission runs, branches, and the pull request a commit heads.
+        permission-actions: read
+        permission-contents: read
+        permission-pull-requests: read

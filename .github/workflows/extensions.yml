@@ -75,31 +75,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read the toolchain pins
-        id: pins
-        run: echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
-
-      - name: Read the composition set
-        # A secret, passed through the environment, never the step's text.
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: python3 -m tools.pipeline.composition_set write composition-set.json
-
-      - name: Mask the extension names for the rest of the job
-        run: python3 -m tools.pipeline.composition_set mask composition-set.json
-
-      # HQ's app, asked to read the extensions' code and pull requests and
-      # nothing else. Scoped by the installation, so no private repository
-      # name reaches the public log.
-      - name: Mint a token that can only read the extensions
+      - name: Read the extensions and mint their reader
         id: reader
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        uses: ./.github/actions/extension-reader
         with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation, so no private repository name reaches the public log
-          permission-contents: read
-          permission-pull-requests: read
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
 
       - name: Find the extension branches this change builds
         # A host pull request's same-named branches, or the extension pull
@@ -191,32 +173,12 @@ jobs:
         if: steps.coordinated.outputs.found == 'true'
         run: tools/pipeline/image-health.sh "severino-hq-candidate:$GITHUB_SHA"
 
-      - name: Install the pinned age
-        if: failure()
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
-        env:
-          MISE_LOCKED_VERIFY_PROVENANCE: "1"
-        with:
-          version: ${{ steps.pins.outputs.mise }}
-          install_args: age
-          cache: false
       - name: Seal the withheld output
         id: seal
         if: failure()
-        run: |
-          set -euo pipefail
-          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
-          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Upload the sealed output
-        # Named apart from Build HQ's, since both can fail in one run;
-        # `mise run failure-logs` opens every failure-logs* artifact.
-        if: failure() && steps.seal.outputs.sealed == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: ./.github/actions/seal-withheld
         with:
-          name: failure-logs-extensions
-          path: failure-logs.tar.age
-          retention-days: 14
+          job: extensions
 
       - name: Say where the reason is
         if: failure() && steps.seal.outputs.sealed == 'true'
@@ -247,23 +209,13 @@ jobs:
         id: pins
         run: echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
 
-      - name: Read the composition set
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: python3 -m tools.pipeline.composition_set write composition-set.json
-
-      - name: Mask the extension names for the rest of the job
-        run: python3 -m tools.pipeline.composition_set mask composition-set.json
-
-      - name: Mint a token that can only read the extensions
+      - name: Read the extensions and mint their reader
         id: reader
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        uses: ./.github/actions/extension-reader
         with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation (see the check's reader)
-          permission-contents: read
-          permission-pull-requests: read
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
 
       - name: Find the extension pull request
         id: coordinated
@@ -313,29 +265,11 @@ jobs:
             exit 1
           fi
 
-      - name: Install the pinned age
-        if: failure()
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
-        env:
-          MISE_LOCKED_VERIFY_PROVENANCE: "1"
-        with:
-          version: ${{ steps.pins.outputs.mise }}
-          install_args: age
-          cache: false
       - name: Seal the withheld output
-        id: seal
         if: failure()
-        run: |
-          set -euo pipefail
-          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
-          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
-      - name: Upload the sealed output
-        if: failure() && steps.seal.outputs.sealed == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: ./.github/actions/seal-withheld
         with:
-          name: failure-logs-secret-scan
-          path: failure-logs.tar.age
-          retention-days: 14
+          job: secret-scan
 
   # HQ's check on the extension pull request's head, in its own job: it runs
   # no extension code, and the one token that writes is minted here, for
@@ -354,23 +288,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read the composition set
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: python3 -m tools.pipeline.composition_set write composition-set.json
-
-      - name: Mask the extension names for the rest of the job
-        run: python3 -m tools.pipeline.composition_set mask composition-set.json
-
-      - name: Mint a token that can only read the extensions
+      - name: Read the extensions and mint their reader
         id: reader
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        uses: ./.github/actions/extension-reader
         with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation (see the check's reader)
-          permission-contents: read
-          permission-pull-requests: read
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
 
       - name: Find the extension pull request
         id: pull

@@ -162,19 +162,16 @@ jobs:
             echo "date=$(date -u +%Y-%m-%d)"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Read the composition set
-        # A secret, and never interpolated into the script body. Actions
-        # expands `${{ … }}` into the text of the step it echoes, and masks only
-        # secret values, so anything private reaches the log through the
-        # environment or not at all.
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: python3 -m tools.pipeline.composition_set write composition-set.json
-
-      - name: Mask the extension names for the rest of the job
-        # Every spelling of every extension, so no later step's output names
-        # one in this public log, including output from commands not yet written.
-        run: python3 -m tools.pipeline.composition_set mask composition-set.json
+      # The reader is for the extensions' admissions and branches: minted per
+      # run and lapsing within the hour, where a personal token would have to
+      # be renewed by hand.
+      - name: Read the extensions and mint their reader
+        id: reader
+        uses: ./.github/actions/extension-reader
+        with:
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
 
       - name: Authenticate to GHCR
         # Once, for every registry read and the push at the end.
@@ -221,21 +218,6 @@ jobs:
           RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
           REPOSITORY: ${{ github.repository }}
         run: tools/pipeline/host-signature.sh "$REPOSITORY" "$HOST_IMAGE" "$RUNNER_IMAGE"
-
-      # HQ's app, asked for read access only: a token minted per run
-      # for the extensions' admissions and branches, that lapses within the
-      # hour, where a personal token would have to be renewed by hand before it
-      # lapsed. Scoped by the installation rather than by listing repositories,
-      # so no private repository's name is written into this public log.
-      - name: Mint a token that can only read the extensions
-        id: reader
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
-        with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation (see Build HQ's reader)
-          permission-actions: read
-          permission-contents: read
 
       - name: Find the latest admission for each extension
         env:
@@ -650,31 +632,12 @@ jobs:
           gh workflow run deploy.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f commit="$COMMIT" -f compose_run="$THIS_RUN"
 
-      - name: Install the pinned age
-        if: failure()
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
-        env:
-          MISE_LOCKED_VERIFY_PROVENANCE: "1"
-        with:
-          version: ${{ steps.pins.outputs.mise }}
-          install_args: age
-          # One small tool, on a failure: no cache entry of its own.
-          cache: false
       - name: Seal the withheld output
         id: seal
         if: failure()
-        run: |
-          set -euo pipefail
-          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
-          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Upload the sealed output
-        if: failure() && steps.seal.outputs.sealed == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: ./.github/actions/seal-withheld
         with:
-          name: failure-logs
-          path: failure-logs.tar.age
-          retention-days: 14
+          job: build
 
       - name: Name the step that failed
         if: failure()

@@ -221,7 +221,7 @@ for only what it does:
 | :--- | :--- | :--- |
 | the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
-| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
+| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions, Contents and Pull requests read on the extensions' repositories alone; Actions write here: start the next workflow |
 
 Every use under one installation shares its hourly allowance. The controller
 leaves at least 1,000 requests of it to the pipeline and the dependency update

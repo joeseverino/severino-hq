@@ -20,6 +20,9 @@ from tests.mise_tasks import body, mise_tasks, runs
 
 ROOT = Path(__file__).resolve().parents[4]
 WORKFLOWS = ROOT / ".github" / "workflows"
+# The actions every job that reads the extensions, or seals what it withheld, calls.
+READER = ".github/actions/extension-reader"
+SEAL = ".github/actions/seal-withheld"
 
 type Node = dict[str, Any]
 
@@ -694,7 +697,10 @@ class PublicLogTests(SimpleTestCase):
         self.assertIn("tools/pipeline/composed-suite.sh", self.compose)
 
     def test_withheld_output_leaves_the_runner_only_sealed(self):
-        uploads = [step for step in self.steps if step.get("uses", "").startswith("actions/upload-artifact@")]
+        sealing = every_step(ROOT / SEAL / "action.yml")
+        uploads = [
+            step for step in [*self.steps, *sealing] if step.get("uses", "").startswith("actions/upload-artifact@")
+        ]
         # The verified composition's record, one digest its own step writes.
         (record,) = [upload for upload in uploads if upload["with"]["name"] == "composition"]
         uploads.remove(record)
@@ -702,10 +708,8 @@ class PublicLogTests(SimpleTestCase):
         for upload in uploads:
             with self.subTest(step=label(upload)):
                 self.assertRegex(upload["with"]["path"], r"\.age$")
-        names = [upload["with"]["name"] for upload in uploads]
+        names = [step["with"]["job"] for step in self.steps if step.get("uses") == f"./{SEAL}"]
         self.assertEqual(len(names), len(set(names)), "two jobs that fail in one run upload under one name")
-        self.assertIn("tools/pipeline/seal-failure-logs.sh", self.compose)
-        self.assertTrue((ROOT / "tools" / "pipeline" / "seal-failure-logs.sh").is_file())
 
     def test_every_upload_of_a_failure_is_one_failure_logs_fetches(self):
         task = (ROOT / "mise-tasks" / "failure-logs").read_text()
@@ -737,14 +741,10 @@ class PublicLogTests(SimpleTestCase):
         """tools/pipeline/tests/test_composition_set.py holds every spelling; this holds when they are masked.
 
         In each job that reads the set, since a mask lasts only the job."""
-        reading = [job for job in self.jobs if any("composition_set write" in script(step) for step in job)]
+        reading = [job for job in self.jobs if any(step.get("uses") == f"./{READER}" for step in job)]
         self.assertGreater(len(reading), 1)
         for number, job in enumerate(reading):
-            (mask,) = [
-                index
-                for index, step in enumerate(job)
-                if "tools.pipeline.composition_set mask composition-set.json" in script(step)
-            ]
+            (mask,) = [index for index, step in enumerate(job) if step.get("uses") == f"./{READER}"]
             speaking = [
                 index
                 for index, step in enumerate(job)
