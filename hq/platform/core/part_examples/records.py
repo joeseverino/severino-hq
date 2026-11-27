@@ -238,13 +238,13 @@ RECORD_LIST_STATES = {
                     detail="3 example accounts",
                     actions=(
                         PageAction._built(
-                            label="↑", url="/example/group/", method="post", value="up", title="Move up", disabled=True
+                            label="↑", url="/example/group/", method="post", sends={"action": "up"}, title="Move up", disabled=True
                         ),
                         PageAction._built(
-                            label="↓", url="/example/group/", method="post", value="down", title="Move down"
+                            label="↓", url="/example/group/", method="post", sends={"action": "down"}, title="Move down"
                         ),
                         PageAction._built(
-                            label="Remove", url="/example/group/", method="post", value="delete", danger=True
+                            label="Remove", url="/example/group/", method="post", sends={"action": "delete"}, danger=True
                         ),
                     ),
                 ),
