@@ -189,7 +189,6 @@ def _write_evidence(kind: str, provider: str, permissions: tuple[str, ...], conn
         label=connection_ref or provider,
         kind=provider,
         status=Tone.NEUTRAL,
-        status_label="",
         credential_model=connection_credential(provider),
     )
     return grant_evidence(ability, instance)[0]

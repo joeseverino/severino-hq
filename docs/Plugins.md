@@ -779,8 +779,7 @@ secret parameter names.
 
 `observed_at` is a `datetime` and serializes as ISO 8601. HQ says an
 instance's state in its lifecycle's one word on every page, derived from its
-`status`, `observed_at` and the evidence behind its abilities; `status_label`
-is shown nowhere. An instance that leaves `status` and `observed_at` unsaid is
+`status`, `observed_at` and the evidence behind its abilities. An instance that leaves `status` and `observed_at` unsaid is
 dated by the readings HQ declares came through its `kind` where any do. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
 anonymously, rather than hiding it.
