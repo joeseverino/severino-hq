@@ -21,6 +21,7 @@ from hq.platform.application.agent_access import SET_AGENT_ACCESS
 from hq.platform.application.attention import waiting_for_approval
 from hq.platform.application.capabilities import capability_registry, command_spec
 from hq.platform.application.capability_policy import agents_may_hold
+from hq.platform.application.command_forms import SWITCH_VARIANTS, is_switch, own_fields, switch_field
 from hq.platform.application.glance import DASHBOARD_MACHINE
 from hq.platform.application.integration_specs import CapabilitySpec, command_schema, kept_by
 from hq.platform.application.integration_testing import override_integration_graph
@@ -34,8 +35,6 @@ from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AgentAccess
 from hq.platform.core.testing import declare, operator
-
-from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
 # The changes said on their page, by the confirmation their button waits on.
 # A change to HQ alone is said by its button.
@@ -64,13 +63,13 @@ def stated(page, effect: str) -> bool:
 
 def switch_words(spec) -> list[str]:
     declared = dict(spec.variants)
-    return [declared.get(variant, "") for variant in SWITCH_WORDS]
+    return [declared.get(variant, "") for variant in SWITCH_VARIANTS]
 
 
 def pressed_as_words(spec) -> bool:
     """A switch that declares both words, which it is pressed by."""
 
-    return sets_yes_or_no(command_schema(spec.command_type)) and all(switch_words(spec))
+    return bool(switch_field(spec))
 
 
 class EveryCommandPageTests(TestCase):
@@ -110,7 +109,7 @@ class EveryCommandPageTests(TestCase):
         switches = [
             spec
             for spec in capability_registry()
-            if spec.name not in extensions and sets_yes_or_no(command_schema(spec.command_type))
+            if spec.name not in extensions and is_switch(command_schema(spec.command_type))
         ]
         for spec in switches:
             with self.subTest(command=spec.name):
@@ -129,7 +128,7 @@ class EveryCommandPageTests(TestCase):
                 # it may be sent without, and writes a default for one left out.
                 self.assertTrue(spec.target_kind)
                 self.assertFalse(spec.target_initial_fields)
-                self.assertTrue(optional_fields(schema))
+                self.assertTrue(own_fields(schema) - set(schema.get("required", ())))
                 self.assertIsNone(kept_by(spec))
         # A record's update and a message's review keep a field left blank,
         # so they warn of nothing.
