@@ -291,6 +291,22 @@ def _updates(on: str = "") -> Callable[[Any], None]:
     return seed
 
 
+def _opening(at: str) -> Callable[[Any], None]:
+    """The update of each app (``_updates``), the one Renovate holds asked to
+    open and left as ``at`` says (``example_estate.work.opening``)."""
+
+    def seed(owner) -> None:
+        _updates()(owner)
+        example_estate.work.opening(owner, at)
+
+    return seed
+
+
+def _checks_running(owner) -> None:
+    _updates()(owner)
+    example_estate.work.checks_running()
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -347,6 +363,9 @@ SEEDS: dict[str, Seed] = {
     # The open app update's new image, whose publisher attaches no package list.
     "update-unlisted": Seed(_unlisted, _SET_UP),
     "app-updates": Seed(_updates(), _SET_UP),
+    **{f"app-update-{at}": Seed(_opening(at), _SET_UP) for at in ("ticking", "not-ticked", "renovate-running")},
+    # The open app update's checks under way.
+    "app-update-checks-running": Seed(_checks_running, _SET_UP),
     # Applied only by a playbook written for another machine.
     "app-updates-elsewhere": Seed(_updates("edge-01"), _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.

@@ -10,13 +10,6 @@ limits. Each said once; the band above has its version and standing.
 {% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
   {% facts layout="band" %}
     {% if update %}
-    {% with checks=update.checks_said %}
-    {% fact "Pull request" icon="commit" tone=checks.tone %}
-      {% entity update.url|outside label=update.label %}
-    {% detail %}
-      <small>{{ checks.badge }}{% if checks.failing %}{% dot %}{{ checks.failing }}{% endif %}{% if checks.why %}{% dot %}{{ checks.why }}{% endif %}{% dot %}{{ update.app }}</small>
-    {% endfact %}
-    {% endwith %}
     {% fact "Pin" icon="deploy" %}
       {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Not read{% endfor %}
     {% detail %}
@@ -32,13 +25,12 @@ limits. Each said once; the band above has its version and standing.
     {% endfact %}
     {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=plan.fixes_said %}{% endif %}
     {% endif %}
-    {% if state and not update %}{% fact "Pull request" icon="commit" value=state.answer %}{% endif %}
-    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.answer url=merge.run_url %}{% endif %}{% endwith %}
     {% if plan %}
     {% fact "Data" icon="layers" value=plan.data_said %}
     {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
     {% endif %}
   {% endfacts %}
+  {% if state %}{% steps numbered=True %}{% for step in state.flow %}{% step done=step.done tone=step.answer.tone %}<strong>{% if step.link %}{% entity step.link %}{% else %}{{ step.title }}{% endif %}</strong> {{ step.answer.short }}{% if step.answer.because %}{% list %}{% for line in step.answer.because %}<li>{% muted %}{{ line }}{% endmuted %}</li>{% endfor %}{% endlist %}{% endif %}{% endstep %}{% endfor %}{% endsteps %}{% endif %}
   {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
   {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}

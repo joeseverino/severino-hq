@@ -21,6 +21,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.domains.control_plane.observations.github import PULL_REQUEST_KIND
 from hq.domains.control_plane.provider_adapters.github import DASHBOARD_BOX_KIND
 from hq.domains.jobs.models import JobState
 
@@ -36,6 +37,7 @@ lazy from .asks import DONE, Asked, AskedAnswer, Standing
 lazy from .cadence import controller_standing
 lazy from .capabilities import Consented, consent
 lazy from .dependency_updates import DependencyRunCommand, asked_at, last_run, request_run
+lazy from .facts import kinds_read
 lazy from .github_estate import repositories
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .refusal_status import RefusalEnvelope, refusal_of
@@ -101,10 +103,11 @@ _ACTIVE = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
 
 
 def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStanding | None:
-    """How the last Open PR of an app ``repository`` holds stands: the tick of
-    the branch Renovate ``held`` it under, then the run that reads it. None
-    before one is asked, and once the run ended well, when the pull request
-    it opened is the update's next state."""
+    """How the last Open PR of an app ``repository`` holds stands, as the
+    one fact its card says it under: the tick of the branch Renovate ``held``
+    it under, then the run that reads it, each with what comes next. None
+    before one is asked, and once the pull requests were read after the run
+    ended, when the one it opened is the update's next state."""
 
     since = None
     if held is not None:
@@ -121,7 +124,7 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
         if tick is None:
             return None
         if tick.state in _ACTIVE:
-            return MergeStanding("Ticking", Tone.ATTENTION, taken=True, lines=(BOX, waits_on(tick)), operation=tick)
+            return _opening(TICKING, waits_on(tick), "Renovate runs once it is ticked", operation=tick)
         result = tick.result or {}
         if tick.state != OperationRequest.State.SUCCEEDED:
             message = str(result.get("message") or "")
@@ -133,28 +136,43 @@ def open_standing(repository: str, held: Mapping[str, Any] | None) -> MergeStand
 
 
 # How an Open PR stands, as its card says it.
+OPENING = "Opening"
 BOX = "Its box on the Dependency Dashboard"
+TICKING = "Ticking its box on the Dependency Dashboard"
 RENOVATE = "Renovate's run"
+SHOWS = "Its pull request shows here once Renovate opens it"
 TRIES_AGAIN = "Open PR tries again"
 ASKS_AGAIN = "Open PR asks again"
 OPENED = "Renovate has opened its pull request."
 
 
+def _opening(*lines: str, operation: OperationRequest | None = None) -> MergeStanding:
+    """An Open PR under way: the step it is at, then what comes next."""
+
+    return MergeStanding(OPENING, Tone.ATTENTION, taken=True, lines=lines, operation=operation)
+
+
 def _run_standing(repository: str, since: datetime | None) -> MergeStanding | None:
     """How the Renovate run asked since ``since`` (any, given none) stands
-    for ``repository``: waiting for its hand-off, running, or failed."""
+    for ``repository``: waiting for its hand-off, running, failed, or ended
+    before HQ read the pull requests it may have opened."""
 
     if (asked := asked_at()) is not None and (since is None or asked >= since):
         said = controller_standing().cannot("", now=timezone.now())
-        return MergeStanding("Waiting", Tone.ATTENTION, taken=True, lines=(RENOVATE, said))
+        return _opening(f"{RENOVATE} is asked", said, SHOWS)
     run = last_run(repository)
-    if run is None or since is None or run.started_at < since:
+    if run is None or (since is not None and run.started_at < since):
         return None
     if run.seen == JobState.RUNNING:
-        return MergeStanding("Running", Tone.ATTENTION, taken=True, lines=(RENOVATE,))
-    if run.seen != JobState.SUCCEEDED:
-        return MergeStanding("Failed", Tone.SERIOUS, lines=(RENOVATE, run.seen.label, ASKS_AGAIN))
-    return None
+        return _opening("Renovate is running", SHOWS)
+    if run.seen == JobState.SUCCEEDED:
+        read = kinds_read().get(PULL_REQUEST_KIND)
+        if run.finished_at is not None and (read is None or read < run.finished_at):
+            return _opening(f"{RENOVATE} ended", "HQ reads its pull request next")
+        return None
+    if since is None:
+        return None
+    return MergeStanding("Failed", Tone.SERIOUS, lines=(RENOVATE, run.seen.label, ASKS_AGAIN))
 
 
 def ticked(operation: OperationRequest, then: dict[str, Any]) -> dict[str, str]:

@@ -58,7 +58,7 @@ lazy from .entity_links import web_url
 lazy from .github_estate import repositories
 lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
-lazy from .labels import dotted, lower_first
+lazy from .labels import dotted
 lazy from .machines import served_by
 lazy from .moments import when
 lazy from .payload_words import ChangeRow
@@ -502,7 +502,9 @@ def _unapprovable(update: AppUpdate) -> Sentence:
         return worded("It changes files outside the apps it names. Review it on GitHub.")
     if not update.readable:
         return worded("HQ could not read the images this update moves from its Compose files. Review it on GitHub.")
-    if (update.checks or {}).get("state") != "success":
+    if (checks := (update.checks or {}).get("state")) == "pending":
+        return worded("Its checks are running. Approve it once they pass.")
+    if checks != "success":
         return worded("Its checks are not passing. Approve it once they pass.")
     return worded("")
 
@@ -566,7 +568,12 @@ def _merged(merge: OperationRequest) -> MergeStanding:
         if then.get("run"):
             return _applied(merge, str(then["run"]))
         return MergeStanding(
-            "Merged", Tone.SERIOUS, taken=True, lines=(str(then.get("refused") or "Not applied"),), operation=merge
+            "Not applied",
+            Tone.SERIOUS,
+            taken=True,
+            merged=True,
+            lines=(str(then.get("refused") or "Its apply was not asked"),),
+            operation=merge,
         )
     refused = str((result.get("status") or {}).get("refused") or "")
     word, why = REFUSED.get(refused) or ("Merge failed", str(result.get("message") or ""))
@@ -578,15 +585,13 @@ def _applied(merge: OperationRequest, first: str) -> MergeStanding:
 
     queued = OperationRequest.objects.filter(pk=first).first()
     if queued is None:
-        return MergeStanding("Merged", Tone.GOOD, taken=True, operation=merge)
+        return MergeStanding("Merged", Tone.GOOD, taken=True, merged=True, operation=merge)
     revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "")
     standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) or MergeStanding(
         "Merged", Tone.GOOD, taken=True, operation=queued, run=run_row(queued)
     )
-    if standing.tone == Tone.GOOD:
-        return standing
     # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
-    return replace(standing, word="Merged", lines=(f"Apply {lower_first(standing.word)}", *standing.lines), taken=True)
+    return replace(standing, taken=True, merged=True)
 
 
 def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] = ()) -> MergeStanding | None:

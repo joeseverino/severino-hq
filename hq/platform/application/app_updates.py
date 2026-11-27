@@ -39,6 +39,7 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
+lazy from .app_update_flow import FlowStep, update_flow
 lazy from .app_update_open import OPEN, open_standing, open_target
 lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
@@ -120,6 +121,8 @@ class AppUpdate:
     within_apps: bool
     # Whether HQ read every file GitHub says it changes.
     whole: bool
+    # Each check on its head as its last run stands (``CheckRun``).
+    check_runs: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def label(self) -> str:
@@ -325,6 +328,7 @@ def _update(
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
         artifact_problem=tuple(pull.get("artifact_problem") or ()),
+        check_runs=tuple(pull.get("check_runs") or ()),
         readable=bool(change.get("read")),
         renovates=bool(repository.updater)
         and pull.get("author") == repository.updater
@@ -399,6 +403,8 @@ class MergeStanding:
     tone: str
     # Whether it previews, merges, applies or merged, so no second approval is offered.
     taken: bool = False
+    # Whether its merge landed, so what it says is its apply's.
+    merged: bool = False
     # Its fact's detail: what it waits on, or of a preview or an apply that
     # ended, the step it stopped on, what that said and each app the run did
     # not release.
@@ -498,6 +504,19 @@ class UpdateState:
 
         return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
 
+    @property
+    def flow(self) -> tuple[FlowStep, ...]:
+        """Its way to running, step by step (``app_update_flow``)."""
+
+        return update_flow(self)
+
+    @property
+    def beside(self) -> MergeStanding | None:
+        """Its standing where a page says it beside its answer: an approval's
+        or an apply's. An Open PR's is its answer, so it is said once."""
+
+        return self.standing if self.kind in (UpdateKind.OPEN, UpdateKind.MERGED) else None
+
 
 UNOPENED = "Renovate has not seen the release yet."
 # What Renovate waits for, by the marker of the box it holds the branch under
@@ -558,7 +577,7 @@ def update_state(item: Container) -> UpdateState:
         until = UNTIL.get(str(held.get("marker", "")), "")
         words = ended(" ".join(("Renovate is holding its branch", until)).strip())
         said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        answer = Answer("Held by Renovate", (capfirst(until),))
+        answer = standing.answer if standing else Answer("Held by Renovate", (capfirst(until),))
         return UpdateState(
             UpdateKind.HELD, latest, words, answer, said=said, standing=standing, managed=managed, **offered
         )
@@ -566,7 +585,7 @@ def update_state(item: Container) -> UpdateState:
         UpdateKind.UNOPENED,
         latest,
         UNOPENED,
-        Answer("Not opened", (UNOPENED,)),
+        standing.answer if standing else Answer("Not opened", (UNOPENED,)),
         said="Asks Renovate to run.",
         standing=standing,
         managed=managed,

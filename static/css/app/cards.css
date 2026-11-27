@@ -156,6 +156,8 @@
 .step-list.is-numbered:has(.table-scroll, .command, > li:only-child) > li > div { flex: 1; min-inline-size: 0; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+/* A numbered step's tone colors its number, where an icon's would be. */
+.step-list.is-numbered > li:is(.tone-good, .tone-attention, .tone-serious)::before { color: var(--tone-ink); }
 /* One step stands alone, with no number. */
 .step-list.is-numbered > li:only-child::before { content: none; }
 /* Steps that pair a label with its command (partials/_operator_step.html) are

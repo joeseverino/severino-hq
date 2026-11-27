@@ -418,6 +418,10 @@ def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
         "head_repository": f"example/{name}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
+        "check_runs": [
+            _check_run("validate", "success", timedelta(hours=4), seconds=58),
+            _check_run("scan", "success", timedelta(hours=4), seconds=131),
+        ],
         "files": [
             {
                 "path": f"compose/{app}/compose.yaml",
@@ -436,6 +440,17 @@ def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
             }
         ],
     }
+
+
+def _check_run(name, conclusion, age, *, seconds=0):
+    """One check of a pull request's head as GitHub's check run says it: run
+    ``seconds`` from ``age`` ago, or still running given no ``conclusion``."""
+
+    started = iso(age)
+    if not conclusion:
+        return {"name": name, "status": "in_progress", "conclusion": "", "started_at": started, "completed_at": None}
+    done = iso(age - timedelta(seconds=seconds))
+    return {"name": name, "status": "completed", "conclusion": conclusion, "started_at": started, "completed_at": done}
 
 
 def _updates(name):
@@ -971,3 +986,54 @@ def approval(owner, ended: str) -> None:
         asked={**merging, "correlation": applies["correlation"]},
         result={"status": {"merge_sha": merged}, THEN: {"run": str(applied.pk)}},
     )
+
+
+# How the Open PR of the app Renovate holds stands, by the seed that leaves it so.
+TICKING, NOT_TICKED, RENOVATE_RUNNING = "ticking", "not-ticked", "renovate-running"
+
+
+def opening(owner, at: str) -> None:
+    """The app Renovate holds, its Open PR pressed and left as ``at`` says:
+    its box ticking, the tick refused, or Renovate's run under way once it
+    was ticked."""
+
+    from hq.domains.control_plane.models import OperationRequest
+    from hq.platform.application.capabilities import run_capability
+    from hq.platform.application.resource_operations import THEN
+    from hq.platform.application.security import web_principal
+
+    payload = {"repository": f"example/{APPS}", "app": HELD_APP}
+    run_capability("app_update.open", payload, principal=web_principal(owner), idempotency_key="example-open")
+    if at == TICKING:
+        return
+    ticks = OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE)
+    if at == NOT_TICKED:
+        said = {"message": "GitHub refused the edit of its Dependency Dashboard."}
+        ticks.update(state=OperationRequest.State.FAILED, completed_at=timezone.now(), result=said)
+        return
+    ticks.update(state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now(), result={THEN: {"run": "asked"}})
+    store(
+        DEPENDENCY_RUN_KIND,
+        {
+            "connection_ref": GITHUB,
+            "owner": "example",
+            "repositories": [f"example/{APPS}"],
+            "outcome": "handed_off",
+            "started_at": iso(),
+            "finished_at": None,
+        },
+    )
+
+
+def checks_running() -> None:
+    """The open app update's head checked again: one check passed, one running."""
+
+    held = ProviderInventory.objects.get(kind=PULL_REQUEST_KIND).records
+    running = {
+        "checks": {"state": "pending", "total": 2, "failing": [], "running": 1, "names": ["validate", "scan"]},
+        "check_runs": [
+            _check_run("validate", "success", timedelta(minutes=3), seconds=58),
+            _check_run("scan", "", timedelta(minutes=2)),
+        ],
+    }
+    store(PULL_REQUEST_KIND, *({**each, **running} if each.get("number") == 58 else each for each in held))
