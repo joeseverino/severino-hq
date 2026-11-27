@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, ReadRequest
-from hq.platform.application.markup_testing import select, texts
+from hq.platform.application.markup_testing import select, text, texts, with_class
 from hq.platform.core.templatetags.value_tags import dot
 from hq.platform.core.testing import declare, operator
 
@@ -41,7 +41,6 @@ class ControllerPageTests(TestCase):
 
         self.assertFalse(page.standing.known)
         self.assertIsNone(page.swept_at)
-        self.assertEqual(page.readings, ())
         self.assertEqual(page.queue, ())
         self.assertEqual((page.overdue_tone, page.queue_tone), ("",) * 2)
 
@@ -62,27 +61,21 @@ class ControllerPageTests(TestCase):
         self.assertContains(never, "docs/Install.md#11-the-controllers-first-reading")
         self.assertNotContains(arrived, "Start the controller")
 
-    def test_what_was_read_is_listed_with_what_failed_first(self):
+    def test_the_summary_counts_the_readings_the_table_lists(self):
+        # A machine's figures are gathered through several connections, so no
+        # one provider takes them.
+        store("machine.telemetry")
         store("adguard.rewrite")
-        store("tailscale.device", reachable=False, error="The provider refused the credential.")
-        store("npm.proxy_host", connected=False)
+        controller_arrived()
+        operator(self.client, "someone")
 
-        page = controller_page()
+        response = self.client.get(reverse("control_plane:controller"))
 
-        self.assertEqual(next(reading.kind for reading in page.readings), "tailscale.device")
-        results = {reading.kind: (reading.standing.state, reading.error) for reading in page.readings}
-        self.assertEqual(results["adguard.rewrite"], ("readable", ""))
-        self.assertEqual(results["npm.proxy_host"], ("not_connected", ""))
-        self.assertEqual(results["tailscale.device"], ("unreadable", "The provider refused the credential."))
-        self.assertEqual({reading.records for reading in page.readings}, {2})
-
-    def test_a_kind_no_read_has_answered_was_tried_and_never_succeeded(self):
-        store("tailscale.device", age=timedelta(minutes=5), records=[], reachable=False, observed_at=None)
-
-        reading = next(reading for reading in controller_page().readings if reading.kind == "tailscale.device")
-
-        self.assertEqual(reading.standing.age.state, "never")
-        self.assertLess(reading.attempted_at, timezone.now() - timedelta(minutes=4))
+        (listed,) = (
+            int(count.words) for count in with_class(response, "count") if "Readings" in count.ancestors[-1].words
+        )
+        self.assertIn(f"{listed} readings", text(response))
+        self.assertIn("machine.telemetry", [named.attrs["title"] for named in select(response, "title")])
 
     def test_a_reading_still_current_is_never_overdue_however_short_the_live_interval(self):
         marker = Path(tempfile.mkdtemp()) / "activity"

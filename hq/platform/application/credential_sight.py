@@ -53,8 +53,8 @@ class Sight:
     state: str
     records: int = 0
     observed_at: datetime | None = None
-    # When a read that failed was tried, which a read that never answered
-    # has in place of ``observed_at``.
+    # When it was last tried, read or not: a failed try leaves ``observed_at``
+    # at the last read that answered, or unset where none has.
     tried_at: datetime | None = None
     error: str = ""
     requires: str = ""
@@ -247,6 +247,7 @@ def sight(
             source,
             NOT_CONNECTED,
             observed_at=row.observed_at,
+            tried_at=attempted_at(row.observed_at, row.updated_at),
             requires=requires,
             permissions=permissions,
         )
@@ -275,6 +276,7 @@ def sight(
         PARTIAL if refused else READABLE,
         records=len(row.records or ()) if records is None else records,
         observed_at=row.observed_at,
+        tried_at=attempted_at(row.observed_at, row.updated_at),
         requires=requires,
         permissions=permissions,
         parts=refused,

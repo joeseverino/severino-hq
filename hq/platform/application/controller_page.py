@@ -12,32 +12,16 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from django.utils import timezone
-from django.utils.text import get_text_list
 
-from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
+from hq.domains.control_plane.models import OperationRequest
 
-from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due, swept
-from .credential_sight import Standing, standing
-from .entity_links import kind_label
+from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due
+from .credential_sight import Standing
 from .freshness import freshness
 from .moments import duration
 from .read_requests import ForcedRead, forced_reads
 from .tone import Tone
-lazy from .facts import every_snapshot
-lazy from .inbound_events import covers
-
-
-@dataclass(frozen=True, slots=True)
-class KindReading:
-    """One kind the sweep reads: when it was last tried, and what came of it."""
-
-    kind: str
-    label: str
-    attempted_at: datetime
-    standing: Standing
-    records: int
-    # What the provider said when the last attempt stored nothing new.
-    error: str
+lazy from .hq_context.sight_part import sight
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,16 +38,15 @@ class ControllerPage:
     swept_at: datetime | None
     sweep_due: bool
     next_sweep_at: datetime | None
-    # How often everything is read, in words, then each reading on a clock of
-    # its own with its clock.
+    # How often everything is read, in words; a reading on a clock of its own
+    # says its clock on its row.
     sweep_every: str
     # Of what every sweep reads, the reading tried longest ago: the one that
     # decides when the next sweep is due, and the one to look at when it is late.
-    oldest: KindReading | None
+    oldest: Standing | None
     # The oldest reading was last tried longer ago than its kind may age:
     # sweeps are not landing.
     overdue: bool
-    readings: tuple[KindReading, ...]
     queue: tuple[QueuedWork, ...]
     asked: tuple[ForcedRead, ...]
 
@@ -76,42 +59,11 @@ class ControllerPage:
         return Tone.ATTENTION if self.queue else ""
 
 
-def _reading(row: ProviderInventory) -> KindReading:
-    return KindReading(
-        kind=row.kind,
-        label=kind_label(row.kind),
-        attempted_at=attempted_at(row.observed_at, row.updated_at),
-        standing=standing(row.kind, row),
-        records=len(row.records) if isinstance(row.records, list) else 0,
-        error=row.error if row.connected and not row.reachable else "",
-    )
-
-
-def _own_clocks(readings: tuple[KindReading, ...]) -> str:
-    """Each reading the sweep reads on a clock of its own, in its freshness's
-    words ("GitHub profile read every 6 hours"), and "and on each event" for
-    one events keep current."""
-
-    return get_text_list(
-        [
-            f"{reading.label}{reading.standing.age.cadence.removeprefix(';')}{' and on each event' * covers(reading.kind)}"
-            for reading in readings
-            if swept(reading.kind) and not every_sweep(reading.kind)
-        ],
-        "and",
-    )
-
-
 def controller_page(now: datetime | None = None) -> ControllerPage:
     now = now or timezone.now()
     verdict: dict[str, Any] = sweep_due()
-    readings = tuple(
-        sorted(
-            (_reading(row) for row in every_snapshot()),
-            # What failed first, then the kinds in a stable order.
-            key=lambda reading: (not reading.standing.failed, reading.label.lower()),
-        )
-    )
+    # Every reading tried, as HQ's page lists them, with when.
+    tried = tuple((row, at) for row in sight().rows if (at := row.sight.tried_at) is not None)
     age = verdict.get("age_seconds")
     interval = int(verdict.get("interval_seconds") or 0)
     due = bool(verdict.get("due"))
@@ -130,19 +82,16 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
     )
     every = timedelta(seconds=interval)
     oldest = min(
-        (reading for reading in readings if every_sweep(reading.kind)),
-        key=lambda reading: reading.attempted_at,
-        default=None,
+        ((row, at) for row, at in tried if every_sweep(row.sight.kind)), key=lambda pair: pair[1], default=None
     )
     return ControllerPage(
         standing=controller_standing(now),
-        swept_at=max((reading.attempted_at for reading in readings), default=None),
+        swept_at=max((at for _row, at in tried), default=None),
         sweep_due=due,
         next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
-        sweep_every="; ".join(filter(None, (duration(every), _own_clocks(readings)))),
-        oldest=oldest,
-        overdue=oldest is not None and freshness(oldest.kind, oldest.attempted_at, now).stale,
-        readings=readings,
+        sweep_every=duration(every),
+        oldest=oldest[0] if oldest else None,
+        overdue=oldest is not None and freshness(oldest[0].sight.kind, oldest[1], now).stale,
         queue=queue,
         asked=forced_reads(),
     )

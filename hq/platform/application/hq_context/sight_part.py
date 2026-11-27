@@ -4,9 +4,11 @@ provider that takes it, and how current each is."""
 from dataclasses import dataclass
 from typing import Any
 
+from django.utils.text import capfirst
+
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.providers import provider_reads
+lazy from hq.domains.control_plane.providers import Read, provider_reads
 
 from ..labels import dotted
 from ..projection import iso, read_once
@@ -14,6 +16,7 @@ from ..tables import Cell, DataTable, Group, TableColumn
 from ..tone import Tone
 from ..ui import counted
 from .band import Tile
+lazy from ..cadence import every_sweep, swept
 lazy from ..connections import connection_rows
 lazy from ..credential_sight import (
     NEVER_SWEPT,
@@ -23,11 +26,15 @@ lazy from ..credential_sight import (
     sight as sight_of,
 )
 lazy from ..facts import stored_snapshots
-lazy from ..freshness import OUT_OF_DATE
+lazy from ..freshness import LAST_READ, OUT_OF_DATE
+lazy from ..inbound_events import covers
 lazy from ..routes import reverse
 
 # The group of readings no connection holds a credential for.
 KEYLESS = "Needs no connection"
+# The group of readings a controller gathers through several connections, so
+# no one provider takes them (a machine's figures).
+SEVERAL = "Through several connections"
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +115,25 @@ def _reading(row: Standing) -> Cell:
         said = (seen.remedy,)
     else:
         said = (seen.error,) if seen.error and not row.read else ()
-    return Cell(seen.label, lines=tuple(Cell(line, muted=True) for line in said))
+    return Cell(seen.label, title=seen.kind, lines=tuple(Cell(line, muted=True) for line in said))
+
+
+def _age(row: Standing) -> Cell:
+    """How old its reading is, with its own clock beneath where it is read
+    slower than every sweep, and when it was tried where that try failed."""
+
+    seen = row.sight
+    clock = (
+        (Cell(capfirst(f"{row.age.cadence.removeprefix('; ')}{' and on each event' * covers(seen.kind)}"), muted=True),)
+        if swept(seen.kind) and not every_sweep(seen.kind) and not row.stale
+        else ()
+    )
+    tried = (
+        (Cell("Tried", muted=True, parts=(Cell(moment=seen.tried_at, muted=True),)),)
+        if row.failed and seen.tried_at
+        else ()
+    )
+    return Cell.reading(reading=row.age, lines=clock + tried)
 
 
 def _state(row: Standing) -> Cell:
@@ -121,9 +146,7 @@ _SEES_COLUMNS = (
     TableColumn("Reading", cell=_reading),
     TableColumn("State", kind="status", css="key-col", cell=_state),
     TableColumn("Records", kind="numeric", drop=2, cell=lambda row: Cell(str(row.sight.records) if row.read else "")),
-    TableColumn(
-        "Reading", kind="status", css="optional-col", drop=1, cell=lambda row: Cell.reading(at=row.sight.observed_at)
-    ),
+    TableColumn(LAST_READ, kind="status", css="optional-col", drop=1, cell=_age),
 )
 
 
@@ -138,20 +161,28 @@ def _sight() -> HqSight:
     stored = {kind: rows[0] for kind, rows in stored_snapshots().items() if rows}
     reported = {CONNECTION_LABELS.get(row.provider) for row in connection_rows()}
     groups: dict[str, list[Standing]] = {}
-    # Each inventory kind once, under the provider that reads it whole.
-    for provider, reads in provider_reads().items():
+    # Each inventory kind once, under the provider that reads it whole, and
+    # each reading no one provider takes under SEVERAL.
+    several = tuple(
+        Read(kind, spec.label, "reading", spec.read_by, tuple(spec.requires))
+        for kind, spec in OBSERVATIONS.items()
+        if spec.provider is None
+    )
+    for provider, reads in (*provider_reads().items(), (None, several)):
         for read in reads:
             if read.source == "part":
                 continue
             seen = sight_of(read.kind, read.label, read.source, stored.get(read.kind), permissions=read.permissions)
-            groups.setdefault(CONNECTION_LABELS.get(provider, KEYLESS), []).append(Standing.of(seen))
+            label = SEVERAL if provider is None else CONNECTION_LABELS.get(provider, KEYLESS)
+            groups.setdefault(label, []).append(Standing.of(seen))
     # A provider that takes a connection and has none is said in one line; a
-    # reading that needs no connection is always listed, read or not, and so is
+    # reading that needs no connection, or no one connection, is always listed,
+    # read or not, and so is
     # every reading of a connection the controller has reported, read yet or not.
     shown = {
         label: tuple(rows)
         for label, rows in groups.items()
-        if label == KEYLESS
+        if label in (KEYLESS, SEVERAL)
         or label in reported
         or any(row.sight.state not in (NOT_CONNECTED, NEVER_SWEPT) for row in rows)
     }
