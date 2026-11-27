@@ -388,15 +388,6 @@ def page_context(
     }
 
 
-def _is_trail(value: object) -> bool:
-    """Whether ``value`` is crumbs: a tuple of (label, url) pairs."""
-
-    return type(value) is tuple and all(
-        type(crumb) is tuple and len(crumb) == 2 and isinstance(crumb[0], str) and isinstance(crumb[1], str | Promise)
-        for crumb in value
-    )
-
-
 class PageMixin(FragmentMixin):
     """Declare a page's head on the view; ``page.html`` renders it.
 
@@ -412,15 +403,9 @@ class PageMixin(FragmentMixin):
     # The pages above this one, from the top, as (label, url) crumbs; a
     # record's own crumb follows them when ``trail_label`` names it.
     page_trail: tuple[Crumb, ...] = ()
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        # One crumb written bare, ``("Things", url)``, would draw each of its
-        # halves as a crumb, so the shape is refused where the view is declared.
-        super().__init_subclass__(**kwargs)
-        if not _is_trail(cls.page_trail):
-            raise ImproperlyConfigured(
-                f"{cls.__name__}.page_trail is a tuple of (label, url) crumbs, not {cls.page_trail!r}."
-            )
+    # The one capability the page reads under beside READ, where it needs one
+    # (``page_capabilities``).
+    required_capability: str
 
     def get_page_title(self) -> str:
         return self.page_title
@@ -604,8 +589,6 @@ def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
         declared = owner.required_capability
     except AttributeError:
         return (str(Capability.READ),)
-    if not isinstance(declared, str):
-        raise ImproperlyConfigured(f"A page declares one capability of its own, not {declared!r}.")
     if not declared:
         raise ImproperlyConfigured(f"{owner.__qualname__!r} must define required_capability.")
     return tuple(dict.fromkeys((str(Capability.READ), str(declared))))

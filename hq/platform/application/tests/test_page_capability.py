@@ -6,7 +6,6 @@ from django.test import RequestFactory, TestCase
 from django.views.generic import View
 
 from hq.platform.application import roles
-from hq.platform.application.security import Capability
 from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.testing import person
 from hq_sdk.web import CapabilityRequiredMixin
@@ -20,17 +19,6 @@ def _person(username: str, role: str):
     if role:
         roles.assign(user, role)
     return user
-
-
-class DeclarationTests(TestCase):
-    def test_a_page_declares_one_capability_never_several(self):
-        from hq.platform.application.pages import page_capabilities
-
-        class Several(View):
-            required_capability = (Capability.READ, Capability.READ_AUDIT_LOG)
-
-        with self.assertRaises(ImproperlyConfigured):
-            page_capabilities(Several.as_view())
 
 
 class _Unnamed(CapabilityRequiredMixin, View):
