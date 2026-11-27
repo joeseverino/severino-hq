@@ -43,20 +43,6 @@ class ReaderSelectionTests(SimpleTestCase):
             labels, _ = selection.selection(["static/css/app/figures.css"], [], [reader, PROBES], "HEAD")
         self.assertEqual(labels, [selection.module_name(reader)])
 
-    def test_a_change_to_a_file_a_check_walks_selects_that_check_alone(self):
-        with tempfile.TemporaryDirectory() as folder, patch.object(chain, "ROOT", Path(folder)):
-            root = Path(folder)
-            (root / "tests").mkdir()
-            (root / "tests/__init__.py").touch()
-            check = Path("tests/test_walk.py")
-            (root / check).write_text(
-                '@walks("hq/**/*.py", "!**/tests/**")\nclass WalkTests: pass\nclass OtherTests: pass\n'
-            )
-
-            self.assertEqual(selection.walking(["hq/a/cadence.py"], [check], []), ["tests.test_walk.WalkTests"])
-            self.assertEqual(selection.walking(["hq/a/tests/test_a.py", "docs/a.md"], [check], []), [])
-            self.assertEqual(selection.walking(["hq/a/cadence.py"], [check], ["tests.test_walk"]), [])
-
     def test_an_imported_helper_selects_the_checks_that_read_it(self):
         helper = Path("hq/platform/application/tests/facts.py")
         reached = selection.import_reach({selection.module_name(helper)}, selection.importers([helper, PROBES]))

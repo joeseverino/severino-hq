@@ -74,7 +74,10 @@ class ReachTests(SimpleTestCase):
             (root / path).write_text(
                 SHEET.replace(".chart-legend:has(> a[href]) { line-height: var(--target-min); }\n", "")
             )
-            with mock.patch.object(look_reach, "ROOT", root), mock.patch.dict("os.environ", {look_reach.BASE: base}):
+            with (
+                mock.patch.object(look_reach, "ROOT", root),
+                mock.patch.dict("os.environ", {look_reach.FAST_BASE: base}),
+            ):
                 reach = look_reach.reach(path)
 
         drawn = look_reach.drawings()

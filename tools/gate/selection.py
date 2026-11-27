@@ -16,7 +16,6 @@ from typing import NamedTuple
 
 import grimp
 
-from hq.platform.application.tests.source import matches, walks
 from hq.platform.core.tests.task import RefError, changed_paths, names
 from tests.mise_tasks import run_files
 from tools.gate import chain, ran
@@ -720,29 +719,3 @@ def selection(changed: list[str], deleted: list[str], files: list[Path], base: s
     """(the test modules to run, how many there are)."""
 
     return test_labels(files, *affected(changed, deleted, files, base))
-
-
-def walking(paths: list[str], files: list[Path], labels: list[str]) -> list[str]:
-    """The test classes outside the modules in ``labels`` that walk a file of ``paths``: each declared with
-    ``walks`` (hq/platform/application/tests/source.py), whose globs are read from its source."""
-
-    found = []
-    for path in files:
-        text = (chain.ROOT / path).read_text(encoding="utf-8") if is_test(path) else ""
-        if f"@{walks.__name__}(" not in text or (module := module_name(path)) in labels:
-            continue
-        classes = (node for node in ast.parse(text).body if isinstance(node, ast.ClassDef))
-        found += [f"{module}.{node.name}" for node in classes if any(matches(p, walked(node)) for p in paths)]
-    return found
-
-
-def walked(node: ast.ClassDef) -> list[str]:
-    """The globs a class's ``walks`` declares."""
-
-    return [
-        arg.value
-        for decorator in node.decorator_list
-        if isinstance(decorator, ast.Call) and call_name(decorator.func) == walks.__name__
-        for arg in decorator.args
-        if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
-    ]

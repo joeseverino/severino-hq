@@ -1,4 +1,4 @@
-"""What a refusal may say, read from the source: the checker ``RefusalTextTests`` runs.
+"""What a refusal may say, read from the source: the checker ``lint:refusal-text`` runs.
 
 Every ``HostRefusal``, and every class that derives from it however deep, is
 built from one sentence. A sentence is:
@@ -28,6 +28,7 @@ read only for the fields it names. A record's key is left out: by name,
 
 import ast
 import re
+import sys
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass, field
@@ -554,25 +555,39 @@ class Checked:
     refusals: set[str]
 
 
-def checked(root: Path, only: list[str] | None = None) -> Checked:
-    """The checker run over every module under ``root``'s hq/ outside tests, or over ``only`` and the modules
-    that import one of them, in a process of its own."""
+def checked(root: Path) -> Checked:
+    """The checker run over every module under ``root``'s hq/ outside tests, in a process of its own."""
 
-    found = apart(_checked, root, only)
+    found = apart(_checked, root)
     return Checked(found["problems"], found["refusals_built"], found["carried"], set(found["refusals"]))
 
 
-def _checked(root: str, only: list[str] | None) -> dict[str, object]:
-    base = Path(root)
-    sources = {
-        str(path.relative_to(base)): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for path in (base / "hq").rglob("*.py")
+def _sources(root: Path) -> dict[str, ast.Module]:
+    return {
+        str(path.relative_to(root)): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for path in (root / "hq").rglob("*.py")
         if "tests" not in path.parts
     }
-    done = check(sources, None if only is None else importing(sources, only))
+
+
+def _checked(root: str) -> dict[str, object]:
+    done = check(_sources(Path(root)))
     return {
         "problems": done.problems,
         "refusals_built": done.refusals_built,
         "carried": done.carried,
         "refusals": sorted(done.index.refusals),
     }
+
+
+def main(named: list[str]) -> int:
+    """Print each problem in the modules of ``named`` and those that import one, or in every module."""
+
+    sources = _sources(Path.cwd())
+    problems = check(sources, importing(sources, named) if named else None).problems
+    print(*problems, sep="\n", file=sys.stderr)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

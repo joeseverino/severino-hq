@@ -10,7 +10,7 @@ import textwrap
 from datetime import date
 from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, tag
 
 from hq.domains.assets.models import Asset
 from hq.domains.calendars.models import Entry
@@ -23,7 +23,6 @@ from ..integration_specs import TARGET_KINDS, kept_by
 from ..record_errors import HostRefusal
 from ..security import Principal, operator_capabilities
 from .refusal_text import check, checked
-from .source import walked, walks
 
 # Distinctive enough that finding it in a message can only mean it was echoed.
 SENT = "sent-by-the-caller-7f3a"
@@ -118,23 +117,18 @@ def _subclasses(cls: type) -> set[type]:
     return found | {deeper for sub in found for deeper in _subclasses(sub)}
 
 
-@walks("hq/**/*.py", "!**/tests/**")
+@tag("source", "tree")
 class RefusalTextTests(SimpleTestCase):
-    """A capability answers with a refusal's text, so every refusal is built from a sentence HQ wrote."""
+    """The checker lint:refusal-text runs reads every refusal under hq/ and every kind of refusal declared."""
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.only = walked(cls.walks)
-        cls.checked = checked(ROOT, cls.only)
+        cls.checked = checked(ROOT)
 
-    def test_every_refusal_is_built_from_a_sentence(self):
-        checked = self.checked
-
-        self.assertEqual(checked.problems, [])
-        if self.only is None:
-            self.assertTrue(checked.refusals_built, "no refusal was found under hq/")
-            self.assertTrue(checked.carried, "no sentence was carried to a refusal under hq/")
+    def test_the_checker_reads_the_refusals_of_hq(self):
+        self.assertTrue(self.checked.refusals_built, "no refusal was found under hq/")
+        self.assertTrue(self.checked.carried, "no sentence was carried to a refusal under hq/")
 
     def test_every_kind_of_refusal_is_read(self):
         """Read from the source, so a kind is checked the day it is declared; here, every kind Python knows."""

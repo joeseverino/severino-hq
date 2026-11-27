@@ -461,17 +461,6 @@ reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
 CI's `lint:source` runs it. So does the composed suite with the extensions,
 which a pull request's Composition job runs.
 
-A check that walks the tree and can read a part of it is declared with
-`walks` (`hq/platform/application/tests/source.py`) instead, on its class,
-with the globs of the files it reads, as mise reads a task's sources (`**`,
-and `!` taking paths out): `@walks("hq/**/*.py", "!**/tests/**")`. fast
-reads the globs from the source and runs the class when the change touched a
-file one matches, and in fast's run the check reads only those files
-(`walked`, from the base fast hands its tests), as the refusal text check
-reads the touched modules and those that import them. Anywhere else it reads
-the whole tree. fast names those it selected:
-`[fast] the checks that walk a file the change touched`.
-
 A run runs its selection however wide it is. `--whole` runs the whole suite
 (the tests tagged `tree` aside) with every quick gate instead, whatever
 changed, and its pass records the tree.
@@ -501,11 +490,14 @@ changed, and so does `lint:imports`, which reads the import graph in about a
 second whenever a Python file changes.
 
 A gate whose linter reads one file at a time (`lint:ruff`, `lint:ast-grep`,
-`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:file-rules`, `lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
+`lint:spelling`, `lint:prose`, `lint:sentence-ends`, `lint:refusal-text`, `lint:file-rules`,
+`lint:source-scans`) runs through hk, as `hk.pkl` declares it, and
 fast hands it the files the change touched: its step reads those its glob
 matches, and its `-whole` step reads the whole tree when one of them is a file
 that step names (the tool's config, the pins). Run alone, with no files, as
-the Lint job runs it, it reads the whole tree.
+the Lint job runs it, it reads the whole tree. A check that reads the whole
+tree to judge part of it is a step too: `lint:refusal-text` indexes every
+module and holds those it is handed and the modules that import one.
 
 A change to a stylesheet under `static/css/app/` or a template selects
 `fast:look`, which runs in the heavy turn beside the tests and holds the

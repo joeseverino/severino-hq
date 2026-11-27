@@ -19,11 +19,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from hq.platform.core.tests.task import Usage, changed_paths, usage
+from hq.platform.core.tests.task import FAST_BASE, Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
 from tools.gate import chain, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
-from tools.gate.selection import python_files, selection, source_first, walking, whole_suite
+from tools.gate.selection import python_files, selection, source_first, whole_suite
 from tools.gate.turn import ONE, in_share, weighed
 from tools.gate.verdict import Gate, Step, run
 
@@ -215,10 +215,8 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
 # with the quick gates (mise.fast.toml), whose output is mise's summary.
 TESTS = "fast:tests"
 ENVIRONMENT = "fast"
-# The variable fast:tests reads the labels of fast:source from, its dependency,
-# and the one a gate in the heavy turn reads fast's base from (fast:look's look).
+# The variable fast:tests reads the labels of fast:source from, its dependency.
 SOURCE = "HQ_FAST_SOURCE"
-BASE = "HQ_FAST_BASE"
 
 
 def heavy_gates(tasks: tuple[str, ...]) -> tuple[str, ...]:
@@ -267,7 +265,7 @@ def run_command(
 
     gates = [word for task in tasks for word in (*handed(task, paths), ":::")]
     tests = [TESTS, "--parallel", parallel, *labels]
-    command = ["env", f"{SOURCE}={' '.join(source)}", f"{BASE}={base}", *mise_run([*gates, *tests], parallel)]
+    command = ["env", f"{SOURCE}={' '.join(source)}", f"{FAST_BASE}={base}", *mise_run([*gates, *tests], parallel)]
     tokens = stage_tokens(tasks, source, labels, parallel)
     return [*in_share(tokens, TURN_BOUND), *command] if tokens else command
 
@@ -365,9 +363,6 @@ def main(asked: Usage) -> int:
     if gate and not every_test and whole_asked:
         print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree")
         labels, every_test = whole_suite(files), True
-    if walks := walking([*changed, *deleted], files, labels):
-        print(f"[fast] the checks that walk a file the change touched, on those files: {' '.join(walks)}")
-        labels = [*labels, *walks]
 
     if gate is None:
         print("\n".join(labels))

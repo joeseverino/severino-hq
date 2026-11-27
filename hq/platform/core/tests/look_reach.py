@@ -9,7 +9,7 @@ element, ``:root``) reaches every entry, as does an at-rule that holds
 declarations rather than rules (``@font-face``, ``@property``,
 ``@keyframes``), and a statement outside every rule (``@layer a, b;``). A rule
 is changed where a line of it, comments aside, differs from the base the
-look's environment names (``BASE``, which fast sets to its own; else HEAD), on
+look's environment names (``FAST_BASE``, which fast sets to its own; else HEAD), on
 either side, so a rule a change deletes reaches the entries it styled. A file
 the base holds as it is is read whole.
 """
@@ -28,11 +28,9 @@ from django.utils.text import Truncator
 
 from hq.platform.core.stylesheets import SHEETS
 from hq.platform.core.tests.css_usage import Block, blocks_of, named
-from hq.platform.core.tests.task import ROOT
+from hq.platform.core.tests.task import FAST_BASE, ROOT
 lazy from hq.platform.core.tests.browser import catalog
 
-# The variable that names the ref a change is read from.
-BASE = "HQ_FAST_BASE"
 # The at-rules that group rules, each of which is drawn only as its rules are.
 GROUPS = ("@media", "@supports", "@container", "@layer", "@scope", "@starting-style")
 # A sheet's path from the checkout's root: the stylesheets live under static/.
@@ -108,7 +106,7 @@ def reach(path: str) -> Reach:
 
 
 def _sheet(path: str) -> Reach:
-    base = os.environ.get(BASE) or "HEAD"
+    base = os.environ.get(FAST_BASE) or "HEAD"
     tip = _text(ROOT / path)
     was = _shown(base, path)
     hunks = _hunks(base, path)
