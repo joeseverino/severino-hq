@@ -133,26 +133,25 @@
 /* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
 /* Steps or checks side by side ({% steps %}), each an icon, a title and a
-   sentence. Read down each column, as a list is, so however many there are
-   the columns end within a step of each other: never a row of five and a row
-   of two. */
+   sentence: as many columns as fit, up to four, each at least 14rem, filled
+   in rows, so no column stands empty beside a step taller than the rest. */
 .step-list {
-  columns: 14rem 4; column-gap: var(--space-9);
+  --steps-at-most: 4; --step-width: 14rem;
+  display: grid; gap: var(--space-5) var(--space-9);
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- lays out the steps of one list, never sections or cards */
+  grid-template-columns: repeat(auto-fit, minmax(max(min(var(--step-width), 100%), (100% - (var(--steps-at-most) - 1) * var(--space-9)) / var(--steps-at-most)), 1fr));
   font-size: var(--text-sm);
 }
-.step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
-/* Steps done in order ({% steps numbered=True %}) read down their columns,
-   wider ones since a step says more, each step's number where an icon would
-   be: a short run of them fills a wide frame rather than stacking down its
-   start. */
-.step-list.is-numbered { columns: 22rem 3; counter-reset: step; }
-/* Steps that hold a table's region or a command, and a step that stands
-   alone, take the frame's whole width, one step to a row, so a table keeps its
-   columns and a command its line. */
-.step-list.is-numbered:has(.table-scroll, .command, > li:only-child) { columns: auto; }
+.step-list li { display: flex; align-items: flex-start; gap: var(--space-5); }
+/* Steps done in order ({% steps numbered=True %}) take wider columns, up to
+   three, since a step says more, each step's number where an icon would be:
+   a short run of them fills a wide frame rather than stacking down its start. */
+.step-list.is-numbered { --steps-at-most: 3; --step-width: 22rem; counter-reset: step; }
+/* Steps that hold a table's region or a command take the frame's whole
+   width, one step to a row, so a table keeps its columns and a command its line. */
+.step-list.is-numbered:has(.table-scroll, .command) { grid-template-columns: minmax(0, 1fr); }
 .step-list.is-numbered:has(.table-scroll, .command, > li:only-child) > li > div { flex: 1; min-inline-size: 0; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
-.step-list.is-numbered > li:last-child { padding-bottom: 0; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
 /* One step stands alone, with no number. */
 .step-list.is-numbered > li:only-child::before { content: none; }

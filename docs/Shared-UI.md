@@ -1723,11 +1723,10 @@ written as a class.
 
 ### steps (host only)
 
-A list of short steps (`{% steps %}`) is read down its columns, so its columns end within a step
-of each other. Each step is `{% step icon=... %}`: its icon, then what it says; `tone` colors the
+A list of short steps (`{% steps %}`) is laid out in rows of as many columns as fit, up to four, so
+no column stands empty beside a long step. Each step is `{% step icon=... %}`: its icon, then what it says; `tone` colors the
 icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
-done in order are `{% steps numbered=True %}`: read down wider columns, as many as fit up to
-three, so a short run fills a wide frame; each step's number stands where its icon would be, so
+done in order are `{% steps numbered=True %}`: wider columns, as many as fit up to three, so a short run fills a wide frame; each step's number stands where its icon would be, so
 its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
 `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
 runs it, and it carries no secret.
