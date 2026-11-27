@@ -31,9 +31,10 @@ lazy from .facts import stored_snapshots
 if TYPE_CHECKING:
     from .credential_sight import Standing
 
-# What the listener is called in a sentence about it, as its channel's
-# label (``InboundSource.WORKER``) says it at the head of one.
+# What each channel's reader is called in a sentence about it, as its
+# channel's label (``InboundSource``) says it at the head of one.
 LISTENER_NAMED = "event listener"
+HOST_NAMED = "host event reader"
 
 # How often each channel's reader (the Worker's listener, the Docker reader)
 # says it is listening when nothing happens, as the contract's
@@ -68,11 +69,12 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
     """When ``source`` last reported, and whether that is too long ago. A
     channel never heard is never silent (``unheard``)."""
 
+    named = LISTENER_NAMED if source == InboundSource.WORKER else HOST_NAMED
     seen_at = readings.heard(channel(source))
     if seen_at is None:
-        return WorkerStanding(seen_at=None, silent=False, named=LISTENER_NAMED, unheard=unheard(source))
+        return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard(source))
     silent = passed(seen_at + 2 * CHANNEL_EVERY)
-    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=LISTENER_NAMED)
+    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=named)
 
 
 def covers(kind: str) -> bool:

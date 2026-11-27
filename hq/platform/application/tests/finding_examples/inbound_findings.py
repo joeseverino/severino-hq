@@ -11,6 +11,7 @@ from . import AT, Example, Examples, Raised
 from .unit_findings import KIND as UNITS, failed
 
 SILENT = "The event listener stopped reporting"
+HOST_SILENT = "The host event reader stopped reporting"
 
 
 def heard(
@@ -79,7 +80,7 @@ EXAMPLES = (
         "event-channel-silent",
         fires=(
             heard(InboundSource.WORKER, timedelta(hours=1), raises=(SILENT,)),
-            heard(InboundSource.HOST, timedelta(days=30), raises=(SILENT,)),
+            heard(InboundSource.HOST, timedelta(days=30), raises=(HOST_SILENT,)),
             # Its unit failed: the failure is the item, and this is said beneath it.
             heard(
                 InboundSource.WORKER,
@@ -92,7 +93,7 @@ EXAMPLES = (
                 InboundSource.HOST,
                 timedelta(hours=1),
                 declared=True,
-                raises=(Raised(title=SILENT, presses=("infrastructure.resource.start",)),),
+                raises=(Raised(title=HOST_SILENT, presses=("infrastructure.resource.start",)),),
             ),
         ),
         # Never set up; heard lately.
