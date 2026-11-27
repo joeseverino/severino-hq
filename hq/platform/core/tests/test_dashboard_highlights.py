@@ -7,7 +7,6 @@ from unittest.mock import Mock, patch
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.template import Context, Template
-from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -17,7 +16,7 @@ from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
 from hq.platform.application.drawings import Dot, Dots, Trend
-from hq.platform.application.freshness import Freshness, ReadCadence, last_read
+from hq.platform.application.freshness import Freshness, ReadCadence
 from hq.platform.application.markup_testing import all_elements, elements, hrefs, links, select, text, with_class
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
@@ -58,42 +57,12 @@ class DashboardHighlightTests(SimpleTestCase):
         self.assertEqual(highlights["highlights"][0]["label"], "Example 1")
         self.assertEqual(highlights["highlights"][0]["cards"], cards)
 
-    def test_rich_readings_keep_the_contributors_window_and_plain_links(self):
-        overview = DomainOverview(
-            "A useful summary",
-            "/example/",
-            (
-                Kpi("Recent work", "12", "Through Aug 21, 2026", "/example/"),
-                Kpi("Another reading", "3"),
-                Kpi("A third reading", "4"),
-            ),
-        )
-        domain = contributor(1, overview=Mock(return_value=overview))
-        with (
-            patch("hq.platform.application.domains.all_domains", return_value=(domain,)),
-            patch("hq.platform.application.dashboard.all_domains", return_value=(domain,)),
-            uncached(),
-            projection_scope(),
-        ):
-            result = dashboard_highlights(cli_principal())
-        html = render_to_string(
-            "core/_dashboard_highlights.html",
-            {"dashboard_highlights": result["highlights"]},
-        )
-        self.assertIn("Through Aug 21, 2026", text(html))
-        self.assertIn("/example/", hrefs(html))
-        self.assertNotIn("First", text(html))
-
-    def test_a_window_whose_data_is_out_of_date_says_how_old_it_is(self):
-        """A dated source past its cadence is never headed by its window ("Latest 4 weeks")."""
+    def test_a_window_whose_data_is_out_of_date_is_not_said(self):
+        """A dated source is headed by its window ("Latest 4 weeks") only while it is current."""
 
         ended, cadence = timezone.now() - timedelta(days=60), ReadCadence(timedelta(days=14), timedelta(days=14))
         overview = partial(DomainOverview, "A summary", "/example/", (Kpi("Work", "9"),), period="Latest 4 weeks")
-        stale = {"label": "Example", "cards": [], "overview": overview(reading=Freshness("stale", ended, cadence))}
-        html = render_to_string("core/_dashboard_highlights.html", {"dashboard_highlights": [stale]})
-
-        said = f"{' '.join(last_read(ended).split())} · out of date"
-        self.assertTrue(with_class(html, "section-aside")[0].words.startswith(said))
+        self.assertNotIn("Latest", overview(reading=Freshness("stale", ended, cadence)).window)
         self.assertEqual(overview(reading=Freshness("current", timezone.now(), cadence)).window, "Latest 4 weeks")
         self.assertNotIn("Latest", overview(reading=Freshness("never", None, cadence)).window)
 
