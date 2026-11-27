@@ -64,6 +64,10 @@ class Cloudflare(Permission):
     # As R2's own token page (R2, Manage API tokens) names it, scoped to one
     # bucket there; the token editor's name for it is the API one.
     R2_OBJECT_WRITE = "Object Read & Write", "bucket", "Workers R2 Storage Bucket Item Write"
+    # Reading a Worker's deployments and its versions' tags: of the groups
+    # both operations accept (x-api-token-group), the read-only one that
+    # opens no live logs.
+    WORKERS_SCRIPTS_READ = "Workers Scripts Read", "account"
     DNS_WRITE = "DNS Write", "zone"
     PAGE_RULES_READ = "Page Rules Read", "zone"
     SINGLE_REDIRECT_READ = "Single Redirect Read", "zone", "Dynamic URL Redirects Read"

@@ -30,6 +30,30 @@ def heard(
     return Example(readings={UNITS: units} if units else {}, given=given, raises=raises)
 
 
+BEHIND = "The events Worker is behind HQ's routes"
+WORKER = "cloudflare.worker"
+
+
+def deployed(*tags: str, name: str = "hq-events") -> Example:
+    """The Worker ``name`` on the account, serving one version per tag, or
+    never deployed; a version's tag is what its deploy gave it."""
+
+    record = {
+        "connection_ref": "example-cloudflare",
+        "account_id": "0123abcd",
+        "name": name,
+        "deployment_id": "example-deployment" if tags else "",
+        "deployed_at": "2026-01-14T18:30:00Z" if tags else None,
+        "versions": [
+            {"id": f"example-{number}", "number": number, "percentage": 100 / len(tags), "tag": tag}
+            for number, tag in enumerate(tags, 7)
+        ],
+        "requests": 120,
+        "errors": 0,
+    }
+    return Example(readings={WORKER: [record]}, raises=(BEHIND,) if name == "hq-events" and tags else ())
+
+
 EXAMPLES = (
     Examples(
         "event-channel-silent",
@@ -50,5 +74,12 @@ EXAMPLES = (
             heard(InboundSource.WORKER, timedelta(minutes=3)),
             heard(InboundSource.HOST, timedelta(minutes=3)),
         ),
+    ),
+    Examples(
+        "events-worker-behind",
+        # Deployed without the tag HQ's routes give it, whole or as part of a split.
+        fires=(deployed(""), deployed("ffffffffffffffffffffffffffffffff", "")),
+        # Never deployed; another Worker deployed untagged.
+        quiet=(deployed(), deployed("", name="example-site")),
     ),
 )

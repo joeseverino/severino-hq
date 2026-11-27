@@ -39,6 +39,7 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindCloudflareTunnel:             {CloudflareTunnelRecord{}},
 	runtime.ResourceKindCloudflareEdgeCertificate:    {CloudflareEdgeCertificateRecord{}},
 	runtime.ResourceKindCloudflareRedirect:           {CloudflareRedirectRecord{}},
+	runtime.ResourceKindCloudflareWorker:             {runtime.CloudflareWorkerRecord{}},
 	runtime.ResourceKindGitHubRepository:             {GitHubRepositoryRecord{}, githubCarried{}},
 	runtime.ResourceKindGitHubWorkflowRun:            {GitHubWorkflowRunRecord{}, githubCarried{}},
 	runtime.ResourceKindGitHubOpenPullRequest:        {GitHubOpenPullRequestRecord{}, githubCarried{}},

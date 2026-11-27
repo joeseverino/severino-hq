@@ -260,3 +260,27 @@ class BridgeEventsTests(TestCase):
 
         self.assertEqual(InboundEvent.objects.get().delivery_id, PUSH["delivery_id"])
         self.assertEqual(asked(), PUSHED)
+
+
+# What HQ's routes tag the Worker's version with, and an older deploy's tag.
+TAG = "0123456789abcdef0123456789abcdef"
+OLD = "fedcba9876543210fedcba9876543210"
+
+
+@mock.patch("hq.domains.control_plane.inbound_worker.deploy_tag", return_value=TAG)
+class EventsWorkerTests(TestCase):
+    def test_a_worker_serving_a_version_of_other_routes_is_behind(self, _tag):
+        from hq.platform.application.inbound_events import events_worker
+        from hq.platform.application.inventory_testing import store
+
+        for tags, behind in (((TAG,), False), ((OLD,), True), ((TAG, OLD), True), ((), False)):
+            with self.subTest(tags=tags):
+                versions = [
+                    {"id": f"example-{tag}", "number": 1, "percentage": 100 / len(tags), "tag": tag} for tag in tags
+                ]
+                store(
+                    "cloudflare.worker",
+                    {"connection_ref": "example-cloudflare", "name": "hq-events", "versions": versions},
+                )
+
+                self.assertEqual(events_worker().behind, behind)

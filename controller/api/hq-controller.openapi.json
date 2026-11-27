@@ -3644,6 +3644,102 @@
         ],
         "type": "object"
       },
+      "CloudflareWorkerRecord": {
+        "description": "One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "deployment_id": {
+            "default": "",
+            "type": "string"
+          },
+          "deployed_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "versions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CloudflareWorkerWorkerVersionRecord"
+            },
+            "type": "array"
+          },
+          "requests": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "errors": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "cpu_time_p50_us": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          },
+          "cpu_time_p99_us": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CloudflareWorkerWorkerVersionRecord": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "percentage": {
+            "default": 100,
+            "type": "number"
+          },
+          "tag": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "ConnectionProvider": {
         "type": "string",
         "description": "A connection provider HQ's registry declares: what a credential is for.",
@@ -6787,6 +6883,7 @@
           "filtering",
           "https",
           "images",
+          "invocations",
           "job_logs",
           "leaked_credentials",
           "page_rules",
@@ -6826,6 +6923,7 @@
           "PartFiltering",
           "PartHTTPS",
           "PartImages",
+          "PartInvocations",
           "PartJobLogs",
           "PartLeakedCredentials",
           "PartPageRules",
@@ -6917,6 +7015,7 @@
           "cloudflare.pages_project",
           "cloudflare.redirect",
           "cloudflare.tunnel",
+          "cloudflare.worker",
           "cloudflare.zone",
           "dns.reverse",
           "github.allowance",
@@ -6990,6 +7089,7 @@
           "ResourceKindCloudflarePagesProject",
           "ResourceKindCloudflareRedirect",
           "ResourceKindCloudflareTunnel",
+          "ResourceKindCloudflareWorker",
           "ResourceKindCloudflareZone",
           "ResourceKindDNSReverse",
           "ResourceKindGitHubAllowance",
@@ -7094,6 +7194,7 @@
           "cloudflare.pages_project",
           "cloudflare.redirect",
           "cloudflare.tunnel",
+          "cloudflare.worker",
           "cloudflare.zone",
           "github.allowance",
           "github.delivery",
@@ -7146,6 +7247,7 @@
           "SweptCloudflarePagesProject",
           "SweptCloudflareRedirect",
           "SweptCloudflareTunnel",
+          "SweptCloudflareWorker",
           "SweptCloudflareZone",
           "SweptGitHubAllowance",
           "SweptGitHubDelivery",

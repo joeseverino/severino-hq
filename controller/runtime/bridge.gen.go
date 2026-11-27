@@ -679,6 +679,7 @@ const (
 	PartFiltering         ReadingPartName = "filtering"
 	PartHTTPS             ReadingPartName = "https"
 	PartImages            ReadingPartName = "images"
+	PartInvocations       ReadingPartName = "invocations"
 	PartJobLogs           ReadingPartName = "job_logs"
 	PartLeakedCredentials ReadingPartName = "leaked_credentials"
 	PartPageRules         ReadingPartName = "page_rules"
@@ -738,6 +739,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartHTTPS:
 		return true
 	case PartImages:
+		return true
+	case PartInvocations:
 		return true
 	case PartJobLogs:
 		return true
@@ -897,6 +900,7 @@ const (
 	ResourceKindCloudflarePagesProject       ResourceKind = "cloudflare.pages_project"
 	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
+	ResourceKindCloudflareWorker             ResourceKind = "cloudflare.worker"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindDNSReverse                   ResourceKind = "dns.reverse"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
@@ -989,6 +993,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareRedirect:
 		return true
 	case ResourceKindCloudflareTunnel:
+		return true
+	case ResourceKindCloudflareWorker:
 		return true
 	case ResourceKindCloudflareZone:
 		return true
@@ -1179,6 +1185,7 @@ const (
 	SweptCloudflarePagesProject       SweptKind = "cloudflare.pages_project"
 	SweptCloudflareRedirect           SweptKind = "cloudflare.redirect"
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
+	SweptCloudflareWorker             SweptKind = "cloudflare.worker"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
 	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
@@ -1247,6 +1254,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareRedirect:
 		return true
 	case SweptCloudflareTunnel:
+		return true
+	case SweptCloudflareWorker:
 		return true
 	case SweptCloudflareZone:
 		return true
@@ -1752,6 +1761,28 @@ type CloudflareTunnelTunnelConnectionRecord struct {
 type CloudflareTunnelTunnelIngressRecord struct {
 	Hostname string `json:"hostname"`
 	Service  string `json:"service,omitempty"`
+}
+
+// CloudflareWorkerRecord One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day.
+type CloudflareWorkerRecord struct {
+	AccountID     string                                `json:"account_id,omitempty"`
+	ConnectionRef string                                `json:"connection_ref,omitempty"`
+	CPUTimeP50Us  *float32                              `json:"cpu_time_p50_us,omitempty"`
+	CPUTimeP99Us  *float32                              `json:"cpu_time_p99_us,omitempty"`
+	DeployedAt    string                                `json:"deployed_at,omitempty"`
+	DeploymentID  string                                `json:"deployment_id,omitempty"`
+	Errors        *int                                  `json:"errors,omitempty"`
+	Name          string                                `json:"name"`
+	Requests      *int                                  `json:"requests,omitempty"`
+	Versions      []CloudflareWorkerWorkerVersionRecord `json:"versions,omitempty"`
+}
+
+// CloudflareWorkerWorkerVersionRecord defines model for CloudflareWorkerWorkerVersionRecord.
+type CloudflareWorkerWorkerVersionRecord struct {
+	ID         string  `json:"id"`
+	Number     int     `json:"number,omitempty"`
+	Percentage float32 `json:"percentage,omitempty"`
+	Tag        string  `json:"tag,omitempty"`
 }
 
 // CommitVerification Whether GitHub verified the commit's signature, and the GitHub account that committed it.

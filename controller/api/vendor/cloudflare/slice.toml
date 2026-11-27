@@ -20,12 +20,22 @@ cloudflare-tunnel-configuration-get-configuration = ["tunnel_configuration"]
 cloudflare-tunnel-list-cloudflare-tunnel-connections = ["tunnel_tunnel_client"]
 cloudflare-tunnel-list-cloudflare-tunnels = ["tunnel_cfd_tunnel"]
 d1-list-databases = ["d1_database-response"]
+getWorkerVersion = ["workers_Version"]
 getZoneRuleset = ["rulesets_RedirectFromValue"]
 pages-project-get-projects = ["pages_project"]
 registrar-domain-registration-list = ["registrar-api_registration"]
 user-api-tokens-verify-token = ["iam_token_verify_response_single_segment"]
 web-analytics-list-sites = ["rum_site"]
+worker-deployments-list-deployments = ["workers_deployment"]
+worker-script-list-workers = ["workers_script-response"]
 zones-get = ["zones_zone"]
+
+# A Worker is read for its name, its deployment and each version's number
+# and tag; its code, bindings and settings are never decoded.
+[keep]
+workers_Version = ["id", "number", "annotations"]
+workers_deployment = ["id", "created_on", "versions"]
+workers_script-response = ["id"]
 
 # Every list is read page by page to its end; certificate packs of every
 # status, and tunnels still live.

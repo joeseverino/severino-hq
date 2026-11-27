@@ -121,6 +121,7 @@ Permissions, and no others:
 - `Registrar: Domains Read (account)`
 - `SSL and Certificates Read (zone)`
 - `Single Redirect Read (zone; API: Dynamic URL Redirects Read)`
+- `Workers Scripts Read (account)`
 - `Zone Read (zone)`
 - `Zone Settings Read (zone)`
 

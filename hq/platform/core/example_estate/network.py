@@ -177,6 +177,22 @@ def zone():
             "expires_on": (now() + timedelta(days=71)).isoformat(),
         },
     )
+    # The events Worker, deployed before HQ's routes last changed.
+    store(
+        "cloudflare.worker",
+        {
+            "connection_ref": CLOUDFLARE,
+            "account_id": "0123abcd",
+            "name": "hq-events",
+            "deployment_id": "example-deployment",
+            "deployed_at": iso(timedelta(days=6)),
+            "versions": [{"id": "example-version", "number": 14, "percentage": 100, "tag": ""}],
+            "requests": 1_284,
+            "errors": 3,
+            "cpu_time_p50_us": 812.0,
+            "cpu_time_p99_us": 4_210.0,
+        },
+    )
     # The rest of the account: nothing on Pages, D1, Access or tunnels.
     for kind in (
         "cloudflare.pages_project",

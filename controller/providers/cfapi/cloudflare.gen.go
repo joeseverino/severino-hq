@@ -2203,6 +2203,48 @@ type TunnelTunnelType string
 // TunnelVersion The cloudflared version used to establish this connection.
 type TunnelVersion = string
 
+// WorkersVersion defines model for workers_Version.
+type WorkersVersion struct {
+	// Annotations Metadata about the version.
+	Annotations struct {
+		// WorkersMessage Human-readable message about the version. Truncated to 1000 bytes if longer.
+		WorkersMessage string `json:"workers/message,omitempty"`
+
+		// WorkersTag User-provided identifier for the version. Maximum 100 bytes.
+		WorkersTag string `json:"workers/tag,omitempty"`
+
+		// WorkersTriggeredBy Operation that triggered the creation of the version.
+		WorkersTriggeredBy string `json:"workers/triggered_by,omitempty"`
+	} `json:"annotations,omitempty"`
+
+	// ID Version identifier.
+	ID string `json:"id"`
+
+	// Number The integer version number, starting from one.
+	Number int `json:"number"`
+}
+
+// WorkersDeployment defines model for workers_deployment.
+type WorkersDeployment struct {
+	CreatedOn string `json:"created_on"`
+	ID        string `json:"id"`
+
+	// Versions Worker versions included in this deployment. Each object must contain a `version_id` UUID and a `percentage`; percentages across all objects must total 100. In the `cf` CLI, pass the entire array as one JSON value to `--versions`, either inline, for example `--versions '[{"version_id":"023e105f-2a42-4f8b-a1c1-73f6a2a30c0f","percentage":100}]'`, or from a JSON file with `--versions @versions.json`.
+	Versions []struct {
+		// Percentage Percentage of traffic served by this version.
+		Percentage float32 `json:"percentage"`
+
+		// VersionID Identifier of the Worker Version.
+		VersionID string `json:"version_id"`
+	} `json:"versions"`
+}
+
+// WorkersScriptResponse defines model for workers_script-response.
+type WorkersScriptResponse struct {
+	// ID The name used to identify the script.
+	ID string `json:"id,omitempty"`
+}
+
 // ZonesIdentifier Identifier
 type ZonesIdentifier = string
 
@@ -2688,6 +2730,15 @@ type ClientInterface interface {
 	// WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
 	WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// WorkerScriptListWorkers performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+	WorkerScriptListWorkers(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WorkerDeploymentsListDeployments performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+	WorkerDeploymentsListDeployments(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetWorkerVersion performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+	GetWorkerVersion(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UserAPITokensVerifyToken performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
 	UserAPITokensVerifyToken(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2893,6 +2944,45 @@ func (c *API) RegistrarDomainRegistrationList(ctx context.Context, accountID str
 // WebAnalyticsListSites performs a GET /accounts/{account_id}/rum/site_info/list (the `WebAnalyticsListSites` operationId) request.
 func (c *API) WebAnalyticsListSites(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewWebAnalyticsListSitesRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WorkerScriptListWorkers performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+func (c *API) WorkerScriptListWorkers(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWorkerScriptListWorkersRequest(c.Server, accountID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WorkerDeploymentsListDeployments performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+func (c *API) WorkerDeploymentsListDeployments(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWorkerDeploymentsListDeploymentsRequest(c.Server, accountID, scriptName)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetWorkerVersion performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+func (c *API) GetWorkerVersion(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetWorkerVersionRequest(c.Server, accountID, workerID, versionID)
 	if err != nil {
 		return nil, err
 	}
@@ -3842,6 +3932,129 @@ func NewWebAnalyticsListSitesRequest(server string, accountID string, params *We
 	return req, nil
 }
 
+// NewWorkerScriptListWorkersRequest constructs an http.Request for the WorkerScriptListWorkers method
+func NewWorkerScriptListWorkersRequest(server string, accountID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/scripts"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWorkerDeploymentsListDeploymentsRequest constructs an http.Request for the WorkerDeploymentsListDeployments method
+func NewWorkerDeploymentsListDeploymentsRequest(server string, accountID string, scriptName string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "script_name", scriptName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/scripts/" + pathParam1 + "/deployments"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetWorkerVersionRequest constructs an http.Request for the GetWorkerVersion method
+func NewGetWorkerVersionRequest(server string, accountID string, workerID string, versionID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "worker_id", workerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "version_id", versionID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/workers/workers/" + pathParam1 + "/versions/" + pathParam2
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewUserAPITokensVerifyTokenRequest constructs an http.Request for the UserAPITokensVerifyToken method
 func NewUserAPITokensVerifyTokenRequest(server string) (*http.Request, error) {
 	var err error
@@ -4533,6 +4746,21 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	WebAnalyticsListSitesWithResponse(ctx context.Context, accountID string, params *WebAnalyticsListSitesParams, reqEditors ...RequestEditorFn) (*WebAnalyticsListSitesReply, error)
 
+	// WorkerScriptListWorkersWithResponse performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WorkerScriptListWorkersWithResponse(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*WorkerScriptListWorkersReply, error)
+
+	// WorkerDeploymentsListDeploymentsWithResponse performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	WorkerDeploymentsListDeploymentsWithResponse(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*WorkerDeploymentsListDeploymentsReply, error)
+
+	// GetWorkerVersionWithResponse performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	GetWorkerVersionWithResponse(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*GetWorkerVersionReply, error)
+
 	// UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5001,6 +5229,108 @@ func (r WebAnalyticsListSitesReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r WebAnalyticsListSitesReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WorkerScriptListWorkersReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WorkerScriptListWorkersReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WorkerScriptListWorkersReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WorkerScriptListWorkersReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WorkerScriptListWorkersReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type WorkerDeploymentsListDeploymentsReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r WorkerDeploymentsListDeploymentsReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WorkerDeploymentsListDeploymentsReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WorkerDeploymentsListDeploymentsReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WorkerDeploymentsListDeploymentsReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetWorkerVersionReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r GetWorkerVersionReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetWorkerVersionReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetWorkerVersionReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetWorkerVersionReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5524,6 +5854,39 @@ func (c *ClientWithResponses) WebAnalyticsListSitesWithResponse(ctx context.Cont
 	return ParseWebAnalyticsListSitesReply(rsp)
 }
 
+// WorkerScriptListWorkersWithResponse performs a GET /accounts/{account_id}/workers/scripts (the `WorkerScriptListWorkers` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WorkerScriptListWorkersWithResponse(ctx context.Context, accountID string, reqEditors ...RequestEditorFn) (*WorkerScriptListWorkersReply, error) {
+	rsp, err := c.WorkerScriptListWorkers(ctx, accountID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWorkerScriptListWorkersReply(rsp)
+}
+
+// WorkerDeploymentsListDeploymentsWithResponse performs a GET /accounts/{account_id}/workers/scripts/{script_name}/deployments (the `WorkerDeploymentsListDeployments` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) WorkerDeploymentsListDeploymentsWithResponse(ctx context.Context, accountID string, scriptName string, reqEditors ...RequestEditorFn) (*WorkerDeploymentsListDeploymentsReply, error) {
+	rsp, err := c.WorkerDeploymentsListDeployments(ctx, accountID, scriptName, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWorkerDeploymentsListDeploymentsReply(rsp)
+}
+
+// GetWorkerVersionWithResponse performs a GET /accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id} (the `GetWorkerVersion` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) GetWorkerVersionWithResponse(ctx context.Context, accountID string, workerID string, versionID string, reqEditors ...RequestEditorFn) (*GetWorkerVersionReply, error) {
+	rsp, err := c.GetWorkerVersion(ctx, accountID, workerID, versionID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetWorkerVersionReply(rsp)
+}
+
 // UserAPITokensVerifyTokenWithResponse performs a GET /user/tokens/verify (the `UserAPITokensVerifyToken` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -5852,6 +6215,54 @@ func ParseWebAnalyticsListSitesReply(rsp *http.Response) (*WebAnalyticsListSites
 	}
 
 	response := &WebAnalyticsListSitesReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseWorkerScriptListWorkersReply parses an HTTP response from a WorkerScriptListWorkersWithResponse call
+func ParseWorkerScriptListWorkersReply(rsp *http.Response) (*WorkerScriptListWorkersReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WorkerScriptListWorkersReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseWorkerDeploymentsListDeploymentsReply parses an HTTP response from a WorkerDeploymentsListDeploymentsWithResponse call
+func ParseWorkerDeploymentsListDeploymentsReply(rsp *http.Response) (*WorkerDeploymentsListDeploymentsReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WorkerDeploymentsListDeploymentsReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetWorkerVersionReply parses an HTTP response from a GetWorkerVersionWithResponse call
+func ParseGetWorkerVersionReply(rsp *http.Response) (*GetWorkerVersionReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetWorkerVersionReply{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -1,5 +1,6 @@
 """The events page: what HQ was told happened outside it, whether each
-channel that tells it is listening, and every event it takes."""
+channel that tells it is listening, the Worker that hears providers as
+Cloudflare runs it, and every event it takes."""
 
 from typing import override
 
@@ -7,7 +8,7 @@ from django.template.loader import render_to_string
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import InboundEvent, InboundSource
-from hq.platform.application.inbound_events import channel_standing, setup_guide, taken
+from hq.platform.application.inbound_events import channel_standing, events_worker, setup_guide, taken
 from hq.platform.application.inbound_reads import INBOUND_EVENTS
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction
@@ -49,4 +50,5 @@ class InboundEventListView(ListPageMixin, TemplateView):
         channels = [(label, standing, setup_guide(standing)) for label, standing in standings]
         context["page_facts"] = render_to_string("control_plane/_inbound_summary.html", {"channels": channels})
         context["taken"] = taken_table(taken())
+        context["worker"] = events_worker()
         return context

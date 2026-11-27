@@ -252,6 +252,27 @@
       ]
     }
   ],
+  "cloudflare.worker": [
+    {
+      "account_id": "example",
+      "connection_ref": "example",
+      "cpu_time_p50_us": 1,
+      "cpu_time_p99_us": 1,
+      "deployed_at": "example",
+      "deployment_id": "example",
+      "errors": 1,
+      "name": "example",
+      "requests": 1,
+      "versions": [
+        {
+          "id": "example",
+          "number": 1,
+          "percentage": 1,
+          "tag": "example"
+        }
+      ]
+    }
+  ],
   "cloudflare.zone": [
     {
       "zone": "example",

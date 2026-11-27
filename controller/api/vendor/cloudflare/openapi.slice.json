@@ -455,6 +455,90 @@
     }
    }
   },
+  "/accounts/{account_id}/workers/scripts": {
+   "get": {
+    "operationId": "worker-script-list-workers",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Workers response."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/workers/scripts/{script_name}/deployments": {
+   "get": {
+    "operationId": "worker-deployments-list-deployments",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "script_name",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List Deployments response."
+     }
+    }
+   }
+  },
+  "/accounts/{account_id}/workers/workers/{worker_id}/versions/{version_id}": {
+   "get": {
+    "operationId": "getWorkerVersion",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "worker_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "version_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Get version success."
+     }
+    }
+   }
+  },
   "/user/tokens/verify": {
    "get": {
     "operationId": "user-api-tokens-verify-token",
@@ -3356,6 +3440,113 @@
     "description": "The cloudflared version used to establish this connection.",
     "type": "string",
     "example": "2022.7.1"
+   },
+   "workers_Version": {
+    "type": "object",
+    "properties": {
+     "annotations": {
+      "description": "Metadata about the version.",
+      "type": "object",
+      "properties": {
+       "workers/message": {
+        "description": "Human-readable message about the version. Truncated to 1000 bytes if longer.",
+        "type": "string",
+        "example": "Fixed bug.",
+        "maxLength": 1000,
+        "x-auditable": true
+       },
+       "workers/tag": {
+        "description": "User-provided identifier for the version. Maximum 100 bytes.",
+        "type": "string",
+        "example": "v1.0.1",
+        "maxLength": 100,
+        "x-auditable": true
+       },
+       "workers/triggered_by": {
+        "description": "Operation that triggered the creation of the version.",
+        "type": "string",
+        "example": "upload",
+        "x-auditable": true
+       }
+      }
+     },
+     "id": {
+      "description": "Version identifier.",
+      "type": "string",
+      "x-auditable": true
+     },
+     "number": {
+      "description": "The integer version number, starting from one.",
+      "type": "integer",
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "id",
+     "number"
+    ]
+   },
+   "workers_deployment": {
+    "type": "object",
+    "properties": {
+     "created_on": {
+      "type": "string",
+      "x-auditable": true
+     },
+     "id": {
+      "type": "string",
+      "x-auditable": true
+     },
+     "versions": {
+      "description": "Worker versions included in this deployment. Each object must contain a `version_id` UUID and a `percentage`; percentages across all objects must total 100. In the `cf` CLI, pass the entire array as one JSON value to `--versions`, either inline, for example `--versions '[{\"version_id\":\"023e105f-2a42-4f8b-a1c1-73f6a2a30c0f\",\"percentage\":100}]'`, or from a JSON file with `--versions @versions.json`.",
+      "type": "array",
+      "items": {
+       "properties": {
+        "percentage": {
+         "description": "Percentage of traffic served by this version.",
+         "type": "number",
+         "example": 100,
+         "maximum": 100,
+         "minimum": 0.01,
+         "x-auditable": true
+        },
+        "version_id": {
+         "description": "Identifier of the Worker Version.",
+         "type": "string",
+         "x-auditable": true
+        }
+       },
+       "required": [
+        "version_id",
+        "percentage"
+       ],
+       "type": "object"
+      },
+      "example": [
+       {
+        "percentage": 100,
+        "version_id": "023e105f-2a42-4f8b-a1c1-73f6a2a30c0f"
+       }
+      ],
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "id",
+     "versions",
+     "created_on"
+    ]
+   },
+   "workers_script-response": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "description": "The name used to identify the script.",
+      "type": "string",
+      "example": "my-workers-script",
+      "x-auditable": true
+     }
+    }
    },
    "zones_identifier": {
     "description": "Identifier",

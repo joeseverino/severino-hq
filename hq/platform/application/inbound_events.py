@@ -6,16 +6,27 @@ finding reads here without being able to say an event happened.
 """
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from hq.domains.control_plane.models import InboundSource
+from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
+lazy from hq.domains.control_plane import inbound_worker
+lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters import INBOUND
 lazy from hq.domains.control_plane.provider_spec import InboundSpec
 
 from . import readings
 from .derivations import passed
+from .moments import moment
+from .projection import read_once
 lazy from .cadence import WorkerStanding, WorkerState
 lazy from .connection_setup import docs_url
+lazy from .credential_sight import standing
+lazy from .facts import stored_snapshots
+
+if TYPE_CHECKING:
+    from .credential_sight import Standing
 
 # What each channel is called in a sentence about it.
 LISTENER_NAMED = "event listener"
@@ -110,3 +121,65 @@ def taken() -> tuple[Taken, ...]:
             for reads, events in alike.items()
         )
     return tuple(found)
+
+
+@dataclass(frozen=True, slots=True)
+class EventsWorker:
+    """The events Worker as Cloudflare runs it, from the ``cloudflare.worker``
+    reading: the deployment serving it and its last day of invocations, none
+    of either where the reading holds none."""
+
+    standing: Standing
+    connection_ref: str = ""
+    deployed_at: datetime | None = None
+    # (number, tag) of each version the deployment serves.
+    versions: tuple[tuple[int | None, str], ...] = ()
+    requests: int | None = None
+    errors: int | None = None
+    # CPU time per invocation, in milliseconds.
+    cpu_time_p50_ms: float | None = None
+    cpu_time_p99_ms: float | None = None
+
+    @property
+    def deployed(self) -> bool:
+        return bool(self.versions)
+
+    @property
+    def behind(self) -> bool:
+        """Whether a version it serves was deployed from other routes or
+        configuration than HQ generates: tagged otherwise, or not at all."""
+
+        tags = {tag for _number, tag in self.versions}
+        return bool(tags) and ("" in tags or tags != {inbound_worker.deploy_tag()})
+
+
+def events_worker() -> EventsWorker:
+    """The events Worker, by the name its configuration gives it."""
+
+    return read_once("inbound_events.worker", _events_worker)
+
+
+def _events_worker() -> EventsWorker:
+    row = next(iter(stored_snapshots().get(WORKER_KIND, ())), None)
+    spec = OBSERVATIONS[WORKER_KIND]
+    found = standing(WORKER_KIND, row, label=spec.label, permissions=tuple(spec.requires))
+    name = inbound_worker.SETTINGS["name"]
+    record: dict[str, Any] = next(
+        (each for each in (row.records if row else ()) if isinstance(each, dict) and each.get("name") == name), {}
+    )
+    return EventsWorker(
+        standing=found,
+        connection_ref=str(record.get("connection_ref", "")),
+        deployed_at=moment(record.get("deployed_at")),
+        versions=tuple(
+            (version.get("number"), str(version.get("tag", ""))) for version in record.get("versions") or ()
+        ),
+        requests=record.get("requests"),
+        errors=record.get("errors"),
+        cpu_time_p50_ms=_milliseconds(record.get("cpu_time_p50_us")),
+        cpu_time_p99_ms=_milliseconds(record.get("cpu_time_p99_us")),
+    )
+
+
+def _milliseconds(micros: float | None) -> float | None:
+    return None if micros is None else micros / 1000
