@@ -1,6 +1,5 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
-import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -9,12 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.host import (
-    RENDER_REASONS,
-    RENDER_STATUS_KIND,
-    RENDERER_NAME,
-    STATUS_WORD,
-)
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, RENDERER_NAME
 from hq.platform.core.testing import connection, declare
 
 from .. import render_status_findings as rules
@@ -83,45 +77,16 @@ def sweep(*records, **fields) -> None:
 
 @tag("source")
 class OneDeclarationTests(SimpleTestCase):
-    """What HQ restates of the renderer, held to where the renderer declares it."""
+    """What HQ says of the renderer, held to the units the host ships."""
 
     def source(self, *parts: str) -> str:
         return ROOT.joinpath(*parts).read_text(encoding="utf-8")
 
-    def test_the_word_pattern_is_the_renderers(self):
-        declared = re.search(r"const WordPattern = `([^`]+)`", self.source("controller", "secretstatus", "status.go"))
-
-        self.assertEqual(declared.group(1), STATUS_WORD)
-
-    def test_the_renderer_name_is_the_controllers(self):
-        declared = re.search(
-            r"rendererName = regexp\.MustCompile\(`([^`]+)`\)",
-            self.source("controller", "providers", "host_readings.go"),
-        )
-
-        self.assertEqual(declared.group(1), RENDERER_NAME)
-
-    def test_the_reasons_are_the_controllers(self):
-        source = self.source("controller", "providers", "host_readings.go")
-        said = set(re.findall(r'unreadable\("(\w+)"\)', source))
-
-        self.assertEqual(said, set(RENDER_REASONS))
-
-    def test_every_failure_class_is_explained(self):
-        source = self.source("controller", "secrets", "render.go")
-        body = source[source.index("func Class(err error) string") :]
-        classes = set(re.findall(r'return "(\w+)"', body[: body.index("\n}\n")]))
-
-        self.assertEqual(classes, set(rules.FAILURE_CLASSES))
-
-    def test_the_thresholds_are_the_timers_and_the_renderers(self):
+    def test_the_thresholds_are_the_timers(self):
         timer = self.source("deploy", "systemd", "severino-hq-secrets.timer")
-        main = self.source("controller", "cmd", "hq-secrets", "main.go")
 
         self.assertIn("OnUnitActiveSec=1h\n", timer)
         self.assertIn("RandomizedDelaySec=30s\n", timer)
-        # gofmt aligns the field to its neighbors, so any run of spaces.
-        self.assertRegex(main, r"FullEvery: +24 \* time\.Hour,")
         # Read from the timer, not restated beside it.
         self.assertEqual(rules.RENDER_EVERY, timedelta(hours=1))
         self.assertEqual(rules.RENDER_DELAY, timedelta(seconds=30))
@@ -129,12 +94,7 @@ class OneDeclarationTests(SimpleTestCase):
         self.assertEqual(rules.CONFIRMED_WITHIN, timedelta(hours=3, seconds=90))
         self.assertEqual(rules.RENDERED_WITHIN, timedelta(hours=27, seconds=90))
 
-    def test_every_renderer_the_launcher_names_has_its_unit(self):
-        layout = self.source("controller", "host", "layout.go")
-        block = layout[layout.index("var Renderers = ") :]
-        named = re.findall(r'^\t\{"([^"]+)", "[^"]+"\},$', block[: block.index("\n}\n")], re.MULTILINE)
-
-        self.assertEqual(named, list(rules.RENDERER_UNITS))
+    def test_every_renderer_has_its_unit(self):
         for name, unit in rules.RENDERER_UNITS.items():
             with self.subTest(renderer=name):
                 self.assertRegex(name, RENDERER_NAME)

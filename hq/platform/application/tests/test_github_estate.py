@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
+from hq.domains.control_plane.observations.github import PARTS, PULL_REQUEST_KIND, REPOSITORY_KIND, WORKFLOW_RUN_KIND
 from hq.platform.core.testing import operator
 
 from ..attention import raised
@@ -24,26 +24,37 @@ def raised_items():
     return tuple(raised(PROJECTS))
 
 
-def store(**record):
-    ProviderInventory.objects.update_or_create(
-        kind="github.repository",
-        defaults={
-            "records": [
-                {
-                    "connection_ref": "github",
-                    "repository": "example/alpha",
-                    "url": "https://github.com/example/alpha",
-                    "default_branch": "main",
-                    "head": {"sha": "abc"},
-                    **record,
-                }
-            ],
-            "reachable": True,
-            "connected": True,
-            "observed_at": timezone.now(),
-            "refused_parts": [{"part": "dependabot", "scope": "example/alpha"}],
-        },
-    )
+def store(pull_requests=(), runs=(), **record):
+    """One repository's reading, ``example/alpha`` unless ``record`` names
+    another, with ``pull_requests`` and ``runs`` the readings of its pass."""
+
+    named = {"connection_ref": "github", "repository": record.get("repository", "example/alpha")}
+    held = {
+        REPOSITORY_KIND: [
+            {
+                **named,
+                "url": "https://github.com/example/alpha",
+                "default_branch": "main",
+                "head": {"sha": "abc"},
+                **record,
+            }
+        ],
+        PULL_REQUEST_KIND: [named | pull for pull in pull_requests],
+        WORKFLOW_RUN_KIND: [named | run for run in runs],
+    }
+    for kind, records in held.items():
+        ProviderInventory.objects.update_or_create(
+            kind=kind,
+            defaults={
+                "records": records,
+                "reachable": True,
+                "connected": True,
+                "observed_at": timezone.now(),
+                "refused_parts": [{"part": "dependabot", "scope": named["repository"]}]
+                if kind == REPOSITORY_KIND
+                else [],
+            },
+        )
 
 
 class EstateTests(TestCase):
@@ -69,7 +80,7 @@ class FailingRunTests(TestCase):
     RUN = "https://github.com/example/alpha/actions/runs/7"
 
     def failing(self, *runs):
-        store(checks={"state": "failure", "failing": ["lint"]}, failing_runs=list(runs))
+        store(checks={"state": "failure", "failing": ["lint"]}, runs=[{"branch": "main", **run} for run in runs])
         (item,) = raised_items()
         return item
 
@@ -203,8 +214,10 @@ UNANSWERED = {
 LOW = {**UNANSWERED, "number": 1, "package": "example-low", "severity": "low"}
 
 
-def repository(**record) -> Repository:
-    return Repository("example/alpha", {"repository": "example/alpha", **record}, None)
+def repository(pull_requests=(), **record) -> Repository:
+    return Repository(
+        "example/alpha", {"repository": "example/alpha", **record}, None, pull_requests=tuple(pull_requests)
+    )
 
 
 class UpdateTests(SimpleTestCase):

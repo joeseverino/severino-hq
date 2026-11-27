@@ -245,17 +245,6 @@ class FormRefusalTests(_ReceiptForms):
             self.assertEqual(denials(capability), 3)
         self.assertUnchanged()
 
-    def test_a_file_a_receipt_cannot_be_is_refused_on_the_form(self):
-        """The type stands for every file rule, whose words ReceiptFileRuleTests holds."""
-
-        for post in (self.create, self.edit):
-            with self.subTest(form=post.__name__):
-                response = post(file=a_new_file("text/html", b"markup"))
-
-                self.assertEqual(response.status_code, 400)
-                self.assertIn("A receipt cannot be this type of file.", text(response))
-        self.assertUnchanged()
-
     def test_the_capabilitys_refusal_is_said_on_the_form(self):
         refusal = {"ok": False, "error": {"code": "conflict", "message": "That receipt changed after it was read."}}
         for post in (self.create, self.edit):

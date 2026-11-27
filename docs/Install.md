@@ -482,8 +482,8 @@ and item names for you to fill in.
    cd worker && CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' op run -- sh -c 'printf %s "$TAILSCALE_WEBHOOK_SECRET" | ./node_modules/.bin/wrangler secret put TAILSCALE_WEBHOOK_SECRET'
    ```
 
-   Then send the console's test event: the Worker answers it 202 and
-   forwards nothing, since HQ takes no `test` event.
+   Then send the console's test event: it shows on Events as `test`,
+   Ignored, since HQ takes no `test` event and reads nothing for it.
 7. Add the `cloudflare_events` connection, which the listener waits for
    before it starts: an item in the vault `host.json` names, laid out as
    [Connections](Connections.md#cloudflare-inbound-events) says, its

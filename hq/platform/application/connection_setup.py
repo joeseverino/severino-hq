@@ -1,9 +1,10 @@
 """How to connect each provider, derived from what HQ already declares.
 
 A connection is a 1Password item the controller is given (docs/Secrets.md,
-"Connections"). What to create at the provider (``ConnectionKind``), the
-permissions its readings need (``observer_permissions``), its credential's
-fields (``ConnectionShape``) and its minting script (``MINTERS``) meet once here,
+"Connections"). What to create at the provider and its minting script
+(``ConnectionKind``), the permissions it is issued with
+(``credential_permissions``) and its credential's fields (``ConnectionShape``)
+meet once here,
 for the Connections page and the reference doc: neither says what the code does not.
 """
 
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 lazy from django.conf import settings
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
+from hq.domains.control_plane.credential_reads import credential_permissions
 from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 
 lazy from .credential_sight import credential_sight
@@ -97,16 +98,14 @@ def setups(exclude: frozenset[str] = frozenset()) -> tuple[ProviderSetup, ...]:
 
 def _setup(provider: str, sight) -> ProviderSetup:
     kind = CONNECTION_KINDS[provider]
-    minter = MINTERS.get(provider)
+    minter = kind.minter
     return ProviderSetup(
         provider=provider,
         label=kind.label,
         credential=kind.credential,
         create=kind.create,
         create_url=kind.create_url,
-        permissions=tuple(sorted({*observer_permissions(provider), *kind.writes}))
-        if kind.credential == "scoped"
-        else (),
+        permissions=credential_permissions(provider) if kind.credential == "scoped" else (),
         mint=" ".join(minter.invocation) if minter else "",
         item_type=_item_type(kind.shape),
         fields=_fields(provider, kind.shape),

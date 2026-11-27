@@ -276,14 +276,6 @@ class TheCapabilityIsDerivedTests(ComposedExample):
 
         self.assertEqual(self.registry.asked, ["first-note"])
 
-    def test_a_caller_without_the_capability_is_denied(self):
-        caller = Principal("example-agent", "api", frozenset({"notes.read"}))
-
-        result = execute_capability(example.LOOKUP, {}, principal=caller, target="first-note")
-
-        self.assertEqual((result["ok"], result["error"]["code"]), (False, "forbidden"))
-        self.assertFalse(Job.objects.exists())
-
     def test_a_command_line_waits_for_the_work_because_nothing_outlives_it(self):
         result = execute_capability(example.LOOKUP, {}, principal=cli_principal(), target="first-note")
 

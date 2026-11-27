@@ -10,7 +10,7 @@ URLs and a handful of provenance fields; the statements themselves are dropped.
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from .github_public import github_repository
 lazy from .entity_links import https_url
@@ -19,6 +19,7 @@ SPDX = "https://spdx.dev/Document"
 CYCLONEDX = "https://cyclonedx.org/bom"
 SLSA_V02 = "https://slsa.dev/provenance/v0.2"
 SLSA_V1 = "https://slsa.dev/provenance/v1"
+_GO = "pkg:golang/"
 _BUILDKIT = "https://mobyproject.org/buildkit@v1#metadata"
 # git@github.com:owner/repository.git, the form a local clone reports.
 _SCP = re.compile(r"^git@github\.com:([^/]+)/([^/]+?)(?:\.git)?$")
@@ -39,6 +40,54 @@ def packages_of(predicate_type: str, predicate: Mapping[str, Any]) -> tuple[str,
     else:
         return ()
     return tuple(dict.fromkeys(purl for purl in found if purl.startswith("pkg:")))
+
+
+def main_modules(predicate_type: str, predicate: Mapping[str, Any]) -> tuple[str, ...]:
+    """The package URLs of the Go modules an SBOM's binaries were built as.
+
+    Syft records each module a binary embeds as a dependency of the binary's
+    main module (an SPDX ``DEPENDENCY_OF`` relationship, a CycloneDX
+    ``dependsOn``), so a main module is a Go package others depend on that
+    depends on none.
+    """
+
+    if predicate_type == SPDX:
+        purls = {
+            str(package.get("SPDXID", "")): str(reference.get("referenceLocator", ""))
+            for package in predicate.get("packages") or ()
+            for reference in package.get("externalRefs") or ()
+            if reference.get("referenceType") == "purl"
+        }
+        edges = (
+            (purls.get(str(each.get("relatedSpdxElement", "")), ""), purls.get(str(each.get("spdxElementId", "")), ""))
+            for each in predicate.get("relationships") or ()
+            if each.get("relationshipType") == "DEPENDENCY_OF"
+        )
+    elif predicate_type == CYCLONEDX:
+        purls = {
+            str(component.get("bom-ref", "")): str(component.get("purl", ""))
+            for component in _components(predicate.get("components") or ())
+        }
+        edges = (
+            (purls.get(str(each.get("ref", "")), ""), purls.get(str(needed), ""))
+            for each in predicate.get("dependencies") or ()
+            for needed in each.get("dependsOn") or ()
+        )
+    else:
+        return ()
+    go = [(dependent, needed) for dependent, needed in edges if dependent.startswith(_GO) and needed.startswith(_GO)]
+    needed = {each for _dependent, each in go}
+    return tuple(dict.fromkeys(dependent for dependent, _needed in go if dependent not in needed))
+
+
+def module_repository(main: Iterable[str]) -> str:
+    """``owner/repository`` when every main module is a path in one GitHub repository."""
+
+    found = set()
+    for purl in main:
+        path = unquote(str(purl).removeprefix(_GO).partition("@")[0].partition("?")[0]).split("/")
+        found.add("/".join(path[1:3]) if path[0] == "github.com" and len(path) >= 3 else "")
+    return found.pop() if len(found) == 1 else ""
 
 
 def _components(components) -> Iterable[Mapping[str, Any]]:
@@ -111,15 +160,17 @@ def github_source(source: str) -> str:
 
 
 def reduce(statements: Iterable[tuple[str, Mapping[str, Any]]]) -> dict[str, Any]:
-    """``{packages, sbom, provenance}`` from the statements attached to one digest."""
+    """``{packages, main, sbom, provenance}`` from the statements attached to one digest."""
 
     packages: tuple[str, ...] = ()
+    main: tuple[str, ...] = ()
     sbom = ""
     provenance: dict[str, Any] | None = None
     for predicate_type, predicate in statements:
         if predicate_type in (SPDX, CYCLONEDX) and not sbom:
             packages = packages_of(predicate_type, predicate)
+            main = main_modules(predicate_type, predicate)
             sbom = "SPDX" if predicate_type == SPDX else "CycloneDX"
         elif predicate_type in (SLSA_V02, SLSA_V1) and provenance is None:
             provenance = provenance_of(predicate_type, predicate)
-    return {"packages": packages, "sbom": sbom, "provenance": provenance}
+    return {"packages": packages, "main": main, "sbom": sbom, "provenance": provenance}

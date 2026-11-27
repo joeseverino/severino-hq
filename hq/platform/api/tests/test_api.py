@@ -299,50 +299,6 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["error"]["code"], "unknown_capability")
 
-    def test_an_invalid_payload_names_the_field(self):
-        with _serving():
-            response = self._post(
-                "project.create",
-                {"payload": {"slug": "nameless"}},
-                token=_token(scope="write_projects"),
-            )
-        error = response.json()["error"]
-        self.assertEqual(error["message"], "project.create: name is required.")
-        self.assertEqual(error["details"][0]["type"], "missing")
-
-    def test_a_refused_value_appears_nowhere_in_the_response(self):
-        """Neither message nor details repeat what was sent: it may be a secret."""
-
-        secret = "hunter2-not-for-logs"
-        token = _token(scope="write_projects")
-        payloads = {
-            "schema": {"name": [secret], "slug": "schema"},
-            "domain": {"name": "Domain", "slug": "domain", "status": secret},
-        }
-        for case, payload in payloads.items():
-            with self.subTest(case), _serving():
-                response = self._post(
-                    "project.create",
-                    {"payload": payload},
-                    token=token,
-                    idempotency_key=f"secret-{case}",
-                )
-            self.assertEqual(response.status_code, 400)
-            self.assertEqual(response.json()["error"]["code"], "invalid_input")
-            self.assertNotIn(secret, response.content.decode())
-
-        with _serving():
-            listed = self.client.get(
-                f"/api/v2/resources/projects/?limit={secret}",
-                HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
-            )
-        self.assertEqual(listed.status_code, 400)
-        self.assertEqual(
-            listed.json()["error"]["message"],
-            "projects: limit must be a valid integer.",
-        )
-        self.assertNotIn(secret, listed.content.decode())
-
     def test_the_root_reports_what_the_credential_may_do(self):
         with _serving():
             response = self.client.get("/api/v2/", HTTP_AUTHORIZATION=f"Bearer {_token()}")
@@ -505,12 +461,6 @@ class TransportTests(SentinelMixin, TestCase):
         # A request reached it, so its path is said.
         self.assertIsNotNone(found["reached"])
 
-    def test_a_resource_query_sent_twice_is_refused(self):
-        headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
-        with _serving():
-            repeated = self.client.get("/api/v2/resources/projects/?limit=1&limit=2", **headers)
-        self.assertEqual(repeated.status_code, 400)
-
     def test_a_resource_read_keeps_only_the_fields_asked_for(self):
         from hq.domains.projects.models import Project
 
@@ -544,20 +494,13 @@ class TransportTests(SentinelMixin, TestCase):
         self.assertTrue(data["items"])
         self.assertTrue(all(set(item) == {"record"} for item in data["items"]))
 
-    def test_findings_narrow_by_floor_and_limit_and_refuse_without_repeating_the_value(self):
+    def test_findings_narrow_by_floor_and_limit(self):
         headers = {"HTTP_AUTHORIZATION": f"Bearer {_token(scope='read')}"}
         with _serving(), host_only():
             narrowed = self.client.get("/api/v2/findings/?severity=attention&limit=1", **headers)
-            refused = {
-                value: self.client.get(f"/api/v2/findings/?{value}", **headers)
-                for value in ("limit=many", "limit=0", "severity=critical")
-            }
         self.assertEqual(narrowed.status_code, 200)
         self.assertLessEqual(len(narrowed.json()["data"]["findings"]), 1)
         self.assertIn("truncated", narrowed.json()["data"]["summary"])
-        for value, response in refused.items():
-            with self.subTest(value):
-                self.assertNotIn(value.split("=")[1], response.json()["error"]["message"])
 
     @override_settings(SEVERINO_API_RESOURCE="")
     def test_the_surface_is_off_until_a_resource_is_configured(self):

@@ -220,13 +220,26 @@ class TemplateRecordTests(SimpleTestCase):
                 '{{ label|default:"" }}{% with total=items|length %}{{ total }}{% endwith %}'
                 '{% if why %}{% firstof why as said %}{% else %}{% firstof "" as said %}{% endif %}{{ said }}'
                 "{% partialdef aside %}{{ aside }}{% endpartialdef %}{% partialdef count inline %}{{ count }}{% endpartialdef %}"
+                # A tag built to go without an argument reads it only when given.
+                "{% reading_age_of reading at as age %}{{ age }}"
             )
             .template.nodelist
         )
         reads = template_contract._Reads(engines["django"].engine)
         reads.walk(nodelist, set(), frozenset())
 
-        self.assertEqual(reads.found, {"why": False, "message": True, "items": True, "label": False, "count": True})
+        self.assertEqual(
+            reads.found,
+            {
+                "why": False,
+                "message": True,
+                "items": True,
+                "label": False,
+                "count": True,
+                "reading": False,
+                "at": False,
+            },
+        )
 
     def test_a_public_block_the_frame_stops_drawing_fails_the_record(self):
         with (

@@ -14,6 +14,7 @@ from typing import Any
 from hq.domains.control_plane.observations.public_registry import IMAGE_KIND
 
 from .standards import Check, Examples, Measurement, Reading, measure
+from .ui import counted
 lazy from .container_standard import example
 
 IMAGE_UNREAD = "Its image has not been read"
@@ -38,10 +39,20 @@ def _source_known(container: Any) -> Reading:
 
 
 def _no_urgent(container: Any) -> Reading:
+    """Unmet only when the release an upgrade would pin is clear of one: a
+    serious vulnerability no release fixes is said, and failed once one does."""
+
     standing = container.standing
     if standing.checked is None:
         return Reading.unavailable("Its packages have not been checked for vulnerabilities")
-    return Reading.judged(not standing.urgent)
+    if standing.urgent:
+        return Reading.unmet()
+    if standing.unfixed and standing.fix_unread:
+        return Reading.unavailable(f"The packages of {standing.latest} have not been checked")
+    if standing.unfixed:
+        count = counted(len(standing.unfixed), "serious vulnerability", "serious vulnerabilities")
+        return Reading.met(f"No release fixes its {count} yet", limited=True)
+    return Reading.met()
 
 
 def _no_advisory(container: Any) -> Reading:
@@ -83,18 +94,24 @@ STANDARD: tuple[Check, ...] = (
         "no-urgent",
         "No fixable serious vulnerability",
         _no_urgent,
-        "It has a critical or high vulnerability in a package that has a fixed version.",
-        "Upgrade to a release built with the fixed packages.",
+        "It has a critical or high vulnerability that its newest release fixes.",
+        "Upgrade to its newest release.",
         serious=True,
-        unmet="Has a fixable serious vulnerability",
-        breaks=({"checked": {"findings": [{"id": "GHSA-1", "severity": "high", "fixed": ["1.2.1"]}]}},),
-        # Only a serious one with a fix is urgent.
+        unmet="Has a serious vulnerability its newest release fixes",
+        breaks=(
+            {
+                "newer": ("1.3.0",),
+                "checked": {"findings": [{"id": "GHSA-1", "severity": "high", "fixed": ["1.2.1"]}]},
+                "target_checked": {"findings": []},
+            },
+        ),
+        # Only a serious one a release fixes is urgent.
         keeps=(
             {
                 "checked": {
                     "findings": [
                         {"id": "GHSA-2", "severity": "low", "fixed": ["1.2.1"]},
-                        {"id": "GHSA-3", "severity": "critical", "fixed": []},
+                        {"id": "GHSA-3", "severity": "critical", "fixed": ["1.2.1"]},
                     ]
                 }
             },

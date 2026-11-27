@@ -205,8 +205,12 @@ _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _iso_day(value: object) -> object:
-    if isinstance(value, date) or (isinstance(value, str) and _ISO_DAY.fullmatch(value)):
+    # The day itself, since what follows a validator reads a strict date only
+    # as one, never as its text.
+    if isinstance(value, date):
         return value
+    if isinstance(value, str) and _ISO_DAY.fullmatch(value):
+        return date.fromisoformat(value)
     raise ValueError
 
 

@@ -1,32 +1,28 @@
 """What each connection provider's credential can see, as the last sweep found it.
 
-Derived from the ``OBSERVATIONS`` and ``PROVIDERS`` registries (``_fed``); the
+Derived from ``providers.provider_reads``, the one index of what reads what; the
 states a kind can be in are docs/Derived-Facts.md#what-a-credential-can-see. A
 record that names its ``connection_ref`` belongs to that connection alone, so
 two connections of one provider never show each other's readings.
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 from hq.domains.control_plane.models import ProviderInventory
-from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from hq.domains.control_plane.providers import PROVIDERS
-from hq.domains.control_plane.reading_parts import RefusedPart, parts_of, refused_parts
+from hq.domains.control_plane.providers import PROVIDERS, Read, provider_reads
+from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts
 
 from . import readings
-from .labels import human_label
 from .projection import read_once
 from .tone import Tone, TonedChoices
-lazy from .facts import stored_snapshots
-lazy from .freshness import STALE, freshness
+lazy from .facts import records_through, stored_snapshots
+lazy from .freshness import STALE, Freshness, freshness
 lazy from .ui import counted
 
 
@@ -167,11 +163,14 @@ class ProviderSight:
         return ", ".join(parts)
 
     @property
-    def read_at(self) -> datetime | None:
-        """When what it reads was last read: the oldest of them, said once."""
+    def age(self) -> Freshness | None:
+        """How old what it reads is, said once: an out-of-date reading's age,
+        else the oldest's; None when nothing was read."""
 
+        read = (found for found in map(Standing.of, self.sights) if found.read and found.age.observed_at)
         return min(
-            (sight.observed_at for sight in self.sights if sight.state in (READABLE, PARTIAL) and sight.observed_at),
+            (found.age for found in read),
+            key=lambda age: (not age.stale, age.observed_at),
             default=None,
         )
 
@@ -209,19 +208,6 @@ class ProviderSight:
         """What those permissions would let HQ see."""
 
         return tuple(dict.fromkeys(label for sight in self.refused_permission for label in sight.unseen))
-
-
-def _through(row: ProviderInventory, connection_ref: str) -> list | None:
-    """The row's records read through one connection; None when not attributable.
-
-    A record naming a connection is that connection's. A kind whose records name
-    none belongs to the provider as a whole.
-    """
-
-    records = [record for record in row.records or () if isinstance(record, dict)]
-    if not connection_ref or not any("connection_ref" in record for record in records):
-        return None
-    return [record for record in records if record.get("connection_ref") == connection_ref]
 
 
 def sight(
@@ -282,27 +268,76 @@ def sight(
     )
 
 
-def standing(row: ProviderInventory, *, now: datetime | None = None) -> tuple[str, str]:
-    """``(state, label)`` for one stored reading: a ``SightState``, or
-    freshness's ``STALE`` once a readable reading is out of date."""
+@dataclass(frozen=True, slots=True)
+class Standing:
+    """A kind's last read and its age: the one state every surface names it by,
+    a ``SightState`` or freshness's ``STALE`` once what was read is out of date."""
 
-    found = sight(row.kind, "", "reading", row)
-    if found.state in (READABLE, PARTIAL):
-        aged = freshness(row.kind, row.observed_at, now)
-        if aged.stale:
-            return STALE, aged.label
-    return found.state, found.state_label
+    sight: Sight
+    age: Freshness
+
+    @classmethod
+    def of(cls, seen: Sight, now: datetime | None = None) -> Standing:
+        return cls(seen, freshness(seen.kind, seen.observed_at, now))
+
+    @property
+    def read(self) -> bool:
+        return self.sight.state in (READABLE, PARTIAL)
+
+    @property
+    def failed(self) -> bool:
+        return self.sight.state in (REFUSED, UNREADABLE)
+
+    @property
+    def stale(self) -> bool:
+        # Only a reading that was taken can be out of date; a refused one says so.
+        return self.read and self.age.stale
+
+    @property
+    def state(self) -> str:
+        return STALE if self.stale else self.sight.state
+
+    @property
+    def label(self) -> str:
+        return self.age.label if self.stale else self.sight.state_label
+
+    @property
+    def tone(self) -> Tone:
+        return Tone.ATTENTION if self.stale else self.sight.tone
 
 
-def refused_outright(rows: Iterable[Any]) -> str:
-    """The provider's words for refusing a credential outright, or "".
+def standing(
+    kind: str,
+    row: ProviderInventory | None,
+    *,
+    label: str = "",
+    permissions: tuple[str, ...] = (),
+    now: datetime | None = None,
+) -> Standing:
+    """One stored kind's standing, every surface's. A credential refused for
+    it that read something else is missing a permission, as the credential's
+    own sight says (``credential_sight``)."""
+
+    refused = row is not None and not row.reachable and row.refusal == CREDENTIAL_REFUSAL
+    found = sight(
+        kind, label, "reading", row, permissions=permissions, credential_valid=refused and _credential_valid(kind)
+    )
+    return Standing.of(found, now)
+
+
+def _credential_valid(kind: str) -> bool:
+    inventory = _inventory()
+    return any(kind in fed_kinds(provider) and not _refused(provider, inventory) for provider in CONNECTION_CREDENTIALS)
+
+
+def _refused(provider: str, inventory: dict[str, ProviderInventory]) -> str:
+    """The provider's words for refusing its credential outright, or "".
 
     Outright only when nothing it feeds was read: a credential that read one
-    kind is valid, and its refusals elsewhere are missing permissions. ``rows``
-    are one provider's inventory rows, with ``reachable``, ``refusal``, ``error``.
+    kind is valid, and its refusals elsewhere are missing permissions.
     """
 
-    rows = tuple(rows)
+    rows = tuple(inventory[read.kind] for read in _fed(provider) if read.kind in inventory and read.source != "part")
     if any(row.reachable for row in rows):
         return ""
     return next(
@@ -320,7 +355,7 @@ def _stored_inventory() -> dict[str, ProviderInventory]:
 
 
 def _attributed(
-    fed: tuple[str, str, str, tuple[str, ...]],
+    read: Read,
     row: ProviderInventory | None,
     connection_ref: str,
     *,
@@ -329,27 +364,22 @@ def _attributed(
 ) -> Sight | None:
     """One kind's sight through one connection, or None when it read nothing there.
 
-    Blank ``connection_ref`` is the provider as a whole. A ``PART_SOURCE`` item
-    is only the parts of another provider's kind this credential reads.
+    Blank ``connection_ref`` is the provider as a whole. A ``part`` read is
+    only the parts of another provider's kind this credential reads.
     """
 
-    kind, label, source, permissions = fed
+    part = read.source == "part"
     if row is not None:
-        parts = _parts_for(row, provider, connection_ref, own=source != PART_SOURCE)
-    standing = {"permissions": permissions, "credential_valid": credential_valid}
+        parts = _parts_for(row, provider, connection_ref, own=not part)
+    standing = {"permissions": read.permissions, "credential_valid": credential_valid}
     if row is None or not row.connected or not row.reachable:
-        return None if source == PART_SOURCE else sight(kind, label, source, row, **standing)
-    through = None if source == PART_SOURCE else _through(row, connection_ref)
-    if through is None:
-        return sight(kind, label, source, row, parts=parts, **standing)
-    if not through:
+        return None if part else sight(read.kind, read.label, read.source, row, **standing)
+    if part:
+        return sight(read.kind, read.label, read.source, row, parts=parts, **standing)
+    through = records_through(row.records, connection_ref)
+    if row.records and not through:
         return None
-    return sight(kind, label, source, row, records=len(through), parts=parts, **standing)
-
-
-# A fed item that is parts of another provider's kind: a zone's TLS posture,
-# read through the account credential while the zone list is read through DNS.
-PART_SOURCE = "part"
+    return sight(read.kind, read.label, read.source, row, records=len(through), parts=parts, **standing)
 
 
 def _parts_for(row: ProviderInventory, provider: str, connection_ref: str, *, own: bool) -> tuple[RefusedPart, ...]:
@@ -377,17 +407,12 @@ def credential_sight(
     """
 
     inventory = _inventory() if inventory is None else inventory
-    fed, manages = _fed()
     found = []
-    for provider, kinds in sorted(fed.items()):
-        refused = refused_outright(
-            inventory[kind]
-            for kind, _label, source, _permissions in kinds
-            if kind in inventory and source != PART_SOURCE
-        )
+    for provider in sorted(CONNECTION_CREDENTIALS):
+        refused = _refused(provider, inventory)
         sights = (
-            _attributed(item, inventory.get(item[0]), connection_ref, credential_valid=not refused, provider=provider)
-            for item in kinds
+            _attributed(read, inventory.get(read.kind), connection_ref, credential_valid=not refused, provider=provider)
+            for read in _fed(provider)
         )
         found.append(
             ProviderSight(
@@ -399,7 +424,7 @@ def credential_sight(
                         key=lambda seen: (seen.source, seen.label),
                     )
                 ),
-                tuple(sorted(set(manages.get(provider, ())))),
+                tuple(sorted({spec.label for spec in PROVIDERS.values() if provider in spec.connection_providers})),
                 refused,
             )
         )
@@ -409,60 +434,30 @@ def credential_sight(
 def fed_kinds(provider: str) -> tuple[str, ...]:
     """Every stored kind ``provider``'s credential reads, whole or in part."""
 
-    fed, _manages = _fed()
-    return tuple(dict.fromkeys(kind for kind, *_rest in fed.get(provider, ())))
+    return tuple(dict.fromkeys(read.kind for read in _fed(provider)))
 
 
-def _fed() -> tuple[dict[str, list[tuple[str, str, str, tuple[str, ...]]]], dict[str, list[str]]]:
-    """(kind, label, source, permissions) each provider's credential feeds, and
-    the labels of the resource kinds it acts on."""
+def _fed(provider: str) -> tuple[Read, ...]:
+    """What a credential-holding provider's credential reads from the inventory."""
 
-    fed: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {provider: [] for provider in CONNECTION_CREDENTIALS}
-    manages: dict[str, list[str]] = {}
-    for kind, spec in OBSERVATIONS.items():
-        if spec.provider in fed:
-            fed[spec.provider].append((kind, spec.label, "reading", tuple(spec.requires)))
-    for kind, spec in PROVIDERS.items():
-        label = spec.label or human_label(kind)
-        for provider in spec.connection_providers:
-            manages.setdefault(provider, []).append(label)
-            if not spec.unobserved_reason and provider in fed:
-                fed[provider].append((kind, label, "resource", ()))
-        _fed_parts(fed, kind, spec.connection_providers)
-    return fed, manages
-
-
-def _fed_parts(fed, kind: str, own: tuple[str, ...]) -> None:
-    """The parts of ``kind`` another provider's credential reads, fed to it."""
-
-    by_provider: dict[str, list] = {}
-    for part in parts_of(kind).values():
-        if part.provider and part.provider not in own and part.provider in fed:
-            by_provider.setdefault(part.provider, []).append(part)
-    for provider, parts in by_provider.items():
-        fed[provider].append(
-            (
-                kind,
-                ", ".join(part.label for part in parts),
-                PART_SOURCE,
-                tuple(dict.fromkeys(name for part in parts for name in part.requires)),
-            )
-        )
+    if provider not in CONNECTION_CREDENTIALS:
+        return ()
+    return tuple(read for read in provider_reads().get(provider, ()) if read.kept is None)
 
 
 def read_through(provider: str, label: str) -> ProviderSight | None:
     """What came through a connection HQ reaches itself, with no credential:
-    each reading whose declaration names its kind, as stored. None when none
-    does."""
+    each reading HQ takes through it, as stored. None when none does."""
 
     def load() -> ProviderSight | None:
         inventory = _inventory()
         sights = [
-            sight(kind, spec.label, "reading", inventory.get(kind))
-            for kind, spec in OBSERVATIONS.items()
-            if spec.read_by == "hq" and spec.provider == provider
+            _kept(read.kept, read.kept.through[provider])
+            if read.kept is not None
+            else sight(read.kind, read.label, "reading", inventory.get(read.kind))
+            for read in provider_reads().get(provider, ())
+            if read.by == "hq"
         ]
-        sights.extend(_kept(kept, kept.through[provider]) for kept in readings.KEPT if provider in kept.through)
         return ProviderSight(provider, label, tuple(sorted(sights, key=lambda seen: seen.label))) if sights else None
 
     return read_once(f"credential_sight.through:{provider}", load)

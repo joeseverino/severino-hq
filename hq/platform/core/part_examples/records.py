@@ -14,6 +14,8 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.cadence import CONTROLLER_REFRESH
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
+lazy from hq.platform.application.connection_context import Read
+lazy from hq.platform.application.credential_sight import Sight
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.decisions import decision
 lazy from hq.platform.application.display_words import Code
@@ -21,6 +23,7 @@ lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
+lazy from hq.platform.application.freshness import CURRENT, NEVER, STALE, Freshness, ReadCadence
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.relationships import Relationships
@@ -141,41 +144,46 @@ def _toolbar():
 
 # Each provider's last sweep, as ``inventory.inventory_state`` hands it over:
 # one current, one out of date, one unreachable.
-_INVENTORY = (
-    {
-        "kind": "example.records",
-        "label": "Example records",
-        "count": 12,
-        "reachable": True,
-        "error": "",
-        "observed_at": DRAWN_AT - timedelta(minutes=5),
-        "state": "readable",
-        "state_label": "Readable",
-        "refused_parts": (),
-    },
-    {
-        "kind": "example.hosts",
-        "label": "Example hosts",
-        "count": 4,
-        "reachable": True,
-        "error": "",
-        "observed_at": DRAWN_AT - timedelta(days=2),
-        "state": "stale",
-        "state_label": "Out of date",
-        "refused_parts": ("Example addresses not read",),
-    },
-    {
-        "kind": "example.zones",
-        "label": "An example provider with a long name",
-        "count": 0,
-        "reachable": False,
-        "error": "The example provider refused the credential.",
-        "observed_at": None,
-        "state": "refused",
-        "state_label": "Refused",
-        "refused_parts": (),
-    },
-)
+def _inventory() -> tuple[dict, ...]:
+    hourly = ReadCadence(timedelta(hours=1), timedelta(hours=1))
+    return (
+        {
+            "kind": "example.records",
+            "label": "Example records",
+            "count": 12,
+            "read": True,
+            "error": "",
+            "age": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=5), hourly),
+            "state": "readable",
+            "state_label": "Readable",
+            "tone": "",
+            "refused_parts": (),
+        },
+        {
+            "kind": "example.hosts",
+            "label": "Example hosts",
+            "count": 4,
+            "read": True,
+            "error": "",
+            "age": Freshness(STALE, DRAWN_AT - timedelta(days=2), hourly),
+            "state": "stale",
+            "state_label": "Out of date",
+            "tone": "attention",
+            "refused_parts": ("Example addresses not read",),
+        },
+        {
+            "kind": "example.zones",
+            "label": "An example provider with a long name",
+            "count": 0,
+            "read": False,
+            "error": "The example provider refused the credential.",
+            "age": Freshness(NEVER, None, hourly),
+            "state": "refused",
+            "state_label": "Refused",
+            "tone": "serious",
+            "refused_parts": (),
+        },
+    )
 
 
 # The open problems about the thing a page shows: an urgent one in its
@@ -614,20 +622,20 @@ TABLE_TOOLBAR_STATES = {
 # How old each provider's last reading is: folded as a grid, one of them
 # out of date and one unreachable; one provider's as a sentence; and its
 # age alone, in a heading's aside.
-SWEEP_FRESHNESS = Example(context=lambda: {"inventory": _INVENTORY})
+SWEEP_FRESHNESS = Example(context=lambda: {"inventory": _inventory()})
 
 
 SWEEP_FRESHNESS_STATES = {
     "one": Example(
         '{% section "Example records 2" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
         "{% endsection %}",
-        lambda: {"inventory": _INVENTORY},
+        lambda: {"inventory": _inventory()},
     ),
     "inline": Example(
         '{% section "Example records 3" %}<p>An example line.</p>{% aside %}12 example records'
         '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}'
         "{% endsection %}",
-        lambda: {"inventory": _INVENTORY},
+        lambda: {"inventory": _inventory()},
     ),
 }
 
@@ -720,6 +728,56 @@ METER_STATES = {
                 {"tone": Tone.SERIOUS, "group": "every"},
                 {"tone": Tone.GOOD, "group": "public"},
                 {"tone": Tone.NEUTRAL, "group": "public"},
+            )
+        },
+    ),
+}
+
+
+def _read(label, state="readable", records=0, **given):
+    """One thing an example connection reads, as its last sweep found it."""
+
+    sight = Sight(
+        f"example.{label.lower().replace(' ', '_')}", label, "reading", state, records, DRAWN_AT - timedelta(hours=1)
+    )
+    return Read(label, sight=sight, **given)
+
+
+def _reads(*reads):
+    """An example connection's Reads, each drawn as its part, opened where it says more."""
+
+    pieces = tuple(
+        Cell(piece=Piece(included_parts.CONNECTION_READ, {"read": read}, read.label, more=read.opens)) for read in reads
+    )
+    return table(
+        "Example connections",
+        (TableColumn("Connection", kind="identifier"), TableColumn("Reads", drop=3)),
+        ("example-backups", Cell(parts=pieces, fit=True)),
+    )
+
+
+# A reading and the records its last sweep found, as a connection's row opens to it.
+CONNECTION_READ = Example(context=lambda: {"read": _read("Example host", records=3)})
+
+CONNECTION_READ_STATES = {
+    # A connection's Reads in its row, opened: a count, a refusal, a reading
+    # no subject joins with its newest record and when it happened, and one
+    # whose one record names itself and says what it holds.
+    "newest": Example(
+        "{% data_table table %}",
+        lambda: {
+            "table": _reads(
+                _read("Example host", records=3),
+                _read("Example zone", state="refused"),
+                _read(
+                    "Example backup",
+                    records=1,
+                    newest=EntityLink(
+                        "example-backup-01.tar.gz.age", kind="example.backup", detail="46 MB · 90 copies kept"
+                    ),
+                    newest_at=DRAWN_AT - timedelta(hours=7),
+                ),
+                _read("Example settings", records=1, newest=EntityLink("example-tailnet", kind="example.settings")),
             )
         },
     ),

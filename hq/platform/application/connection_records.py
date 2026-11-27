@@ -9,15 +9,16 @@ from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 from hq.domains.control_plane.reading_parts import RefusedPart
 
 from . import finding_steps, findings
-from .answer_fields import AsRead, ObservedAt
+from .answer_fields import AsRead, DateTime, ObservedAt
 from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
-from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS, ConnectionFact, ConnectionLink
+from .connection_contracts import GRANT_MODELS, ConnectionFact, ConnectionLink
 from .connection_lifecycle import Lifecycle
 from .connection_reach import NETWORK_LABELS
 from .credential_sight import SightState
 from .describe import Describe, listed
 from .json_schemas import Written
 from .policy_links import PolicyName
+from .reading_records import Aged
 from .record_parts import WrittenLink
 from .tone import Tone
 from .ui import ended
@@ -225,15 +226,23 @@ class AbilityPart(TypedDict):
     action: WrittenAction | None
 
 
-class SeenPart(SightPart):
-    freshness: Annotated[str, Describe("How current its last read is, in one word.")]
-    freshness_label: Annotated[str, Describe("How current its last read is, in the words its row shows.")]
+class SeenPart(SightPart, Aged):
+    """What the last sweep found of one thing a connection reads, and how current it is."""
 
 
 class ReadPart(TypedDict):
     label: Annotated[str, Describe("What it reads, in words.")]
     sight: Annotated[SeenPart | None, Describe("What was last read of it; null when nothing reads it yet.")]
     ability: Annotated[AbilityPart | None, Describe("The permissions behind it; null when none are named.")]
+    newest: Annotated[
+        WrittenLink | None,
+        Describe("Its newest record, for a reading whose records join no subject; null otherwise."),
+    ]
+    newest_at: Annotated[
+        str | None,
+        DateTime(),
+        Describe("When what that record tells of happened, an ISO 8601 date-time; null without one."),
+    ]
 
 
 class ReachMachinePart(TypedDict):
@@ -296,10 +305,7 @@ class ConnectionStandingRecord(ConnectionStandingRow):
     ]
     credential_model: Annotated[
         str | None,
-        Describe(
-            f"What sort of credential it is, {listed(CREDENTIAL_MODELS)}, the last for one the service refused; "
-            "null when that is not known."
-        ),
+        Describe(f"What sort of credential it is, {listed(GRANT_MODELS)}; null when that is not known."),
     ]
     scopes_known: Annotated[
         bool,

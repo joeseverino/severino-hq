@@ -111,8 +111,6 @@ class UnreportedRowsTests(TestCase):
         context = connections_context(principal=cli_principal())
 
         (row,) = (row for row in context.rows if row.instance.connection_ref == "example-dns")
-        self.assertEqual(row.lifecycle, "unreported")
-        self.assertEqual(row.state_label, "No longer reported")
         self.assertTrue(row.state_line.startswith("Last reported "))
         self.assertIn((1, "no longer reported"), context.attention_states)
 

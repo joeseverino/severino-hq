@@ -690,8 +690,12 @@ and when an extension's instance leaves its provider.
 A permission is something proven. An ability declares how its authority is
 proven, and an instance reports the credential observed. HQ derives
 per-ability evidence and a per-connection lifecycle from the two. It fails
-closed on a missing or rejected grant, and names an undeclared one rather than
-counting it as authorized.
+closed on a missing grant, and names an undeclared one rather than counting it
+as authorized. Every page, count, finding and answer says a connection's state
+through one function: `connections.connection_standing` for a connection a
+controller reports (its probe, its age, a credential its service refused, and
+whether it is still reported), `connection_catalog.instance_standing` for an
+extension's instance, both composed by `connection_lifecycle.standing`.
 
 The controller's connection providers carry their credential model beside the
 providers, so reach a sweep reports is never mistaken for permission. The
@@ -935,7 +939,9 @@ follow, each held by `controller/providers/github_spend_test.go`:
   a repository whose answer moved from the fingerprint its held record was
   read under, or one HQ's clock makes due. The clock is
   `observations.github.FULL_READ_EVERY`, at a point in the hour of its own for
-  each repository (`hq/platform/application/github_repositories.py`). Any
+  each repository (`hq/platform/application/github_repositories.py`); an
+  event the query cannot see (an alert, a finished workflow run) since its
+  read (`UNPROBED_EVENTS`) makes it due at once. Any
   other repository is sent carried, and HQ keeps its record
   (`ObservationSpec.from_last`). A conditional request would not do this job:
   GitHub's ETag follows the token's text, and every sweep mints a new token.
@@ -1134,7 +1140,7 @@ fuse by hand. Bridge messages decode into types generated from
 | Half | Written by | Holds |
 |---|---|---|
 | What the bridge alone defines | hand, in `hq/domains/control_plane/bridge_base.json` | each action's path, parameters and payload; the messages that are not registry facts (claims, reports, sweep verdicts, problems) |
-| Everything the registry owns | `bridge_registry`, from the registry's declarations | resource kinds, swept kinds, connection providers, failure classes, reading parts, the record of every reading (from the Pydantic model HQ validates it with), and the values both sides check |
+| Everything the registry owns | `bridge_registry`, from the registry's declarations | resource kinds, swept kinds, connection providers, failure classes, reading parts, the job states HQ answers a unit with, the host units and secret renderers HQ names, the record of every reading (from the Pydantic model HQ validates it with), and the values both sides check |
 
 A module that owns such a value (a Caddyfile token pattern, the
 `github.delivery` defaults, a certificate name) declares it once in `SHARED`.
@@ -1763,20 +1769,25 @@ to HQ only over the bridge socket, trusted as the controller trusts it. `python
 -m hq_runner` claims runs one pass at a time until none is left, then exits.
 Its environment names everything it reads, each as an `HQ_AUTOMATION_*`
 variable (`hq_runner/__main__.py`), since on the host "runner" is the Actions
-runner's word. Those are the bridge socket, the journal, the connections
-document, the ssh directory, and the scratch space each pass works in. They
+runner's word. Those are the privilege profile whose logins it holds, the
+bridge socket, the journal, the connections document, the ssh directory, and
+the scratch space each pass works in. They
 also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
-HQ knows the worker is there by its claims. Each claim of nothing but its
-work records its arrival (`cadence.note_automation`), so a worker that finds
-nothing to take still counts as seen, and never as the controller. One never
-seen, or not seen within two of its timer's floors while it holds no run's
-lease, is absent (`cadence.automation_standing`). No scan is then asked
-for, every playbook's run is refused with the reason, a run or scan already
-waiting reads "Not started", and the finding `automation-worker-absent` says
-how to set one up.
+HQ knows each profile's worker is there by its claims. Each claim of nothing
+but its work records that profile's arrival (`cadence.note_automation`), so a
+worker that finds nothing to take still counts as seen, and never as the
+controller. One never seen, or not seen within two of its timer's floors
+while it holds no run's lease, is absent (`cadence.automation_standing`).
+While the read profile's is absent no scan is asked for; while any profile's
+is, each run of that profile is refused with the reason, one already waiting
+reads "Not started", and the finding `automation-worker-absent` says how to
+set it up, once for the read profile's, whose absence is every other's. The
+Playbooks page and the HQ page's Jobs section show each profile's worker,
+whether it reports, its last claim and the machines its logins reach
+(`automation_workers.profile_workers`).
 
 What runs is the procedure its claim names, at the claim's reviewed revision
 (`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
@@ -1827,11 +1838,23 @@ file it imports or includes by name, and every file Ansible reads as YAML
 includes or depends on. `become: false` and `ansible_become: false` alone
 escalate to nothing.
 
-Its inventory entry is that
-connection's address, port and user, its identity file alone (no agent, no
-password), its pinned `known_hosts` with host key checking on, since
-ansible-runner turns it off unless told otherwise, and its `shell_type` when
-it carries one. The hosts and extra-vars come from the claim's `input`, and
+Its login is that connection's address, port and user, its identity file
+alone (no agent, no password), and its pinned `known_hosts` with host key
+checking on, since ansible-runner turns it off unless told otherwise; its
+inventory entry says only `ssh` and the connection's `shell_type` when it
+carries one. The login is pinned as extra vars (`ansible.PINNED`): every
+variable the ssh connection reads for where it connects, as whom, with which
+key or password, and with which program and arguments, each set from the
+host's entry in `hq_logins` by a template of the worker's own, or to null. An
+extra var outranks every variable a playbook sets, and a variable outranks
+the `remote_user` keyword, so nothing a playbook declares changes the login a
+host is reached through, and a task delegated to another machine still goes
+to its own host as its own login. The smoke points the login elsewhere in
+every way a play can (its, a role's, a block's and a task's vars, `set_fact`,
+`include_vars`, `remote_user`) and holds each variable to the run's login, and
+it holds `PINNED` to the ssh connection's options in the pinned ansible-core.
+A playbook may still set `ansible_connection`; a task run on the worker
+itself is the case below of a playbook's local tasks. The hosts and extra-vars come from the claim's `input`, and
 every ansible-runner argument is fixed in `hq_runner/ansible.py`. A parameter
 is data, never a template: Ansible reads an extra var's text as one and runs
 its lookups on the worker, so the worker hands the extra vars over as a file
@@ -2051,10 +2074,30 @@ On a host the worker runs as the glance does, a oneshot unit a path starts.
 HQ's doorbell, `severino-hq-automation.path`, starts
 `severino-hq-automation.service`, and a 15-minute timer is its floor. Root's
 `hq-host automation` (`controller/host/automation.go`) launches it as a
-controller pass is launched, in a short-lived container of its own image
+controller pass is launched, in short-lived containers of its own image
 (`AutomationImage`, pinned in the tree). Where the procedures come from is the
 host's `automation` entry, never a claim ([Tokens on the
 host](Deployment.md#tokens-on-the-host)).
+
+It runs one container per privilege profile, as AWX runs each job with its
+own credential injected into an environment of its own. The profiles are the
+lent runner connections' (`lendByProfile`), always with the read profile's,
+and each container is told its own as `HQ_AUTOMATION_PROFILE`. They run one
+after another, in one bound, each until its profile's queue is empty. Each
+claims only the runs of its profile, which its claim names: HQ offers it no
+run whose playbook names another privilege
+(`automation_runs.other_profiles`), and the worker refuses one anyway, since
+it reaches a machine only as its own profile. Only the read profile's
+container claims scans, which take no login. Each keeps a journal of its own.
+
+Its security property: a worker holds the identities of its own profile's
+logins alone. Every lent identity is moved into the ssh directory of its
+connection's profile before any container starts, so the key of a login that
+escalates, the change profile's included, is in the one container that runs
+that profile's reviewed playbooks, and a read, a scan or another privilege's
+playbook runs where it is not. Each container reads every runner connection,
+which names an address, a user and an identity's item and no secret, so the
+read profile's scan reports every login.
 
 Its image is verified at deploy, as the controller's is: the controller runs
 the composition `hq-host deploy` verified and pulled. The release's own
@@ -2100,10 +2143,10 @@ What it is given, and what that means:
   bridge's peer check requires, with no capability, no way to gain one, a
   read-only root, a `noexec` scratch tmpfs, and caps on its memory and
   processes.
-- **Custody.** It holds the runner-role connections and their identities alone,
-  the pinned host keys and the grant's token. They are copied under the
-  renderer's lock into a directory of its own on the renderer's tmpfs and lent
-  read-only. The grant may only read: `host.json` is refused when the
+- **Custody.** Each container holds the runner-role connections, the
+  identities of its own profile's alone, the pinned host keys and the grant's
+  token. They are copied under the renderer's lock into a directory of the
+  run's own on the renderer's tmpfs and lent read-only. The grant may only read: `host.json` is refused when the
   automation entry names one with any permission above `read`. Its journal
   directory is the one host path it writes, and runs nothing: Docker's bind
   mount takes no `noexec`, so the directory is a `noexec` mount of its own
@@ -2124,17 +2167,20 @@ What it is given, and what that means:
   everything else: the LAN, the tailnet, the host's other services, other
   containers, IPv6 and a forged source. A runner connection whose host is not
   an IPv4 address cannot be named by the table, so it is not lent.
-- **A compromised worker** reaches the runner login on each machine lent to it,
-  with the rights that machine gives the login. It gets an hour's read of the
-  playbooks' repository. Over its socket it can claim, renew and report only
-  runs and scans: it misstates the outcome of the runs it claims and what
-  their playbooks stated of the machines they ran on, and no more. It cannot
+- **A compromised worker** reaches the runner login of its own profile on
+  each machine lent to it, with the rights that machine gives the login, and
+  no other profile's. It gets an hour's read of the playbooks' repository.
+  Every profile's container shares one socket, so the profile a claim names is
+  routing, never a bound: over it a compromised container can claim, renew and
+  report any profile's runs and the scans, misstating the outcome of the runs
+  it claims and what their playbooks stated of the machines they ran on, and
+  no more, since it holds no other profile's key to run one with. It cannot
   send a reading, settle a merge or report any other record's work, all of
   which only the controller's socket takes.
 - **A reviewed playbook's local tasks** run as the worker's account, and can
-  read the token file and the identity files, as any Ansible controller's
-  can.
+  read the token file and its own profile's identity files, as any Ansible
+  controller's can.
 - **Bounds.** A run ends at its manifest's `timeout_seconds` and its lease;
-  root removes the container at `AutomationBound`, and the unit's
-  start timeout outlasts that. A run in flight then is reported unknown and
+  root removes the container running at `AutomationBound`, which bounds
+  every profile's together, and the unit's start timeout outlasts that. A run in flight then is reported unknown and
   never run again; one queued behind it waits for the next start.

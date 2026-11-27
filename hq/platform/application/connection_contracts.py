@@ -37,15 +37,14 @@ if TYPE_CHECKING:
 GrantModel = Literal["scoped", "coarse", "none"]
 GRANT_MODELS: tuple[str, ...] = get_args(GrantModel)
 
-# How an instance's credential was observed, from the same vocabulary, plus
-# ``rejected`` for one the provider refused.
-CREDENTIAL_MODELS: tuple[str, ...] = (*GRANT_MODELS, "rejected")
 # A credential HQ holds but cannot classify: a controller's report of a
 # provider HQ no longer models. Said rather than left blank, so no reader has
 # to guess what an empty value meant.
 UNKNOWN_CREDENTIAL = "unknown"
-# Every value an instance may say.
-INSTANCE_CREDENTIAL_MODELS = (*CREDENTIAL_MODELS, UNKNOWN_CREDENTIAL)
+# Every value an instance may say: how its credential was observed, from the
+# grant vocabulary, or unknown. Whether its service refused it is the
+# connection's state (``connections.connection_standing``).
+INSTANCE_CREDENTIAL_MODELS = (*GRANT_MODELS, UNKNOWN_CREDENTIAL)
 
 
 @dataclass(frozen=True, slots=True)

@@ -188,9 +188,9 @@ class ScanDueTests(ScanTestCase):
     def test_while_no_worker_would_take_it_none_is_asked(self):
         from hq.platform.core.models import UpstreamReading
 
-        from ..cadence import AUTOMATION_HEARTBEAT
+        from ..cadence import automation_heartbeat
 
-        UpstreamReading.objects.filter(key=AUTOMATION_HEARTBEAT).delete()
+        UpstreamReading.objects.filter(key=automation_heartbeat("read")).delete()
 
         self.read("1" * 40)
 

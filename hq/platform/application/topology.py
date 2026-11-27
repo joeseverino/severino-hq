@@ -9,12 +9,13 @@ mutation that could drift from the thing it claims to represent.
 
 import re
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, create_model
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
@@ -33,11 +34,12 @@ from .action_links import (
 )
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .conditions import DRIFTED, holding
-from .connection_catalog import ConnectionGroup, connection_catalog
+from .connection_catalog import CONTROLLER_CONNECTIONS, ConnectionGroup, connection_catalog
+from .connection_lifecycle import STATE_FACT
 from .connections import ConnectionLink, ConnectionSpec
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
-from .entity_links import entity_link, kind_label, node_name, record_name
+from .entity_links import entity_link, kind_label, node_name, provider_label, record_name
 from .infrastructure import ResourceState, declared_resources, resource_health
 from .integration_validation import required_capability_names
 from .json_schemas import as_written
@@ -65,10 +67,12 @@ from .topology_model import (
     TopologyEdge,
     TopologyNode,
     TopologyTrace,
+    ability_id,
     derived_id,
     edge_between,
     gate_covers,
     newest_stamp,
+    read_kind,
 )
 lazy from . import derived_reads
 lazy from .adoption import manages_through
@@ -273,14 +277,15 @@ def _connection_nodes(
     nodes: dict[str, TopologyNode],
     edges: dict[str, TopologyEdge],
     principal: Principal,
+    read: Mapping[str, datetime],
 ) -> None:
     for group in groups:
         spec_actions = _connection_actions(group.spec)
         connection_url = spec_actions[0].url if spec_actions else ""
-        _declared_ability_nodes(group, nodes, principal)
+        _declared_ability_nodes(group, nodes, principal, read)
         for connection in group.connections:
             instance = connection.instance
-            node = _connection_node(group, instance, spec_actions, connection_url)
+            node = _connection_node(group, connection, spec_actions, connection_url)
             nodes[node.id] = node
             if instance.controller_id:
                 _controller_edge(group, instance, node, connection_url, nodes, edges, principal)
@@ -289,29 +294,32 @@ def _connection_nodes(
             _ability_edges(group, connection, node.id, edges)
 
 
-def _declared_ability_nodes(group, nodes, principal) -> None:
+def _declared_ability_nodes(group, nodes, principal, read: Mapping[str, datetime]) -> None:
     # A declared ability exists even when no controller currently reports a
     # matching connection. Keeping it in the graph makes the difference
     # between unsupported and temporarily unobserved explicit, and keeps
-    # resources of that kind discoverable instead of orphaning them.
+    # resources of that kind discoverable instead of orphaning them. One that
+    # reads a kind was observed when that kind was last read.
     for ability in group.spec.abilities:
-        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
+        node_id = ability_id(group.spec.name, ability.name)
         nodes.setdefault(
-            ability_id,
+            node_id,
             TopologyNode(
-                id=ability_id,
+                id=node_id,
                 kind="ability",
                 label=ability.label,
                 subtitle=group.spec.label,
                 detail=ability.summary,
-                url=_focus_url(ability_id),
-                actions=_ability_actions(ability, ability_id, principal),
+                url=_focus_url(node_id),
+                observed_at=iso(read.get(read_kind(node_id))) or "",
+                actions=_ability_actions(ability, node_id, principal),
                 read_capabilities=required_capability_names(group.spec),
             ),
         )
 
 
-def _connection_node(group, instance, spec_actions, connection_url) -> TopologyNode:
+def _connection_node(group, connection, spec_actions, connection_url) -> TopologyNode:
+    instance = connection.instance
     link = entity_link("connection", instance.label)
     return TopologyNode(
         id=Kind.CONNECTION.of(f"{group.spec.name}:{instance.id}"),
@@ -319,12 +327,13 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
         label=instance.label,
         # Called by the service it reaches, as every other mention of it is.
         name=link.label if link.label != instance.label else "",
-        subtitle=CONNECTION_LABELS.get(instance.kind, group.spec.label),
+        subtitle=provider_label(instance.kind) if group.spec.name == CONTROLLER_CONNECTIONS else group.spec.label,
         provider=instance.kind,
         connection_ref=instance.connection_ref,
         controller_id=instance.controller_id,
-        status=instance.status,
-        status_label=instance.status_label,
+        status=connection.lifecycle.tone,
+        status_label=connection.lifecycle.label,
+        facts=((STATE_FACT, connection.lifecycle),),
         detail=instance.detail,
         # The connection's row on the connections page, unless its
         # spec routes it to a page of its own.
@@ -359,12 +368,12 @@ def _target_edges(instance, connection, nodes, edges) -> None:
             target, kind=Kind.TARGET, read_capabilities=connection.read_capabilities, through=instance.label
         )
         _named_by(nodes, node)
-        relation = edge_between(connection_id, node.id, "reaches", status=instance.status)
+        relation = edge_between(connection_id, node.id, "reaches", status=connection.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
         resource_id = Kind.RESOURCE.of(target.resource_key)
         if target.resource_key and resource_id in nodes:
-            relation = edge_between(connection_id, resource_id, "used_by", status=instance.status)
+            relation = edge_between(connection_id, resource_id, "used_by", status=connection.status)
             edges[relation.id] = relation
 
 
@@ -378,15 +387,16 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
             node = _link_node(dependency, kind=Kind.DEPENDENCY, read_capabilities=connection.read_capabilities)
             _named_by(nodes, node)
             target_id = node.id
-        relation = edge_between(connection_id, target_id, "used_by", status=instance.status)
+        relation = edge_between(connection_id, target_id, "used_by", status=connection.status)
         edges[relation.id] = relation
 
 
 def _ability_edges(group, connection, connection_id, edges) -> None:
     for state in connection.abilities:
-        ability_id = Kind.ABILITY.of(f"{group.spec.name}:{state.ability.name}")
         available = Tone.GOOD if state.available is True else Tone.SERIOUS if state.available is False else Tone.NEUTRAL
-        relation = edge_between(connection_id, ability_id, "enables", status=available)
+        relation = edge_between(
+            connection_id, ability_id(group.spec.name, state.ability.name), "enables", status=available
+        )
         edges[relation.id] = relation
 
 
@@ -483,7 +493,7 @@ def relation_graph(*, principal: Principal) -> RelationGraph:
         for resource in resources:
             node = _resource_node(resource)
             nodes[node.id] = node
-        _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal)
+        _connection_nodes(connection_catalog(principal=principal), nodes, edges, principal, kinds_read())
         subjects = add_estate(nodes, edges, resources)
         return RelationGraph(Topology(tuple(nodes.values()), tuple(edges.values())), subjects)
 
@@ -511,7 +521,8 @@ def _derive(principal: Principal) -> Topology:
             nodes[resource_id] = replace(nodes[resource_id], facts=extra)
 
     groups = connection_catalog(principal=principal)
-    _connection_nodes(groups, nodes, edges, principal)
+    read = kinds_read()
+    _connection_nodes(groups, nodes, edges, principal, read)
     add_estate(nodes, edges, resources)
     add_connection_facts(nodes)
     _governs_edges(groups, resources, edges)
@@ -524,7 +535,7 @@ def _derive(principal: Principal) -> Topology:
         )
     )
     ordered_edges = tuple(sorted(edges.values(), key=lambda edge: (edge.kind, edge.source, edge.target)))
-    return Topology(ordered_nodes, ordered_edges, kinds_read=tuple(kinds_read().items()))
+    return Topology(ordered_nodes, ordered_edges, kinds_read=tuple(read.items()))
 
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:
@@ -571,10 +582,10 @@ def _governs_edges(groups, resources, edges: dict[str, TopologyEdge]) -> None:
         resources_by_kind.setdefault(resource.kind, []).append(Kind.RESOURCE.of(resource.key))
     for group in groups:
         for ability in group.spec.abilities:
-            ability_id = Kind.ABILITY.of(f"{group.spec.name}:{ability.name}")
+            governor = ability_id(group.spec.name, ability.name)
             for kind in ability.governs_kinds:
                 for resource_id in resources_by_kind.get(kind, ()):
-                    relation = edge_between(ability_id, resource_id, "governs")
+                    relation = edge_between(governor, resource_id, "governs")
                     edges[relation.id] = relation
 
 

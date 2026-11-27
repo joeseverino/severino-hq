@@ -37,9 +37,10 @@ def event(outcome: str = "changed", *, host: str = APP, message: str = "Restarte
 
 class LeasedRunTestCase(TestCase):
     retry = "never"
+    privilege: str | None = None
 
     def setUp(self):
-        self.supply = Supply(self, manifest(retry=self.retry))
+        self.supply = Supply(self, manifest(retry=self.retry, privilege=self.privilege))
         answer = approved_run(self, run_payload(), principal=AGENT, key="example-run")
         self.assertTrue(answer["queued"], answer)
         self.operation_id = answer["operation"]["id"]
@@ -234,6 +235,27 @@ class ClaimTests(LeasedRunTestCase):
 
         with self.assertRaisesMessage(ValueError, "not claimed"):
             self.report(events=[event()])
+
+
+class ProfileTests(LeasedRunTestCase):
+    privilege = "example.service_control"
+
+    def claim_as(self, **profile: str):
+        return bridge_client.call(
+            "claim",
+            app=bridge_client.worker(),
+            controller_id=WORKER,
+            capability=["automation.operation:run"],
+            **profile,
+        )["operation"]
+
+    def test_a_worker_is_offered_only_the_runs_of_the_profile_whose_logins_it_holds(self):
+        # One that names no profile holds the read login's.
+        self.assertIsNone(self.claim_as())
+        self.assertIsNone(self.claim_as(profile="example.other"))
+        self.assertEqual(self.operation().state, OperationRequest.State.QUEUED)
+
+        self.assertEqual(self.claim_as(profile=self.privilege)["id"], self.operation_id)
 
 
 class HeldApprovalTests(TestCase):

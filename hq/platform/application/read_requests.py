@@ -13,6 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.domains.control_plane.observations.contract import read_together
 lazy from hq.platform.core.attribution import continuing
 
 from .derivations import reached
@@ -76,10 +77,11 @@ def connection_providers(connection_ref: str) -> tuple[str, ...]:
 
 
 def forced_kinds(connection_ref: str, kind: str) -> tuple[str, ...] | None:
-    """The kinds a read of one connection or one kind forces; None is every kind."""
+    """The kinds a read of one connection or one kind forces, with every kind
+    read in the same pass as one (``read_together``); None is every kind."""
 
     if kind:
-        return (kind,)
+        return tuple(sorted(read_together((kind,))))
     if connection_ref:
         return tuple(
             dict.fromkeys(found for provider in connection_providers(connection_ref) for found in fed_kinds(provider))

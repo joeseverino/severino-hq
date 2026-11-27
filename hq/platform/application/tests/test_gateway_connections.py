@@ -84,7 +84,7 @@ class GatewayConnectionTests(TestCase):
         items = list_resource("connections", principal=OPERATOR, fields=[WHOLE_RECORD])["items"]
 
         found = {item["kind"]: item["lifecycle"] for item in items}
-        self.assertEqual((found["nws"], found["rdap"], found["public_dns"]), ("ready", "ready", "unreachable"))
+        self.assertEqual((found["nws"], found["rdap"], found["public_dns"]), ("reachable", "reachable", "unreachable"))
         nws = next(item for item in items if item["family"] == "hq.nws")
         self.assertEqual(nws["targets"][0]["label"], "Dashboard weather")
         # No command performs a weather read, so the abilities name none. They

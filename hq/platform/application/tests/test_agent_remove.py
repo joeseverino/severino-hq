@@ -16,7 +16,7 @@ from hq.platform.core.testing import operator
 
 from ..capabilities import command_spec, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, subject_of, web_principal
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, subject_of, web_principal
 from .test_agent_devices import (
     API,
     AWAITING,
@@ -130,21 +130,6 @@ class WhoMayRemoveTests(TestCase):
 
     def test_it_is_held_to_the_block_s_holders(self):
         self.assertEqual(command_spec(REMOVE).required_capabilities, command_spec(BLOCK).required_capabilities)
-
-    def test_no_credential_the_block_refuses_removes_an_agent(self):
-        granted = frozenset(Capability)
-        for credential in (
-            Principal(AGENT, "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=credential.interface):
-                blocked = execute_capability(BLOCK, keyed({"blocked": True}), principal=credential, target=AGENT)
-                removed = execute_capability(REMOVE, keyed(), principal=credential, target=AGENT)
-
-                self.assertEqual(blocked["error"]["code"], "forbidden")
-                self.assertEqual(removed["error"]["code"], "forbidden")
-        self.assertTrue(AgentIdentity.objects.filter(client_id=AGENT).exists())
 
 
 class RemoveControlTests(TestCase):

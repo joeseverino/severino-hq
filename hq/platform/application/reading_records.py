@@ -21,7 +21,14 @@ class ReadingRow(TypedDict):
     error: Annotated[str, Describe("Why the last read failed, as the service said; empty when it did not.")]
 
 
-class ReadingItem(ReadingRow):
+class Aged(TypedDict):
+    """How current a kind's last read is, as ``credential_sight.Standing`` says it."""
+
+    freshness: Annotated[str, Describe("How current its last read is, in one word.")]
+    freshness_label: Annotated[str, Describe("How current its last read is, in the words its row shows.")]
+
+
+class ReadingItem(ReadingRow, Aged):
     provider_label: Annotated[str, Describe("The service's name, in words.")]
     read_by: Annotated[
         str,

@@ -147,8 +147,7 @@ def resource_options(
     query = dict(query or {})
     # A choice list is the whole catalog: a default-sized page would leave
     # every resource past it unselectable.
-    if "limit" in resource.listing.query.model_fields:
-        query.setdefault("limit", MAX_PAGE_SIZE)
+    query.setdefault("limit", MAX_PAGE_SIZE)
 
     try:
         # Whole items: an option is named by whichever of its fields names it.

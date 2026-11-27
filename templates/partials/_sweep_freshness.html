@@ -22,16 +22,15 @@ what it counts; with no reading it gives nothing, separator included.
 `only_kind` narrows it to one provider, and stays a sentence: one reading needs
 no band, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
-records. Each state is worded by `credential_sight.standing`: refused, unreadable,
-or out of date.
-{% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
+records. Each state, its tone and its age are `credential_sight.standing`'s.
+{% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.read %}{% include "partials/_reading_age.html" with reading=snapshot.age only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     {% muted element="p" %}
       {% for snapshot in inventory %}
         {% if snapshot.kind == only_kind %}
-          {% if snapshot.reachable %}
+          {% if snapshot.read %}
             {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}{% dot %}
-            {% include "partials/_reading_age.html" with at=snapshot.observed_at only %}
+            {% include "partials/_reading_age.html" with reading=snapshot.age only %}
           {% else %}
             {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
           {% endif %}
@@ -47,12 +46,10 @@ or out of date.
     {% section "Last read" count=inventory|length fold=True css="sweep" %}
       {% facts layout="band" %}
         {% for snapshot in inventory %}
-          {% if not snapshot.reachable %}
-            {% fact snapshot.label tone="serious" %}{% empty_value %}{% detail %}{% status snapshot.state_label tone="serious" pill=False title=snapshot.error %}{% endfact %}
-          {% elif snapshot.state == "stale" or snapshot.state == "partial" %}
-            {% fact snapshot.label tone="attention" title=snapshot.refused_parts|join:"; " %}{{ snapshot.count }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% dot %}{% status snapshot.state_label|lower tone="attention" pill=False %}{% endfact %}
+          {% if not snapshot.read %}
+            {% fact snapshot.label tone=snapshot.tone %}{% empty_value %}{% detail %}{% status snapshot.state_label tone=snapshot.tone pill=False title=snapshot.error %}{% endfact %}
           {% else %}
-            {% fact snapshot.label title=snapshot.refused_parts|join:"; " %}{{ snapshot.count }}{% detail %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% endfact %}
+            {% fact snapshot.label tone=snapshot.tone title=snapshot.refused_parts|join:"; " %}{{ snapshot.count }}{% detail %}{% include "partials/_reading_age.html" with reading=snapshot.age only %}{% if snapshot.state == "partial" %}{% dot %}{% status snapshot.state_label|lower tone=snapshot.tone pill=False %}{% endif %}{% endfact %}
           {% endif %}
         {% endfor %}
       {% endfacts %}

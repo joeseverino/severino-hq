@@ -127,19 +127,19 @@ class ExtensionCadenceTests(TestCase):
             self.assertEqual(stale_after(EXAMPLE_KIND), timedelta(days=4))
 
     def test_its_connections_go_stale_on_its_own_cadence(self):
-        from ..connection_catalog import connection_lifecycle
+        from ..connection_catalog import instance_standing
         from ..connections import ConnectionInstance
 
         now = timezone.now()
 
         def lifecycle(age):
             instance = ConnectionInstance(
-                "one", "One", EXAMPLE_KIND, "good", "ok", credential_model="none", observed_at=now - age
+                "one", "One", EXAMPLE_KIND, "good", credential_model="none", observed_at=now - age
             )
-            return connection_lifecycle(instance, "proven", now=now)
+            return instance_standing(instance, "proven")
 
         with installed(declaring("example.alpha", {EXAMPLE_KIND: every(30, 30)})):
-            self.assertEqual(lifecycle(timedelta(days=20)), "ready")
+            self.assertEqual(lifecycle(timedelta(days=20)), "reachable")
             self.assertEqual(lifecycle(timedelta(days=31)), "stale")
 
     def test_a_kind_the_host_declares_or_two_extensions_claim_is_refused(self):

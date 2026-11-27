@@ -8,8 +8,9 @@ import (
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
-	"regexp"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/api"
 )
 
 // Name is the status document's name in the renderer's runtime directory.
@@ -91,11 +92,9 @@ type Dependency struct {
 	Status  string `json:"status"`
 }
 
-// WordPattern is every string a document carries besides its times: a short
-// word, never a sentence.
-const WordPattern = `^[A-Za-z0-9_.+-]{1,64}$`
-
-var wordPattern = regexp.MustCompile(WordPattern)
+// wordPattern is every string a document carries besides its times: a short
+// word, never a sentence, as the bridge contract's StatusWord states it.
+var wordPattern = api.MustPattern("StatusWord")
 
 // Word is value when it is a short word, and Unreadable when it is not.
 func Word(value *string) string {

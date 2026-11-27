@@ -13,12 +13,14 @@ from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.text import get_text_list
 from pydantic import Field, StrictBool, StrictStr, StringConstraints
 
 from hq.domains.control_plane.names import HOSTNAME_LENGTH, HOSTNAME_PATTERN, normalized_hostname
 from hq.platform.core.digests import digest
+lazy from hq.domains.control_plane.connection_shapes import READ_PROFILE
 lazy from hq.domains.control_plane.models import (
     ApprovalRequest,
     ManagedResource,
@@ -282,16 +284,38 @@ def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple
     return resolved
 
 
-# The privilege profile of the worker's login that escalates to nothing, as
-# the controller's connections.ReadProfile and hq_runner's READ_PROFILE name it.
-READ_PROFILE = "read"
-
-
 def login_profile(manifest: OperationManifest) -> str:
     """The profile of the login a run of ``manifest`` goes through: its
     privilege, or the read login's for one that names none."""
 
     return manifest.privilege or READ_PROFILE
+
+
+def other_profiles(profile: str) -> Q:
+    """Every playbook run of another profile than ``profile``: what a worker
+    lent ``profile``'s logins alone is never offered, since it holds no
+    identity to run it with."""
+
+    return Q(resource__kind=OPERATION_KIND) & ~Q(resource__spec__privilege="" if profile == READ_PROFILE else profile)
+
+
+def claimant(action: str, privilege: str | None) -> str:
+    """The profile of the worker that claims a scan or a run of a playbook
+    whose privilege is ``privilege``: the read profile's takes the scans."""
+
+    return READ_PROFILE if action == OperationRequest.Action.SCAN or not privilege else privilege
+
+
+def run_profile(operation: OperationRequest) -> str:
+    """The profile of the worker that claims ``operation``, a scan or a run."""
+
+    return claimant(operation.action, (operation.resource.spec or {}).get("privilege"))
+
+
+def _playbook_profile(resource: ManagedResource) -> str:
+    """The profile of the logins a playbook's runs go through."""
+
+    return claimant(OperationRequest.Action.RUN, (resource.spec or {}).get("privilege"))
 
 
 def runner_reaches() -> frozenset[tuple[str, str]]:
@@ -603,12 +627,12 @@ def _enqueue_run(
     released: bool = False,
 ) -> tuple[OperationRequest, bool]:
     def prepare() -> Prepared:
+        resource = record()
         # A run no worker will take would wait for nothing: the finding that
         # says so (``automation_findings``) carries how to set one up.
-        untaken = automation_standing().cannot("run", now=timezone.now())
+        untaken = automation_standing(_playbook_profile(resource)).cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = record()
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule

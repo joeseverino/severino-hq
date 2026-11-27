@@ -29,10 +29,10 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `absent`, `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
-| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
+| `partials/_form_actions.html` | `verb` | `bar`, `cancel_url`, `choice_field`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
-| `partials/_identity.html` | `name`, `tip`, `tone`, `url` | `about`, `badge`, `handle`, `picture` | An account's picture, name and handle. |
+| `partials/_identity.html` | `name`, `url` | `about`, `badge`, `handle`, `picture`, `tip`, `tone` | An account's picture, name and handle. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_meter.html` | `label`, `max`, `value` | `marks` | A proportion as a bar, or as a segment for each of what it counts. |
@@ -408,7 +408,9 @@ permission note in its tone where it differs from its neighbors or cannot be use
 
 A part of a connection's Reads, given the `read` and its `connection`: its name, quiet where its
 credential cannot use it, then on the row's open line its state word in its tone where it was not
-read cleanly, its record count where it was, and why it was not read.
+read cleanly, its record count where it was, and why it was not read. A reading whose records join
+no subject (`ObservationSpec.joins`) is shown on no other page, so its `newest` record follows the
+count: its title, what it says and when (`newest_at`).
 
 ### control_plane/_credential_fix.html (host only)
 

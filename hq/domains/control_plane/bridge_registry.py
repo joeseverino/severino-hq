@@ -15,9 +15,11 @@ from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
+lazy from hq.domains.jobs.models import ANSWERED_STATES
+lazy from hq.platform.application.cadence import swept
 lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
-from . import provider_spec
+from . import connection_shapes, provider_spec
 from .connection_kinds import SHAPES
 from .observations import OBSERVATIONS
 from .provider_adapters import ADMITTED, CONNECTIONS, INBOUND
@@ -84,12 +86,9 @@ def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank:
 
 
 def swept_kinds() -> list[str]:
-    """Every kind a controller reads in a sweep: a reading it takes, and a
-    resource kind that does not say why nothing reads it."""
+    """Every kind a controller reads in a sweep (``cadence.swept``)."""
 
-    read = {kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "controller"}
-    resources = {kind for kind, spec in PROVIDERS.items() if not spec.unobserved_reason}
-    return sorted(read | resources)
+    return sorted(kind for kind in {*OBSERVATIONS, *PROVIDERS} if swept(kind))
 
 
 def _enumerations() -> dict[str, dict[str, Any]]:
@@ -134,6 +133,11 @@ def _enumerations() -> dict[str, dict[str, Any]]:
             "Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.",
             InboundSource.values,
             "InboundSource",
+        ),
+        "JobState": _enumeration(
+            "How a job stands when HQ answers for it.",
+            (state.value for state in ANSWERED_STATES),
+            "JobState",
         ),
         "ReadingPartName": _enumeration(
             "A part a reading is read in, as HQ's registry declares them; empty for "
@@ -252,7 +256,7 @@ def _heartbeat() -> dict[str, dict[str, Any]]:
 def _declared() -> Iterable[dict[str, dict[str, Any]]]:
     yield _enumerations()
     yield _heartbeat()
-    for module in (provider_spec, *ADMITTED):
+    for module in (provider_spec, connection_shapes, *ADMITTED):
         for value in getattr(module, "SHARED", ()):
             yield _shared(value)
     yield from _records()
@@ -373,7 +377,7 @@ def connections_document() -> dict[str, Any]:
         "openapi": "3.2.0",
         "info": {
             "title": CONNECTIONS_TITLE,
-            "version": "2.0.0",
+            "version": f"{connection_shapes.CONNECTIONS_VERSION}.0.0",
             "description": (
                 "The document that carries provider connections from the secret "
                 "renderer to the controller. It is a file, not an API: there are no "

@@ -10,6 +10,7 @@ records, agent transcripts) while the caller already has its own input.
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from difflib import get_close_matches
 from typing import Any, get_args
 
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
@@ -66,7 +67,7 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Input
         for error in sent
     ]
     problems = [
-        (_path(error["loc"]), _pydantic_reason(error, original.get("ctx") or {}))
+        (_path(error["loc"]), _pydantic_reason(error, original.get("ctx") or {}, original.get("input")))
         for error, original in zip(details, sent, strict=True)
     ]
     return InputRefusal(_message(subject, problems), details)
@@ -145,7 +146,7 @@ def _said(error: Mapping[str, Any]) -> str:
     return _ERROR_CLAUSE.split(msg, maxsplit=1)[0]
 
 
-def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> str:
+def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any], sent: object = None) -> str:
     kind = error["type"]
     if kind == "missing":
         return "is required"
@@ -162,7 +163,10 @@ def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> st
             for choice in _EXPECTED_SPLIT.split(msg.removeprefix("Input should be "))
             if choice.strip()
         ]
-        return f"must be one of {', '.join(choices)}"
+        # The choice nearest what was sent names the retry, a declared value
+        # and never the one sent.
+        nearest = get_close_matches(sent, choices, n=1) if isinstance(sent, str) else []
+        return f"must be one of {', '.join(choices)}" + (f" (nearest: {nearest[0]})" if nearest else "")
     # A bound, a number the schema declares, reads as the model's refusal of
     # it does, whichever of the two answers first.
     if kind == "less_than_equal" and "le" in context:
@@ -171,6 +175,9 @@ def _pydantic_reason(error: Mapping[str, Any], context: Mapping[str, Any]) -> st
         return f"must be at least {context['ge']}"
     if kind == "json_invalid":
         return "is not valid JSON"
+    if kind == "string_type" and isinstance(sent, list):
+        # Several values of a text field are one text, comma-separated.
+        return "must be one text; send several values comma-separated"
     return _IS.sub("is ", _SHOULD.sub("must ", msg)) if msg else "is invalid"
 
 

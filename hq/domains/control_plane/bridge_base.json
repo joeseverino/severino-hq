@@ -43,6 +43,17 @@
             }
           },
           {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "The privilege profile of the logins the claiming automation worker holds, the read profile when it names none: it is offered that profile's playbook runs alone.",
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+            }
+          },
+          {
             "name": "attempt",
             "in": "query",
             "required": false,
@@ -1945,6 +1956,13 @@
             },
             "description": "Providers a connection credential is modeled for."
           },
+          "logging_in": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds read by logging in to a machine: the only readers the controller lets open a shell."
+          },
           "extensions": {
             "type": "array",
             "description": "Each admitted extension the running image composes, which delivery follows.",
@@ -1971,6 +1989,7 @@
           "connection_providers",
           "observations",
           "connection_credentials",
+          "logging_in",
           "extensions",
           "github_profiles",
           "github_repositories",
@@ -2548,22 +2567,6 @@
             "type": "string"
           }
         }
-      },
-      "JobState": {
-        "type": "string",
-        "description": "How a job stands when HQ answers for it.",
-        "enum": [
-          "succeeded",
-          "failed",
-          "lost",
-          "running"
-        ],
-        "x-enum-varnames": [
-          "JobStateSucceeded",
-          "JobStateFailed",
-          "JobStateLost",
-          "JobStateRunning"
-        ]
       },
       "SourceCatalog": {
         "type": "object",

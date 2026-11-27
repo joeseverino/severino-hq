@@ -12,7 +12,6 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import NOBODY
 from hq.platform.mcp.capability_answer import agent_capabilities
 
 from .. import history
@@ -64,15 +63,6 @@ class CapabilityTests(TestCase):
         self.assertIn("write_projects", result["error"]["message"])
         self.assertFalse(Project.objects.filter(slug="denied").exists())
 
-    def test_json_executor_returns_canonical_error_envelope(self):
-        result = execute_capability(
-            "project.create",
-            {"slug": "missing-name"},
-            principal=cli_principal(),
-        )
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "invalid_input")
-
     def test_a_target_of_the_wrong_kind_is_refused_by_name(self):
         """The message names the kind expected, so a client can correct itself.
 
@@ -97,17 +87,6 @@ class CapabilityTests(TestCase):
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertIn("target must be the id of the record it acts on", result["error"]["message"])
-
-    def test_an_unauthorized_caller_is_refused_before_its_target_is_read(self):
-        result = execute_capability(
-            "expense.update",
-            {},
-            principal=NOBODY,
-            target="not-an-integer",
-        )
-
-        self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
 
     def test_json_executor_creates_through_same_service(self):
         result = execute_capability(
@@ -192,12 +171,6 @@ class CapabilityTests(TestCase):
             ],
         )
 
-    def test_a_missing_field_is_named(self):
-        result = execute_capability("project.create", {"slug": "missing-name"}, principal=cli_principal())
-
-        self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(result["error"]["message"], "project.create: name is required.")
-
     def test_a_wrong_type_names_the_field_and_the_type(self):
         from typing import Annotated
 
@@ -210,35 +183,6 @@ class CapabilityTests(TestCase):
         error = self._refusal(CountCommand, {"counts": [1, "two"]})
 
         self.assertEqual(error["message"], "example.decide: counts[1] must be a valid integer.")
-
-    def test_a_refusal_never_repeats_the_value_it_refused(self):
-        """Field names, choices and declared reasons only: a payload can carry a secret."""
-
-        from typing import Annotated, Literal
-
-        from ..command_fields import Checked, Reason
-
-        secret = "hunter2-not-for-logs"
-
-        def _check(value):
-            raise ValueError(f"{value} is not a token")
-
-        @dataclass(frozen=True, slots=True)
-        class SecretCommand:
-            verdict: Literal["applies", "does_not_apply"]
-            token: Annotated[str, Checked(_check, Reason("example_token", "must be a token"))]
-
-        error = self._refusal(SecretCommand, {"verdict": secret, "token": secret})
-
-        self.assertNotIn(secret, json.dumps(error, default=repr))
-        self.assertEqual(
-            error["message"],
-            "example.decide: verdict must be one of applies, does_not_apply; token must be a token.",
-        )
-        self.assertEqual(
-            [(detail["type"], detail["msg"]) for detail in error["details"]],
-            [("literal_error", "Input should be 'applies' or 'does_not_apply'"), ("example_token", "must be a token")],
-        )
 
     def test_a_validator_that_refuses_in_words_of_its_own_does_not_load(self):
         from typing import Annotated

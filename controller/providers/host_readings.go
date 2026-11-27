@@ -10,12 +10,12 @@ import (
 	"maps"
 	"net"
 	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 	"github.com/joeseverino/severino-hq/controller/secretstatus"
@@ -72,23 +72,16 @@ func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostEdgeReboot, r.hostEdgeReboot)
 }
 
-// What a status document's record says of the read itself.
-const (
-	renderStatusRead       = "read"
-	renderStatusUnreadable = "unreadable"
-)
-
-var rendererName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
+var rendererName = api.MustPattern("HostRenderStatusRecord", "properties", "renderer")
 
 // HostRenderStatusRecord is one renderer's status document, or why it could
-// not be read. Reason is one fixed word: missing, unreadable, oversized or
-// invalid. A document that cannot be read is a record, never a refused read,
-// so HQ can say which renderer went quiet.
+// not be read. A document that cannot be read is a record, never a refused
+// read, so HQ can say which renderer went quiet.
 type HostRenderStatusRecord struct {
-	Renderer string               `json:"renderer"`
-	State    string               `json:"state"`
-	Reason   string               `json:"reason,omitempty"`
-	Status   *secretstatus.Status `json:"status,omitempty"`
+	Renderer string                               `json:"renderer"`
+	State    runtime.HostRenderStatusRecordState  `json:"state"`
+	Reason   runtime.HostRenderStatusRecordReason `json:"reason,omitempty"`
+	Status   *secretstatus.Status                 `json:"status,omitempty"`
 }
 
 // hostRenderStatus is each configured renderer's account of itself. Root
@@ -112,29 +105,29 @@ func (r *Registry) hostRenderStatus(context.Context) ([]any, error) {
 }
 
 func renderStatusRecord(name, path string) HostRenderStatusRecord {
-	unreadable := func(reason string) HostRenderStatusRecord {
-		return HostRenderStatusRecord{Renderer: name, State: renderStatusUnreadable, Reason: reason}
+	unreadable := func(reason runtime.HostRenderStatusRecordReason) HostRenderStatusRecord {
+		return HostRenderStatusRecord{Renderer: name, State: runtime.HostRenderStatusRecordStateUnreadable, Reason: reason}
 	}
 	file, err := os.Open(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return unreadable("missing")
+		return unreadable(runtime.HostRenderStatusRecordReasonMissing)
 	}
 	if err != nil {
-		return unreadable("unreadable")
+		return unreadable(runtime.HostRenderStatusRecordReasonUnreadable)
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, secretstatus.MaxBytes+1))
 	if err != nil {
-		return unreadable("unreadable")
+		return unreadable(runtime.HostRenderStatusRecordReasonUnreadable)
 	}
 	if len(data) > secretstatus.MaxBytes {
-		return unreadable("oversized")
+		return unreadable(runtime.HostRenderStatusRecordReasonOversized)
 	}
 	status, err := secretstatus.Decode(data)
 	if err != nil {
-		return unreadable("invalid")
+		return unreadable(runtime.HostRenderStatusRecordReasonInvalid)
 	}
-	return HostRenderStatusRecord{Renderer: name, State: renderStatusRead, Status: &status}
+	return HostRenderStatusRecord{Renderer: name, State: runtime.HostRenderStatusRecordStateRead, Status: &status}
 }
 
 // HostFirewallRecord is the distilled firewall answer the launcher mounts.

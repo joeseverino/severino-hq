@@ -15,6 +15,7 @@ from typing import Any, final
 
 from django.core.exceptions import ValidationError
 
+from hq.domains.control_plane.connection_shapes import READ_PROFILE
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.analytics import analytics_plan, record_analytics
@@ -97,8 +98,11 @@ def _claim(lane: Lane) -> Run:
         refused = next((kind for kind, _action in capabilities if not lane.holds(kind)), None)
         if refused is not None:
             raise ValueError(f"This socket claims no {refused} work.")
-        if lane.automation:
-            note_automation()
+        # The worker's socket is every profile's worker's, so the claim says
+        # whose; the logins it holds are what bound it.
+        profile = (parameters["profile"] or READ_PROFILE) if lane.automation else None
+        if profile is not None:
+            note_automation(profile)
         else:
             note_controller()
         return claim_next_operation(
@@ -106,6 +110,7 @@ def _claim(lane: Lane) -> Run:
             lease_seconds=parameters["lease-seconds"],
             capabilities=capabilities,
             attempt=parameters["attempt"] or "",
+            profile=profile,
         )
 
     return run

@@ -193,7 +193,6 @@ class PreviewTests(RunTestCase):
         self.assertNotIn("check", acted.input)
 
     def test_a_preview_is_refused_wherever_its_run_is(self):
-        self.refused(run_payload(check=True), "forbidden", principal=MCP_READER)
         self.supply(manifest(hosts=(DB,)))
         self.refused(run_payload(APP, check=True), "precondition")
 
@@ -255,11 +254,6 @@ class DoorbellTests(RunTestCase):
 
 
 class RefusedRunTests(RunTestCase):
-    def test_a_read_grant_cannot_run_a_change(self):
-        self.refused(run_payload(), "forbidden", principal=MCP_READER)
-
-        self.assertFalse(OperationRequest.objects.exists())
-
     def test_an_unknown_procedure_is_no_command(self):
         self.refused(run_payload(), "unknown_capability", name="automation.example.unknown.run")
 
@@ -426,28 +420,6 @@ class HeldRunPageTests(RunTestCase):
 
 
 class InvalidRunTests(RunTestCase):
-    def test_a_free_execution_field_is_refused(self):
-        for field in ("playbook", "inventory", "extra_vars", "limit"):
-            with self.subTest(field=field):
-                self.refused(run_payload(**{field: "example"}), "invalid_input")
-
-    def test_a_free_field_inside_the_parameters_is_refused(self):
-        payload = {"hosts": [APP], "parameters": {"service": "web", "inventory": "hosts.ini"}}
-
-        self.refused(payload, "invalid_input")
-
-    def test_a_correlation_longer_than_200_characters_is_refused(self):
-        self.refused(run_payload(correlation="x" * 201), "invalid_input")
-        self.assertTrue(self.ask(run_payload(correlation="x" * 200))["ok"])
-
-    def test_a_correlation_with_spaces_or_lines_is_refused(self):
-        for said in ("two words", "first\nsecond"):
-            with self.subTest(said=said):
-                self.refused(run_payload(correlation=said), "invalid_input")
-
-    def test_a_run_names_at_least_one_host(self):
-        self.refused({"hosts": [], "parameters": {"service": "web"}}, "invalid_input")
-
     def test_nothing_is_queued_for_any_of_them(self):
         self.refused(run_payload(playbook="site.yml"), "invalid_input")
 

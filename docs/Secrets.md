@@ -217,7 +217,9 @@ read forces one.
 
 Failures are filed under one word each, in the journal line
 (`event=secrets.render.failed class=...`), in the status document, and as the
-exit status:
+exit status. HQ declares the words and what each means (`FAILURE_CLASSES` in
+`hq/domains/control_plane/observations/host.py`), and the renderer's constants
+are generated from the bridge contract that carries them:
 
 | Class | Exit | Meaning |
 |---|---|---|
@@ -372,7 +374,9 @@ machine the controller runs on; the Checks page
 The allowance is three runs at their latest, derived from the timer's interval
 and randomized delay (`deploy/systemd/severino-hq-secrets.timer`). So a
 renderer two runs behind is raised as the third falls due. A full read is
-forced every 24 hours (`FullEvery`), so it is overdue that allowance later.
+forced every 24 hours (`FULL_READ_EVERY` in
+`hq/domains/control_plane/observations/host.py`, which the renderer reads from
+the bridge contract), so it is overdue that allowance later.
 
 Both are measured against when the reading was taken, never against the
 present moment, so a quiet stretch between reads raises nothing. A reading
@@ -503,9 +507,12 @@ create nothing: a secret goes into 1Password and nowhere else.
   `oauth_keys` scope: an API access token, or an OAuth client given as
   `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`.
 
-Both lists are `observer_permissions` in
+Both lists are `credential_permissions` in
 `hq.domains.control_plane.credential_reads`: the `requires` of every reading
-for that provider plus the reads that are not readings yet. `--permissions` and
+for that provider, the reads that are not readings yet, and the `writes` its
+connection kind declares (D1 Edit for the contact inbox), the same list the
+setup card and a credential fix name. Each task is its connection kind's
+`minter`. `--permissions` and
 `--scopes` take a file of names instead.
 
 `mise run wire-pocket-id` writes Pocket ID's permission list for HQ's API the

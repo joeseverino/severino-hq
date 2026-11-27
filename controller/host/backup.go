@@ -19,24 +19,28 @@ import (
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
-// BackupDir is where archives are written unless the unit says otherwise.
+// BackupDir is where a host keeps its archives.
 const BackupDir = "/srv/severino-hq/backups"
 
-// archivePrefix and archiveSuffix name every archive, so retention removes
-// nothing else.
+// ArchivePrefix and archiveSuffix name every archive.
 const (
-	archivePrefix = "severino-hq-"
+	ArchivePrefix = "severino-hq-"
 	archiveSuffix = ".tar.gz.age"
 )
 
-// BackupSettings are what the backup unit decides: where archives go, who can
-// read them, and how long they stay on this disk.
+// IsArchive is whether name is an archive's: retention removes, and the
+// off-site copy carries, nothing else.
+func IsArchive(name string) bool {
+	return strings.HasPrefix(name, ArchivePrefix) && strings.HasSuffix(name, archiveSuffix)
+}
+
+// BackupSettings are what the backup unit decides: who can read an archive,
+// and how long it stays on this disk.
 type BackupSettings struct {
-	Dir string
 	// Recipients are post-quantum age recipients, at least one: an archive is
 	// only ever written encrypted, and to keys a quantum computer cannot break.
 	Recipients []*age.HybridRecipient
-	// Retention is how long an archive stays in Dir.
+	// Retention is how long an archive stays in the backup directory.
 	Retention time.Duration
 }
 
@@ -44,10 +48,7 @@ type BackupSettings struct {
 // not post-quantum, or a retention that is not a whole number of days is
 // refused before anything is written.
 func ReadBackupSettings(getenv func(string) string) (BackupSettings, error) {
-	settings := BackupSettings{Dir: getenv("SEVERINO_BACKUP_DIR")}
-	if settings.Dir == "" {
-		settings.Dir = BackupDir
-	}
+	settings := BackupSettings{}
 	for recipient := range strings.SplitSeq(getenv("SEVERINO_BACKUP_AGE_RECIPIENTS"), ",") {
 		if recipient = strings.TrimSpace(recipient); recipient == "" {
 			continue
@@ -112,9 +113,9 @@ func (m *Machine) Backup(ctx context.Context, getenv func(string) string) error 
 }
 
 // backup snapshots database, archives it with each directory under its name,
-// and writes the archive into settings.Dir whole or not at all.
+// and writes the archive into m.Backups whole or not at all.
 func (m *Machine) backup(ctx context.Context, settings BackupSettings, database string, dirs map[string]string, now time.Time) error {
-	if err := os.MkdirAll(settings.Dir, 0o700); err != nil {
+	if err := os.MkdirAll(m.Backups, 0o700); err != nil {
 		return err
 	}
 	stage, err := os.MkdirTemp("", "severino-backup-")
@@ -128,14 +129,17 @@ func (m *Machine) backup(ctx context.Context, settings BackupSettings, database 
 		return err
 	}
 
-	name := archivePrefix + now.UTC().Format("20060102T150405Z") + archiveSuffix
-	target := filepath.Join(settings.Dir, name)
-	file, err := atomicfile.Create(target, 0o600)
+	name := ArchivePrefix + now.UTC().Format("20060102T150405Z") + archiveSuffix
+	target := filepath.Join(m.Backups, name)
+	file, err := atomicfile.Create(target, 0o640)
 	if err != nil {
 		return err
 	}
 	defer file.Discard()
 	err = m.writeArchive(file, settings.Recipients, snapshot, dirs)
+	if err == nil {
+		err = m.Lend(file.Temporary())
+	}
 	if err == nil {
 		err = file.Replace()
 	}
@@ -143,7 +147,7 @@ func (m *Machine) backup(ctx context.Context, settings BackupSettings, database 
 		return err
 	}
 	fmt.Fprintln(m.Out, "Wrote", target)
-	return prune(settings.Dir, settings.Retention, now)
+	return prune(m.Backups, settings.Retention, now)
 }
 
 // snapshot copies the live database consistently and checks the copy.
@@ -319,7 +323,7 @@ func (zeros) Read(p []byte) (int, error) {
 }
 
 // prune removes archives older than retention from dir, and nothing else:
-// off-host retention belongs to the replication.
+// off-host retention is the bucket's lock and lifecycle.
 func prune(dir string, retention time.Duration, now time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -327,7 +331,7 @@ func prune(dir string, retention time.Duration, now time.Time) error {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.Type().IsRegular() || !strings.HasPrefix(name, archivePrefix) || !strings.HasSuffix(name, archiveSuffix) {
+		if !entry.Type().IsRegular() || !IsArchive(name) {
 			continue
 		}
 		info, err := entry.Info()

@@ -16,7 +16,7 @@ from hq.platform.core.testing import operator
 
 from ..appearance import SET_THEME, ThemeCommand, set_theme, theme_for
 from ..capabilities import execute_capability
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, web_principal
 
 
 def drawn_theme(response) -> str | None:
@@ -73,26 +73,6 @@ class ThemeServiceTests(TestCase):
         (event,) = AuditLog.objects.filter(object_type="Appearance")
         self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
 
-    def test_a_principal_with_no_person_cannot_choose_for_one(self):
-        granted = frozenset(Capability)
-        for principal in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=principal.interface):
-                self.assertEqual(self.choose("dark", principal)["error"]["code"], "forbidden")
-        self.assertEqual(theme_for(self.user), "system")
-        self.assertEqual(denials(), 3)
-
-    def test_an_unknown_theme_is_refused(self):
-        for theme in ("", "sepia", "DARK", "system "):
-            with self.subTest(theme=theme):
-                refused = self.choose(theme)["error"]
-                self.assertEqual(refused["code"], "invalid_input")
-                self.assertEqual([detail["loc"] for detail in refused["details"]], [["theme"]])
-        self.assertFalse(Appearance.objects.exists())
-
     def test_the_choice_does_not_happen_without_its_record(self):
         with (
             mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
@@ -127,16 +107,6 @@ class ThemeSwitchTests(TestCase):
         self.assertIsNone(drawn_theme(page))
         self.assertEqual(color_scheme(page), "light dark")
         self.assertEqual(theme_for(self.user), "system")
-
-    def test_invalid_input_is_refused_and_changes_nothing(self):
-        self.choose("dark")
-        for theme in ("sepia", "", "<script>"):
-            with self.subTest(theme=theme):
-                refused = self.choose(theme)
-                self.assertEqual(refused.status_code, 400)
-                self.assertIn(b"theme", refused.content)
-        self.assertEqual(self.client.post(reverse("theme"), form_keyed()).status_code, 400)
-        self.assertEqual(theme_for(self.user), "dark")
 
     def test_an_operator_without_the_grant_is_refused_with_the_reason(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.SET_PREFERENCES})

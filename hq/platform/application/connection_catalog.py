@@ -4,11 +4,10 @@ Each connection grouped by family, what it may do and why, and the evidence
 behind each ability. The API serializes the same view.
 """
 
+from collections.abc import Iterable
 from dataclasses import KW_ONLY, dataclass, replace
-from datetime import datetime
 
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import timezone
 
 from .action_links import (
     ActionLink,
@@ -27,9 +26,8 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
-from .connection_lifecycle import WORKING, Lifecycle, standing
+from .connection_lifecycle import WORKING, Lifecycle, probed, standing
 from .contracts import SCOPE_NAME, endpoint_has_private_parts
-from .derivations import present
 from .freshness import freshness, last_read
 from .integrations import held_graph
 from .moments import when
@@ -37,6 +35,7 @@ from .projection import read_once
 from .security import Principal
 from .tone import Tone
 lazy from .connection_records import AbilityPart
+lazy from .connections import connection_standings
 lazy from .credential_sight import PARTIAL, READABLE, REFUSED, UNREADABLE, read_through
 lazy from .entity_links import entity_link, link_url
 lazy from .record_saves import row
@@ -66,7 +65,6 @@ EVIDENCE_LABELS = {
     "undeclared": "Permissions not checked",
     "unknown": "Permissions not reported",
     "missing": "Permission missing",
-    "revoked": "Credential refused",
 }
 # The sentence behind each label, for the place that has room for one.
 EVIDENCE_DETAILS = {
@@ -77,14 +75,10 @@ EVIDENCE_DETAILS = {
     "undeclared": "HQ has not checked this credential's permissions.",
     "unknown": "The service has not said which permissions this credential has.",
     "missing": "This credential lacks a permission this needs.",
-    "revoked": "The service refused this credential.",
 }
 # Evidence that settles the question: the ability may be performed and HQ can
 # say why. The rest either cannot be performed or has not been shown.
 PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
-# Evidence that says the ability cannot be performed, drawn as a fault; the
-# rest of what is unproven is said quietly.
-FAILED_EVIDENCE = frozenset({"missing", "revoked"})
 
 # What HQ can say about the credential's permissions, as the one line under
 # the state. Blank where the owner can do nothing about it: a connection type
@@ -110,9 +104,6 @@ def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> 
     credential model (what kind of credential was observed).
     """
 
-    # A rejected credential proves nothing for anything.
-    if instance.credential_model == "rejected":
-        return "revoked", ()
     # A keyless ability or credential has nothing to prove.
     if ability.grant == "none" or instance.credential_model == "none":
         return "not_applicable", ()
@@ -134,11 +125,13 @@ def grant_evidence(ability: ConnectionAbility, instance: ConnectionInstance) -> 
     return "undeclared", ()
 
 
-def connection_authority(states: tuple[ConnectionAbilityState, ...]) -> str:
-    evidence = {state.evidence for state in states}
+def connection_authority(evidence: Iterable[str]) -> str:
+    """What HQ knows of a credential's permissions, from what proves each of its abilities."""
+
+    evidence = set(evidence)
     if not evidence:
         return "none"
-    if evidence & {"missing", "revoked"}:
+    if "missing" in evidence:
         return "missing"
     if "unknown" in evidence:
         return "unknown"
@@ -151,43 +144,21 @@ def connection_authority(states: tuple[ConnectionAbilityState, ...]) -> str:
     return "proven"
 
 
-def connection_lifecycle(
-    instance: ConnectionInstance,
-    authority: str,
-    *,
-    now: datetime,
-) -> Lifecycle:
-    """One state from the observation, its age, reachability and authority.
+def instance_standing(instance: ConnectionInstance, authority: str) -> Lifecycle:
+    """How one instance stands: as its controller's row says (``connection_standing``)
+    where a controller reports it, else from what its family emitted."""
 
-    Ordered by what matters most: a rejected credential is revoked whatever
-    else is true (``standing``); nothing observed is merely configured; an old
-    observation is stale before it is anything else, because every later claim
-    rests on it; missing access fails closed ahead of reachability; and only a
-    reached connection with proven authority is ready.
-    """
-
-    return standing(
-        _observed_lifecycle(instance, authority, now=now),
-        refused=instance.credential_model == "rejected",
-    )
-
-
-def _observed_lifecycle(instance: ConnectionInstance, authority: str, *, now: datetime) -> Lifecycle:
+    reported = connection_standings().get((instance.controller_id, instance.connection_ref))
+    if reported is not None and instance.connection_ref:
+        return reported
     observed = instance.observed_at
-    if observed is None:
-        return Lifecycle.CONFIGURED
-    if timezone.is_naive(observed):
-        observed = timezone.make_aware(observed)
-    # How old it may get is its kind's cadence, an extension's own included.
-    if freshness(instance.kind, observed, now).stale:
-        return Lifecycle.STALE
-    if authority == "missing":
-        return Lifecycle.UNAUTHORIZED
-    if instance.status == Tone.SERIOUS:
-        return Lifecycle.UNREACHABLE
-    if instance.status == Tone.NEUTRAL:
-        return Lifecycle.CONFIGURED
-    return Lifecycle.READY if authority in {"proven", "whole_account"} else Lifecycle.REACHABLE
+    return standing(
+        None
+        if observed is None
+        else probed(reachable=instance.status != Tone.SERIOUS, was_probed=instance.status != Tone.NEUTRAL),
+        stale=freshness(instance.kind, observed).stale,
+        authority=authority,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,7 +184,7 @@ class ConnectionAbilityState:
 
     @property
     def evidence_tone(self) -> str:
-        return Tone.SERIOUS if self.evidence in FAILED_EVIDENCE else ""
+        return Tone.SERIOUS if self.evidence == "missing" else ""
 
 
 # Actions derived from the family's spec rather than from one connection.
@@ -239,6 +210,8 @@ class ConnectionView:
         """
 
         observed = self.instance.observed_at
+        if self.lifecycle == Lifecycle.UNREPORTED:
+            return f"Last reported {when(observed)}" if observed else ""
         if self.lifecycle == Lifecycle.REVOKED:
             return ""
         if self.lifecycle == Lifecycle.STALE:
@@ -250,8 +223,6 @@ class ConnectionView:
             return f"Needs {', '.join(missing)}" if missing else ""
         if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
             return ""
-        if self.lifecycle == Lifecycle.CONFIGURED and self.authority != "none":
-            return Lifecycle.UNPROBED.label
         return AUTHORITY_LABELS[self.authority]
 
     @property
@@ -384,12 +355,13 @@ def connection_catalog(*, principal: Principal) -> tuple[ConnectionGroup, ...]:
 
     groups = []
     for spec in _permitted(principal):
-        instances = _connection_instances(spec)
         abilities = {ability.name: ability for ability in spec.abilities}
         groups.append(
             ConnectionGroup(
                 spec,
-                tuple(_connection_view(spec, instance, abilities, principal) for instance in instances),
+                tuple(
+                    _connection_view(spec, instance, abilities, principal) for instance in _connection_instances(spec)
+                ),
             )
         )
     # Composition order is domain order, which puts the Connections domain
@@ -422,11 +394,11 @@ def _ability_state(
     ability: ConnectionAbility, instance: ConnectionInstance, principal: Principal
 ) -> ConnectionAbilityState:
     evidence, missing = grant_evidence(ability, instance)
-    # Unknown stays undecided; only absent or rejected proof closes the door.
+    # Unknown stays undecided; only absent proof closes the door.
     # Undeclared proof leaves the ability usable under HQ's own authorization,
     # and the evidence says so beside it rather than the page pretending
     # otherwise.
-    available = None if evidence == "unknown" else evidence not in ("missing", "revoked")
+    available = None if evidence == "unknown" else evidence != "missing"
     return ConnectionAbilityState(
         ability,
         available=available,
@@ -461,19 +433,14 @@ def _connection_view(
             seen.add(state.action.url)
             actions = (*actions, state.action)
     instance = _read_through(instance)
-    authority = connection_authority(states)
-    lifecycle = connection_lifecycle(
-        instance,
-        authority,
-        now=present(),
-    )
-    instance = replace(instance, status_label=instance.status_label.strip() or lifecycle.label)
+    authority = connection_authority(state.evidence for state in states)
+    lifecycle = instance_standing(instance, authority)
     return ConnectionView(
         instance,
         states,
         recommend_connection_action(
             actions,
-            unhealthy=instance.status != Tone.GOOD or lifecycle in (Lifecycle.STALE, Lifecycle.REVOKED),
+            unhealthy=lifecycle not in WORKING,
             missing_scope_count=sum(len(state.missing_scopes) for state in states),
             unknown_scope_count=sum(state.available is None for state in states),
         ),

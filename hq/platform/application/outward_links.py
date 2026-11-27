@@ -9,13 +9,11 @@ lazy from urllib.parse import urlsplit
 
 lazy from django.conf import settings
 
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.platform.application.routes import reverse
 
 from .derivations import derivation
 lazy from .connections import connection_rows
-lazy from .entity_links import web_url
-lazy from .labels import human_label
+lazy from .entity_links import provider_label, web_url
 lazy from .pins import DASHBOARD_LINK, pinned
 lazy from .published_sites import public_sites
 
@@ -48,9 +46,7 @@ def consoles() -> tuple[tuple[str, str, str], ...]:
             continue
         found.append(
             (
-                CONNECTION_LABELS.get(connection.provider)
-                or human_label(connection.provider)
-                or connection.connection_ref,
+                provider_label(connection.provider) or connection.connection_ref,
                 connection.connection_ref,
                 endpoint,
             )

@@ -26,7 +26,7 @@ from mcp.shared.exceptions import MCPError
 from pydantic import TypeAdapter
 from starlette.applications import Starlette
 
-from hq.platform.application import agent_admission, approvals
+from hq.platform.application import agent_admission
 from hq.platform.application.agent_limits import Limited, Slot
 from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.refusal_codes import LATER_CODES, Code
@@ -89,12 +89,14 @@ INSTRUCTIONS = "\n\n".join(
             "queue list only the held requests you made."
         ),
         (
-            "A client that declares the `io.modelcontextprotocol/tasks` extension gets a held change back "
-            "as a task whose id is `approval.id`. `tasks/get` reads `working` until an operator decides and "
-            "HQ applies it. It then reads `completed` with the call's answer, or an error coded `operator_rejected`, "
-            "`expired`, `stale` or `operation_failed`. Poll at `pollIntervalMs`. `tasks/cancel` withdraws it "
-            "while it waits, as `approval.withdraw` does, and the task reads `cancelled`. `tasks/update` "
-            "changes nothing, and only the agent that asked can read the task."
+            "A client that declares the `io.modelcontextprotocol/tasks` extension gets a held change, or a "
+            "call that queued work, back as a task whose id is its `approval.id` or `operation.id`. "
+            "`tasks/get` reads `working` until an operator decides and HQ's work ends, an approved change's "
+            "run included. It then reads `completed` with the call's answer, or an error coded "
+            "`operator_rejected`, `expired`, `stale` or `operation_failed`. Poll at `pollIntervalMs`. "
+            "`tasks/cancel` withdraws a held change while it waits, as `approval.withdraw` does, or cancels "
+            "a run until HQ's runner starts it, as `automation.run.cancel` does, and the task reads "
+            "`cancelled`. `tasks/update` changes nothing, and only the agent that asked can read the task."
         ),
     )
 )
@@ -322,7 +324,7 @@ class ToolServer:
             # Served from the procedures adopted now, whichever process adopted them.
             await sync_to_async(automation_adoption.catch_up)()
             result = await tool.call(params.arguments or {})
-            if isinstance(result, dict) and approvals.is_held(result) and tasks.requested(context):
+            if tasks.follows(result) and tasks.requested(context):
                 task = await sync_to_async(tasks.created)(result, current_principal())
                 if task is not None:
                     return task

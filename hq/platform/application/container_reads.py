@@ -57,7 +57,7 @@ def _repository(repo: Any) -> RepositoryPart | None:
                 "url": pull.get("url", ""),
                 "draft": bool(pull.get("draft")),
             }
-            for pull in repo.pull_requests or ()
+            for pull in repo.pull_requests
         ],
     }
 

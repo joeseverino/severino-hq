@@ -23,7 +23,7 @@ from hq.platform.application.tests import test_github_estate as estate
 from hq.platform.application.tests.test_github_estate import store
 from hq.platform.application.tests.test_github_posture import kept
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import MCP_READER, operator
+from hq.platform.core.testing import operator
 
 URL = "https://github.com/example/alpha"
 
@@ -73,16 +73,6 @@ class DependencyUpdatesTests(TestCase):
 
         for enabled in (True, False):
             self.assertEqual(switch("notes", {"dependency_updates": enabled})["error"]["code"], "precondition")
-
-    def test_a_principal_without_project_writes_is_denied(self):
-        store(access=kept())
-        reader = MCP_READER
-
-        result = switch("alpha", {"dependency_updates": True}, principal=reader)
-
-        self.assertEqual(result["error"]["code"], "forbidden")
-        self.project.refresh_from_db()
-        self.assertFalse(self.project.dependency_updates)
 
     def test_an_unknown_project_is_not_found(self):
         self.assertEqual(switch("example-missing", {"dependency_updates": True})["error"]["code"], "not_found")

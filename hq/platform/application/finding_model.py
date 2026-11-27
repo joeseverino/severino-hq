@@ -364,20 +364,6 @@ def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     return (FindingRemedy(capability="infrastructure.resource.reconcile", target=node.label),)
 
 
-def is_observable(kind_key: str) -> bool:
-    """Whether anything can ever produce an observation of this kind.
-
-    Judging by the sweep interval a kind no sweep visits (a printer, an offline
-    CA, a delivery target, a certificate observed only when issued or
-    installed) asks for a reading that cannot arrive, so its claim could never
-    clear; a certificate's real risk, expiry, is reported elsewhere. Read from
-    the provider's ``unobserved_reason``, which a test joins to the collectors.
-    """
-
-    provider = PROVIDERS.get(kind_key)
-    return not (provider and provider.unobserved_reason)
-
-
 def fact_values(node, key: str) -> tuple[str, ...]:
     """The non-empty values a node carries under one fact key."""
 

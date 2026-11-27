@@ -77,7 +77,7 @@ the zone at the top of the page.
   {% data_table records_table %}
 {% aside %}
   {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
-  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
+  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}{% muted %}{% if snapshot.read %}{% include "partials/_reading_age.html" with reading=snapshot.age only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label }}</span>{% endif %}{% endmuted %}{% endif %}{% endfor %}
   {% comment %}
   No "adopt" button: the sweep adopts records in a managed domain
   (``zones.adopt_discovered_records``).

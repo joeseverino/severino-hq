@@ -555,13 +555,13 @@ RULES: dict[str, Rule] = {
         _HOST_MODULES,
         _lifecycle_restated,
         refuses=(
-            'LABELS = {"ready": "Up", "stale": "Old"}',
-            'WORKING = "ready", "reachable"',
+            'LABELS = {"reachable": "Up", "stale": "Old"}',
+            'WORKING = "unprobed", "reachable"',
             '"""Marks connection-unreported."""',
             'SAID = f"{name}NO LONGER REPORTED"',
             'NODE = "conne" "ction:unreported:"',
         ),
-        passes=('ONE = ("ready", "other")', "STATE = Lifecycle.READY"),
+        passes=('ONE = ("reachable", "other")', "STATE = Lifecycle.REACHABLE"),
         skips=(*_HOST_LEFT_OUT, "hq/platform/application/connection_lifecycle.py"),
     ),
 }

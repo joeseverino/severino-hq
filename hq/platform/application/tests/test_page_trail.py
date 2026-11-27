@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import SimpleTestCase
-from django.urls import Resolver404, resolve
+from django.test import SimpleTestCase, override_settings
+from django.urls import Resolver404, path, resolve
+from django.views.generic import TemplateView
 
 from ..pages import PageMixin
 from ..routes import routed
@@ -61,3 +62,34 @@ class DeclaredTrailTests(SimpleTestCase):
                         resolve(str(url))
                     except Resolver404:
                         self.fail(f"{url} routes nowhere")
+
+
+class Bare(PageMixin, TemplateView):
+    pass
+
+
+class Below(PageMixin, TemplateView):
+    page_trail = (("Example", "/example/"),)
+
+
+class Posted(PageMixin, TemplateView):
+    http_method_names = ["post"]
+
+
+urlpatterns = [
+    path("dashboard/", Bare.as_view(), name="dashboard"),
+    path("lost/", Bare.as_view(), name="example_lost"),
+    path("below/", Below.as_view(), name="example_below"),
+    path("things/<slug:slug>/", Bare.as_view(), name="example_thing"),
+    path("posted/", Posted.as_view(), name="example_posted"),
+]
+
+
+@override_settings(ROOT_URLCONF=__name__)
+class ReachedTests(SimpleTestCase):
+    """Every page a reader can find, as HQ refuses to start without."""
+
+    def test_a_page_neither_listed_nor_below_another_is_unreached(self):
+        from ..pages import unreached_pages
+
+        self.assertEqual(unreached_pages(), ("example_lost",))

@@ -97,6 +97,7 @@ const (
 	ConnectionProviderNPM              ConnectionProvider = "npm"
 	ConnectionProviderOnePassword      ConnectionProvider = "onepassword"
 	ConnectionProviderPortainer        ConnectionProvider = "portainer"
+	ConnectionProviderR2               ConnectionProvider = "r2"
 	ConnectionProviderSSH              ConnectionProvider = "ssh"
 	ConnectionProviderTailscale        ConnectionProvider = "tailscale"
 )
@@ -122,9 +123,26 @@ func (e ConnectionProvider) Valid() bool {
 		return true
 	case ConnectionProviderPortainer:
 		return true
+	case ConnectionProviderR2:
+		return true
 	case ConnectionProviderSSH:
 		return true
 	case ConnectionProviderTailscale:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ConnectionsVersion.
+const (
+	ConnectionsVersionN2 ConnectionsVersion = 2
+)
+
+// Valid indicates whether the value is a known member of the ConnectionsVersion enum.
+func (e ConnectionsVersion) Valid() bool {
+	switch e {
+	case ConnectionsVersionN2:
 		return true
 	default:
 		return false
@@ -527,6 +545,24 @@ func (e HostRenderStatusRecordState) Valid() bool {
 	}
 }
 
+// Defines values for HostService.
+const (
+	ControllerUnit HostService = "severino-hq-controller.service"
+	SecretsUnit    HostService = "severino-hq-secrets.service"
+)
+
+// Valid indicates whether the value is a known member of the HostService enum.
+func (e HostService) Valid() bool {
+	switch e {
+	case ControllerUnit:
+		return true
+	case SecretsUnit:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InboundProvider.
 const (
 	InboundProviderGitHubApp InboundProvider = "github_app"
@@ -608,6 +644,21 @@ func (e PassMode) Valid() bool {
 	}
 }
 
+// Defines values for ReadProfile.
+const (
+	ReadProfileRead ReadProfile = "read"
+)
+
+// Valid indicates whether the value is a known member of the ReadProfile enum.
+func (e ReadProfile) Valid() bool {
+	switch e {
+	case ReadProfileRead:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReadingPartName.
 const (
 	PartACLManagement     ReadingPartName = "acl_management"
@@ -633,6 +684,7 @@ const (
 	PartPageRules         ReadingPartName = "page_rules"
 	PartPosture           ReadingPartName = "posture"
 	PartProxyHosts        ReadingPartName = "proxy_hosts"
+	PartPullStates        ReadingPartName = "pull_states"
 	PartQueryLog          ReadingPartName = "querylog"
 	PartRedirectionHosts  ReadingPartName = "redirection_hosts"
 	PartRegistration      ReadingPartName = "registration"
@@ -697,6 +749,8 @@ func (e ReadingPartName) Valid() bool {
 		return true
 	case PartProxyHosts:
 		return true
+	case PartPullStates:
+		return true
 	case PartQueryLog:
 		return true
 	case PartRedirectionHosts:
@@ -749,6 +803,60 @@ func (e Refusal) Valid() bool {
 	}
 }
 
+// Defines values for RenderFailure.
+const (
+	RenderFailureBusy               RenderFailure = "busy"
+	RenderFailureConfig             RenderFailure = "config"
+	RenderFailureConnectDenied      RenderFailure = "connect_denied"
+	RenderFailureConnectResponse    RenderFailure = "connect_response"
+	RenderFailureConnectUnavailable RenderFailure = "connect_unavailable"
+	RenderFailureContent            RenderFailure = "content"
+	RenderFailureHost               RenderFailure = "host"
+	RenderFailureInternal           RenderFailure = "internal"
+	RenderFailureWebUnhealthy       RenderFailure = "web_unhealthy"
+)
+
+// Valid indicates whether the value is a known member of the RenderFailure enum.
+func (e RenderFailure) Valid() bool {
+	switch e {
+	case RenderFailureBusy:
+		return true
+	case RenderFailureConfig:
+		return true
+	case RenderFailureConnectDenied:
+		return true
+	case RenderFailureConnectResponse:
+		return true
+	case RenderFailureConnectUnavailable:
+		return true
+	case RenderFailureContent:
+		return true
+	case RenderFailureHost:
+		return true
+	case RenderFailureInternal:
+		return true
+	case RenderFailureWebUnhealthy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RendererRegistryVersion.
+const (
+	RendererRegistryVersionN2 RendererRegistryVersion = 2
+)
+
+// Valid indicates whether the value is a known member of the RendererRegistryVersion enum.
+func (e RendererRegistryVersion) Valid() bool {
+	switch e {
+	case RendererRegistryVersionN2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RenewalReason.
 const (
 	RenewalReasonCancelled RenewalReason = "Cancelled"
@@ -794,10 +902,12 @@ const (
 	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
+	ResourceKindGitHubOpenPullRequest        ResourceKind = "github.open_pull_request"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindGitHubWebhook                ResourceKind = "github.webhook"
+	ResourceKindGitHubWorkflowRun            ResourceKind = "github.workflow_run"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
@@ -823,6 +933,7 @@ const (
 	ResourceKindPortainerNetwork             ResourceKind = "portainer.network"
 	ResourceKindPortainerRuntime             ResourceKind = "portainer.runtime"
 	ResourceKindPortainerVolume              ResourceKind = "portainer.volume"
+	ResourceKindR2Backup                     ResourceKind = "r2.backup"
 	ResourceKindRegistryAddress              ResourceKind = "registry.address"
 	ResourceKindRegistryDigest               ResourceKind = "registry.digest"
 	ResourceKindRegistryDomain               ResourceKind = "registry.domain"
@@ -886,6 +997,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindGitHubDependencyRun:
 		return true
+	case ResourceKindGitHubOpenPullRequest:
+		return true
 	case ResourceKindGitHubProfile:
 		return true
 	case ResourceKindGitHubPullRequest:
@@ -893,6 +1006,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubRepository:
 		return true
 	case ResourceKindGitHubWebhook:
+		return true
+	case ResourceKindGitHubWorkflowRun:
 		return true
 	case ResourceKindHQRequestPath:
 		return true
@@ -943,6 +1058,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindPortainerRuntime:
 		return true
 	case ResourceKindPortainerVolume:
+		return true
+	case ResourceKindR2Backup:
 		return true
 	case ResourceKindRegistryAddress:
 		return true
@@ -1007,6 +1124,36 @@ func (e RunEventOutcome) Valid() bool {
 	}
 }
 
+// Defines values for RunnerRole.
+const (
+	Runner RunnerRole = "runner"
+)
+
+// Valid indicates whether the value is a known member of the RunnerRole enum.
+func (e RunnerRole) Valid() bool {
+	switch e {
+	case Runner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretRenderer.
+const (
+	SecretRendererHQ SecretRenderer = "hq"
+)
+
+// Valid indicates whether the value is a known member of the SecretRenderer enum.
+func (e SecretRenderer) Valid() bool {
+	switch e {
+	case SecretRendererHQ:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SweptKind.
 const (
 	SweptAdGuardClient                SweptKind = "adguard.client"
@@ -1027,9 +1174,11 @@ const (
 	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
+	SweptGitHubOpenPullRequest        SweptKind = "github.open_pull_request"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
 	SweptGitHubWebhook                SweptKind = "github.webhook"
+	SweptGitHubWorkflowRun            SweptKind = "github.workflow_run"
 	SweptHostEdgeReboot               SweptKind = "host.edge_reboot"
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
@@ -1051,6 +1200,7 @@ const (
 	SweptPortainerNetwork             SweptKind = "portainer.network"
 	SweptPortainerRuntime             SweptKind = "portainer.runtime"
 	SweptPortainerVolume              SweptKind = "portainer.volume"
+	SweptR2Backup                     SweptKind = "r2.backup"
 	SweptTailscaleDNS                 SweptKind = "tailscale.dns"
 	SweptTailscaleDevice              SweptKind = "tailscale.device"
 	SweptTailscalePolicy              SweptKind = "tailscale.policy"
@@ -1097,11 +1247,15 @@ func (e SweptKind) Valid() bool {
 		return true
 	case SweptGitHubDependencyRun:
 		return true
+	case SweptGitHubOpenPullRequest:
+		return true
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
 		return true
 	case SweptGitHubWebhook:
+		return true
+	case SweptGitHubWorkflowRun:
 		return true
 	case SweptHostEdgeReboot:
 		return true
@@ -1144,6 +1298,8 @@ func (e SweptKind) Valid() bool {
 	case SweptPortainerRuntime:
 		return true
 	case SweptPortainerVolume:
+		return true
+	case SweptR2Backup:
 		return true
 	case SweptTailscaleDNS:
 		return true
@@ -1634,6 +1790,15 @@ type ConnectionRecord struct {
 	Store any `json:"store,omitempty"`
 }
 
+// ConnectionRef A connection's name: a file name in the renderer's directories.
+type ConnectionRef = string
+
+// ConnectionsDocument The connections document as written: maxLength is the most bytes it may be.
+type ConnectionsDocument = string
+
+// ConnectionsVersion The only connections document version either side accepts.
+type ConnectionsVersion int
+
 // Contract The desired-only contract for one resource (export).
 type Contract struct {
 	Resource      Resource `json:"resource"`
@@ -1663,6 +1828,9 @@ type ControllerRegistry struct {
 	// GithubRepositories Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
 	GithubRepositories GitHubRepositoriesPlan `json:"github_repositories"`
 	Locked             []LockedAction         `json:"locked"`
+
+	// LoggingIn Kinds read by logging in to a machine: the only readers the controller lets open a shell.
+	LoggingIn []ResourceKind `json:"logging_in"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
@@ -1787,6 +1955,73 @@ type GitHubMergeStatus struct {
 	Refused GitHubMergeRefusal `json:"refused,omitempty"`
 }
 
+// GitHubOpenPullRequestCheckRun One check as its last run stands: a workflow run's job, another app's
+// check, or a commit status, in GitHub's words, lower-cased.
+type GitHubOpenPullRequestCheckRun struct {
+	Conclusion string `json:"conclusion,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Status     string `json:"status,omitempty"`
+}
+
+// GitHubOpenPullRequestChecks A commit's checks, each standing as its last run did, and why each
+// failing job of a workflow run failed, by the job's name.
+type GitHubOpenPullRequestChecks struct {
+	Failing  []string                                   `json:"failing,omitempty"`
+	Failures map[string]GitHubOpenPullRequestJobFailure `json:"failures,omitempty"`
+	Names    []string                                   `json:"names,omitempty"`
+	Running  int                                        `json:"running,omitempty"`
+	State    string                                     `json:"state,omitempty"`
+	Total    int                                        `json:"total,omitempty"`
+}
+
+// GitHubOpenPullRequestJobFailure Why one failing check failed: for a workflow's job, the step it failed
+// at, the error GitHub's log of that step marks, and the step's last lines
+// of output before it; for any other check, no step, its output's title as
+// the error and its summary as the log. Each is the check's own words,
+// bounded (“github_failures.go“, “github_checks.go“).
+type GitHubOpenPullRequestJobFailure struct {
+	Error string   `json:"error,omitempty"`
+	Log   []string `json:"log,omitempty"`
+	Step  string   `json:"step,omitempty"`
+}
+
+// GitHubOpenPullRequestPullFile One file a pull request changes.
+type GitHubOpenPullRequestPullFile struct {
+	Additions int    `json:"additions,omitempty"`
+	App       string `json:"app,omitempty"`
+	Deletions int    `json:"deletions,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
+
+// GitHubOpenPullRequestRecord One open pull request. “check_runs“ is every check on its head, and “mergeable_state“ and “review_state“ GitHub's own words for whether it can merge and where its review stands (“github_pulls.go“). For one Renovate opened (its branch under “renovate/“), “checks“ is the head's with why each failing job failed, “files“ each file it changes, one page of them, and “changed_files“ how many GitHub says it changes; they are None and 0 for any other. “apps“ is “{app, read, images: [{service, before, after}]}“ per app whose directory it changes, each service whose image differs at its head, in a repository opted in to updates, and None otherwise (“github_compose.go“).
+type GitHubOpenPullRequestRecord struct {
+	Apps            []map[string]any                `json:"apps,omitempty"`
+	ArtifactProblem []string                        `json:"artifact_problem,omitempty"`
+	Author          string                          `json:"author,omitempty"`
+	Base            string                          `json:"base,omitempty"`
+	BaseBranch      string                          `json:"base_branch,omitempty"`
+	Branch          string                          `json:"branch,omitempty"`
+	Carried         bool                            `json:"carried,omitempty"`
+	ChangedFiles    int                             `json:"changed_files,omitempty"`
+	CheckRuns       []GitHubOpenPullRequestCheckRun `json:"check_runs,omitempty"`
+	Checks          GitHubOpenPullRequestChecks     `json:"checks,omitempty"`
+	ConnectionRef   string                          `json:"connection_ref"`
+	CreatedAt       string                          `json:"created_at,omitempty"`
+	Draft           bool                            `json:"draft,omitempty"`
+	Files           []GitHubOpenPullRequestPullFile `json:"files,omitempty"`
+	Head            string                          `json:"head,omitempty"`
+	HeadRepository  string                          `json:"head_repository,omitempty"`
+	Labels          []string                        `json:"labels,omitempty"`
+	MergeableState  string                          `json:"mergeable_state,omitempty"`
+	Number          int                             `json:"number,omitempty"`
+	Repository      string                          `json:"repository"`
+	ReviewState     string                          `json:"review_state,omitempty"`
+	Title           string                          `json:"title,omitempty"`
+	UpdatedAt       string                          `json:"updated_at,omitempty"`
+	URL             string                          `json:"url,omitempty"`
+}
+
 // GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
 type GitHubProfilePlan struct {
 	// Accounts GitHub logins.
@@ -1880,42 +2115,6 @@ type GitHubRepositoryJobFailure struct {
 	Step  string   `json:"step,omitempty"`
 }
 
-// GitHubRepositoryPullFile One file a pull request changes.
-type GitHubRepositoryPullFile struct {
-	Additions int    `json:"additions,omitempty"`
-	App       string `json:"app,omitempty"`
-	Deletions int    `json:"deletions,omitempty"`
-	Path      string `json:"path,omitempty"`
-	Status    string `json:"status,omitempty"`
-}
-
-// GitHubRepositoryPullRequest One open pull request. For one Renovate opened (its branch under
-// “renovate/“), “checks“ is the head's, “files“ each file it changes, one page of them, and
-// “changed_files“ how many GitHub says it changes; they are None and 0
-// for any other. “apps“ is
-// “{app, read, images: [{service, before, after}]}“ per app whose
-// directory it changes, each service whose image differs at its head, in a
-// repository opted in to updates, and None otherwise (“github_compose.go“).
-type GitHubRepositoryPullRequest struct {
-	Apps            []map[string]any           `json:"apps,omitempty"`
-	ArtifactProblem []string                   `json:"artifact_problem,omitempty"`
-	Author          string                     `json:"author,omitempty"`
-	Base            string                     `json:"base,omitempty"`
-	Branch          string                     `json:"branch,omitempty"`
-	ChangedFiles    int                        `json:"changed_files,omitempty"`
-	Checks          GitHubRepositoryChecks     `json:"checks,omitempty"`
-	CreatedAt       string                     `json:"created_at,omitempty"`
-	Draft           bool                       `json:"draft,omitempty"`
-	Files           []GitHubRepositoryPullFile `json:"files,omitempty"`
-	Head            string                     `json:"head,omitempty"`
-	HeadRepository  string                     `json:"head_repository,omitempty"`
-	Labels          []string                   `json:"labels,omitempty"`
-	Number          int                        `json:"number,omitempty"`
-	Title           string                     `json:"title,omitempty"`
-	UpdatedAt       string                     `json:"updated_at,omitempty"`
-	URL             string                     `json:"url,omitempty"`
-}
-
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
 	Access          GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
@@ -1928,35 +2127,32 @@ type GitHubRepositoryRecord struct {
 
 	// Checks A commit's checks, each standing as its last run did, and why each
 	// failing job of a workflow run failed, by the job's name.
-	Checks            GitHubRepositoryChecks        `json:"checks,omitempty"`
-	Compose           []string                      `json:"compose,omitempty"`
-	ComposeImages     []map[string]any              `json:"compose_images,omitempty"`
-	ConnectionRef     string                        `json:"connection_ref"`
-	Dashboard         string                        `json:"dashboard,omitempty"`
-	DefaultBranch     string                        `json:"default_branch,omitempty"`
-	DependabotAlerts  []map[string]any              `json:"dependabot_alerts,omitempty"`
-	Deployments       []map[string]any              `json:"deployments,omitempty"`
-	Environments      []map[string]any              `json:"environments,omitempty"`
-	FailingRuns       []map[string]any              `json:"failing_runs,omitempty"`
-	Fingerprint       string                        `json:"fingerprint,omitempty"`
-	Head              map[string]any                `json:"head,omitempty"`
-	HeldBranches      []map[string]any              `json:"held_branches,omitempty"`
-	Images            []map[string]any              `json:"images,omitempty"`
-	Pins              []map[string]any              `json:"pins,omitempty"`
-	Private           bool                          `json:"private,omitempty"`
-	PullRequestChecks []string                      `json:"pull_request_checks,omitempty"`
-	PullRequests      []GitHubRepositoryPullRequest `json:"pull_requests,omitempty"`
-	PushedAt          string                        `json:"pushed_at,omitempty"`
-	ReadAt            string                        `json:"read_at,omitempty"`
-	Release           map[string]any                `json:"release,omitempty"`
-	Repository        string                        `json:"repository"`
-	Rules             map[string]any                `json:"rules,omitempty"`
-	Runners           []map[string]any              `json:"runners,omitempty"`
-	Runs              []map[string]any              `json:"runs,omitempty"`
-	Updater           string                        `json:"updater,omitempty"`
-	URL               string                        `json:"url,omitempty"`
-	Variables         []string                      `json:"variables,omitempty"`
-	Waiting           []map[string]any              `json:"waiting,omitempty"`
+	Checks            GitHubRepositoryChecks `json:"checks,omitempty"`
+	Compose           []string               `json:"compose,omitempty"`
+	ComposeImages     []map[string]any       `json:"compose_images,omitempty"`
+	ConnectionRef     string                 `json:"connection_ref"`
+	Dashboard         string                 `json:"dashboard,omitempty"`
+	DefaultBranch     string                 `json:"default_branch,omitempty"`
+	DependabotAlerts  []map[string]any       `json:"dependabot_alerts,omitempty"`
+	Deployments       []map[string]any       `json:"deployments,omitempty"`
+	Environments      []map[string]any       `json:"environments,omitempty"`
+	Fingerprint       string                 `json:"fingerprint,omitempty"`
+	Head              map[string]any         `json:"head,omitempty"`
+	HeldBranches      []map[string]any       `json:"held_branches,omitempty"`
+	Images            []map[string]any       `json:"images,omitempty"`
+	Pins              []map[string]any       `json:"pins,omitempty"`
+	Private           bool                   `json:"private,omitempty"`
+	PullRequestChecks []string               `json:"pull_request_checks,omitempty"`
+	PushedAt          string                 `json:"pushed_at,omitempty"`
+	ReadAt            string                 `json:"read_at,omitempty"`
+	Release           map[string]any         `json:"release,omitempty"`
+	Repository        string                 `json:"repository"`
+	Rules             map[string]any         `json:"rules,omitempty"`
+	Runners           []map[string]any       `json:"runners,omitempty"`
+	Updater           string                 `json:"updater,omitempty"`
+	URL               string                 `json:"url,omitempty"`
+	Variables         []string               `json:"variables,omitempty"`
+	Waiting           []map[string]any       `json:"waiting,omitempty"`
 }
 
 // GitHubRepositoryRepositoryAccess Who and what can reach a repository, and how its Actions may run.
@@ -2042,6 +2238,31 @@ type GitHubWebhookRecord struct {
 	Newest        GitHubWebhookDelivery `json:"newest,omitempty"`
 	Organization  bool                  `json:"organization,omitempty"`
 	Owner         string                `json:"owner"`
+}
+
+// GitHubWorkflowRunCheckRun One check as its last run stands: a workflow run's job, another app's
+// check, or a commit status, in GitHub's words, lower-cased.
+type GitHubWorkflowRunCheckRun struct {
+	Conclusion string `json:"conclusion,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Status     string `json:"status,omitempty"`
+}
+
+// GitHubWorkflowRunRecord A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.
+type GitHubWorkflowRunRecord struct {
+	Branch        string                      `json:"branch,omitempty"`
+	Carried       bool                        `json:"carried,omitempty"`
+	Conclusion    string                      `json:"conclusion,omitempty"`
+	ConnectionRef string                      `json:"connection_ref"`
+	CreatedAt     string                      `json:"created_at,omitempty"`
+	Event         string                      `json:"event,omitempty"`
+	ID            int                         `json:"id,omitempty"`
+	Jobs          []GitHubWorkflowRunCheckRun `json:"jobs,omitempty"`
+	Name          string                      `json:"name,omitempty"`
+	Repository    string                      `json:"repository"`
+	Sha           string                      `json:"sha,omitempty"`
+	Status        string                      `json:"status,omitempty"`
+	URL           string                      `json:"url,omitempty"`
 }
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
@@ -2302,6 +2523,9 @@ type HostRenderStatusSecretRenderSuccess struct {
 	Counts           HostRenderStatusSecretRenderCounts `json:"counts,omitempty"`
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
+
+// HostService A unit of HQ's host that HQ tells an operator to start or read.
+type HostService string
 
 // HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.
 type HostTailnetLockRecord struct {
@@ -2750,6 +2974,9 @@ type PortainerVolumeRecord struct {
 	UsedBy        []PortainerVolumeMountUser `json:"used_by,omitempty"`
 }
 
+// PrivilegeProfile A runner transport's privilege profile, as a procedure names its privilege.
+type PrivilegeProfile = string
+
 // Problem An RFC 9457 problem: why HQ refused or failed a bridge call.
 type Problem struct {
 	Detail string `json:"detail"`
@@ -2757,6 +2984,30 @@ type Problem struct {
 	Title  string `json:"title"`
 	Type   string `json:"type,omitempty"`
 }
+
+// R2BackupRecord The newest backup archive in a connection's bucket, as the bucket's own listing states it: the r2.backup reading's one record per connection. The controller uploads the host's newest archive first when the bucket lacks it, so this is the last off-site copy.
+type R2BackupRecord struct {
+	// Bucket The bucket's name.
+	Bucket string `json:"bucket"`
+
+	// ConnectionRef The connection whose bucket holds it.
+	ConnectionRef string `json:"connection_ref"`
+
+	// Copies The backup archives the bucket holds.
+	Copies int `json:"copies"`
+
+	// Key The newest archive's object key, its name on the host.
+	Key string `json:"key"`
+
+	// SizeBytes The archive's size in bytes.
+	SizeBytes int `json:"size_bytes"`
+
+	// UploadedAt When the bucket last wrote the object (LastModified).
+	UploadedAt string `json:"uploaded_at"`
+}
+
+// ReadProfile The privilege profile of a runner login that escalates to nothing.
+type ReadProfile string
 
 // ReadingPartName A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
 type ReadingPartName string
@@ -2785,6 +3036,15 @@ type RefusedPart struct {
 	Refusal FailureClass `json:"refusal"`
 	Scope   string       `json:"scope"`
 }
+
+// RenderFailure A word a secret renderer files a failed run under.
+type RenderFailure string
+
+// RenderFullReadSeconds The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full.
+type RenderFullReadSeconds = int
+
+// RendererRegistryVersion The only renderer registry version the renderer reads.
+type RendererRegistryVersion int
 
 // Renewal A renewed lease. continue false tells the claimant to stop; a held operation's lease is still extended so it can report what it did.
 type Renewal struct {
@@ -2874,11 +3134,17 @@ type RunStated struct {
 	Readings map[string]map[string][]map[string]any `json:"readings,omitempty"`
 }
 
+// RunnerMachine The machine a runner transport reaches, by its name in HQ.
+type RunnerMachine = string
+
 // RunnerReach One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.
 type RunnerReach struct {
 	Machine string `json:"machine"`
 	Profile string `json:"profile"`
 }
+
+// RunnerRole The role of an SSH transport the automation worker runs playbooks through.
+type RunnerRole string
 
 // ScannedFile A file of the repository, by its path and the git object id that names its content.
 type ScannedFile struct {
@@ -2905,6 +3171,12 @@ type ScannedRole struct {
 	ArgumentSpec any    `json:"argument_spec"`
 	Role         string `json:"role"`
 }
+
+// SecretRenderer A secret renderer the host's launcher names.
+type SecretRenderer string
+
+// SettingName A setting's name, as a vault item's projection states it.
+type SettingName = string
 
 // SourceCatalog The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.
 type SourceCatalog struct {
@@ -2939,6 +3211,9 @@ type StatedText = string
 
 // StatedValue A value in a stated record, at any depth.
 type StatedValue = any
+
+// StatusWord Every string a secret renderer's status document carries besides its times.
+type StatusWord = string
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {
@@ -3052,6 +3327,9 @@ type ClaimParams struct {
 
 	// Capability A kind:action the controller can perform.
 	Capability []string `form:"capability,omitempty" json:"capability,omitempty"`
+
+	// Profile The privilege profile of the logins the claiming automation worker holds, the read profile when it names none: it is offered that profile's playbook runs alone.
+	Profile string `form:"profile,omitempty" json:"profile,omitempty"`
 
 	// Attempt The claimant's name for this claim. A claim retried with the same name is answered the operation it already leased.
 	Attempt string `form:"attempt,omitempty" json:"attempt,omitempty"`
@@ -4087,6 +4365,14 @@ func NewClaimRequest(server string, params *ClaimParams) (*http.Request, error) 
 				}
 			}
 
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "profile", params.Profile, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
 		}
 
 		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attempt", params.Attempt, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {

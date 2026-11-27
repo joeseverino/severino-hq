@@ -6,6 +6,7 @@ from operator import attrgetter
 from typing import Any
 
 from hq.domains.control_plane.names import normalized_hostname
+from hq.platform.application.connection_lifecycle import Lifecycle
 from hq.platform.application.entity_links import connection_anchor, declared_link
 from hq.platform.application.freshness import reading_age
 from hq.platform.application.moments import when
@@ -87,7 +88,7 @@ def _connection_row(row: Any, request: Any, *, starts: bool) -> Row:
         (
             replace(_name(row, starts=starts), below=_name_below(row)),
             Cell(
-                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label")),
+                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label"), attrgetter("opens")),
                 fit=True,
                 below=(
                     (
@@ -132,15 +133,19 @@ def _name(row: Any, *, starts: bool) -> Cell:
         lines.append(
             Cell(
                 status=StatusMark(
-                    sight.label, "refused this credential:", sight.credential_refusal, tone="serious", pill=False
+                    sight.label,
+                    "refused this credential:",
+                    sight.credential_refusal,
+                    tone=Lifecycle.REVOKED.tone,
+                    pill=False,
                 )
             )
         )
     if sight is not None and sight.sights:
-        age = (Cell(piece=reading_age(at=sight.read_at), dot=True),) if sight.read_at else ()
+        age = (Cell(piece=reading_age(sight.age), dot=True),) if sight.age else ()
         lines.append(Cell(sight.summary, muted=True, parts=age))
-    if row.fix:
-        lines.append(Cell(status=_fix_mark(row.fix)))
+    if row.fix and (mark := _fix_mark(row.fix)):
+        lines.append(Cell(status=mark))
     return replace(Cell.of(connection.name_link), lines=tuple(lines))
 
 
@@ -174,13 +179,14 @@ def _reached(row: Any) -> Cell | None:
     return replace(head, muted=True, shows="narrow-more", parts=tuple(rest))
 
 
-def _fix_mark(fix: Any) -> StatusMark:
-    """What a credential lacks or when it lapses, in a word or two."""
+def _fix_mark(fix: Any) -> StatusMark | None:
+    """What a credential lacks or when it lapses, in a word or two. A refused
+    one is said by the row's state and its refusal line."""
 
     if fix.missing:
         return StatusMark("Missing", counted(len(fix.missing), "permission"), tone="attention", pill=False)
     if fix.refused:
-        return StatusMark("Credential refused", tone="attention", pill=False)
+        return None
     return StatusMark("Expires", fix.expiry, tone="attention", pill=False)
 
 
@@ -197,10 +203,16 @@ def _name_below(row: Any) -> tuple[Below, ...]:
     )
 
 
-def _pieces(row: Any, part: Any, key: str, items: Iterable[Any], label: Any) -> tuple[Cell, ...]:
-    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part."""
+def _pieces(
+    row: Any, part: Any, key: str, items: Iterable[Any], label: Any, more: Any = lambda _item: False
+) -> tuple[Cell, ...]:
+    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part,
+    ``more`` saying which hold words for the row's open line."""
 
-    return tuple(Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item))) for item in items)
+    return tuple(
+        Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item), more=more(item)))
+        for item in items
+    )
 
 
 def _reaches(instance: Any) -> Cell:

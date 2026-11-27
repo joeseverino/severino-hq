@@ -852,9 +852,7 @@ class DomainOverview:
 
         if self.reading is None or not self.reading.due:
             return self.period
-        if self.reading.observed_at is None:
-            return self.reading.label
-        return dotted(self.reading.last_read, "out of date" if self.reading.stale else "")
+        return self.reading.said
 
 
 def stacked_bar_chart(

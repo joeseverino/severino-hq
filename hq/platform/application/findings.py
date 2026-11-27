@@ -20,7 +20,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from pydantic import ConfigDict, Field, create_model, with_config
 
-from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
+from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, observed
 lazy from hq.domains.control_plane.models import OperationRequest
 lazy from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -28,6 +28,7 @@ lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE
 
 from . import (
     automation_findings,
+    backup_findings,
     certificate_expiry,
     connection_findings,
     container_findings,
@@ -75,7 +76,6 @@ from .finding_model import (
     FindingRemedy,
     FindingRule,
     Gathered,
-    is_observable,
     parse_stamp,
     written_fact,
 )
@@ -203,6 +203,7 @@ RULE_MODULES = (
     contradiction_findings,
     posture,
     automation_findings,
+    backup_findings,
     inbound_findings,
     delivery_findings,
     machine_findings,
@@ -494,7 +495,7 @@ def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.Con
     if subject is not None and subject.kind == "connection" and subject.connection_ref:
         return cadence.ControllerSweepCommand(connection_refs=(subject.connection_ref,))
     kind = finding.scope or (subject.kind_key if subject is not None else "")
-    if kind in OBSERVATIONS or (kind in PROVIDERS and is_observable(kind)):
+    if observed(kind):
         return cadence.ControllerSweepCommand(kinds=(kind,))
     if finding.affected_scopes:
         return cadence.ControllerSweepCommand(every_connection=True)

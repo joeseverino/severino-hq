@@ -1,11 +1,12 @@
-"""The events page's table: one page of the events list, a group for each
-channel that told HQ."""
+"""The events page's tables: one page of the events list, a group for each
+channel that told HQ, and every event HQ takes, a group for each provider."""
 
 from dataclasses import replace
 from typing import Any
 
 from hq.domains.control_plane.models import InboundOutcome, InboundSource
-from hq.platform.application.entity_links import kind_label
+from hq.platform.application.entity_links import kind_label, provider_label
+from hq.platform.application.inbound_events import Taken
 from hq.platform.application.moments import moment
 from hq.platform.application.quoted import Quoted
 from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
@@ -41,4 +42,39 @@ def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
         table,
         rows=(),
         groups=tuple(Group(source.label, tuple(by_source[source])) for source in InboundSource if source in by_source),
+    )
+
+
+def _kinds(kinds: tuple[str, ...], *, muted: bool = False) -> Cell:
+    return Cell(", ".join(kind_label(kind) for kind in kinds), muted=muted)
+
+
+def _channel(taken: Taken) -> Cell:
+    """The channel the events arrive by, and its standing now."""
+
+    return Cell(taken.source.label, parts=(replace(Cell.state(taken.heard), dot=True),))
+
+
+TAKEN_COLUMNS = (
+    TableColumn("Events", cell=lambda taken: Cell(", ".join(taken.events))),
+    TableColumn("Makes due", cell=lambda taken: _kinds(taken.reads)),
+    TableColumn("Kept current", drop=2, cell=lambda taken: _kinds(taken.kept, muted=True)),
+    TableColumn("Channel", kind="status", drop=1, cell=_channel),
+)
+
+
+def taken_table(taken: tuple[Taken, ...]) -> DataTable:
+    """Every event HQ takes, under the provider that sends it, providers by name."""
+
+    table = DataTable.of("What HQ takes", TAKEN_COLUMNS, taken, keeps_order=True)
+    by_provider: dict[str, list[tuple[Taken, Row]]] = {}
+    for each, row in zip(taken, table.rows, strict=True):
+        by_provider.setdefault(provider_label(each.provider), []).append((each, row))
+    return replace(
+        table,
+        rows=(),
+        groups=tuple(
+            Group(label, tuple(row for _each, row in rows), count=sum(len(each.events) for each, _row in rows))
+            for label, rows in sorted(by_provider.items())
+        ),
     )

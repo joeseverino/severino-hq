@@ -39,6 +39,7 @@ from hq.domains.control_plane.models import (
     attempted_at,
 )
 lazy from hq.domains.control_plane.bridge_contract import declared_names
+lazy from hq.domains.control_plane.connection_kinds import LOGS_IN
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
@@ -46,7 +47,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controlle
 lazy from hq.platform.core.attribution import queued_in
 lazy from hq.platform.core.doorbell import ask_soon
 
-from . import readings
+from . import readings, unit_timers
 from .action_links import READ_NOW_CAPABILITY
 from .asks import Asked, AskedAnswer, Standing, asked_read
 from .command_fields import Choices, Describe, Names
@@ -55,6 +56,7 @@ from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
 from .moments import duration
+from .projection import read_once
 from .read_requests import ForcedRead, connection_providers, due_reads, forced_kinds, forced_reads
 from .record_errors import Sentence
 from .refusal_codes import Code
@@ -63,6 +65,7 @@ from .tone import Absent, Tone, Toned
 from .ui import ended
 lazy from . import outbound_work
 lazy from .adoption import manages_through, observes_only
+lazy from .automation_runs import READ_PROFILE, claimant
 lazy from .facts import stored_snapshots
 lazy from .inbound_events import covers
 
@@ -187,9 +190,8 @@ def note_controller() -> None:
 
 # The host also starts a pass this long after the last one ended, to catch a
 # doorbell rung while the host was off, a claim whose controller died, and the
-# day's automatic work. deploy/systemd/severino-hq-controller.timer must hold
-# the same value (tested).
-CONTROLLER_FLOOR = timedelta(minutes=15)
+# day's automatic work.
+CONTROLLER_FLOOR = unit_timers.span("severino-hq-controller.timer", "OnUnitInactiveSec")
 
 # A healthy controller arrives at least once per floor; the second floor allows
 # for a long pass.
@@ -226,6 +228,8 @@ class WorkerStanding:
     named: Sentence = CONTROLLER_NAMED
     # What never heard from means of it.
     unheard: WorkerState = WorkerState.NOT_CONFIGURED
+    # When it last took work, for a worker that claims it.
+    claimed_at: datetime | None = None
 
     @property
     def known(self) -> bool:
@@ -293,57 +297,104 @@ def controller_standing(now: datetime | None = None) -> WorkerStanding:
     return WorkerStanding(seen_at=seen_at, silent=silent, here=here)
 
 
-# HQ's playbook worker's arrival, a reading rather than a file beside the
-# controller's: the findings and the queue that say it is absent are derived
-# from rows (``derivations``), so a row is what moves them when it arrives.
+# HQ's playbook workers' arrivals, one per privilege profile, each a reading
+# rather than a file beside the controller's: the findings and the queue that
+# say one is absent are derived from rows (``derivations``), so a row is what
+# moves them when it arrives.
 AUTOMATION = "automation"
-AUTOMATION_HEARTBEAT = readings.heartbeat(AUTOMATION)
-# The host starts the worker this long after the last one ended, as well as at
-# its doorbell. deploy/systemd/severino-hq-automation.timer must hold the same
-# value (tested).
-AUTOMATION_FLOOR = timedelta(minutes=15)
+# The host starts the workers this long after the last ended, as well as at
+# its doorbell.
+AUTOMATION_FLOOR = unit_timers.span("severino-hq-automation.timer", "OnUnitInactiveSec")
 # A worker that arrives arrives at least once per floor; the second floor
 # allows for one that started late. One holding a run renews its lease instead.
 AUTOMATION_SILENT_AFTER = 2 * AUTOMATION_FLOOR
 # A worker claims until nothing waits, so one pass claims several times, and
 # a write a minute says all an age is worded in.
 _AUTOMATION_NOTED_EVERY = timedelta(minutes=1)
-# The work only HQ's playbook worker claims.
+# The work only HQ's playbook workers claim.
 AUTOMATION_WORK = (OperationRequest.Action.SCAN, OperationRequest.Action.RUN)
 
 
-def note_automation() -> None:
-    """Record that HQ's playbook worker reached HQ, as each of its claims
-    arrives, so a worker that finds nothing to take still counts as seen.
+def _automation(profile: str) -> str:
+    """What the arrival of the worker lent ``profile``'s logins is noted as (``readings.note``)."""
+
+    return f"{AUTOMATION}.{profile}"
+
+
+def automation_heartbeat(profile: str) -> str:
+    """The reading that holds when the worker lent ``profile``'s logins last arrived."""
+
+    return readings.heartbeat(_automation(profile))
+
+
+def note_automation(profile: str) -> None:
+    """Record that the playbook worker lent ``profile``'s logins reached HQ,
+    as each of its claims arrives, so a worker that finds nothing to take
+    still counts as seen.
 
     Written only by the bridge's claim over the root-only socket, never by a
     page. It holds a moment and nothing else, so it names no secret.
     """
 
-    readings.note(AUTOMATION, every=_AUTOMATION_NOTED_EVERY)
+    readings.note(_automation(profile), every=_AUTOMATION_NOTED_EVERY)
 
 
-def automation_standing() -> WorkerStanding:
-    """HQ's playbook worker's last arrival: its heartbeat, or its newest
-    claim of a scan or a run. Silent once two of its timer's floors pass with
-    no arrival, unless it still holds a run's lease. Unlike the controller,
-    one never seen is absent: a scan or run asked of it waits for nothing, so
-    each is refused while it stands (``cannot``)."""
+def _automation_claims() -> dict[str, tuple[datetime | None, datetime | None]]:
+    """Each profile's worker's newest claim, and the last of its live leases
+    to run out, read with every other profile's in one query a projection."""
+
+    def load() -> dict[str, tuple[datetime | None, datetime | None]]:
+        found: dict[str, tuple[datetime | None, datetime | None]] = {}
+        rows = (
+            OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
+            .values("action", "resource__spec__privilege")
+            .annotate(
+                newest=Max("claimed_at"),
+                leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED)),
+            )
+        )
+        for row in rows:
+            profile = claimant(row["action"], row["resource__spec__privilege"])
+            held = found.get(profile, (None, None))
+            found[profile] = (_later(held[0], row["newest"]), _later(held[1], row["leased"]))
+        return found
+
+    return read_once("cadence.automation_claims", load)
+
+
+def _later(one: datetime | None, other: datetime | None) -> datetime | None:
+    return max((moment for moment in (one, other) if moment is not None), default=None)
+
+
+def automation_profiles() -> tuple[str, ...]:
+    """Every profile HQ has asked a scan or run of, the read profile's first."""
+
+    return (READ_PROFILE, *sorted(set(_automation_claims()) - {READ_PROFILE}))
+
+
+def automation_standing(profile: str) -> WorkerStanding:
+    """The last arrival of the playbook worker lent ``profile``'s logins: its
+    heartbeat, or its newest claim of the scans or runs it takes. Silent once
+    two of its timer's floors pass with no arrival, unless it still holds a
+    run's lease. Unlike the controller, one never seen is absent: a scan or
+    run asked of it waits for nothing, so each is refused while it stands
+    (``cannot``)."""
 
     now = present()
-    work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
-    # The last lease to run out decides whether any is still held.
-    found = work.aggregate(
-        newest=Max("claimed_at"), leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED))
-    )
-    claimed, leased = found["newest"], found["leased"]
-    seen = [moment for moment in (readings.heard(AUTOMATION), claimed) if moment is not None]
+    # The read profile's worker always runs once automation is set up; another
+    # runs once a connection lends its profile a login.
+    # A profile's name is the operator's, so a refusal says "its profile".
+    read = profile == READ_PROFILE
+    named = PLAYBOOK_WORKER_NAMED if read else f"{PLAYBOOK_WORKER_NAMED} for its privilege profile"
+    unheard = WorkerState.NOT_CONFIGURED if read else WorkerState.UNHEARD
+    claimed, leased = _automation_claims().get(profile, (None, None))
+    seen = [moment for moment in (readings.heard(_automation(profile)), claimed) if moment is not None]
     if not seen:
-        return WorkerStanding(seen_at=None, silent=False, named=PLAYBOOK_WORKER_NAMED)
+        return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard)
     seen_at = max(seen)
     holding = leased is not None and not passed(leased, now=now)
     silent = not holding and passed(seen_at + AUTOMATION_SILENT_AFTER, now=now)
-    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=PLAYBOOK_WORKER_NAMED)
+    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=named, claimed_at=claimed)
 
 
 def newest_reading() -> datetime | None:
@@ -395,7 +446,8 @@ def ssh_probe_interval() -> timedelta:
 
 
 def carried_connections(controller_id: str, *, failing: bool = False) -> list[str]:
-    """SSH connections this controller should report without probing again.
+    """Connections that log in to a machine (``ConnectionKind.logs_in``)
+    this controller should report without probing again.
 
     Only ones whose last probe succeeded within ``ssh_probe_interval``, so a
     recovery shows as soon as it happens. ``failing`` carries the failing ones
@@ -407,7 +459,7 @@ def carried_connections(controller_id: str, *, failing: bool = False) -> list[st
     fresh_since = timezone.now() - ssh_probe_interval()
     probes = ProviderConnection.objects.filter(
         controller_id=controller_id,
-        provider="ssh",
+        provider__in=LOGS_IN,
         probed=True,
         observed_at__gte=fresh_since,
     )
@@ -427,7 +479,7 @@ def swept(kind: str) -> bool:
     if reading is not None:
         return reading.read_by == "controller"
     declared = PROVIDERS.get(kind)
-    return declared is not None and not declared.unobserved_reason
+    return declared is not None and declared.sweeps
 
 
 def own_clock(kind: str) -> timedelta | None:

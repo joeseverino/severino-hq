@@ -462,6 +462,16 @@
               "reads.ability.action.reason",
               "reads.ability.action.recommended",
               "reads.ability.action.refusal",
+              "reads.newest",
+              "reads.newest.label",
+              "reads.newest.url",
+              "reads.newest.external",
+              "reads.newest.kind",
+              "reads.newest.kind_label",
+              "reads.newest.title",
+              "reads.newest.detail",
+              "reads.newest.identity",
+              "reads.newest_at",
               "changes",
               "changes.name",
               "changes.label",
@@ -1996,6 +2006,8 @@
               "records",
               "observed_at",
               "error",
+              "freshness",
+              "freshness_label",
               "provider_label",
               "read_by",
               "facet",
@@ -2028,6 +2040,8 @@
               "records",
               "observed_at",
               "error",
+              "freshness",
+              "freshness_label",
               "provider_label",
               "read_by",
               "facet",
@@ -2835,6 +2849,19 @@
         },
         "style": "form"
       },
+      "WholeLimit": {
+        "description": "How many records a page holds, 1 to 100; absent, every one.",
+        "explode": true,
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "style": "form"
+      },
       "WorkIdIdentifier": {
         "description": "The record's `id`, as each item of the list carries it.",
         "in": "path",
@@ -3415,21 +3442,6 @@
           }
         }
       },
-      "EstateFigurePageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/EstateFigurePageSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
       "ExpenseSavedSuccess": {
         "content": {
           "application/json": {
@@ -3483,21 +3495,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/HeldRequestRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "HopRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/HopRowPageSuccess"
             }
           }
         },
@@ -3798,21 +3795,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/PlaybookRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "ProblemPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ProblemPageSuccess"
             }
           }
         },
@@ -4161,21 +4143,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SourcesChosenSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "TailnetPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/TailnetPageSuccess"
             }
           }
         },
@@ -4535,7 +4502,7 @@
             "type": "string"
           },
           "evidence": {
-            "description": "How HQ knows whether it holds: `verified`, `coarse`, `not_applicable`, `unverified`, `undeclared`, `unknown`, `missing` or `revoked`.",
+            "description": "How HQ knows whether it holds: `verified`, `coarse`, `not_applicable`, `unverified`, `undeclared`, `unknown` or `missing`.",
             "type": "string"
           },
           "grant": {
@@ -5282,6 +5249,38 @@
         },
         "type": "object"
       },
+      "Aged": {
+        "additionalProperties": false,
+        "description": "How current a kind's last read is, as ``credential_sight.Standing`` says it.",
+        "properties": {
+          "freshness": {
+            "description": "How current its last read is, in one word.",
+            "type": "string"
+          },
+          "freshness_label": {
+            "description": "How current its last read is, in the words its row shows.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "freshness",
+          "freshness_label"
+        ],
+        "type": "object"
+      },
+      "AgedPartial": {
+        "additionalProperties": false,
+        "description": "How current a kind's last read is, as ``credential_sight.Standing`` says it.",
+        "properties": {
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
+          }
+        },
+        "type": "object"
+      },
       "AgendaItem": {
         "additionalProperties": false,
         "description": "One thing on the calendar in the span, from whichever source holds it.",
@@ -5463,6 +5462,13 @@
           }
         },
         "type": "object"
+      },
+      "AllFields": {
+        "description": "Every field a record here holds, each a name `fields` may keep; a dot after one keeps a part inside it. Only in a read of this one resource.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       },
       "Allocation": {
         "additionalProperties": false,
@@ -7586,6 +7592,7 @@
             "default": "",
             "description": "The connection to the host that serves this route.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Caddy",
             "type": "string"
           },
@@ -9111,7 +9118,7 @@
           "connection_ref": {
             "description": "The connection that holds this zone.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Served by",
             "type": "string"
           },
@@ -9489,7 +9496,7 @@
                 "type": "null"
               }
             ],
-            "description": "What sort of credential it is, `scoped`, `coarse`, `none` or `rejected`, the last for one the service refused; null when that is not known."
+            "description": "What sort of credential it is, `scoped`, `coarse` or `none`; null when that is not known."
           },
           "dependencies": {
             "description": "What the connection depends on.",
@@ -9555,7 +9562,7 @@
             "description": "The latest audit entry about it; null for none."
           },
           "lifecycle": {
-            "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `ready`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
+            "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
             "type": "string"
           },
           "observed_at": {
@@ -15801,6 +15808,9 @@
         "additionalProperties": false,
         "description": "How one record of a resource is read, where it can be.",
         "properties": {
+          "all_fields": {
+            "$ref": "#/components/schemas/AllFields"
+          },
           "identifier": {
             "description": "The field of a record that `get_resource` finds it by.",
             "type": "string"
@@ -18524,6 +18534,9 @@
         "additionalProperties": false,
         "description": "How a resource is listed, where it can be.",
         "properties": {
+          "all_fields": {
+            "$ref": "#/components/schemas/AllFields"
+          },
           "fields": {
             "description": "The fields each item keeps unless the caller names its own.",
             "items": {
@@ -18539,7 +18552,7 @@
             "type": "array"
           },
           "paging": {
-            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
+            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource.",
             "type": "object"
           },
           "query_schema": {
@@ -23314,7 +23327,7 @@
           "connection_ref": {
             "description": "The Portainer that manages this machine.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Portainer",
             "type": "string"
           },
@@ -25143,6 +25156,30 @@
             "description": "What it reads, in words.",
             "type": "string"
           },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its newest record, for a reading whose records join no subject; null otherwise."
+          },
+          "newest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When what that record tells of happened, an ISO 8601 date-time; null without one.",
+            "format": "date-time"
+          },
           "sight": {
             "anyOf": [
               {
@@ -25159,7 +25196,9 @@
         "required": [
           "label",
           "sight",
-          "ability"
+          "ability",
+          "newest",
+          "newest_at"
         ],
         "type": "object"
       },
@@ -25180,6 +25219,21 @@
           },
           "label": {
             "$ref": "#/components/schemas/ReadPart/properties/label"
+          },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLinkPartial",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its newest record, for a reading whose records join no subject; null otherwise."
+          },
+          "newest_at": {
+            "$ref": "#/components/schemas/ReadPart/properties/newest_at"
           },
           "sight": {
             "anyOf": [
@@ -25205,6 +25259,12 @@
           "facet": {
             "description": "What its records supply a service: `certificate`, `dns`, `network`, `proxy`, `registration` or `runtime`, or empty for none.",
             "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/ReadingRow/properties/kind"
@@ -25260,6 +25320,8 @@
           "records",
           "observed_at",
           "error",
+          "freshness",
+          "freshness_label",
           "provider_label",
           "read_by",
           "facet",
@@ -25308,6 +25370,12 @@
           },
           "facet": {
             "$ref": "#/components/schemas/ReadingItem/properties/facet"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/ReadingRowPartial/properties/kind"
@@ -25411,6 +25479,12 @@
           "facet": {
             "$ref": "#/components/schemas/ReadingItem/properties/facet"
           },
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
+          },
           "items": {
             "description": "The records it holds, each as its type's schema admits it; empty for a type HQ withholds.",
             "items": {
@@ -25463,6 +25537,8 @@
           "records",
           "observed_at",
           "error",
+          "freshness",
+          "freshness_label",
           "provider_label",
           "read_by",
           "facet",
@@ -25483,6 +25559,12 @@
           },
           "facet": {
             "$ref": "#/components/schemas/ReadingItemPartial/properties/facet"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "items": {
             "$ref": "#/components/schemas/ReadingRecord/properties/items"
@@ -28162,17 +28244,16 @@
       },
       "SeenPart": {
         "additionalProperties": false,
+        "description": "What the last sweep found of one thing a connection reads, and how current it is.",
         "properties": {
           "error": {
             "$ref": "#/components/schemas/SightPart/properties/error"
           },
           "freshness": {
-            "description": "How current its last read is, in one word.",
-            "type": "string"
+            "$ref": "#/components/schemas/Aged/properties/freshness"
           },
           "freshness_label": {
-            "description": "How current its last read is, in the words its row shows.",
-            "type": "string"
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/SightPart/properties/kind"
@@ -28232,15 +28313,16 @@
       },
       "SeenPartPartial": {
         "additionalProperties": false,
+        "description": "What the last sweep found of one thing a connection reads, and how current it is.",
         "properties": {
           "error": {
             "$ref": "#/components/schemas/SightPartPartial/properties/error"
           },
           "freshness": {
-            "$ref": "#/components/schemas/SeenPart/properties/freshness"
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
           },
           "freshness_label": {
-            "$ref": "#/components/schemas/SeenPart/properties/freshness_label"
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/SightPartPartial/properties/kind"
@@ -29803,10 +29885,12 @@
           "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
+          "github.open_pull_request",
           "github.profile",
           "github.pull_request",
           "github.repository",
           "github.webhook",
+          "github.workflow_run",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -29832,6 +29916,7 @@
           "portainer.network",
           "portainer.runtime",
           "portainer.volume",
+          "r2.backup",
           "registry.address",
           "registry.digest",
           "registry.domain",
@@ -29871,10 +29956,12 @@
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.dependency_run": "Dependency update run",
+          "github.open_pull_request": "Open pull request",
           "github.profile": "GitHub profile",
           "github.pull_request": "Pull request",
           "github.repository": "GitHub repository",
           "github.webhook": "GitHub App webhook",
+          "github.workflow_run": "GitHub workflow run",
           "host.edge_reboot": "Pending restart on an edge",
           "host.filesystem": "Disk space",
           "host.firewall": "Host firewall",
@@ -29900,6 +29987,7 @@
           "portainer.network": "Docker network",
           "portainer.runtime": "Container settings",
           "portainer.volume": "Volumes and mounts",
+          "r2.backup": "Off-site backup",
           "registry.address": "Address owner",
           "registry.digest": "Image signatures",
           "registry.domain": "Domain registration",
@@ -30088,7 +30176,7 @@
           "connection_ref": {
             "description": "The connection HQ uses to reach this target.",
             "maxLength": 160,
-            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
             "title": "Connection",
             "type": "string"
           },
@@ -30363,6 +30451,7 @@
             "default": "",
             "description": "The connection HQ uses to change this device.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Tailscale",
             "type": "string"
           },
@@ -30537,6 +30626,7 @@
             "default": "",
             "description": "The Tailscale connection the policy is read through.",
             "maxLength": 160,
+            "pattern": "^(?:[a-zA-Z0-9][a-zA-Z0-9_.-]*)?$",
             "title": "Tailscale",
             "type": "string"
           },
@@ -32201,6 +32291,12 @@
         ],
         "description": "The page of HQ's web interface that shows it, by its route name such as `projects:list`; null for none.",
         "title": "Web route"
+      },
+      "WholeLimit": {
+        "description": "How many records a page holds, 1 to 100; absent, every one.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
       },
       "WorkItem": {
         "additionalProperties": false,
@@ -38062,6 +38158,7 @@
                 "service-wiring-incomplete",
                 "posture-unmet",
                 "automation-worker-absent",
+                "offsite-backup-late",
                 "event-channel-silent",
                 "deploy-running",
                 "machine-offline",
@@ -38650,6 +38747,12 @@
         "operationId": "listApprovalsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/HeldRequestItemPageFields"
           }
         ],
@@ -38673,6 +38776,14 @@
                 "operationId": "getApprovalsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listApprovalsV2": {
+                "operationId": "listApprovalsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -39528,6 +39639,12 @@
         "operationId": "listConnectionsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ConnectionStandingRecordFields"
           }
         ],
@@ -39551,6 +39668,14 @@
                 "operationId": "getConnectionsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/connection_ref"
+                }
+              },
+              "listConnectionsV2": {
+                "operationId": "listConnectionsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -40266,6 +40391,12 @@
         "operationId": "listCredentialsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/CredentialRecordFields"
           }
         ],
@@ -40289,6 +40420,14 @@
                 "operationId": "getCredentialsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/provider"
+                }
+              },
+              "listCredentialsV2": {
+                "operationId": "listCredentialsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -40814,12 +40953,40 @@
         "operationId": "listEstateV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/EstateFigurePageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/EstateFigurePageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateFigurePageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listEstateV2": {
+                "operationId": "listEstateV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -41126,12 +41293,40 @@
         "operationId": "listHqV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ProblemPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ProblemPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listHqV2": {
+                "operationId": "listHqV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -41878,6 +42073,12 @@
         "operationId": "listPlaybookScansV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ScanResultFields"
           }
         ],
@@ -41901,6 +42102,14 @@
                 "operationId": "getPlaybookScansV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listPlaybookScansV2": {
+                "operationId": "listPlaybookScansV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -42006,6 +42215,12 @@
         "operationId": "listPlaybooksV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/PlaybookRowPageFields"
           }
         ],
@@ -42029,6 +42244,14 @@
                 "operationId": "getPlaybooksV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/playbook"
+                }
+              },
+              "listPlaybooksV2": {
+                "operationId": "listPlaybooksV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -42475,6 +42698,7 @@
                 "npm",
                 "osv",
                 "portainer",
+                "r2",
                 "rdap",
                 "ssh",
                 "tailscale",
@@ -42910,12 +43134,40 @@
         "operationId": "listRequestPathV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/HopRowPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/HopRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HopRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listRequestPathV2": {
+                "operationId": "listRequestPathV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -43304,6 +43556,12 @@
         "operationId": "listServicesV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ServiceItemPageFields"
           }
         ],
@@ -43327,6 +43585,14 @@
                 "operationId": "getServicesV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/hostname"
+                }
+              },
+              "listServicesV2": {
+                "operationId": "listServicesV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -43432,12 +43698,40 @@
         "operationId": "listTailnetV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/TailnetPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/TailnetPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TailnetPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listTailnetV2": {
+                "operationId": "listTailnetV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -44323,6 +44617,13 @@
       "summary": "Connections"
     },
     {
+      "description": "What providers and HQ's host told HQ happened, and the readings each made due.",
+      "kind": "nav",
+      "name": "hq.events",
+      "parent": "hq.infrastructure",
+      "summary": "Events"
+    },
+    {
       "description": "The private network the machines share: its policy, grants and members.",
       "kind": "nav",
       "name": "hq.tailnet",
@@ -44341,12 +44642,6 @@
       "kind": "nav",
       "name": "hq.estate",
       "summary": "Estate"
-    },
-    {
-      "description": "What providers and HQ's host told HQ happened, and the readings each made due.",
-      "kind": "nav",
-      "name": "hq.events",
-      "summary": "Events"
     },
     {
       "description": "One query across every domain, answered with what the reader may read.",

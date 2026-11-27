@@ -13,7 +13,7 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
 
-from ..connection_shapes import API_TOKEN
+from ..connection_shapes import API_TOKEN, ConnectionRef
 from ..consoles import cloudflare_dashboard
 from ..names import LEADS_TO, normalized_hostname
 from ..observations import cloudflare as readings
@@ -21,7 +21,9 @@ from ..observations.contract import ReadingPart
 from ..permissions import Cloudflare
 from ..provider_spec import (
     ConnectionKind,
+    Minter,
     NameContext,
+    Observes,
     ProviderModel,
     ProviderSpec,
     SharedValue,
@@ -297,8 +299,7 @@ class CloudflareZoneSpec(ProviderModel):
         title="Domain",
         description="The domain itself, e.g. example.com.",
     )
-    connection_ref: RequiredText = Field(
-        max_length=160,
+    connection_ref: ConnectionRef = Field(
         title="Served by",
         description="The connection that holds this zone.",
     )
@@ -669,7 +670,7 @@ class ContactInboxSpec(ProviderModel):
     nothing.
     """
 
-    connection_ref: RequiredText = Field(max_length=160, title="Connection")
+    connection_ref: ConnectionRef = Field(title="Connection")
     account_id: RequiredText = Field(max_length=64, title="Account")
     database_id: RequiredText = Field(max_length=64, title="Database")
     reviews: tuple[ContactReview, ...] = Field(default=(), max_length=CONTACT_CHANGES_LIMIT, title="Reviews")
@@ -732,6 +733,23 @@ CONNECTIONS = {
         # cloudflare.contact_inbox declaration.
         writes=(Cloudflare.D1_EDIT,),
         gives="Your site's visits and contact-form messages, its tunnels, Access apps and Pages projects.",
+        minter=Minter(
+            task="mint:cloudflare",
+            stores=(("--store", "API_TOKEN"),),
+            bootstrap=(("CLOUDFLARE_BOOTSTRAP_TOKEN", "API_TOKEN"),),
+            account_flag="--account",
+        ),
+        observes=(
+            Observes(
+                name="analytics.read",
+                label="Site analytics",
+                summary=(
+                    "Reads site traffic (pages, referrers, countries, devices, "
+                    "browsers, operating systems) and Core Web Vitals."
+                ),
+                subject_resource="analytics",
+            ),
+        ),
     ),
     "cloudflare_dns": ConnectionKind(
         "Cloudflare DNS",

@@ -18,7 +18,7 @@ from hq.platform.application.ui import ended
 lazy from hq.platform.application.expiry import days_until
 lazy from hq.platform.application.moments import moment, stamp_day
 
-from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT
+from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT, ConnectionRef
 from ..provider_spec import (
     ConnectionKind,
     ProviderModel,
@@ -177,8 +177,7 @@ class TLSDeliveryTargetSpec(ProviderModel):
         title="Type",
         description="Sets how the certificate is delivered and verified.",
     )
-    connection_ref: RequiredText = Field(
-        max_length=160,
+    connection_ref: ConnectionRef = Field(
         title="Connection",
         description="The connection HQ uses to reach this target.",
     )
@@ -537,5 +536,6 @@ CONNECTIONS = {
         create="An SSH key made in 1Password, its public half in the machine's authorized_keys.",
         create_url="https://developer.1password.com/docs/ssh/manage-keys/",
         gives="Caddy routes and certificates on your machines, and which of their ports answer.",
+        logs_in=True,
     ),
 }

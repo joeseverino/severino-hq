@@ -69,28 +69,81 @@ BECOME = "ansible_become"
 EXTRAVARS = "extravars.yml"
 # Ansible's tag for text it must never read as a template.
 UNSAFE = "!unsafe"
+# Each host's login (``login``), by the host's name, as one extra var.
+LOGINS = "hq_logins"
+# Every variable the ssh connection plugin reads for where it connects, as
+# whom, with which key or password, and with which program and arguments
+# (``plugins/connection/ssh.py`` in ansible-core 2.22; the smoke holds this to
+# it): each the field of the host's login it is pinned to, or None for one no
+# run sets. Each is an extra var, the one place Ansible ranks above a play's,
+# a role's, a task's, ``set_fact`` and ``include_vars``
+# (``vars/manager.py``, ``get_vars``), so nothing a playbook declares changes
+# which login a host is reached through. A var of the plugin's outranks its
+# keyword (``remote_user``), and None hides a play's value, leaving the
+# setting at its default (``config/manager.py``,
+# ``get_config_value_and_origin``).
+PINNED: Mapping[str, str | None] = {
+    "ansible_host": "host",
+    "ansible_ssh_host": "host",
+    "ansible_port": "port",
+    "ansible_ssh_port": "port",
+    "ansible_user": "user",
+    "ansible_ssh_user": "user",
+    "ansible_private_key_file": "key",
+    "ansible_ssh_private_key_file": "key",
+    "ansible_ssh_common_args": "args",
+    "ansible_host_key_checking": "checks_host_key",
+    "ansible_ssh_host_key_checking": "checks_host_key",
+    "ansible_private_key": None,
+    "ansible_ssh_private_key": None,
+    "ansible_private_key_passphrase": None,
+    "ansible_ssh_private_key_passphrase": None,
+    "ansible_password": None,
+    "ansible_ssh_pass": None,
+    "ansible_ssh_password": None,
+    "ansible_ssh_pkcs11_provider": None,
+    "ansible_ssh_args": None,
+    "ansible_ssh_extra_args": None,
+    "ansible_scp_extra_args": None,
+    "ansible_sftp_extra_args": None,
+    "ansible_ssh_executable": None,
+    "ansible_scp_executable": None,
+    "ansible_sftp_executable": None,
+    "ansible_control_path": None,
+    "ansible_control_path_dir": None,
+}
 # How long ansible-doc may take to read one role's argument spec.
 DOC_TIMEOUT_SECONDS = 60
 
 
-def _host_vars(target: Target) -> dict[str, Any]:
+def login(target: Target) -> dict[str, Any]:
+    """How ``target`` is reached, as ``LOGINS`` holds it: every value ``PINNED`` reads."""
+
     options = [f"UserKnownHostsFile={target.known_hosts}", *_SSH_OPTIONS]
-    found: dict[str, Any] = {
-        "ansible_connection": "ssh",
-        "ansible_host": target.host,
-        "ansible_port": target.port,
-        "ansible_user": target.user,
-        "ansible_ssh_private_key_file": str(target.identity),
-        "ansible_ssh_common_args": shlex.join(part for option in options for part in ("-o", option)),
-        "ansible_host_key_checking": True,
+    return {
+        "host": target.host,
+        "port": target.port,
+        "user": target.user,
+        "key": str(target.identity),
+        "args": shlex.join(part for option in options for part in ("-o", option)),
+        "checks_host_key": True,
     }
-    if target.shell_type:
-        found["ansible_shell_type"] = target.shell_type
-    return found
 
 
 def _inventory(hosts: tuple[str, ...], targets: tuple[Target, ...]) -> dict[str, Any]:
-    return {"all": {"hosts": {host: _host_vars(target) for host, target in zip(hosts, targets, strict=True)}}}
+    """Each host, opened over ssh as a shell of its type; where to and as whom is ``PINNED``'s."""
+
+    return {
+        "all": {
+            "hosts": {
+                host: {
+                    "ansible_connection": "ssh",
+                    **({"ansible_shell_type": each.shell_type} if each.shell_type else {}),
+                }
+                for host, each in zip(hosts, targets, strict=True)
+            }
+        }
+    }
 
 
 def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
@@ -122,13 +175,15 @@ def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
 
 
 def extravars(run: Run) -> dict[str, Any]:
-    """The run's parameters, and for a run through the read login, escalation turned off.
+    """The run's parameters, each host's login, and for a run through the read
+    login, escalation turned off.
 
     Off as an extra var, the one place Ansible ranks above every ``become`` a
     project can set, and written after the parameters so none turns it back on.
     """
 
     found = dict(run.parameters)
+    found[LOGINS] = {host: login(target) for host, target in zip(run.hosts, run.targets, strict=True)}
     if not run.escalates:
         found[BECOME] = False
     return found
@@ -146,19 +201,35 @@ def as_data(value: Any) -> str:
     if isinstance(value, str):
         return f"{UNSAFE} {json.dumps(value)}"
     if isinstance(value, Mapping):
-        return "{" + ", ".join(f"{json.dumps(str(key))}: {as_data(each)}" for key, each in value.items()) + "}"
+        return _mapping({str(key): as_data(each) for key, each in value.items()})
     if isinstance(value, (list, tuple)):
         return "[" + ", ".join(as_data(each) for each in value) + "]"
     return json.dumps(value)
 
 
-def write_extravars(run: Run, private_data_dir: Path) -> Path:
-    """The run's extra vars as the file ``arguments`` names, the worker's alone to read."""
+def _mapping(written: Mapping[str, str]) -> str:
+    """A YAML mapping of each key to its value as YAML already."""
 
+    return "{" + ", ".join(f"{json.dumps(key)}: {value}" for key, value in written.items()) + "}"
+
+
+def _pinned(field: str | None) -> str:
+    """What ``PINNED`` sets a variable to: the worker's own template of the
+    host's login field, read per host, or null."""
+
+    return json.dumps(None if field is None else f"{{{{ {LOGINS}[inventory_hostname].{field} }}}}")
+
+
+def write_extravars(run: Run, private_data_dir: Path) -> Path:
+    """The run's extra vars as the file ``arguments`` names, the worker's alone
+    to read: its data, then ``PINNED`` over any parameter of the same name."""
+
+    written = {name: as_data(value) for name, value in extravars(run).items()}
+    written.update({name: _pinned(field) for name, field in PINNED.items()})
     path = private_data_dir / EXTRAVARS
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        handle.write(as_data(extravars(run)) + "\n")
+        handle.write(_mapping(written) + "\n")
     return path
 
 

@@ -4,17 +4,20 @@ import logging
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import Any
+from functools import cache, lru_cache
+from typing import Any, Literal
 
+from hq.platform.application.labels import human_label
 from hq.platform.application.record_errors import Sentence
 lazy from hq.platform.application.default_hold import needs_approval
 lazy from hq.platform.application.entity_links import page_url
+lazy from hq.platform.application.readings import KEPT
 lazy from hq.platform.application.references import Kind
 
-from .attribution import unattributed_kinds
-from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
+from .attribution import logging_in, unattributed_kinds
+from .connection_kinds import CONNECTION_LABELS
 from .observations import OBSERVATIONS
+from .observations.contract import Reader, ReadingPart
 from .provider_adapters import DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
@@ -48,14 +51,14 @@ def service_facets() -> tuple[tuple[str, str], ...]:
 
 
 def registry_label(kind: str) -> str:
-    """What a registered resource or reading kind is called. Never the identifier."""
+    """What a resource or reading kind is called: its declared label, else,
+    for a stored kind nothing declares any more, its identifier in words."""
 
-    provider = PROVIDERS.get(kind)
-    if provider is not None and provider.label:
-        return provider.label
+    if kind in PROVIDERS:
+        return PROVIDERS[kind].label
     if kind in OBSERVATIONS:
         return OBSERVATIONS[kind].label
-    return "Unknown type"
+    return human_label(kind)
 
 
 def operator_label(kind: str) -> str:
@@ -66,9 +69,7 @@ def operator_label(kind: str) -> str:
     spec = PROVIDERS.get(kind)
     if spec is None:
         return ""
-    return next(
-        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS), spec.label
-    )
+    return CONNECTION_LABELS[spec.connection_providers[0]] if spec.connection_providers else spec.label
 
 
 def _registry() -> dict[str, ProviderSpec]:
@@ -83,6 +84,22 @@ def _registry() -> dict[str, ProviderSpec]:
 # Every kind any admitted module declares, in admission order. Derived, so a
 # provider joins by being admitted and nothing here names it.
 PROVIDERS = _registry()
+
+
+def observed(kind: str) -> bool:
+    """Whether anything reads ``kind``: it is a reading, or a declaration a
+    sweep reads back (``ProviderSpec.sweeps``). A kind nothing declares is not."""
+
+    spec = PROVIDERS.get(kind)
+    return kind in OBSERVATIONS or (spec is not None and spec.sweeps)
+
+
+def unswept(kind: str) -> bool:
+    """Whether HQ declares ``kind`` and nothing sweeps it, so it can never be
+    behind a sweep. A kind HQ does not declare is read by whatever brings it."""
+
+    spec = PROVIDERS.get(kind)
+    return spec is not None and not spec.sweeps
 
 
 def resource_home(resource: Any) -> str:
@@ -155,58 +172,55 @@ def read_spec[T](kind: str, spec: Mapping[str, Any], read: Callable[[dict[str, A
         return None
 
 
+@dataclass(frozen=True, slots=True)
+class Read:
+    """One thing a provider reads: a reading, a resource kind a sweep reads
+    back, the parts of another provider's kind, or a value kept outside the
+    inventory (``readings.Kept``)."""
+
+    kind: str
+    label: str
+    source: Literal["reading", "resource", "part"]
+    by: Reader = "controller"
+    permissions: tuple[str, ...] = ()
+    # The kept value this is, whose ``through`` says whether a stored value
+    # came through this provider; ``kind`` is then the cadence it is judged by.
+    kept: Any = None
+
+
+@cache
+def provider_reads() -> Mapping[str, tuple[Read, ...]]:
+    """Everything each provider reads, by provider: the one index of what
+    reads what, from the declarations alone."""
+
+    found: dict[str, list[Read]] = {}
+    for kind, reading in OBSERVATIONS.items():
+        found.setdefault(reading.provider, []).append(
+            Read(kind, reading.label, "reading", reading.read_by, tuple(reading.requires))
+        )
+    for kind, spec in PROVIDERS.items():
+        if spec.sweeps:
+            for provider in spec.connection_providers:
+                found.setdefault(provider, []).append(Read(kind, spec.label, "resource"))
+        by_provider: dict[str, list[ReadingPart]] = {}
+        for part in spec.parts:
+            if part.provider and part.provider not in spec.connection_providers:
+                by_provider.setdefault(part.provider, []).append(part)
+        for provider, parts in by_provider.items():
+            label = ", ".join(part.label for part in parts)
+            needs = tuple(dict.fromkeys(name for part in parts for name in part.requires))
+            found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
+    for kept in KEPT:
+        for provider in kept.through:
+            found.setdefault(provider, []).append(Read(kept.cadence, kept.label, "reading", "hq", kept=kept))
+    return frozendict({provider: tuple(reads) for provider, reads in found.items()})
+
+
 # Kinds a controller reports as readings rather than as resources; see
 # control_plane.observations.
 OBSERVATION_KINDS = frozenset(OBSERVATIONS)
-
-
-@dataclass(frozen=True, slots=True)
-class ObserverAbility:
-    """What a connection is carried for when it reconciles nothing.
-
-    Every other ability derives from a resource kind, the record of why a
-    credential is held. A connection that only reads has none, and without this
-    shows on the connections page as a credential nobody can account for. The
-    effect is always a read: changing state needs a kind, which reconcile keys on.
-    """
-
-    provider: str
-    name: str
-    label: str
-    summary: str
-    subject_resource: str
-
-
-_OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
-    ObserverAbility(
-        provider="cloudflare_api",
-        name="analytics.read",
-        label="Site analytics",
-        summary=(
-            "Reads site traffic (pages, referrers, countries, devices, "
-            "browsers, operating systems) and Core Web Vitals."
-        ),
-        subject_resource="analytics",
-    ),
-)
-
-
-def observer_abilities() -> tuple[ObserverAbility, ...]:
-    return _OBSERVER_ABILITIES
-
-
-# A provider a resource can be reconciled through, or an observer can read
-# through, without a credential model would be reported as "proof undeclared"
-# forever. Refused here, beside the declarations, rather than found on the page.
-_unmodeled = sorted(
-    (
-        {provider for spec in PROVIDERS.values() for provider in spec.connection_providers}
-        | {ability.provider for ability in _OBSERVER_ABILITIES}
-    )
-    - set(CONNECTION_CREDENTIALS)
-)
-if _unmodeled:
-    raise ValueError(f"Connections without a credential model: {', '.join(_unmodeled)}.")
+# Every kind read by logging in to a machine (``attribution.logging_in``).
+LOGGING_IN = logging_in(OBSERVATIONS, PROVIDERS.values())
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):
@@ -291,7 +305,7 @@ def describe_providers() -> dict[str, Any]:
         "providers": [
             {
                 "kind": provider.kind,
-                "label": provider.label or provider.kind,
+                "label": provider.label,
                 "summary": provider.summary,
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,

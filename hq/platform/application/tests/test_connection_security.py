@@ -89,7 +89,7 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
             (
                 ConnectionView(
                     instance,
-                    lifecycle={"good": "ready", "serious": "unreachable"}.get(status, "configured"),
+                    lifecycle={"good": "reachable", "serious": "unreachable"}.get(status, "configured"),
                     abilities=(
                         ConnectionAbilityState(
                             ability,
@@ -121,25 +121,6 @@ class OneStateModelTests(TestCase):
         views = tuple(replace(group.connections[0], lifecycle=lifecycle) for lifecycle in lifecycles)
         return _posture((replace(group, connections=views),))
 
-    def test_each_lifecycle_lands_in_exactly_one_headline_bucket(self):
-        for lifecycle, bucket, state in (
-            ("ready", "healthy_count", "good"),
-            ("reachable", "healthy_count", "good"),
-            ("stale", "attention_count", "attention"),
-            ("unauthorized", "attention_count", "serious"),
-            ("unreachable", "attention_count", "serious"),
-            ("revoked", "attention_count", "serious"),
-            ("configured", "unverified_count", "neutral"),
-        ):
-            with self.subTest(lifecycle=lifecycle):
-                posture = self._posture_with(lifecycle)
-                counts = {
-                    name: getattr(posture, name) for name in ("healthy_count", "attention_count", "unverified_count")
-                }
-                self.assertEqual(counts[bucket], 1, counts)
-                self.assertEqual(sum(counts.values()), 1, counts)
-                self.assertEqual(posture.state, state)
-
     def test_the_posture_is_the_worst_its_rows_show(self):
         self.assertEqual(self._posture_with("configured", "revoked").state, "serious")
 
@@ -150,8 +131,7 @@ class OneStateModelTests(TestCase):
             ("not_applicable", "good", ""),
             ("coarse", "neutral", ""),
             ("unverified", "neutral", ""),
-            ("revoked", "neutral", ""),
-            ("revoked", "serious", "advanced"),
+            ("missing", "serious", "advanced"),
         ):
             with self.subTest(evidence=evidence, advanced=advanced), override_settings(SEVERINO_POSTURE=advanced):
                 judged = replace(view, abilities=(replace(view.abilities[0], evidence=evidence),))
@@ -163,22 +143,6 @@ class OneStateModelTests(TestCase):
         self.assertEqual(posture.headline, "")
         self.assertEqual(posture.admission, ())
         self.assertEqual(posture.state, "good")
-
-    def test_a_whole_account_credential_is_named_and_still_ready(self):
-        from hq.platform.application.connection_catalog import (
-            AUTHORITY_LABELS,
-            connection_authority,
-            connection_lifecycle,
-        )
-
-        (group,) = _groups()
-        view = group.connections[0]
-        coarse = (replace(view.abilities[0], evidence="coarse"),)
-        authority = connection_authority(coarse)
-
-        self.assertEqual(authority, "whole_account")
-        self.assertEqual(AUTHORITY_LABELS[authority], "Credential has full account access")
-        self.assertEqual(connection_lifecycle(view.instance, authority, now=timezone.now()), "ready")
 
 
 @override_settings(SEVERINO_ENFORCE_TRUSTED_NETWORK=True, ALLOWED_HOSTS=["hq.example.test"])

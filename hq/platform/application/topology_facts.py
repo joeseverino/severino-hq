@@ -11,14 +11,14 @@ from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 lazy from hq.platform.core.network import parse_ip
 
+from .connection_lifecycle import Lifecycle
 from .references import Kind
 from .topology_model import TopologyNode
 lazy from . import tailnet
 lazy from .conditions import DRIFTED, held_since
-lazy from .connections import connection_rows, unfinished_work
+lazy from .connections import connection_rows, connection_standing, credential_refusals, unfinished_work
 lazy from .credential_findings import ENDPOINT, FAILURE, UNREPORTED, credential_facts
 lazy from .credential_mint import credential_fixes
-lazy from .estate import refused_connections
 lazy from .facts import Subject, connection_facts, inventory_about, snapshots_of
 lazy from .history import near
 lazy from .moments import when
@@ -278,7 +278,6 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
 
     perimeter = _perimeter_facts()
     unanswered = _unanswered()
-    refused = refused_connections()
     fixes = credential_fixes()
     unfinished = unfinished_work()
     tailnet = _tailnet_facts() + posture_facts()
@@ -287,8 +286,8 @@ def add_connection_facts(nodes: dict[str, TopologyNode]) -> None:
     def facts_for(node: TopologyNode) -> tuple[tuple[str, str], ...]:
         found = tuple(perimeter.get(node.connection_ref, ()))
         found += unanswered.get((node.controller_id, node.connection_ref), ())
-        if node.connection_ref in refused:
-            found += (("credential-refused", refused[node.connection_ref]),)
+        if connection_standing(node) == Lifecycle.REVOKED:
+            found += (("credential-refused", credential_refusals()[node.provider]),)
         found += credential_facts(fixes.get(node.connection_ref))
         steps = unfinished.get((node.controller_id, node.connection_ref), ())
         found += tuple(("work-unfinished", step) for step in steps)
@@ -318,5 +317,5 @@ def _unanswered() -> dict[tuple[str, str], tuple[tuple[str, str], ...]]:
             *(((ENDPOINT, row.endpoint),) if row.endpoint else ()),
         )
         for row in connection_rows()
-        if not row.reachable
+        if connection_standing(row) in (Lifecycle.UNREACHABLE, Lifecycle.UNREPORTED)
     }

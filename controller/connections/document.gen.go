@@ -39,6 +39,9 @@ type Connection struct {
 	Provider    string       `json:"provider"`
 	Ref         string       `json:"ref"`
 
+	// S3Bucket The settings a connection of the s3_bucket shape arrives with.
+	S3Bucket *S3Bucket `json:"s3_bucket,omitempty"`
+
 	// ServiceAccount The settings a connection of the service_account shape arrives with.
 	ServiceAccount *ServiceAccount `json:"service_account,omitempty"`
 
@@ -72,6 +75,14 @@ type Login struct {
 type OAuthClient struct {
 	ClientID     string       `json:"client_id" setting:"CLIENT_ID"`
 	ClientSecret secret.Value `json:"client_secret" setting:"CLIENT_SECRET"`
+}
+
+// S3Bucket The settings a connection of the s3_bucket shape arrives with.
+type S3Bucket struct {
+	AccessKeyID     string       `json:"access_key_id" setting:"ACCESS_KEY_ID"`
+	Bucket          string       `json:"bucket" setting:"BUCKET"`
+	SecretAccessKey secret.Value `json:"secret_access_key" setting:"SECRET_ACCESS_KEY"`
+	URL             string       `json:"url" setting:"URL"`
 }
 
 // SSHTransport The settings a connection of the ssh_transport shape arrives with.

@@ -25,7 +25,7 @@ import (
 // deployments' latest statuses and the latest release. Everything else
 // (alerts, variables, runners, environments, branch rules, access, artifacts
 // and what an unpinned action's tag names now) waits for the full read HQ's
-// clock makes due.
+// clock, or an event about an alert, makes due.
 
 // githubGraphQL is GitHub's GraphQL endpoint under the REST API's host.
 const githubGraphQL = "/graphql"

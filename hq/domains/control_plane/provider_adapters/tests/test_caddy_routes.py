@@ -47,3 +47,11 @@ class RouteValueTests(SimpleTestCase):
                 validate_spec(
                     "caddy.route", {"connection_ref": "example-edge", "domain": domain, "upstream": "app:8080"}
                 )
+
+    def test_a_connection_no_renderer_could_file_is_refused(self):
+        for ref in ("-oProxyCommand=x", "../edge", "edge host"):
+            with self.subTest(ref=ref), self.assertRaises(ValueError):
+                validate_spec("caddy.route", {"connection_ref": ref, "domain": "a.example.com", "upstream": "app:8080"})
+        self.assertEqual(
+            validate_spec("caddy.route", {"domain": "a.example.com", "upstream": "app:8080"})["connection_ref"], ""
+        )

@@ -680,12 +680,15 @@ RELEASED = "ok"
 
 
 class AppRelease(BaseModel):
-    """What the applier did with one app (``compose_project_outcomes``):
-    ``result`` one of ``_RESULTS``, ``changed`` whether it replaced what ran."""
+    """What the applier did with one service of an app
+    (``compose_project_outcomes``): ``result`` one of ``_RESULTS``,
+    ``changed`` whether it replaced what ran, ``image`` what runs after."""
 
     model_config = ConfigDict(frozen=True)
 
     project: str
+    service: str = ""
+    image: str = ""
     result: str
     health: str = ""
     changed: bool
@@ -735,15 +738,25 @@ def _released(record: Mapping[str, Any]) -> tuple[str, Tone]:
 
 
 def _pulled(record: Mapping[str, Any]) -> str:
-    """What the applier did with one app, and the health it found."""
+    """What the applier did with one service, the release it runs and the health it found."""
 
     release = _read(AppRelease, record)
-    return dotted(_released(record)[0], release.health if release else "")
+    if release is None:
+        return _released(record)[0]
+    image = ImageRef.parse(release.image)
+    return dotted(_released(record)[0], image.said if image else "", release.health)
+
+
+def _release_title(record: Mapping[str, Any]) -> str:
+    """The app, and its service where the service has a name of its own."""
+
+    project, service = str(record.get("project") or ""), str(record.get("service") or "")
+    return dotted(project, service) if service not in ("", project) else project
 
 
 PULLED_KIND = StatedKind(
     "App releases",
-    title=lambda record: str(record.get("project") or ""),
+    title=_release_title,
     describe=_pulled,
     tone=lambda record: _released(record)[1],
 )

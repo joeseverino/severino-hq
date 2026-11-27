@@ -82,11 +82,13 @@ A manifest must pass these checks:
 - No capability appears twice in one list, and each MCP read capability is also
   an operator capability.
 
-Two checks need the running host, so they run at startup. An extension's
+Three checks need the running host, so they run at startup. An extension's
 capabilities are its own: naming one of the host's fails there. The installed
 set is checked whole. Two extensions may not share an id, a distribution, a
 Django app or a URL prefix, and one prefix may not nest inside another. A
-navigation group says what it is for once, in the host or one manifest.
+navigation group says what it is for once, in the host or one manifest. Every
+page is reached: one whose address names no record is a navigation item or
+names the page it opens from in its `page_trail` (`hq.E120`).
 
 Every extension view needs a session wherever it is mounted. A native or machine
 client uses the versioned [API](API.md), derived from the same command and query
@@ -775,10 +777,11 @@ authorization headers, secret values or private URL parts. URL userinfo, query
 strings and fragments are rejected outright, rather than filtered by a list of
 secret parameter names.
 
-`observed_at` is a `datetime` and serializes as ISO 8601. An instance that
-leaves `status`, `status_label` and `observed_at` unsaid is said in its
-lifecycle's word, and dated by the readings HQ declares came through its
-`kind` where any do. Links are local paths
+`observed_at` is a `datetime` and serializes as ISO 8601. HQ says an
+instance's state in its lifecycle's one word on every page, derived from its
+`status`, `observed_at` and the evidence behind its abilities; `status_label`
+is shown nowhere. An instance that leaves `status` and `observed_at` unsaid is
+dated by the readings HQ declares came through its `kind` where any do. Links are local paths
 or explicit HTTP(S) URLs. Emit a truthful reduced mode when the gateway works
 anonymously, rather than hiding it.
 
@@ -792,8 +795,7 @@ Say how authority is proven, not only what it permits. Each ability declares a
 | `none` | the call is keyless |
 
 Each instance says its `credential_model`, a required keyword: one of the same
-words, `rejected` for a credential the provider refused, or `unknown` for one
-whose kind cannot be told. An instance that leaves it out, or says anything
+words, or `unknown` for one whose kind cannot be told. An instance that leaves it out, or says anything
 else, is refused as it is made. One that holds a credential (any model but
 `none`) belongs to a spec that names its `secret_store`, and the Connections
 page says "Secrets in" that store or "No key needed" (`PLUGIN_API_VERSION` 11).

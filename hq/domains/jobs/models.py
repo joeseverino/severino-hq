@@ -42,6 +42,12 @@ class JobState(TonedChoices):
     LOST = "lost", Tone.ATTENTION, "Stopped early"
 
 
+# What HQ answers a unit that asked for the host's own work
+# (``outbound_work.run_for_host``): how the job ended, or that one of its kind
+# was already running. The bridge contract carries them as ``JobState``.
+ANSWERED_STATES = (JobState.SUCCEEDED, JobState.FAILED, JobState.LOST, JobState.RUNNING)
+
+
 # A live job nothing has heard from for too long has stopped early: running
 # with no heartbeat since, or queued and never started (the process that
 # recorded it stopped before its thread ran).

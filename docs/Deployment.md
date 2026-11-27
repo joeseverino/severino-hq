@@ -191,13 +191,15 @@ Every log is public, so each failure is reported at two levels:
 | :--- | :--- | :--- |
 | the run's log and summary | the failed step and its error, failing host test ids, counts | nothing that names an extension or the host |
 | the sealed `failure-logs` artifacts, one per failed job | what the log withheld: the composed suite's output, an extension's check against the host, a refused composition's reason, a container's log | readable only with the operator's identity |
+| Fuzz's `failure-logs-fuzz` artifact | each input that failed, at its path under `controller/` | public, as the inputs are |
 | the host, `/var/log/severino-hq/` | the pull, sync, install and failed-health output, root-only | the host's own detail |
 
 Compose writes what it withholds to `WITHHELD_DIR`;
 `tools/pipeline/seal-failure-logs.sh` encrypts it with [age](https://age-encryption.org)
 to `FAILURE_LOG_RECIPIENT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env).
 `mise run failure-logs RUN_ID` opens it with the identity in
-`SEVERINO_FAILURE_LOG_IDENTITY`. To rotate, generate a pair with
+`SEVERINO_FAILURE_LOG_IDENTITY`, and fetches Fuzz's inputs beside it as they
+are. To rotate, generate a pair with
 `age-keygen -pq`, store the identity, and replace the recipient; runs sealed
 before then need the old identity.
 
@@ -332,6 +334,7 @@ The security properties:
 | `/var/lib/severino-hq/automation/` | the automation worker's journal, the web account's alone, mode 0700, a `noexec` mount of its own | `deploy/tmpfiles/severino-hq.conf`, `var-lib-severino\x2dhq-automation.mount`, the worker |
 | `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
 | `/opt/apps/severino-hq/secrets/` | made by `deploy/tmpfiles/severino-hq.conf`: the renderer's lock, the controller's ACME state, and in `seal/` the controller's sealing seed, its account's, mode 0400, lent to a pass read-only ([Secrets](Secrets.md#sealing-to-the-controller)) | `hq-secrets`, the controller, `hq-host controller` and `hq-host release` |
+| `/srv/severino-hq/backups/` | the encrypted archives, root's, mode 0700; each archive mode 0640 with the web group, the newest lent read-only to an applying pass for its off-site copy ([Backup](Backup.md#the-off-site-copy)) | `deploy/tmpfiles/severino-hq.conf`, `hq-host backup` |
 | `/var/lib/severino-hq/seal/public.key` | root's copy of the sealing key's public half, bound read-only into the web container | `hq-host controller` and `hq-host release` |
 | docker volumes `severino-hq_severino_{data,media,exports,bridge}` | the database, uploads, exports and the bridge socket | HQ |
 | `/var/log/severino-hq/` | output a deploy keeps off the public log, `extensions.log`: which extensions a refused deploy would have dropped, and `renovate.log`: every dependency run's own output | `hq-host` |
@@ -353,7 +356,7 @@ from the tree, and every unit and the deploy call it.
 | `setup RUNNER` | install's second half: applies the tree's setup in RUNNER, a digest-pinned image the host already holds, verifying nothing. The runner's sudo rule does not reach it |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: the tree, each file the setup would change (a check run of it), and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
-| `backup` | snapshots and archives HQ's volumes, where docker says they are ([Backup](Backup.md)) |
+| `backup` | snapshots and archives HQ's volumes, where docker says they are, with no network; the next applying controller pass copies the archive off-site ([Backup](Backup.md)) |
 | `unit --serve` | answers one request on the unit socket: stops, starts or restarts the systemd unit a container names in its `severino-hq.unit` label, once that unit's own start commands are found to run the container ([Architecture](Architecture.md#a-container-its-unit-runs)) |
 | `edge-receiver` | as any account, writes to a pipe a tar of the tree's `hq-edge` and its `SHA256SUMS` line, for an administrator to install on an edge, once the tree is proven to be the release ([Remote targets](#remote-targets)) |
 | `check` | the host's half of `mise run check --release`, as any account and read-only. It runs `verify`, and with it the runner's sudo rules (or, where sudo asks for a password, the drift unit's run since the release was installed). It checks free disk, and that every program a sudo rule names, and the edge receiver, is root's alone. Where sudo lets it read nftables, it checks that a loaded Renovate egress table is the one `hq-host` renders (an absent one waits for the next run, which loads it). `mise run check:host`, which `check --release` runs, builds it from HEAD for the host's platform and runs it from a temporary directory over SSH on `SEVERINO_HQ_DEPLOY_HOST`, so the release being checked is the one checking. Exits 0 ready, 1 a fault, 3 unverified |

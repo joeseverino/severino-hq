@@ -26,6 +26,7 @@ from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.models import ProviderInventory
 
 from .connection_lifecycle import ATTENTION, WORKING, Lifecycle
+from .freshness import OUT_OF_DATE
 from .posture import SCOPE, STANDARD, Inputs, advanced
 from .reach import TAILNET
 from .request_standard import ADMISSION
@@ -80,7 +81,7 @@ def _edge_reading(hostname: str, snapshots: Mapping[str, Any]) -> Reading:
 def _judged(policy: IngressPolicy, *, reachable: bool, proxy: str) -> Reading:
     if not reachable:
         return Reading.unavailable(
-            "Last reading is out of date",
+            OUT_OF_DATE,
             detail=f"{proxy} is not answering, so this is from the last time HQ read it.",
         )
     if not policy.restricted:
@@ -120,7 +121,7 @@ def tailnet_policy_reading() -> Reading:
 
     if any(not snapshot.reachable for snapshot in tailnet.snapshots()[TAILNET_POLICY_KIND]):
         return Reading.unavailable(
-            "Last reading is out of date",
+            OUT_OF_DATE,
             detail="Tailscale is not answering, so this is from the last time HQ read it.",
         )
     policy = tailnet.policy()

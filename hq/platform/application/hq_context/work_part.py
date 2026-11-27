@@ -12,6 +12,8 @@ from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_
 lazy from hq.domains.jobs.models import Job as JobRow
 lazy from hq.platform.core.included_parts import DOTS
 
+from ..automation_workers import ProfileWorker, profile_workers, reached_by_profile, workers_table
+from ..backup_findings import OffSiteCopy, off_site_copies
 from ..drawings import Dot, Dots
 from ..moments import moment
 from ..projection import iso, read_once
@@ -86,6 +88,10 @@ class Work:
     # Why the units could not be read, in a sentence; "" when they were.
     unread: str = ""
     renderers_unread: str = ""
+    # HQ's playbook workers, one per privilege profile.
+    workers: tuple[ProfileWorker, ...] = ()
+    # The newest off-site copy of HQ's backups, in each backup connection.
+    off_site: tuple[OffSiteCopy, ...] = ()
 
     @property
     def services(self) -> tuple[WorkUnit, ...]:
@@ -105,6 +111,10 @@ class Work:
     @property
     def renderers_table(self) -> DataTable:
         return DataTable.of("Credentials refresh", _RENDERER_COLUMNS, self.renderers)
+
+    @property
+    def workers_table(self) -> DataTable:
+        return workers_table(self.workers)
 
 
 def _unit(job: WorkUnit) -> Cell:
@@ -172,6 +182,8 @@ def _work() -> Work:
         unread=unread,
         renderers_unread=renderers_unread,
         scheduled=_on_a_cadence(),
+        workers=profile_workers(),
+        off_site=off_site_copies(),
     )
 
 
@@ -391,6 +403,7 @@ def _on_a_cadence() -> tuple[Scheduled, ...]:
 
 
 def work_json(work: Work) -> dict[str, Any]:
+    reached = reached_by_profile() if work.workers else {}
     return {
         "read_at": iso(work.read_at),
         "unread": work.unread,
@@ -398,6 +411,8 @@ def work_json(work: Work) -> dict[str, Any]:
         "credentials_unread": work.renderers_unread,
         "credentials": [_plain(item) for item in work.renderers],
         "scheduled": [_scheduled_json(item) for item in work.scheduled],
+        "playbook_workers": [_worker_json(worker, reached) for worker in work.workers],
+        "off_site_backups": [_off_site_json(copy) for copy in work.off_site],
     }
 
 
@@ -410,4 +425,24 @@ def _scheduled_json(item: Scheduled) -> dict[str, Any]:
         "result": item.result,
         "next_due": iso(item.next_due),
         "recent": [dot.tip for dot in item.runs.dots] if item.runs else [],
+    }
+
+
+def _worker_json(worker: ProfileWorker, reached: dict[str, tuple[str, ...]]) -> dict[str, Any]:
+    return {
+        "profile": worker.profile,
+        "state": worker.standing.state.label,
+        "seen_at": iso(worker.standing.seen_at),
+        "claimed_at": iso(worker.standing.claimed_at),
+        "machines": list(reached.get(worker.profile, ())),
+    }
+
+
+def _off_site_json(copy: OffSiteCopy) -> dict[str, Any]:
+    return {
+        "connection_ref": copy.connection_ref,
+        "key": copy.key,
+        "uploaded_at": iso(copy.uploaded_at),
+        "copies": copy.copies,
+        "late": copy.late(timezone.now()),
     }

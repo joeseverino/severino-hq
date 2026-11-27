@@ -58,6 +58,13 @@ def limit_words(most: int, *, paged: bool) -> str:
 # of its own, since the parameter the document writes carries the default.
 # The fields every paged list takes:
 type PageLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=True))]
+# A list its handler derives whole takes the same bound, and without it is answered whole.
+type WholeLimit = Annotated[
+    int,
+    Field(
+        ge=1, le=MAX_PAGE_SIZE, description=f"How many records a page holds, 1 to {MAX_PAGE_SIZE}; absent, every one."
+    ),
+]
 # A page past any list HQ holds is still one whose first row a database can count to.
 type PageNumber = Annotated[
     int,
@@ -159,9 +166,8 @@ def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
 
     if not (spec.listing and spec.identifier):
         return []
-    query = {"limit": MAX_PAGE_SIZE} if "limit" in spec.listing.query.model_fields else {}
     try:
-        page = list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
+        page = list_resource(spec.name, {"limit": MAX_PAGE_SIZE}, principal=principal, fields=[spec.identifier])
     except HostRefusal, ResourceError:
         # A list that needs a filter only the caller can choose, or whose
         # rows do not carry the identifier, holds no candidates.
@@ -199,6 +205,17 @@ def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
     return {spec.search.scope: spec.required_capabilities for spec in held_graph().resources.values() if spec.search}
 
 
+# Every top-level field a mask over a resource's records may name, which a read
+# of that one resource lists, so a call names them right the first time.
+type AllFields = Annotated[
+    list[str],
+    Describe(
+        "Every field a record here holds, each a name `fields` may keep; a dot after one keeps a part inside it. "
+        "Only in a read of this one resource."
+    ),
+]
+
+
 class ListOperation(TypedDict):
     """How a resource is listed, where it can be."""
 
@@ -210,6 +227,7 @@ class ListOperation(TypedDict):
         ),
     ]
     fields: NotRequired[Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]]
+    all_fields: NotRequired[AllFields]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -225,7 +243,7 @@ class ListOperation(TypedDict):
             Describe(
                 "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: "
                 "`list_resource` takes each as an argument of its own beside `filters`, and the machine API as a "
-                "query parameter beside them. Only in a read of this one resource; absent, the list takes neither."
+                "query parameter beside them. Only in a read of this one resource."
             ),
         ]
     ]
@@ -235,6 +253,7 @@ class GetOperation(TypedDict):
     """How one record of a resource is read, where it can be."""
 
     identifier: Annotated[str, Describe("The field of a record that `get_resource` finds it by.")]
+    all_fields: NotRequired[AllFields]
 
 
 class SearchOperation(TypedDict):
@@ -295,12 +314,26 @@ def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     listing: ListOperation = {"filters": list(list_filters(spec.listing.query))}
     if whole:
         listing["fields"] = list(spec.listing.fields)
+        listing["all_fields"] = _top_level(spec, listed=True)
         schema = sent_schema(spec.listing.query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():
             listing["paging"] = narrowed(schema, PAGING)
     return listing
+
+
+def _getting(spec: ResourceSpec, *, whole: bool) -> GetOperation | None:
+    if not spec.identifier:
+        return None
+    getting: GetOperation = {"identifier": spec.identifier}
+    if whole and (named := _top_level(spec, listed=False)):
+        getting["all_fields"] = named
+    return getting
+
+
+def _top_level(spec: ResourceSpec, *, listed: bool) -> list[str]:
+    return [path for path in mask_paths(spec, listed=listed) if "." not in path]
 
 
 def _described(spec: ResourceSpec, principal: Principal | None, *, whole: bool) -> ResourceDescription:
@@ -312,7 +345,7 @@ def _described(spec: ResourceSpec, principal: Principal | None, *, whole: bool) 
         "required_capabilities": list(required_capability_names(spec)),
         "operations": {
             "list": _listing(spec, whole=whole),
-            "get": ({"identifier": spec.identifier} if spec.identifier else None),
+            "get": _getting(spec, whole=whole),
             "search": ({"scope": spec.search.scope} if spec.search else None),
         },
     }
@@ -355,7 +388,9 @@ def list_resource(
         raise unlisted(spec)
     read = spec.listing
     try:
-        parsed = read.query.model_validate(query or {}, strict=strict)
+        # Read as JSON, the form every caller sends it in, as a record's
+        # identifier is: a strict day is its text there.
+        parsed = read.query.model_validate_json(to_json(query or {}), strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     asked = parsed.model_dump()
@@ -372,6 +407,7 @@ def list_resource(
         read.keeps(around, searched=searched is not None),
         read.totals,
         PAGE_FIELD in type(parsed).model_fields,
+        around.get("limit"),
     )
     with paging(scope):
         result = read.reader(**asked, **_caller(spec, principal))
@@ -401,10 +437,7 @@ def every_item(
     page after page through ``list_resource`` at its largest page: what a web
     page drawing the whole list shows."""
 
-    spec = _resource(name)
-    query = {**(query or {})}
-    if spec.listing and "limit" in spec.listing.query.model_fields:
-        query["limit"] = MAX_PAGE_SIZE
+    query = {**(query or {}), "limit": MAX_PAGE_SIZE}
     items: list[dict[str, Any]] = []
     while True:
         page = list_resource(name, query, principal=principal, strict=False, fields=fields)

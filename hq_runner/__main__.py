@@ -24,6 +24,9 @@ from .worker import Bridge as BridgeProtocol, Runner, Scan, work_once
 # The variables the launcher sets: the host side calls this worker
 # "automation", since "runner" there is the Actions runner's word.
 ID = "HQ_AUTOMATION_ID"
+# The privilege profile whose logins the launcher lent this worker, and so
+# whose runs alone it claims.
+PROFILE = "HQ_AUTOMATION_PROFILE"
 BRIDGE_SOCKET = "HQ_AUTOMATION_BRIDGE_SOCKET"
 JOURNAL = "HQ_AUTOMATION_JOURNAL"
 CONNECTIONS = "HQ_AUTOMATION_CONNECTIONS"
@@ -42,6 +45,7 @@ class ConfigError(Exception):
 @dataclass(frozen=True, slots=True)
 class Config:
     controller_id: str
+    profile: str
     bridge_socket: str
     journal: Path
     connections: Path
@@ -64,8 +68,12 @@ class Config:
         repository = environ.get(REPOSITORY, "").strip()
         if not repository:
             raise ConfigError(f"{REPOSITORY} is not set")
+        profile = environ.get(PROFILE, "").strip()
+        if not connections.PROFILE.fullmatch(profile):
+            raise ConfigError(f"{PROFILE} names no profile")
         return cls(
             controller_id=environ.get(ID, "").strip() or socket.gethostname(),
+            profile=profile,
             bridge_socket=str(path(BRIDGE_SOCKET)),
             journal=path(JOURNAL),
             connections=path(CONNECTIONS),
@@ -92,10 +100,11 @@ def _token(path: Path | None) -> str:
 
 
 def _reach(config: Config) -> Callable[[str, str], connections.Target | None]:
-    """A pass's connections, read once when its first host is looked up."""
+    """A pass's connections, read once when its first host is looked up: the
+    worker's own profile's alone, the one whose identities it holds."""
 
     read = cache(lambda: connections.runner_targets(config.connections, config.ssh_dir))
-    return lambda host, profile: read().get((host, profile))
+    return lambda host, profile: read().get((host, profile)) if profile == config.profile else None
 
 
 def _scan(config: Config, scratch: Path, token: str) -> Scan:
@@ -141,6 +150,7 @@ def drain(
             outcome = work_once(
                 bridge,
                 controller_id=config.controller_id,
+                profile=config.profile,
                 installed=procedures.resolver(config.project, scratch, token=token),
                 reach=_reach(config),
                 journal=journal,

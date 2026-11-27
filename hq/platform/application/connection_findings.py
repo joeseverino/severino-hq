@@ -3,6 +3,7 @@
 from hq.domains.control_plane.provider_adapters.contracts import ADDRESS_FAILURE
 
 from . import credential_findings
+from .connection_lifecycle import STATE_FACT, Lifecycle
 from .credential_findings import mint_steps
 from .entity_links import entity_link
 from .finding_model import (
@@ -27,10 +28,10 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
         # Said once for its controller, by connections-lost.
         if node.kind != "connection" or fact_values(node, credential_findings.UNREPORTED):
             continue
+        if not set(fact_values(node, STATE_FACT)) & {Lifecycle.UNREACHABLE, Lifecycle.REVOKED}:
+            continue
         refusal = next((value for key, value in node.facts if key == "credential-refused"), None)
         refused = refusal is not None
-        if node.status != Tone.SERIOUS and not refused:
-            continue
         reason = refusal or node.detail
         failure = credential_findings.failure_of_node(node)
         found.append(
@@ -47,7 +48,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 explanation=ended(reason) if reason else "HQ cannot read through it.",
                 evidence=(
-                    ("State", "Refused" if refused else node.status_label or "Unreachable"),
+                    ("State", node.status_label),
                     *((("Cause", credential_findings.FAILURE_LABELS[failure]),) if failure and not refused else ()),
                     *((("Last checked", when(node.observed_at)),) if node.observed_at else ()),
                 ),

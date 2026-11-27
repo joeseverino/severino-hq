@@ -43,6 +43,17 @@
             }
           },
           {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "The privilege profile of the logins the claiming automation worker holds, the read profile when it names none: it is offered that profile's playbook runs alone.",
+            "schema": {
+              "type": "string",
+              "maxLength": 160,
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
+            }
+          },
+          {
             "name": "attempt",
             "in": "query",
             "required": false,
@@ -1945,6 +1956,13 @@
             },
             "description": "Providers a connection credential is modeled for."
           },
+          "logging_in": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResourceKind"
+            },
+            "description": "Kinds read by logging in to a machine: the only readers the controller lets open a shell."
+          },
           "extensions": {
             "type": "array",
             "description": "Each admitted extension the running image composes, which delivery follows.",
@@ -1971,6 +1989,7 @@
           "connection_providers",
           "observations",
           "connection_credentials",
+          "logging_in",
           "extensions",
           "github_profiles",
           "github_repositories",
@@ -2548,22 +2567,6 @@
             "type": "string"
           }
         }
-      },
-      "JobState": {
-        "type": "string",
-        "description": "How a job stands when HQ answers for it.",
-        "enum": [
-          "succeeded",
-          "failed",
-          "lost",
-          "running"
-        ],
-        "x-enum-varnames": [
-          "JobStateSucceeded",
-          "JobStateFailed",
-          "JobStateLost",
-          "JobStateRunning"
-        ]
       },
       "SourceCatalog": {
         "type": "object",
@@ -3654,6 +3657,7 @@
           "npm",
           "onepassword",
           "portainer",
+          "r2",
           "ssh",
           "tailscale"
         ],
@@ -3667,9 +3671,26 @@
           "ConnectionProviderNPM",
           "ConnectionProviderOnePassword",
           "ConnectionProviderPortainer",
+          "ConnectionProviderR2",
           "ConnectionProviderSSH",
           "ConnectionProviderTailscale"
         ]
+      },
+      "ConnectionRef": {
+        "maxLength": 160,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$",
+        "type": "string",
+        "description": "A connection's name: a file name in the renderer's directories."
+      },
+      "ConnectionsDocument": {
+        "maxLength": 1048576,
+        "type": "string",
+        "description": "The connections document as written: maxLength is the most bytes it may be."
+      },
+      "ConnectionsVersion": {
+        "const": 2,
+        "type": "integer",
+        "description": "The only connections document version either side accepts."
       },
       "FailureClass": {
         "type": "string",
@@ -3897,6 +3918,249 @@
         },
         "type": "object"
       },
+      "GitHubOpenPullRequestCheckRun": {
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "properties": {
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestChecks": {
+        "description": "A commit's checks, each standing as its last run did, and why each\nfailing job of a workflow run failed, by the job's name.",
+        "properties": {
+          "state": {
+            "default": "",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "type": "integer"
+          },
+          "failing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "running": {
+            "default": 0,
+            "type": "integer"
+          },
+          "names": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestJobFailure"
+            },
+            "default": {},
+            "maxProperties": 4,
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestJobFailure": {
+        "description": "Why one failing check failed: for a workflow's job, the step it failed\nat, the error GitHub's log of that step marks, and the step's last lines\nof output before it; for any other check, no step, its output's title as\nthe error and its summary as the log. Each is the check's own words,\nbounded (``github_failures.go``, ``github_checks.go``).",
+        "properties": {
+          "step": {
+            "default": "",
+            "type": "string"
+          },
+          "error": {
+            "default": "",
+            "type": "string"
+          },
+          "log": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestPullFile": {
+        "description": "One file a pull request changes.",
+        "properties": {
+          "path": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "additions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "deletions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "app": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestRecord": {
+        "description": "One open pull request. ``check_runs`` is every check on its head, and ``mergeable_state`` and ``review_state`` GitHub's own words for whether it can merge and where its review stands (``github_pulls.go``). For one Renovate opened (its branch under ``renovate/``), ``checks`` is the head's with why each failing job failed, ``files`` each file it changes, one page of them, and ``changed_files`` how many GitHub says it changes; they are None and 0 for any other. ``apps`` is ``{app, read, images: [{service, before, after}]}`` per app whose directory it changes, each service whose image differs at its head, in a repository opted in to updates, and None otherwise (``github_compose.go``).",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "number": {
+            "default": 0,
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "author": {
+            "default": "",
+            "type": "string"
+          },
+          "draft": {
+            "default": false,
+            "type": "boolean"
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "default": "",
+            "type": "string"
+          },
+          "base": {
+            "default": "",
+            "type": "string"
+          },
+          "branch": {
+            "default": "",
+            "type": "string"
+          },
+          "base_branch": {
+            "default": "",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head_repository": {
+            "default": "",
+            "type": "string"
+          },
+          "mergeable_state": {
+            "default": "",
+            "type": "string"
+          },
+          "review_state": {
+            "default": "",
+            "type": "string"
+          },
+          "check_runs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestCheckRun"
+            },
+            "type": "array"
+          },
+          "checks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubOpenPullRequestChecks"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestPullFile"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "changed_files": {
+            "default": 0,
+            "type": "integer"
+          },
+          "apps": {
+            "items": {
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "artifact_problem": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "repository"
+        ],
+        "type": "object"
+      },
       "GitHubProfileRecord": {
         "properties": {
           "login": {
@@ -4115,137 +4379,6 @@
         },
         "type": "object"
       },
-      "GitHubRepositoryPullFile": {
-        "description": "One file a pull request changes.",
-        "properties": {
-          "path": {
-            "default": "",
-            "type": "string"
-          },
-          "status": {
-            "default": "",
-            "type": "string"
-          },
-          "additions": {
-            "default": 0,
-            "type": "integer"
-          },
-          "deletions": {
-            "default": 0,
-            "type": "integer"
-          },
-          "app": {
-            "default": "",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "GitHubRepositoryPullRequest": {
-        "description": "One open pull request. For one Renovate opened (its branch under\n``renovate/``), ``checks`` is the head's, ``files`` each file it changes, one page of them, and\n``changed_files`` how many GitHub says it changes; they are None and 0\nfor any other. ``apps`` is\n``{app, read, images: [{service, before, after}]}`` per app whose\ndirectory it changes, each service whose image differs at its head, in a\nrepository opted in to updates, and None otherwise (``github_compose.go``).",
-        "properties": {
-          "number": {
-            "default": 0,
-            "type": "integer"
-          },
-          "title": {
-            "default": "",
-            "type": "string"
-          },
-          "url": {
-            "default": "",
-            "type": "string"
-          },
-          "author": {
-            "default": "",
-            "type": "string"
-          },
-          "draft": {
-            "default": false,
-            "type": "boolean"
-          },
-          "created_at": {
-            "default": null,
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "updated_at": {
-            "default": null,
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "head": {
-            "default": "",
-            "type": "string"
-          },
-          "base": {
-            "default": "",
-            "type": "string"
-          },
-          "branch": {
-            "default": "",
-            "type": "string"
-          },
-          "labels": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "head_repository": {
-            "default": "",
-            "type": "string"
-          },
-          "checks": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GitHubRepositoryChecks"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/GitHubRepositoryPullFile"
-            },
-            "type": [
-              "array",
-              "null"
-            ],
-            "default": null
-          },
-          "changed_files": {
-            "default": 0,
-            "type": "integer"
-          },
-          "apps": {
-            "items": {
-              "type": "object"
-            },
-            "type": [
-              "array",
-              "null"
-            ],
-            "default": null
-          },
-          "artifact_problem": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
       "GitHubRepositoryRecord": {
         "properties": {
           "connection_ref": {
@@ -4292,31 +4425,10 @@
               "failures": {}
             }
           },
-          "failing_runs": {
-            "default": [],
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "pull_requests": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/GitHubRepositoryPullRequest"
-            },
-            "type": "array"
-          },
           "pull_request_checks": {
             "default": [],
             "items": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "runs": {
-            "default": [],
-            "items": {
-              "type": "object"
             },
             "type": "array"
           },
@@ -4760,6 +4872,90 @@
           "connection_ref",
           "app",
           "owner"
+        ],
+        "type": "object"
+      },
+      "GitHubWorkflowRunCheckRun": {
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "properties": {
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubWorkflowRunRecord": {
+        "description": "A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "default": 0,
+            "type": "integer"
+          },
+          "event": {
+            "default": "",
+            "type": "string"
+          },
+          "sha": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubWorkflowRunCheckRun"
+            },
+            "type": "array"
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "repository"
         ],
         "type": "object"
       },
@@ -5447,6 +5643,18 @@
         },
         "type": "object"
       },
+      "HostService": {
+        "type": "string",
+        "description": "A unit of HQ's host that HQ tells an operator to start or read.",
+        "enum": [
+          "severino-hq-controller.service",
+          "severino-hq-secrets.service"
+        ],
+        "x-enum-varnames": [
+          "ControllerUnit",
+          "SecretsUnit"
+        ]
+      },
       "HostTailnetLockRecord": {
         "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.",
         "properties": {
@@ -5691,6 +5899,22 @@
         "x-enum-varnames": [
           "InboundSourceWorker",
           "InboundSourceHost"
+        ]
+      },
+      "JobState": {
+        "type": "string",
+        "description": "How a job stands when HQ answers for it.",
+        "enum": [
+          "succeeded",
+          "failed",
+          "lost",
+          "running"
+        ],
+        "x-enum-varnames": [
+          "JobStateSucceeded",
+          "JobStateFailed",
+          "JobStateLost",
+          "JobStateRunning"
         ]
       },
       "NPMAccessListAccessRule": {
@@ -6484,6 +6708,62 @@
         "type": "object",
         "description": "One portainer.volume record: Volumes and mounts."
       },
+      "PrivilegeProfile": {
+        "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+        "type": "string",
+        "description": "A runner transport's privilege profile, as a procedure names its privilege."
+      },
+      "R2BackupRecord": {
+        "additionalProperties": false,
+        "description": "The newest backup archive in a connection's bucket, as the bucket's own listing states it: the r2.backup reading's one record per connection. The controller uploads the host's newest archive first when the bucket lacks it, so this is the last off-site copy.",
+        "properties": {
+          "connection_ref": {
+            "description": "The connection whose bucket holds it.",
+            "type": "string"
+          },
+          "bucket": {
+            "description": "The bucket's name.",
+            "maxLength": 63,
+            "type": "string"
+          },
+          "key": {
+            "description": "The newest archive's object key, its name on the host.",
+            "maxLength": 1024,
+            "type": "string"
+          },
+          "size_bytes": {
+            "description": "The archive's size in bytes.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "uploaded_at": {
+            "description": "When the bucket last wrote the object (LastModified).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "copies": {
+            "description": "The backup archives the bucket holds.",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "bucket",
+          "key",
+          "size_bytes",
+          "uploaded_at",
+          "copies"
+        ],
+        "type": "object"
+      },
+      "ReadProfile": {
+        "const": "read",
+        "type": "string",
+        "description": "The privilege profile of a runner login that escalates to nothing."
+      },
       "ReadingPartName": {
         "type": "string",
         "description": "A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.",
@@ -6512,6 +6792,7 @@
           "page_rules",
           "posture",
           "proxy_hosts",
+          "pull_states",
           "querylog",
           "redirection_hosts",
           "registration",
@@ -6550,6 +6831,7 @@
           "PartPageRules",
           "PartPosture",
           "PartProxyHosts",
+          "PartPullStates",
           "PartQueryLog",
           "PartRedirectionHosts",
           "PartRegistration",
@@ -6578,6 +6860,42 @@
           "RefusalPermission"
         ]
       },
+      "RenderFailure": {
+        "type": "string",
+        "description": "A word a secret renderer files a failed run under.",
+        "enum": [
+          "config",
+          "host",
+          "busy",
+          "connect_unavailable",
+          "connect_denied",
+          "connect_response",
+          "content",
+          "web_unhealthy",
+          "internal"
+        ],
+        "x-enum-varnames": [
+          "RenderFailureConfig",
+          "RenderFailureHost",
+          "RenderFailureBusy",
+          "RenderFailureConnectUnavailable",
+          "RenderFailureConnectDenied",
+          "RenderFailureConnectResponse",
+          "RenderFailureContent",
+          "RenderFailureWebUnhealthy",
+          "RenderFailureInternal"
+        ]
+      },
+      "RenderFullReadSeconds": {
+        "default": 86400,
+        "type": "integer",
+        "description": "The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full."
+      },
+      "RendererRegistryVersion": {
+        "const": 2,
+        "type": "integer",
+        "description": "The only renderer registry version the renderer reads."
+      },
       "ResourceKind": {
         "type": "string",
         "description": "Every kind of resource or reading HQ's provider registry declares.",
@@ -6604,10 +6922,12 @@
           "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
+          "github.open_pull_request",
           "github.profile",
           "github.pull_request",
           "github.repository",
           "github.webhook",
+          "github.workflow_run",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6633,6 +6953,7 @@
           "portainer.network",
           "portainer.runtime",
           "portainer.volume",
+          "r2.backup",
           "registry.address",
           "registry.digest",
           "registry.domain",
@@ -6671,10 +6992,12 @@
           "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
+          "ResourceKindGitHubOpenPullRequest",
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",
           "ResourceKindGitHubWebhook",
+          "ResourceKindGitHubWorkflowRun",
           "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
@@ -6700,6 +7023,7 @@
           "ResourceKindPortainerNetwork",
           "ResourceKindPortainerRuntime",
           "ResourceKindPortainerVolume",
+          "ResourceKindR2Backup",
           "ResourceKindRegistryAddress",
           "ResourceKindRegistryDigest",
           "ResourceKindRegistryDomain",
@@ -6715,6 +7039,36 @@
           "ResourceKindTLSDeliveryTarget",
           "ResourceKindTLSUploadedCertificate"
         ]
+      },
+      "RunnerMachine": {
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,252}$",
+        "type": "string",
+        "description": "The machine a runner transport reaches, by its name in HQ."
+      },
+      "RunnerRole": {
+        "const": "runner",
+        "type": "string",
+        "description": "The role of an SSH transport the automation worker runs playbooks through."
+      },
+      "SecretRenderer": {
+        "type": "string",
+        "description": "A secret renderer the host's launcher names.",
+        "enum": [
+          "hq"
+        ],
+        "x-enum-varnames": [
+          "SecretRendererHQ"
+        ]
+      },
+      "SettingName": {
+        "pattern": "^[A-Z][A-Z0-9_]*$",
+        "type": "string",
+        "description": "A setting's name, as a vault item's projection states it."
+      },
+      "StatusWord": {
+        "pattern": "^[A-Za-z0-9_.+-]{1,64}$",
+        "type": "string",
+        "description": "Every string a secret renderer's status document carries besides its times."
       },
       "SweptKind": {
         "type": "string",
@@ -6738,9 +7092,11 @@
           "github.allowance",
           "github.delivery",
           "github.dependency_run",
+          "github.open_pull_request",
           "github.profile",
           "github.repository",
           "github.webhook",
+          "github.workflow_run",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6762,6 +7118,7 @@
           "portainer.network",
           "portainer.runtime",
           "portainer.volume",
+          "r2.backup",
           "tailscale.device",
           "tailscale.dns",
           "tailscale.policy",
@@ -6787,9 +7144,11 @@
           "SweptGitHubAllowance",
           "SweptGitHubDelivery",
           "SweptGitHubDependencyRun",
+          "SweptGitHubOpenPullRequest",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
           "SweptGitHubWebhook",
+          "SweptGitHubWorkflowRun",
           "SweptHostEdgeReboot",
           "SweptHostFilesystem",
           "SweptHostFirewall",
@@ -6811,6 +7170,7 @@
           "SweptPortainerNetwork",
           "SweptPortainerRuntime",
           "SweptPortainerVolume",
+          "SweptR2Backup",
           "SweptTailscaleDevice",
           "SweptTailscaleDNS",
           "SweptTailscalePolicy",

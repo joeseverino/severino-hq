@@ -239,3 +239,17 @@ func TestACarriedKindIsNotRead(t *testing.T) {
 		t.Fatalf("%+v, readers called %v", found, called)
 	}
 }
+
+// A reader of a kind HQ does not declare to log in is refused a shell before
+// anything is dialed; host_reboot_test holds that a declared one reaches it.
+func TestAnUndeclaredKindIsRefusedAShell(t *testing.T) {
+	controller := inventoryController("beta.api")
+	controller.readers["beta.api"] = func(ctx context.Context) ([]any, error) {
+		_, err := controller.commands().SSH(ctx, "beta", "status", nil)
+		return []any{}, err
+	}
+	found, _ := controller.Inventory(t.Context(), nil, nil)
+	if report := found["beta.api"]; report.OK || !strings.Contains(report.Error, ErrNoShell.Error()) {
+		t.Fatalf("an undeclared kind reached a shell: %+v", report)
+	}
+}

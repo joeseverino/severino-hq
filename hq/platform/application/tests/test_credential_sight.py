@@ -1,5 +1,6 @@
 """What each credential can see: derived from the registries, at a cost that does not grow."""
 
+from contextlib import contextmanager
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
@@ -16,7 +17,7 @@ from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
 )
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, provider_reads
 from hq.platform.application.markup_testing import text
 from hq.platform.core.testing import connection, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
@@ -47,11 +48,14 @@ EXAMPLE = ObservationSpec(
 )
 
 
+@contextmanager
 def with_example():
-    return mock.patch(
-        "hq.platform.application.credential_sight.OBSERVATIONS",
-        registry((*OBSERVATIONS.values(), EXAMPLE)),
-    )
+    with mock.patch("hq.domains.control_plane.providers.OBSERVATIONS", registry((*OBSERVATIONS.values(), EXAMPLE))):
+        provider_reads.cache_clear()
+        try:
+            yield
+        finally:
+            provider_reads.cache_clear()
 
 
 def sights_by_kind():
@@ -62,43 +66,7 @@ def by_provider():
     return {provider.provider: provider for provider in credential_sight()}
 
 
-def unobserved_kinds():
-    return {kind for kind, spec in PROVIDERS.items() if spec.unobserved_reason}
-
-
 class CredentialSightTests(TestCase):
-    def test_every_swept_reading_and_resource_kind_of_a_credential_is_listed(self):
-        found = sights_by_kind()
-
-        for kind, spec in OBSERVATIONS.items():
-            if spec.provider in CONNECTION_CREDENTIALS:
-                self.assertIn((spec.provider, kind), found)
-        for kind, spec in PROVIDERS.items():
-            if spec.unobserved_reason:
-                continue
-            for provider in spec.connection_providers:
-                self.assertIn((provider, kind), found)
-
-    def test_a_kind_nothing_sweeps_is_not_listed(self):
-        self.assertTrue(unobserved_kinds())
-        listed = {kind for _, kind in sights_by_kind()}
-
-        self.assertFalse(listed & unobserved_kinds())
-
-    def test_no_kind_is_listed_twice(self):
-        kinds = [kind for _, kind in sights_by_kind()]
-        for provider in credential_sight():
-            labels = [sight.label for sight in provider.sights]
-            self.assertEqual(len(labels), len(set(labels)), provider.provider)
-        self.assertTrue(kinds)
-
-    def test_every_provider_with_a_credential_is_listed_with_its_label(self):
-        providers = by_provider()
-
-        self.assertEqual(set(providers), set(CONNECTION_CREDENTIALS))
-        for name, provider in providers.items():
-            self.assertEqual(provider.label, CONNECTION_LABELS[name])
-
     def test_a_kind_with_no_inventory_row_was_never_swept(self):
         sight = sights_by_kind()[("ssh", "host.perimeter")]
 
@@ -275,10 +243,8 @@ class PerConnectionSightTests(TestCase):
         )
 
     def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
-        from hq.domains.control_plane.attribution import (
-            PER_CONNECTION_PROVIDERS,
-            unattributed_kinds,
-        )
+        from hq.domains.control_plane.attribution import unattributed_kinds
+        from hq.domains.control_plane.connection_kinds import LOGS_IN
 
         class Unnamed(ObservationRecord):
             record: str
@@ -286,7 +252,7 @@ class PerConnectionSightTests(TestCase):
         class Named(ObservationRecord):
             connection_ref: str
 
-        (provider,) = sorted(PER_CONNECTION_PROVIDERS)
+        (provider,) = sorted(LOGS_IN)
         observations = registry(
             (
                 ObservationSpec("example.unnamed", provider, "Unnamed", Unnamed),

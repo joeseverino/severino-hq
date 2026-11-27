@@ -9,7 +9,7 @@ from datetime import datetime
 from hashlib import sha256
 from typing import Annotated
 
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import observed, unswept
 
 from .action_links import ActionLink as TopologyAction
 from .answer_fields import NotRead, ObservedAt
@@ -294,17 +294,31 @@ class TopologyTrace:
 # them rather than one sweep's stamp, so siblings are not compared by it.
 JOINED_KINDS = frozenset({"machine", "service", "zone", "registry", "controller"})
 
-# Node kinds a sweep or a reading can observe. A declaration is observable
-# unless its provider says no sweep reads it.
+# Node kinds a sweep or a reading can observe, beside a declaration or an
+# ability whose kind is observed.
 _OBSERVABLE_KINDS = frozenset({"connection", *JOINED_KINDS})
+
+
+def ability_id(family: str, name: str) -> str:
+    """The node of one ability a connection family declares."""
+
+    return Kind.ABILITY.of(f"{family}:{name}")
+
+
+def read_kind(ability: str) -> str:
+    """The kind HQ reads that an ability node (``ability_id``) stands for, or ""."""
+
+    name = Kind.ABILITY.identity_in(ability).partition(":")[2]
+    return name if observed(name) else ""
 
 
 def observable(node: TopologyNode) -> bool:
     """Whether anything can observe this node, so "never observed" is a gap."""
 
     if node.kind == "resource":
-        provider = PROVIDERS.get(node.kind_key)
-        return not (provider and provider.unobserved_reason)
+        return not unswept(node.kind_key)
+    if node.kind == "ability":
+        return bool(read_kind(node.id))
     return node.kind in _OBSERVABLE_KINDS
 
 

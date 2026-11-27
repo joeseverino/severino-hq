@@ -380,7 +380,8 @@ def _cell(cell: Cell, context: Any) -> DrawnCell:
             for part in (cell, *cell.parts, *cell.lines)
             if part.shows in ("more", "narrow-more", "gist")
         }
-        | ({"line-rest"} if runs else set()),
+        | ({"line-rest"} if runs else set())
+        | ({SHOWN["more"]} if any(part.piece and part.piece.more for part in (cell, *cell.parts)) else set()),
         names=int(cell.name),
         record=cell.name and bool(cell.url or cell.link),
         chip=any(

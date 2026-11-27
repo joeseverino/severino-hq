@@ -135,6 +135,12 @@ Rules:
   `redirects_to` edge between the two services. `upstream` reads where a record
   hands one hostname on (a tunnel's ingress service). `restricts` marks a gate
   in front of what it names (Cloudflare Access, an NPM access list).
+- **A reading no subject joins is shown on its connection.** One that declares
+  no join key (`ObservationSpec.joins` is false) reaches no other page, so the
+  connection's row names its newest record on its open line, with its
+  `describe` and when it happened: the latest by `at` (an upload, a run's end),
+  or its one record. Such a reading words what its records found through
+  `describe`.
 - **A reading can speak for its connection.** `facts` returns `(key, value)`
   pairs that land on the connection's topology node, where a finding rule reads
   them: AdGuard's filtering off, a plain upstream, a rewritten name nobody
@@ -693,8 +699,10 @@ again on the next run.
 `registry.digest` is what the publisher attached to each of those digests,
 read once (`hq.platform.application.oci_registry.attestations`,
 `hq.platform.application.attestations`). It is the in-toto statements BuildKit
-puts beside a platform's manifest, from which HQ keeps the SBOM's package URLs
-and the SLSA provenance's source, commit, builder and base images.
+puts beside a platform's manifest, from which HQ keeps the SBOM's package URLs,
+which of them are the main modules its Go binaries were built as (the Go
+packages the others are dependencies of), and the SLSA provenance's source,
+commit, builder and base images.
 
 They are metadata beside the image, never a layer of it: nothing is pulled and
 nothing runs. The statements are the publisher's unsigned word, and the page
@@ -702,17 +710,27 @@ says "states", not "proves".
 
 `registry.vulnerabilities` is those packages checked against OSV
 (`hq.platform.application.osv`), keyless, one batch per thousand packages.
-Each vulnerability's detail is read once and kept until OSV modifies it: the
-id, the package and installed version, the fixing versions, and a severity
-where the database gives one.
+OSV decides which records affect each version. A main module versioned by a
+Go pseudo-version is not asked: OSV orders Go versions by SemVer, where
+`v0.0.0-<time>-<commit>` precedes every release, so a build from an untagged
+commit would match each advisory its project ever fixed. Grype declines the
+same comparison by default. Its project's own advisories are matched against
+the image's release instead. Each vulnerability's detail is read once and
+kept until OSV modifies it: the id, its aliases, the package and installed
+version, the fixing versions, and a severity where the database gives one. A
+page reads one vulnerability once per package: records naming each other as
+aliases (a GHSA id and its GO id) are one finding, under the rated one's id.
 
 What an image is built from is known, most trusted first, from the container's
 declaration (`source`, for an image that does not say), the image's label, its
-provenance's stated source, then the GitHub registry it lives in
-(`containers.source_of`). The page says which, and the upstream reads follow
-it. An image is vulnerable when an advisory on its source matches its version,
-or when a critical or high vulnerability in its packages has a published fix; an
-unrated or unfixed one is shown, never raised.
+provenance's stated source, the GitHub repository its SBOM's main modules
+are paths in, then the GitHub registry it lives in (`containers.source_of`).
+The page says which, and the upstream reads follow it. An image is vulnerable
+when an advisory on its source matches its version, or when a critical or high
+vulnerability in its packages is gone from the packages of the newest release,
+the one an upgrade would pin. A serious one no release is known to fix is
+shown as such, with no warning tone, and raised once a release fixes it; an
+unrated one is shown, never raised.
 
 `portainer.runtime` is how each container is run, from Docker's inspect
 through Portainer: user, privilege, capabilities, host namespaces, security
@@ -760,7 +778,7 @@ something newer published, and changes nothing. A plan holds:
 
 - the target by digest, and the size of the move;
 - which of the running version's known vulnerabilities (its advisories and
-  its urgent package findings, the set its title counts) it clears, and what
+  its serious package findings) it clears, and what
   it would bring of its own (the two digests' OSV readings compared);
 - whether the move is recommended: it brings nothing of its own and, where
   the running version is vulnerable, fixes something. A finding's title, its
@@ -793,11 +811,7 @@ this one answer.
 
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
-read. A record is a repository's head and its checks, open pull requests
-(for each Renovate opened, its author, the repository its head lives in,
-its head's checks, the files it changes with the app directory each lies in,
-how many GitHub says it changes, and, while its checks fail, what the update
-run's artifact problem comment says it could not update),
+read. A record is a repository's head and its checks,
 workflows waiting on an approval, and deployments with the steps each ran
 before deploying whose names begin "Verify". A repository a project opts in
 to updates also holds each app's Compose files under `compose/<app>/` on its
@@ -813,6 +827,22 @@ alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
+
+The same pass reads two more kinds, each record naming its repository, so an
+agent reads them through the `readings` resource like any other.
+`github.workflow_run` is a workflow's newest run on a branch: every workflow
+on the default branch, and the newest of each on the ten other branches that
+ran most recently, with its head commit, status, conclusion, link and each
+job's conclusion. `github.open_pull_request` is an open pull request: its head
+and base, its author, the repository its head lives in, its head's checks,
+and the files it changes with the app directory each lies in, how many GitHub
+says it changes, and, while its checks fail, what the update run's artifact
+problem comment says it could not update. Its `pull_states` part, one GraphQL
+query a repository, adds GitHub's mergeable state, its review state and each
+check's conclusion; a token without Checks, Commit statuses or Actions read refuses
+that part alone. The three kinds are asked for, read and carried together
+(`ObservationSpec.read_with`), so a repository and its runs and pull requests
+always come from one read.
 
 Each failing job of a workflow run, on the default branch or an update's pull
 request, says why it failed: the step it failed at, the error GitHub's log of
@@ -966,15 +996,18 @@ the operator grants it. The API's name stands beside it where the two differ
 cites the provider's documentation it follows. The registry refuses a
 permission written as text, and the controller names a Tailscale scope by the
 constant the bridge contract carries (`TailscaleScope`). The minting tasks ask for the API name of every
-member `observer_permissions` in `hq.domains.control_plane.credential_reads`
-returns: each reading's `requires` plus the reads that are not readings yet.
+member `credential_permissions` in `hq.domains.control_plane.credential_reads`
+returns: each reading's `requires`, the reads that are not readings yet, and
+the connection kind's `writes`.
 Minting is in [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see
 
 Each connection's row folds in what its provider's credential can see: every
-reading it feeds and every resource kind a sweep reads. A kind with an
-`unobserved_reason` is read by no sweep and is not listed. Each kind is one of:
+reading it feeds and every resource kind a sweep reads
+(`providers.provider_reads`). A kind is read back from a sweep or says why
+not in `unobserved_reason`, exactly one (`ProviderSpec.sweeps`); one nothing
+sweeps is not listed. Each kind is one of:
 
 - **Readable**, with its record count and age.
 - **Refused**. The controller reports `refusal` on the kind. It is `permission`

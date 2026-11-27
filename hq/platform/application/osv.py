@@ -8,6 +8,7 @@ nothing here touches the image.
 """
 
 import json
+import re
 from collections.abc import Iterable, Mapping
 from itertools import batched
 from typing import Any
@@ -20,6 +21,26 @@ TIMEOUT_SECONDS = 20
 # OSV's own limit on one batch.
 BATCH = 1000
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
+# golang.org/x/mod/module's pseudoVersionRE.
+_PSEUDO = re.compile(
+    r"^v[0-9]+\.(0\.0-|\d+\.\d+-([^+]*\.)?0\.)\d{14}-[A-Za-z0-9]+(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
+)
+
+# The ecosystem OSV's schema names for each package URL type it matches by URL.
+_ECOSYSTEMS = {
+    "golang": "Go",
+    "npm": "npm",
+    "pypi": "PyPI",
+    "maven": "Maven",
+    "cargo": "crates.io",
+    "gem": "RubyGems",
+    "nuget": "NuGet",
+    "composer": "Packagist",
+    "hex": "Hex",
+    "pub": "Pub",
+}
 
 
 class OSVReadError(Exception):
@@ -105,10 +126,29 @@ def _read(method: str, path: str, content: bytes | None = None) -> Any:
         raise OSVReadError("OSV answered with something other than JSON.") from exc
 
 
-def matches(purls: Iterable[str]) -> tuple[int, dict[str, list[tuple[str, str]]]]:
-    """``(packages checked, {purl: [(vulnerability id, modified)]})``."""
+def _unordered(purl: str) -> bool:
+    """Whether a package's version holds no place among its releases: a Go
+    pseudo-version (``module.IsPseudoVersion`` in golang.org/x/mod), or the
+    ``(devel)`` of a build with none."""
 
-    asked = [(purl, query) for purl in purls if (query := query_of(purl)) is not None]
+    parsed = _parsed(purl)
+    return parsed is not None and parsed[0] == "golang" and bool(_PSEUDO.match(parsed[3]) or parsed[3] == "(devel)")
+
+
+def matches(purls: Iterable[str], main: Iterable[str] = ()) -> tuple[int, dict[str, list[tuple[str, str]]]]:
+    """``(packages checked, {purl: [(vulnerability id, modified)]})``.
+
+    A main module (``attestations.main_modules``) with a pseudo-version is not
+    asked. OSV orders Go versions by SemVer, where ``v0.0.0-<time>-<commit>``
+    precedes every release, so a binary built from a checkout no tag names
+    would match each advisory its project ever fixed. Grype refuses the same
+    comparison by default (``allow-main-module-pseudo-version-comparison``).
+    Its project's own advisories are matched against the image's release
+    instead (``containers._advisories``).
+    """
+
+    unordered = {purl for purl in main if _unordered(purl)}
+    asked = [(purl, query) for purl in purls if purl not in unordered and (query := query_of(purl)) is not None]
     found: dict[str, list[tuple[str, str]]] = {}
     for chunk in batched(asked, BATCH, strict=False):
         answer = _post("/querybatch", {"queries": [query for _purl, query in chunk]})
@@ -127,21 +167,51 @@ def detail(vulnerability_id: str) -> dict[str, Any]:
     return _get(f"/vulns/{quote(vulnerability_id, safe='')}")
 
 
+def _package(purl: str) -> tuple[str, str] | None:
+    """``(ecosystem, name)`` as OSV's schema names the package a package URL
+    does: a Go module path, an npm name with its scope, a Maven
+    ``groupId:artifactId``, a PEP 503 normalized PyPI name, a distribution's
+    source package under its release."""
+
+    query = query_of(purl)
+    parsed = _parsed(purl)
+    if query is None or parsed is None:
+        return None
+    if "ecosystem" in query["package"]:
+        return query["package"]["ecosystem"], query["package"]["name"]
+    kind, namespace, name, _version, _qualifiers = parsed
+    ecosystem = _ECOSYSTEMS.get(kind)
+    if ecosystem is None:
+        return None
+    if kind == "maven":
+        return ecosystem, f"{namespace}:{name}"
+    if kind == "pypi":
+        return ecosystem, re.sub(r"[-_.]+", "-", name).lower()
+    return ecosystem, f"{namespace}/{name}" if namespace else name
+
+
+def _names(entry: Mapping[str, Any], wanted: tuple[str, str]) -> bool:
+    """Whether an affected entry is about the package ``wanted`` names."""
+
+    package = entry.get("package") or {}
+    name = str(package.get("name", ""))
+    if wanted[0] == "PyPI":
+        name = re.sub(r"[-_.]+", "-", name).lower()
+    return (str(package.get("ecosystem", "")), name) == wanted
+
+
 def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> dict[str, Any]:
-    """One vulnerability as it bears on one package: what fixes it, how bad."""
+    """One vulnerability as it bears on one package: what fixes it, how bad,
+    read from the affected entries about that package alone."""
 
     parsed = _parsed(purl)
-    kind, _namespace, name, installed, qualifiers = parsed or ("", "", purl, "", {})
+    kind, _namespace, name, installed, _qualifiers = parsed or ("", "", purl, "", {})
     _namespace = unquote(_namespace)
-    names = {name, qualifiers.get("upstream", "").partition("@")[0]} - {""}
+    wanted = _package(purl)
     fixed: list[str] = []
     severity = str((vulnerability.get("database_specific") or {}).get("severity") or "")
     for entry in vulnerability.get("affected") or ():
-        package = entry.get("package") or {}
-        if (
-            str(package.get("name", "")).rpartition("/")[2] not in names
-            and package.get("purl", "").partition("@")[0] != purl.partition("@")[0]
-        ):
+        if wanted is None or not _names(entry, wanted):
             continue
         severity = severity or str((entry.get("ecosystem_specific") or {}).get("severity") or "")
         fixed.extend(
@@ -161,4 +231,39 @@ def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> 
         "aliases": tuple(str(alias) for alias in vulnerability.get("aliases") or ())[:8],
         "url": f"https://osv.dev/vulnerability/{quote(identifier, safe='')}",
         "modified": modified or str(vulnerability.get("modified", "")),
+    }
+
+
+def grouped(findings: Iterable[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    """Each vulnerability once per package, in the order first found.
+
+    OSV's aliases name the same vulnerability in other databases, symmetric
+    and transitive by its schema, so a GHSA record and the GO record of one
+    vulnerability are one finding: under the id of the one that rates it,
+    with every fixed version either names.
+    """
+
+    # (where, names, members), each the package and version it is found in.
+    groups: list[tuple[tuple[Any, Any], set[str], list[Mapping[str, Any]]]] = []
+    for item in findings:
+        where = (item.get("package"), item.get("installed"))
+        names = {str(item.get("id", "")), *(str(alias) for alias in item.get("aliases") or ())} - {""}
+        joined = [group for group in groups if group[0] == where and group[1] & names]
+        members = [member for group in joined for member in group[2]]
+        if joined:
+            at = groups.index(joined[0])
+            groups[at] = (where, names.union(*(group[1] for group in joined)), [*members, item])
+            for group in joined[1:]:
+                groups.remove(group)
+        else:
+            groups.append((where, names, [item]))
+    return tuple(_merged(names, members) for _where, names, members in groups)
+
+
+def _merged(names: set[str], members: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    lead = min(members, key=lambda member: (not member.get("severity"), str(member.get("id", ""))))
+    return {
+        **lead,
+        "aliases": tuple(sorted(names - {str(lead.get("id", ""))})),
+        "fixed": tuple(dict.fromkeys(str(fixed) for member in members for fixed in member.get("fixed") or ())),
     }

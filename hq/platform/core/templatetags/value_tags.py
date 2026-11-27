@@ -53,7 +53,7 @@ from hq.platform.core.templatetags.line_breaks import breakable, button_words, c
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
-lazy from hq.platform.application.freshness import LAST_READ
+lazy from hq.platform.application.freshness import LAST_READ, age_of
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
 lazy from hq.platform.application.where_it_runs import named_links as _named_links
@@ -292,6 +292,14 @@ def last_read(value):
     says it (``freshness.LAST_READ``), its moment a ``when``."""
 
     return format_html("{} {}", LAST_READ, when(value))
+
+
+@answers(register)
+def reading_age_of(reading=None, at=None, unread=""):
+    """``{% reading_age_of reading at unread as age %}``: a reading's age in
+    the one wording every page uses (``freshness.age_of``)."""
+
+    return age_of(reading or None, at=at or None, unread=unread or "")
 
 
 @register.filter

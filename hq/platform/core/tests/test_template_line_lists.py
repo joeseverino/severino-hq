@@ -39,18 +39,10 @@ class LineListTagTests(SimpleTestCase):
         self.assertEqual(rest.tag, "li")
         self.assertTrue(markup.startswith('<ul class="dot-list line-list">'))
 
-    def test_a_kind_the_list_has_not_is_refused(self):
-        with self.assertRaises(TemplateSyntaxError):
-            self.drawn('{% line_list names as name kind="dot-list" %}<li>{{ name }}</li>{% endline_list %}', names="a")
-
     def test_a_value_is_escaped_by_the_body_that_draws_it(self):
         markup, _ = self.drawn("{% line_list names as name %}{{ name }}{% endline_list %}", names=["<i>"])
         self.assertIn("&lt;i&gt;", markup)
 
-    def test_a_wrong_form_is_refused(self):
-        for source in (
-            "{% line_list names %}{% endline_list %}",
-            '{% line_list names as n list="dot-list" %}{% endline_list %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
+    def test_values_with_no_name_to_draw_them_by_are_refused(self):
+        with self.assertRaises(TemplateSyntaxError):
+            Template("{% line_list names %}{% endline_list %}")

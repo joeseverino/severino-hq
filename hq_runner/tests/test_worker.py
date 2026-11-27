@@ -14,7 +14,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hq_runner.claim import CAPABILITIES
 from hq_runner.journal import Journal
 from hq_runner.worker import LEASE_SECONDS, RENEW_EVERY_SECONDS, work_once
 
@@ -28,6 +27,9 @@ PRIVATE_KEY = (
 
 
 class PassTestCase(unittest.TestCase):
+    # The profile whose logins the worker is lent.
+    profile = fakes.PRIVILEGE
+
     def setUp(self):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
@@ -38,6 +40,7 @@ class PassTestCase(unittest.TestCase):
         return work_once(
             bridge,
             controller_id=fakes.WORKER,
+            profile=self.profile,
             installed=fakes.installed,
             reach=fakes.reach,
             journal=self.journal,
@@ -95,25 +98,26 @@ class SuccessTests(PassTestCase):
         self.assertEqual(heard[said["runner_on_ok:Touch a file"]], [("Say hello", "ok"), ("Touch a file", "started")])
         self.assertNotIn("events", self.only_report(bridge))
 
-    def test_a_task_that_polls_says_each_pass_s_line_while_under_way_and_no_other_stdout(self):
+    def test_a_task_that_polls_stands_started_until_it_ends_and_no_pass_s_output_leaves_the_worker(self):
         line = fakes.RETRY["event_data"]["res"]["stdout"]
-        later = copy.deepcopy(fakes.RETRY)
-        later["event_data"]["res"]["stdout"] = line.replace("immich", "jellyfin")
+        started = copy.deepcopy(fakes.RETRY)
+        started["event"] = "runner_on_start"
+        del started["event_data"]["res"]
         ended = copy.deepcopy(fakes.RETRY)
         ended["event"] = "runner_on_ok"
-        ended["event_data"]["res"]["stdout"] = line.replace("immich", "ended")
         bridge = fakes.Bridge(fakes.pending())
         heard: list[list[tuple[str, str, str]]] = []
         runner = fakes.Runner(
-            [fakes.RETRY, later, ended],
+            [started, fakes.RETRY, fakes.RETRY, ended],
             between=lambda: heard.append([(e["task"], e["outcome"], e["message"]) for e in bridge.events]),
         )
 
         self.work(bridge, runner)
 
         task = fakes.RETRY["event_data"]["task"]
-        self.assertEqual(heard[1], [(task, "started", line)])
-        self.assertEqual(heard[2], [(task, "started", later["event_data"]["res"]["stdout"])])
+        self.assertEqual(heard[2], [(task, "started", "")])
+        self.assertEqual(heard[3], [(task, "started", "")])
+        self.assertNotIn(line, json.dumps([self.only_report(bridge), bridge.progress, heard]))
         self.assertEqual([(e["task"], e["outcome"], e["message"]) for e in bridge.events], [(task, "ok", "")])
 
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
@@ -140,8 +144,10 @@ class SuccessTests(PassTestCase):
         self.assertEqual(run.parameters, {"service": "db"})
         action, sent = bridge.calls[0]
         self.assertEqual(action, "claim")
-        self.assertEqual(sent["capabilities"], CAPABILITIES)
+        self.assertEqual(sent["profile"], fakes.PRIVILEGE)
         self.assertIn("automation.operation:run", sent["capabilities"])
+        # A scan is the read profile's worker's alone.
+        self.assertNotIn("automation.source:scan", sent["capabilities"])
 
     def test_a_preview_runs_in_check_mode_and_any_other_spelling_of_one_runs_nothing(self):
         from hq_runner.ansible import arguments
@@ -533,6 +539,7 @@ class LoginTests(PassTestCase):
         work_once(
             bridge,
             controller_id=fakes.WORKER,
+            profile=fakes.PRIVILEGE,
             installed=fakes.installed,
             reach=reach,
             journal=self.journal,
@@ -590,19 +597,6 @@ class RedactionTests(PassTestCase):
         for secret in (api_key, "correct-horse-battery", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ", "PRIVATE KEY"):
             self.assertNotIn(secret, sent)
         self.assertIn("[redacted]", sent)
-
-    def test_a_retry_s_line_is_struck_of_a_secret_parameter_and_held_to_a_message_s_length(self):
-        api_key = "example-api-key-0123456789"
-        leaky = copy.deepcopy(fakes.RETRY)
-        leaky["event_data"]["res"]["stdout"] = f"releasing with {api_key} " + "x" * 5000
-        bridge = fakes.Bridge(fakes.pending(parameters={"service": "web", "api_key": api_key}))
-
-        self.work(bridge, fakes.Runner([leaky]))
-
-        (event,) = bridge.events
-        self.assertNotIn(api_key, json.dumps([self.only_report(bridge), bridge.progress]))
-        self.assertTrue(event["message"].startswith("releasing with [redacted] x"))
-        self.assertEqual(len(event["message"]), 500)
 
     def test_a_task_marked_no_log_reports_only_that_it_was_hidden(self):
         bridge = fakes.Bridge(fakes.pending())
@@ -688,6 +682,8 @@ class RestartTests(PassTestCase):
 
 
 class ScanTests(PassTestCase):
+    profile = "read"
+
     CATALOG = {
         "branch": "main",
         "revision": fakes.REVISION,

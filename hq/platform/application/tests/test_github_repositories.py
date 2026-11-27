@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from django.test import SimpleTestCase, TestCase
 
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, ProviderInventory
 from hq.domains.control_plane.observations.github import FULL_READ_EVERY, REPOSITORY_KIND
 
 from ..github_repositories import due, plan
@@ -38,6 +38,32 @@ class PlanTests(TestCase):
         held = {entry["repository"]: entry for entry in plan(READ_AT + timedelta(minutes=1))["held"]}
 
         self.assertEqual((held["example/alpha"]["fingerprint"], held["example/beta"]["fingerprint"]), ("f1", ""))
+
+    def test_an_alert_told_since_the_read_makes_its_repository_due(self):
+        """An alert is one the change query cannot see, so only a full read
+        shows it; a push it can see, and an alert before the read is in it."""
+
+        sweep(read("example/alpha"), read("example/beta"), read("example/gamma"))
+        told = (
+            ("example/alpha", "dependabot_alert.created", READ_AT + timedelta(seconds=30)),
+            ("example/beta", "push", READ_AT + timedelta(seconds=30)),
+            ("example/gamma", "secret_scanning_alert.created", READ_AT - timedelta(seconds=30)),
+        )
+        for index, (subject, event, applied_at) in enumerate(told):
+            InboundEvent.objects.create(
+                provider="github_app",
+                event=event,
+                subject=subject,
+                delivery_id=f"delivery-{index}",
+                source=InboundSource.WORKER,
+                received_at=applied_at,
+                applied_at=applied_at,
+                outcome=InboundOutcome.APPLIED,
+            )
+
+        held = {entry["repository"]: entry["due"] for entry in plan(READ_AT + timedelta(minutes=1))["held"]}
+
+        self.assertEqual(held, {"example/alpha": True, "example/beta": False, "example/gamma": False})
 
     def test_the_plan_is_empty_before_the_first_read(self):
         self.assertEqual(plan(), {"held": []})

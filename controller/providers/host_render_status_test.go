@@ -64,7 +64,8 @@ func TestHostRenderStatusReadingIsTheRenderersOwnDocument(t *testing.T) {
 func TestHostRenderStatusReportsADocumentItCannotReadAsARecord(t *testing.T) {
 	directory := t.TempDir()
 	cases := []struct {
-		name, path, reason string
+		name, path string
+		reason     runtime.HostRenderStatusRecordReason
 	}{
 		{"no document", filepath.Join(directory, "absent.json"), "missing"},
 		{"a directory where the document is", directory, "unreadable"},

@@ -36,7 +36,7 @@ from hq.platform.application.automation_adoption import ADOPT, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, operation_registry
 from hq.platform.application.automation_sources import SCAN, queue_scan
-from hq.platform.application.cadence import AUTOMATION_HEARTBEAT, AUTOMATION_WORK, note_automation
+from hq.platform.application.cadence import AUTOMATION_WORK, automation_heartbeat, note_automation
 from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.machines import machine_catalog
@@ -278,8 +278,9 @@ def _scanned(key: str, found: dict[str, Any] | None, message: str, ago: timedelt
     scans read on Jobs in the order they tell."""
 
     at = back(ago, key) if ago is not None else None
-    # Its worker reached HQ a moment ago, so what is asked of it is taken.
-    note_automation()
+    # Each profile's worker reached HQ a moment ago, so what is asked of it is taken.
+    for profile in PROFILES:
+        note_automation(profile)
     with stamped(lambda *_: {"created_at": at} if at is not None else None):
         # Asked as a sweep's report asks it, by HQ itself.
         hq = internal_principal(doors.CONTROLLER)
@@ -427,12 +428,15 @@ def unadoptable() -> None:
 
 
 def unattended() -> None:
-    """HQ's playbook worker last arrived three hours ago, longer than its
+    """HQ's playbook workers last arrived three hours ago, longer than their
     timer lets pass, and its run's lease ran out then: the run that waits
     reads as not started, and no scan is asked and each run is refused."""
 
     then = timezone.now() - timedelta(hours=3)
-    UpstreamReading.objects.update_or_create(key=AUTOMATION_HEARTBEAT, defaults={"value": {}, "observed_at": then})
+    for profile in PROFILES:
+        UpstreamReading.objects.update_or_create(
+            key=automation_heartbeat(profile), defaults={"value": {}, "observed_at": then}
+        )
     work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK, claimed_at__gt=then)
     work.update(claimed_at=then, lease_expires_at=then)
 
@@ -493,14 +497,30 @@ REPORTED = Ended(
 )
 
 
-# What the applier stated of each app it released (its ``compose_project_outcomes``),
+# What the applier stated of each service it released (its ``compose_project_outcomes``),
 # one the commit did not change left as it ran, and of the pull, which applied it.
 RELEASES = [
-    {"project": app, "service": app, "image": image, "running_digest": f"sha256:{hexed('digest', app)}", **said}
-    for app, image, said in (
-        ("forgejo", "codeberg.org/forgejo/forgejo:9.0.2", {"health": "healthy", "result": "ok", "changed": True}),
-        ("immich", "ghcr.io/immich-app/immich-server:v1.120.1", {"health": "healthy", "result": "ok", "changed": True}),
-        ("jellyfin", "jellyfin/jellyfin:10.10.1", {"health": "healthy", "result": "ok", "changed": False}),
+    {"project": app, "service": service, "image": image, "running_digest": f"sha256:{hexed('digest', service)}", **said}
+    for app, service, image, said in (
+        (
+            "forgejo",
+            "forgejo",
+            "codeberg.org/forgejo/forgejo:9.0.2",
+            {"health": "healthy", "result": "ok", "changed": True},
+        ),
+        (
+            "immich",
+            "immich",
+            "ghcr.io/immich-app/immich-server:v1.120.1",
+            {"health": "healthy", "result": "ok", "changed": True},
+        ),
+        (
+            "immich",
+            "machine-learning",
+            "ghcr.io/immich-app/immich-machine-learning:v1.120.1",
+            {"health": "healthy", "result": "ok", "changed": False},
+        ),
+        ("jellyfin", "jellyfin", "jellyfin/jellyfin:10.10.1", {"health": "healthy", "result": "ok", "changed": False}),
     )
 ]
 APPLIED = Ended(

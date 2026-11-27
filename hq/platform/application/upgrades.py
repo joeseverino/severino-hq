@@ -14,9 +14,10 @@ from django.utils.text import capfirst, get_text_list
 
 from .card_items import Answer
 from .container_words import named
-from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
+from .containers import BEHIND, VULNERABLE, Container, containers
 from .describe import Describe
 from .display_words import Code
+from .image_findings import SERIOUS, ranked
 from .images import affected, version
 from .tone import Tone
 from .ui import counted, ended
@@ -228,20 +229,21 @@ def weigh(
 
 def _fixed(standing: Any, target: str, checked: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:
     """Which of what makes the running version vulnerable the target is clear
-    of: an advisory its range leaves the target out of, a package finding the
-    target's checked packages no longer hold."""
+    of: an advisory its range leaves the target out of, a serious package
+    finding the target's checked packages no longer hold."""
 
     pairs = {str(item.get("id", "")): item.get("vulnerabilities") for item in standing.advisories}
-    urgent = {str(item.get("id", "")) for item in standing.urgent}
+    serious = {str(item.get("id", "")) for item in standing.serious_findings}
     after = None if checked is None else {str(item.get("id", "")) for item in (checked.get("findings") or ())}
 
     def clear(item: Mapping[str, Any]) -> bool:
         key = str(item.get("id", ""))
         if key in pairs and affected(target, [tuple(pair) for pair in pairs[key] or ()]) is False:
             return True
-        return after is not None and key in urgent and key not in after
+        return after is not None and key in serious and key not in after
 
-    return tuple(item for item in standing.known_vulnerabilities if clear(item))
+    found = {str(item.get("id", "")): item for item in (*standing.unfixed, *standing.known_vulnerabilities)}
+    return ranked(item for item in found.values() if clear(item))
 
 
 def _brought(standing: Any, checked: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:

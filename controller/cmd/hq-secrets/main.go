@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets"
@@ -26,9 +27,10 @@ import (
 
 // exitCodes gives each failure class its own status, so a unit's result says
 // which kind of failure it was without anyone reading a message.
-var exitCodes = map[string]int{
-	"internal": 1, "config": 2, "host": 3, "busy": 4, "connect_unavailable": 5,
-	"connect_denied": 6, "connect_response": 7, "content": 8, "web_unhealthy": 9,
+var exitCodes = map[secrets.Failure]int{
+	secrets.RenderFailureInternal: 1, secrets.RenderFailureConfig: 2, secrets.RenderFailureHost: 3,
+	secrets.RenderFailureBusy: 4, secrets.RenderFailureConnectUnavailable: 5, secrets.RenderFailureConnectDenied: 6,
+	secrets.RenderFailureConnectResponse: 7, secrets.RenderFailureContent: 8, secrets.RenderFailureWebUnhealthy: 9,
 }
 
 func main() {
@@ -39,6 +41,10 @@ func main() {
 }
 
 var containerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+// fullEvery is the longest an unchanged vault goes without a full read, as
+// HQ's registry declares it beside the findings that judge it.
+var fullEvery = time.Duration(api.MustLimit("RenderFullReadSeconds", "default")) * time.Second
 
 type configError string
 
@@ -88,7 +94,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 		},
 		RegistryPath:   *registry,
 		ConnectTimeout: *timeout,
-		FullEvery:      24 * time.Hour,
+		FullEvery:      fullEvery,
 		HealthAttempts: 12,
 		HealthInterval: 5 * time.Second,
 	}, container, nil
@@ -99,7 +105,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	fail := func(err error) int {
 		class := secrets.Class(err)
 		// The message is the renderer's own words: no value, no token, no URL.
-		log.Error(err.Error(), slog.String("event", "secrets.render.failed"), slog.String("class", class))
+		log.Error(err.Error(), slog.String("event", "secrets.render.failed"), slog.String("class", string(class)))
 		return exitCodes[class]
 	}
 	// A dry run makes the host reads a render begins with and nothing else:

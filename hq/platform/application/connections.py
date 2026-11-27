@@ -9,14 +9,14 @@ a view of the vault with no second list to drift from it.
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from pydantic import Field, create_model
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS, connection_credential
+from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, CONNECTION_LABELS, connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
+from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home
 lazy from hq.domains.control_plane.names import normalized_hostname
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
@@ -34,7 +34,7 @@ from .connection_contracts import (
     ConnectionLink,
     ConnectionSpec,
 )
-from .connection_lifecycle import Lifecycle, probed, standing
+from .connection_lifecycle import WORKING, Lifecycle, probed, standing
 from .connection_setup import guide_url
 from .contracts import Effect
 from .describe import Describe, listed
@@ -45,11 +45,12 @@ from .integrations import held_graph
 from .moments import when
 from .resources import BoundedQuery, EmptyQuery, one_of
 from .security import Capability, Principal
-from .tone import Tone
 from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
+lazy from .credential_sight import credential_sight
+lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
 lazy from .path_records import HopRow
@@ -91,23 +92,6 @@ class ConnectionReading:
     # it. A connection can answer every probe and refuse every operation, and
     # `reachable` only ever describes the probe.
     failing_steps: tuple[tuple[str, str], ...] = ()
-    # When its controller's report first came with no connections at all. The
-    # row is kept so the page still shows what was there.
-    unreported_at: datetime | None = None
-
-    @property
-    def status(self) -> Lifecycle:
-        return standing(
-            probed(reachable=self.reachable, was_probed=self.probed),
-            unreported=self.unreported_at is not None,
-        )
-
-    @property
-    def status_label(self) -> str:
-        """The status in words. The age shown beside it is when the controller
-        reported, which is not when anything was probed."""
-
-        return self.status.label
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
@@ -217,6 +201,43 @@ def connection_rows() -> tuple:
     return read_once("connections.rows", lambda: tuple(ProviderConnection.objects.all()))
 
 
+def connection_standings() -> Mapping[tuple[str, str], Lifecycle]:
+    """How each reported connection stands, by ``(controller id, connection ref)``,
+    read once per projection. Its abilities declare no permission it could lack,
+    so its authority is never missing."""
+
+    def build() -> dict[tuple[str, str], Lifecycle]:
+        refused = credential_refusals()
+        return {
+            (row.controller_id, row.connection_ref): standing(
+                probed(reachable=row.reachable, was_probed=row.probed),
+                stale=freshness(row.provider, row.reported_at or row.observed_at).stale,
+                unreported=row.unreported_at is not None,
+                refused=row.provider in refused,
+            )
+            for row in connection_rows()
+        }
+
+    return read_once("connections.standings", build)
+
+
+def connection_standing(connection: Any) -> Lifecycle:
+    """How a reported connection stands: the one state every page, count,
+    finding and answer says it in. ``connection`` is anything naming one by
+    ``controller_id`` and ``connection_ref``: its row, instance or topology node."""
+
+    return connection_standings().get((connection.controller_id, connection.connection_ref), Lifecycle.CONFIGURED)
+
+
+def credential_refusals() -> Mapping[str, str]:
+    """Each provider whose service refused its credential, with the service's reason."""
+
+    return read_once(
+        "connections.refusals",
+        lambda: {found.provider: found.credential_refusal for found in credential_sight() if found.credential_refusal},
+    )
+
+
 def connection_names() -> Mapping[str, str]:
     """What a person calls each reported connection, by its ref.
 
@@ -281,7 +302,6 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             resources=tuple(sorted(using.get(row.connection_ref, ()))),
             named=tuple(sorted(named.get(row.connection_ref, ()))),
             failing_steps=_failing_steps(row),
-            unreported_at=row.unreported_at,
         )
         for row in connection_rows()
     )
@@ -331,17 +351,18 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
     # Readers, which derive from no kind. Appended rather than merged into the
     # loop above because they are a different claim: a kind says what a
     # credential may change, an observer says what it may look at.
-    for observer in observer_abilities():
-        abilities.append(
-            ConnectionAbility(
-                name=observer.name,
-                label=observer.label,
-                summary=observer.summary,
-                effect=Effect.READ,
-                subject_resource=observer.subject_resource,
+    for provider, carried in CONNECTION_KINDS.items():
+        for observer in carried.observes:
+            abilities.append(
+                ConnectionAbility(
+                    name=observer.name,
+                    label=observer.label,
+                    summary=observer.summary,
+                    effect=Effect.READ,
+                    subject_resource=observer.subject_resource,
+                )
             )
-        )
-        by_provider.setdefault(observer.provider, []).append(observer.name)
+            by_provider.setdefault(provider, []).append(observer.name)
 
     # Every reading a provider feeds is something its credential lets HQ see.
     for kind, reading in sorted(OBSERVATIONS.items()):
@@ -376,8 +397,7 @@ def _controller_instances(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
                 label=reading.connection_ref,
                 kind=reading.provider or "unclassified",
-                status=(Tone.SERIOUS if not reading.reachable else Tone.GOOD if reading.probed else Tone.NEUTRAL),
-                status_label=reading.status_label,
+                status=probed(reachable=reading.reachable, was_probed=reading.probed).tone,
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
@@ -530,7 +550,7 @@ def describe_connections(*, principal: Principal | None = None) -> ConnectionCat
 
 
 def connections_for(provider: str) -> tuple[ProviderConnection, ...]:
-    """The connections that are one of these, reachable ones first.
+    """The connections that are one of these, working ones first.
 
     Ordering is the whole contract: a menu built from this offers a working
     credential before a broken one, and never silently omits the broken one,
@@ -541,7 +561,7 @@ def connections_for(provider: str) -> tuple[ProviderConnection, ...]:
     return tuple(
         sorted(
             ProviderConnection.objects.filter(provider=provider),
-            key=lambda row: (not row.reachable, row.connection_ref),
+            key=lambda row: (connection_standing(row) not in WORKING, row.connection_ref),
         )
     )
 

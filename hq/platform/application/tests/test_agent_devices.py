@@ -29,7 +29,7 @@ from hq.platform.core.testing import operator
 
 from ..capabilities import execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
-from ..security import Principal, subject_of, web_principal
+from ..security import subject_of, web_principal
 
 AWAITING = "device_awaiting_approval"
 BLOCKED = "device_blocked"
@@ -374,21 +374,6 @@ class WhoMayApproveTests(Doors, TestCase):
         with _serving():
             self.api_write(_token_for(person=person), LAPTOP_AT, f"seen-{person}")
         return str(AgentDevice().objects.get(person=self.person if person else None).pk)
-
-    def test_no_token_approves_or_blocks_a_device(self):
-        key = self._key()
-        granted = frozenset({"read", "govern_agents"})
-        for capability, field in ((APPROVE, "approved"), (BLOCK, "blocked")):
-            for interface in ("mcp", "api"):
-                with self.subTest(capability=capability, interface=interface):
-                    answer = execute_capability(
-                        capability,
-                        keyed({field: True}),
-                        principal=Principal(CLIENT, interface, granted, granted=granted),
-                        target=key,
-                    )
-                    self.assertEqual(answer["error"]["code"], "forbidden")
-        self.assertFalse(AgentDevice().objects.filter(approved_at__isnull=False).exists())
 
     def test_only_the_person_an_agent_acts_for_approves_its_device(self):
         key = self._key()

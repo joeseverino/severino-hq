@@ -19,10 +19,10 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
-from hq.domains.control_plane.credential_reads import MINTERS, Minter, observer_permissions
+from hq.domains.control_plane.credential_reads import credential_permissions
 from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.connection_shapes import projections
-lazy from hq.domains.control_plane.provider_spec import expiry_phrase
+lazy from hq.domains.control_plane.provider_spec import Minter, expiry_phrase
 
 from .moments import moment
 from .projection import read_once
@@ -228,7 +228,8 @@ def mint_command(minter: Minter, provider: str, store: Mapping[str, str]) -> tup
 
 
 def _fix(row: Any, sight: Any) -> CredentialFix:
-    minter = MINTERS.get(row.provider)
+    kind = CONNECTION_KINDS.get(row.provider)
+    minter = kind.minter if kind else None
     fix = CredentialFix(
         connection_ref=row.connection_ref,
         provider=row.provider,
@@ -236,14 +237,13 @@ def _fix(row: Any, sight: Any) -> CredentialFix:
         unseen=sight.unseen if sight else (),
         refused=sight.credential_refusal if sight else "",
         expires_at=row.expires_at,
-        permissions=observer_permissions(row.provider),
+        permissions=credential_permissions(row.provider),
     )
     if minter is None or not fix.needed:
         return fix
     command, gaps = mint_command(minter, row.provider, store_references(row.store))
     # Where to create it by hand instead: the provider's own declaration says.
-    by_hand = CONNECTION_KINDS[row.provider].create if row.provider in CONNECTION_KINDS else ""
-    return replace(fix, command=command, gaps=gaps, by_hand=by_hand)
+    return replace(fix, command=command, gaps=gaps, by_hand=kind.create)
 
 
 def credential_fixes() -> dict[str, CredentialFix]:

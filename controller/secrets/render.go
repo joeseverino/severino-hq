@@ -67,30 +67,33 @@ func (e *configError) Unwrap() error { return ErrConfig }
 func errConfig(message string) error { return &configError{message: message} }
 
 // Class is the one word a failure is filed under: in the journal, in the
-// status document, and as the exit code (see cmd/hq-secrets).
-func Class(err error) string {
+// status document, and as the exit code (see cmd/hq-secrets). HQ declares the
+// words and what each means, and failure.gen.go is generated from them.
+//
+//go:generate yq --input-format json --output-format yaml --split-exp "\"failure.gen.go\"" --from-file failure.yq ../api/hq-controller.openapi.json
+func Class(err error) Failure {
 	switch {
 	case err == nil:
 		return ""
 	case errors.Is(err, ErrConfig), errors.Is(err, connect.ErrEndpoint), errors.Is(err, connect.ErrPort), errors.Is(err, project.ErrRegistry):
-		return "config"
+		return RenderFailureConfig
 	case errors.Is(err, install.ErrBusy):
-		return "busy"
+		return RenderFailureBusy
 	case errors.Is(err, install.ErrHost):
-		return "host"
+		return RenderFailureHost
 	case errors.Is(err, connect.ErrDenied):
-		return "connect_denied"
+		return RenderFailureConnectDenied
 	case errors.Is(err, connect.ErrUnavailable), errors.Is(err, ErrChanging):
-		return "connect_unavailable"
+		return RenderFailureConnectUnavailable
 	case errors.Is(err, connect.ErrResponse), errors.Is(err, connect.ErrRedirect),
 		errors.Is(err, connect.ErrNotLoopback), errors.Is(err, connect.ErrIdentifier):
-		return "connect_response"
+		return RenderFailureConnectResponse
 	case errors.Is(err, project.ErrContent):
-		return "content"
+		return RenderFailureContent
 	case errors.Is(err, ErrUnhealthy):
-		return "web_unhealthy"
+		return RenderFailureWebUnhealthy
 	}
-	return "internal"
+	return RenderFailureInternal
 }
 
 // Result is what a run did.
@@ -328,7 +331,7 @@ func (r *Runner) Run(ctx context.Context) (Result, error) {
 	if settleErr := r.settle(ctx, tree, &result); err == nil {
 		err = settleErr
 	}
-	status.LastAttempt = secretstatus.Attempt{At: r.Now().UTC(), Outcome: result.Outcome, Failure: Class(err)}
+	status.LastAttempt = secretstatus.Attempt{At: r.Now().UTC(), Outcome: result.Outcome, Failure: string(Class(err))}
 	if err != nil {
 		status.LastAttempt.Outcome = secretstatus.OutcomeFailed
 	}

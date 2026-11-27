@@ -7,6 +7,7 @@ package host
 import (
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 	"regexp"
 	"time"
 )
@@ -52,10 +53,11 @@ func StartPeriod(value string) (time.Duration, error) {
 }
 
 const (
-	// SecretsUnit renders the application environment from the vault.
-	SecretsUnit = "severino-hq-secrets.service" //nolint:gosec // G101: a unit's name
-	// ControllerUnit runs one controller pass.
-	ControllerUnit = "severino-hq-controller.service"
+	// SecretsUnit renders the application environment from the vault, and
+	// ControllerUnit runs one controller pass: the units HQ's findings tell an
+	// operator to start or read, so HQ declares them.
+	SecretsUnit    = string(runtime.SecretsUnit)
+	ControllerUnit = string(runtime.ControllerUnit)
 	// GlanceUnit runs one glance pass, beside a controller pass.
 	GlanceUnit = "severino-hq-glance.service"
 	// BackupUnit snapshots HQ's volumes.
@@ -70,6 +72,9 @@ const (
 	// EdgeProgram is the edge receiver, in the tree, which `hq-host
 	// edge-receiver` hands an administrator to install on an edge.
 	EdgeProgram = Lib + "/deploy/bin/hq-edge"
+	// ControllerProgram is the controller in the image, which a pass's
+	// container runs in place of HQ's own entrypoint.
+	ControllerProgram = "/usr/local/bin/hq-controller"
 
 	// WebSecretDir holds the application environment the web container binds.
 	WebSecretDir = hostcore.SecretDir + "/web"
@@ -139,9 +144,10 @@ const (
 )
 
 // Renderers names each secret renderer on the host and its status document
-// in SecretDir. The name is all HQ is told of where a document came from.
+// in SecretDir. The name, one HQ declares with the unit that runs it, is all
+// HQ is told of where a document came from.
 var Renderers = []struct{ Name, Status string }{
-	{"hq", "status.json"},
+	{string(runtime.SecretRendererHQ), "status.json"},
 }
 
 // UnitProperties is what the controller asks systemd of each unit: its

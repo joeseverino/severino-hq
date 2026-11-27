@@ -66,6 +66,6 @@ describe("Tailscale's signature", () => {
   });
 
   it("refuses another secret", async () => {
-    expect(await verify(tailscale, "tskey-webhook-other-secret", SIGNED, TS_BODY, at(0))).toBe(false);
+    expect(await verify(tailscale, "another-webhook-secret", SIGNED, TS_BODY, at(0))).toBe(false);
   });
 });

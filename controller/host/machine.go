@@ -28,6 +28,9 @@ type Machine struct {
 	Seal, SealPublic string
 	// Runtime is /run, where the deploy stages what it must not leave behind.
 	Runtime string
+	// Backups holds the backup archives (BackupDir on a host); the newest is
+	// lent to an applying pass for its off-site copy.
+	Backups string
 	// Runs registers each run that starts containers (RunsDir on a host).
 	Runs string
 	// Sudoers is where the runner's sudo rule is installed.
@@ -43,6 +46,9 @@ type Machine struct {
 	// Owner gives name, beneath root, to the controller's account. Every path
 	// is resolved beneath root, so a link cannot carry a change outside it.
 	Owner func(root *os.Root, name string) error
+	// Lend gives a backup archive's group to the controller's account, which
+	// reads it once a pass is lent it; a test, run unprivileged, does not.
+	Lend func(path string) error
 	// Out is the public log: one line per step, nothing a host is made of.
 	Out io.Writer
 }

@@ -7,11 +7,10 @@ from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.names import in_zone
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 
 from .containers import Running
-from .entity_links import EntityLink, entity_link, kind_label
+from .entity_links import EntityLink, entity_link, kind_label, provider_label
 from .facts import Joined
 from .labels import dotted, lower_first
 from .moments import moment
@@ -108,7 +107,7 @@ class ServiceFacet:
         kinds: list[str] = []
         providers: list[str] = []
         for kind, provider in PROVIDERS.items():
-            if provider.facet == self.id and not provider.unobserved_reason:
+            if provider.facet == self.id and provider.sweeps:
                 kinds.append(kind)
                 providers.extend(provider.connection_providers)
         for kind, spec in OBSERVATIONS.items():
@@ -118,10 +117,10 @@ class ServiceFacet:
         if not providers or connected_kinds() & set(kinds):
             return ""
         held = {row.provider for row in connection_rows()}
-        missing = [CONNECTION_LABELS.get(p, p) for p in dict.fromkeys(providers) if p not in held]
+        missing = [provider_label(p) for p in dict.fromkeys(providers) if p not in held]
         if missing:
             return f"Connect {' or '.join(missing)} to see it."
-        unread = [CONNECTION_LABELS.get(p, p) for p in dict.fromkeys(providers)]
+        unread = [provider_label(p) for p in dict.fromkeys(providers)]
         return f"Not read through {' or '.join(unread)} yet."
 
     @property

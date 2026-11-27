@@ -38,7 +38,7 @@ from .ui import ended
 lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
-lazy from .automation_runs import access_words, anywhere, capability_name
+lazy from .automation_runs import READ_PROFILE, access_words, anywhere, capability_name
 lazy from .cadence import ask, automation_standing
 lazy from .entity_links import entity_link
 lazy from .findings import rule_for
@@ -225,7 +225,7 @@ def queue_scan(*, principal: Principal, once: str) -> OperationRequest | None:
 
     # A scan no worker will take would wait for nothing: the finding that
     # says so (``automation_findings``) carries how to set one up.
-    if automation_standing().cannot("scan", now=timezone.now()):
+    if automation_standing(READ_PROFILE).cannot("scan", now=timezone.now()):
         return None
 
     def prepare() -> Prepared:

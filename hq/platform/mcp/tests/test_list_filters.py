@@ -94,12 +94,20 @@ def query_schema(kind):
     return listing(kind)["query_schema"]
 
 
-def described_value(schema):
-    """A value the field's own schema offers: its default, or else its first choice."""
+# A value of each format a filter's schema names, as JSON carries it.
+FORMATTED = {"date": "2026-01-02", "date-time": "2026-01-02T03:04:05Z"}
 
-    if "default" in schema:
+
+def described_value(schema):
+    """A value the field's own schema offers: its default where it holds one,
+    else its first choice, else one of the format it names."""
+
+    if schema.get("default") is not None:
         return schema["default"]
-    return (enum_of(schema) or [None])[0]
+    if choices := enum_of(schema):
+        return choices[0]
+    formats = [option.get("format") for option in (schema, *schema.get("anyOf", ()))]
+    return next((FORMATTED[each] for each in formats if each in FORMATTED), None)
 
 
 class FiltersInTheSchemaTests(TestCase):
@@ -124,10 +132,8 @@ class FiltersInTheSchemaTests(TestCase):
         for resource in served_resources().listable:
             described = listing(resource.name)
             sent = {field: described_value(schema) for field, schema in fields(described["query_schema"]).items()}
-            paging = fields(described.get("paging", {}))
-            arguments = {"name": resource.name, "filters": sent}
-            if "limit" in paging:
-                arguments["limit"] = paging["limit"]["maximum"]
+            limit = fields(described["paging"])["limit"]
+            arguments = {"name": resource.name, "filters": sent, "limit": limit["maximum"]}
             (answer,) = calls(("list_resource", arguments))
             with self.subTest(kind=resource.name):
                 self.assertEqual(set(described.get("filters", [])), set(sent))
@@ -184,6 +190,14 @@ class DescribeResourcesNarrowsTests(TestCase):
         listed = entry["operations"].get("list")
         self.assertEqual(set(listed["query_schema"]["properties"]), set(listed["filters"]))
         self.assertEqual(set(listed["paging"]["properties"]), {"limit", "page"})
+
+    def test_every_field_a_kind_names_is_one_its_list_keeps(self):
+        for resource in served_resources().listable:
+            named = listing(resource.name)["all_fields"]
+            (answer,) = calls(("list_resource", {"name": resource.name, "fields": named, "limit": 1}))
+            with self.subTest(kind=resource.name):
+                self.assertTrue(named)
+                self.assertFalse(answer.is_error, answer.structured_content)
 
     def test_a_name_is_one_of_the_kinds_composed_at_the_call(self):
         # The server is reached first with no extension installed, as an

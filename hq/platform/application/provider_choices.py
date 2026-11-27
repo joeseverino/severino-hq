@@ -29,7 +29,8 @@ from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.labels import dotted
 
-from .connections import connections_for, reachable_through
+from .connection_lifecycle import WORKING
+from .connections import connection_standing, connections_for, reachable_through
 from .tone import Absent
 lazy from .tailnet_presence import observed_addresses
 
@@ -244,7 +245,9 @@ def _connection_choices(provider: str) -> tuple[tuple[str, str], ...]:
     return tuple(
         (
             connection.connection_ref,
-            connection.connection_ref if connection.reachable else f"{connection.connection_ref} (unreachable)",
+            connection.connection_ref
+            if (state := connection_standing(connection)) in WORKING
+            else f"{connection.connection_ref} ({state.label.lower()})",
         )
         for connection in connections_for(provider)
     )

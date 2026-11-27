@@ -11,6 +11,7 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
     ManagedResource,
 )
+from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 from hq.platform.application import cadence, readings
 from hq.platform.application.conditions import READY
 from hq.platform.application.report_testing import report_connections
@@ -19,6 +20,7 @@ from hq.platform.core.models import UpstreamReading
 from . import doors, network, work
 from .names import (
     ADGUARD,
+    BACKUPS,
     CLOUDFLARE,
     CONTAINERS,
     CONTROLLER,
@@ -158,6 +160,7 @@ def connections():
                     ["example"],
                 ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
+                answering(BACKUPS, "r2", "https://backups.example.com", "Bucket example-backups."),
             ],
             controller_id=CONTROLLER,
         )
@@ -270,6 +273,20 @@ def host():
             "country": "US",
             "range": "198.51.100.0/24",
             "read_at": iso(timedelta(hours=3)),
+        },
+    )
+    # Last night's archive, copied off-site by the pass after it, beside the
+    # three months the bucket's lock keeps.
+    archived = timedelta(hours=7)
+    store(
+        BACKUP_KIND,
+        {
+            "connection_ref": BACKUPS,
+            "bucket": "example-backups",
+            "key": f"severino-hq-{stamp(archived).replace('-', '').replace(':', '')}.tar.gz.age",
+            "size_bytes": 48_213_904,
+            "uploaded_at": stamp(archived - timedelta(minutes=12)),
+            "copies": 90,
         },
     )
     store("caddy.route")

@@ -29,6 +29,8 @@ CONNECTION_CREDENTIALS: Mapping[str, str] = frozendict(
     {provider: kind.credential for provider, kind in CONNECTION_KINDS.items()}
 )
 CONNECTION_LABELS: Mapping[str, str] = frozendict({provider: kind.label for provider, kind in CONNECTION_KINDS.items()})
+# The providers whose connection logs in to one machine (``ConnectionKind.logs_in``).
+LOGS_IN = frozenset(provider for provider, kind in CONNECTION_KINDS.items() if kind.logs_in)
 
 
 def connection_credential(provider: str) -> str:

@@ -74,6 +74,10 @@ class SharedValue:
     varnames: tuple[str, ...] = ()
 
 
+# A setting's name, as a vault item's projection states it.
+SETTING_NAME = r"^[A-Z][A-Z0-9_]*$"
+
+
 @dataclass(frozen=True, slots=True)
 class Setting:
     """One setting of a connection, and where its vault item holds it.
@@ -97,7 +101,7 @@ class Setting:
         return self.item_field in {"credential", "password"}
 
     def __post_init__(self) -> None:
-        if not re.fullmatch(r"[A-Z][A-Z0-9_]*", self.name):
+        if not re.fullmatch(SETTING_NAME, self.name):
             raise ValueError(f"{self.name!r} is not a setting name.")
         if sum((bool(self.item_field), bool(self.label), self.url is not None)) != 1:
             raise ValueError(f"{self.name} comes from exactly one place on its item.")
@@ -132,6 +136,46 @@ ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
 
 
 @dataclass(frozen=True, slots=True)
+class Minter:
+    """How an observer credential for one provider is minted and stored.
+
+    ``task`` is the mise task that mints it. ``stores`` pairs each ``--store``
+    flag with the projection variable whose field it fills, the secret first.
+    ``bootstrap`` pairs each environment variable the task reads with the
+    projection variable whose field on the bootstrap item holds it, so a
+    bootstrap item is shaped like the connection.
+    """
+
+    task: str
+    stores: tuple[tuple[str, str], ...]
+    bootstrap: tuple[tuple[str, str], ...]
+    # The flag naming the account, when the credential is minted for one.
+    account_flag: str = ""
+
+    @property
+    def invocation(self) -> tuple[str, str, str]:
+        """The words that run the task, from the checkout."""
+
+        return ("mise", "run", self.task)
+
+
+@dataclass(frozen=True, slots=True)
+class Observes:
+    """What a connection is carried for when it reconciles nothing.
+
+    Every other ability derives from a resource kind, the record of why a
+    credential is held. A connection that only reads has none, and without this
+    shows on the connections page as a credential nobody can account for. The
+    effect is always a read: changing state needs a kind, which reconcile keys on.
+    """
+
+    name: str
+    label: str
+    summary: str
+    subject_resource: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConnectionKind:
     """One connection provider: its name on the page, and how its credential is held."""
 
@@ -155,6 +199,15 @@ class ConnectionKind:
     # What connecting it gives the owner, in one line of his own words: the
     # Connections page offers it by this, never by the names of its kinds.
     gives: str = ""
+    # Whether its connection logs in to one machine. HQ holds one per machine,
+    # so every record read through it names its connection; and the machine
+    # counts logins, so only the sweep's own clock reads through it, carrying
+    # a recent probe between.
+    logs_in: bool = False
+    # How a replacement credential is minted, where a task mints one.
+    minter: Minter | None = None
+    # What it is carried for beside the kinds it reconciles.
+    observes: tuple[Observes, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,6 +379,11 @@ SHARED = (
         mode="validation",
         refs=(("panel_id", "GlancePanelID"),),
     ),
+    SharedValue(
+        "SettingName",
+        Annotated[str, Field(pattern=SETTING_NAME)],
+        "A setting's name, as a vault item's projection states it.",
+    ),
 )
 
 
@@ -421,10 +479,9 @@ class ProviderSpec:
     resolver: Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
-    # Declared after the positional fields, and always passed by keyword: the
-    # existing entries pass resolved_type and resolver positionally, so a new
-    # field inserted above them silently rebinds both.
-    label: str = ""
+    # Keyword-only, so it binds no positional argument and every kind names
+    # itself: nothing words a kind from its identifier.
+    label: str = field(kw_only=True)
     # Many of them, where adding a letter to ``label`` does not say it.
     label_plural: str = ""
 
@@ -497,15 +554,9 @@ class ProviderSpec:
     # changed. A difference in one is a problem said in those words. It is
     # never "changed outside HQ", so nothing offers to keep or restore a side.
     reported_fields: tuple[str, ...] = ()
-    # Why nothing sweeps this kind, or "" when something does.
-    #
-    # The collector registry is a dict in the controller and this is the list
-    # of kinds; nothing joined them, so a kind could be declared here and swept
-    # by nothing at all, with no symptom but a staleness claim no sweep clears.
-    #
-    # A sentence rather than a boolean: "nothing can reach it" and "no
-    # collector has been written yet" are different states, and the second is
-    # work rather than a fact about the world.
+    # Why nothing sweeps this kind, said exactly where ``_from_record`` is
+    # unset (``sweeps``): a sentence rather than a boolean, since "nothing can
+    # reach it" and "no collector has been written yet" are different states.
     unobserved_reason: str = ""
     # For a kind no sweep reads, how often the controller's reconcile reads
     # again what it applied, where something outside HQ moves it (a
@@ -707,6 +758,11 @@ class ProviderSpec:
             raise ValueError(
                 f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
+        if self.sweeps == bool(self.unobserved_reason):
+            raise ValueError(
+                f"{self.kind!r} is read back from a sweep (_from_record) or says why nothing sweeps it "
+                "(unobserved_reason), exactly one."
+            )
         if self.facet and self.hostnames is None:
             raise ValueError(f"{self.kind!r} supplies {self.facet!r} but says no way to read its spec's hostnames.")
         # The form prints each effect under the field it names, and a name no
@@ -722,7 +778,8 @@ class ProviderSpec:
 
     @property
     def sweeps(self) -> bool:
-        """Whether a swept record of this kind reads back as a spec."""
+        """Whether a sweep reads this kind: its swept records read back as a
+        spec. The one answer to whether a declared kind is observed."""
 
         return self._from_record is not None
 

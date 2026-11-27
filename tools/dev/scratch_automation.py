@@ -89,6 +89,7 @@ class State:
 
         return {
             "HQ_AUTOMATION_ID": WORKER,
+            "HQ_AUTOMATION_PROFILE": logins.READ_PROFILE,
             "HQ_AUTOMATION_BRIDGE_SOCKET": socket,
             "HQ_AUTOMATION_JOURNAL": str(self.root / "state" / "journal.json"),
             "HQ_AUTOMATION_CONNECTIONS": str(self.connections),
@@ -121,7 +122,7 @@ def connections(machines: Iterable[str]) -> dict[str, Any]:
     each machine as each profile, every one reaching this machine."""
 
     return {
-        "schema_version": 2,
+        "schema_version": logins.SCHEMA_VERSION,
         "connections": [
             {
                 "ref": f"{machine}-{profile}",
@@ -129,7 +130,7 @@ def connections(machines: Iterable[str]) -> dict[str, Any]:
                     "host": LOOPBACK,
                     "port": "22",
                     "user": USER,
-                    "role": "runner",
+                    "role": logins.ROLE,
                     "machine": machine,
                     "profile": profile,
                 },

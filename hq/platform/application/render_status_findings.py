@@ -5,20 +5,21 @@ notices: a rotated credential never arrives and a revoked one keeps working.
 The reading and each finding: docs/Secrets.md#how-hq-reads-it.
 """
 
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
-from django.conf import settings
-
 from hq.domains.control_plane.observations.host import (
+    FAILURE_CLASSES,
+    FULL_READ_EVERY,
     RENDER_READ,
     RENDER_STATUS_KIND,
     RENDER_UNREADABLE,
+    RENDERER_UNITS,
+    UNKNOWN_FAILURE,
 )
 
+from . import unit_timers
 from .finding_model import (
     Finding,
     FindingEstate,
@@ -38,30 +39,10 @@ from .ui import ended
 
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
-# disagree. A run that finds the vault unchanged still reads it in full once a
-# day (FullEvery in controller/cmd/hq-secrets/main.go, which
-# ``test_render_status`` holds to the value below).
-RENDER_TIMER = Path(settings.BASE_DIR) / "deploy" / "systemd" / "severino-hq-secrets.timer"
-_SPAN = re.compile(r"(\d+)\s*(h|min|s)")
-_UNITS = {"h": timedelta(hours=1), "min": timedelta(minutes=1), "s": timedelta(seconds=1)}
-
-
-def _timer_span(key: str) -> timedelta:
-    """One time span the renderer's timer declares, in systemd's notation."""
-
-    for line in RENDER_TIMER.read_text().splitlines():
-        name, _, value = line.partition("=")
-        if name == key:
-            spans = _SPAN.findall(value)
-            if not spans or _SPAN.sub("", value).strip():
-                raise ValueError(f"{RENDER_TIMER.name}: {key} is not a span this reads: {value!r}")
-            return sum((int(count) * _UNITS[unit] for count, unit in spans), timedelta())
-    raise ValueError(f"{RENDER_TIMER.name} declares no {key}")
-
-
-RENDER_EVERY = _timer_span("OnUnitActiveSec")
-RENDER_DELAY = _timer_span("RandomizedDelaySec")
-FULL_READ_EVERY = timedelta(hours=24)
+# disagree.
+RENDER_TIMER = "severino-hq-secrets.timer"
+RENDER_EVERY = unit_timers.span(RENDER_TIMER, "OnUnitActiveSec")
+RENDER_DELAY = unit_timers.span(RENDER_TIMER, "RandomizedDelaySec")
 # The installed files are stale once nothing has confirmed them current for
 # three runs at their latest: one missed run is a restart or a held lock, two
 # is a slow Connect.
@@ -70,28 +51,6 @@ CONFIRMED_WITHIN = missed(RENDER_EVERY + RENDER_DELAY, 3).stale_after
 # passed. Never sooner than ``CONFIRMED_WITHIN`` after a
 # full read falls due, so a renderer two runs behind raises one claim, not two.
 RENDERED_WITHIN = FULL_READ_EVERY + CONFIRMED_WITHIN
-
-# The unit that runs each renderer the launcher names
-# (Renderers in controller/host/layout.go), for the exact command. A renderer with no unit
-# here gets its rule's steps in words.
-RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
-
-# A failure filed under a word the table below does not hold, or under none.
-UNKNOWN_FAILURE = "an error HQ does not recognize"
-
-# What each word a failed run is filed under means (``Class`` in
-# controller/secrets/render.go, and the table in docs/Secrets.md).
-FAILURE_CLASSES = {
-    "config": "the job's configuration was refused",
-    "host": "a folder, mount, lock file or destination on the machine is not as it should be",
-    "busy": "another refresh was already running",
-    "connect_unavailable": "1Password Connect did not answer in time, or the vault kept changing",
-    "connect_denied": "1Password Connect refused the token",
-    "connect_response": "1Password Connect gave an answer HQ could not use",
-    "content": "something in the vault was refused",
-    "web_unhealthy": "the web container did not come back after its settings changed",
-    "internal": UNKNOWN_FAILURE,
-}
 
 # Why the reading holds no document for a renderer, as evidence says it.
 UNREAD_REASONS = {

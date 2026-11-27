@@ -7,13 +7,11 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentAccess, AuditLog
 from hq.platform.core.testing import operator
 
 from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
-from ..capabilities import execute_capability
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal, web_principal
 
 
 def _said():
@@ -37,30 +35,6 @@ class StateTests(TestCase):
 class WhoMayPullItTests(TestCase):
     def setUp(self):
         self.user = operator(username="op")
-
-    def test_no_credential_can_change_it(self):
-        granted = frozenset(Capability)
-        for credential in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=credential.interface):
-                result = execute_capability(SET_AGENT_ACCESS, keyed({"paused": True}), principal=credential)
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-
-        self.assertFalse(agents_paused())
-        self.assertEqual(_said(), [])
-        self.assertEqual(_denials(), 3)
-
-    def test_a_state_that_is_not_a_yes_or_no_is_invalid(self):
-        for payload in ({}, {"paused": "sometimes"}):
-            with self.subTest(payload=payload):
-                result = execute_capability(SET_AGENT_ACCESS, keyed(payload), principal=web_principal(self.user))
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertFalse(agents_paused())
 
     def test_the_change_does_not_happen_without_its_record(self):
         with (

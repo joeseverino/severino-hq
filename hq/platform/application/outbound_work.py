@@ -17,7 +17,7 @@ from typing import Annotated, Any, NotRequired, cast
 from django.core.exceptions import ImproperlyConfigured
 lazy from django.utils import timezone
 
-lazy from hq.domains.jobs.models import Job
+lazy from hq.domains.jobs.models import Job, JobState
 lazy from hq.domains.jobs.runner import ALREADY_RUNNING, SCHEDULER, Progress, due as is_due, run, start
 
 from .asks import FAILED, Ask, Asked, AskedAnswer, Standing
@@ -308,7 +308,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
             request={SUBJECT_FIELD: subject},
         )
     except RecordConflict:
-        live = Job.objects.filter(kind=work.name, state__in=("queued", "running")).first()
+        live = Job.objects.filter(kind=work.name, state__in=(JobState.QUEUED, JobState.RUNNING)).first()
         if live is not None and live.request.get(SUBJECT_FIELD, "") == subject:
             return {**_job_asked(live, ALREADY_RUNNING), "started": False, "job": str(live.pk)}
         # Another subject's run of the same work holds the one live slot.
@@ -382,7 +382,7 @@ def run_for_host(name: str) -> dict[str, Any]:
     try:
         job = run_now(work.name, principal=_scheduler())
     except RecordConflict:
-        return {"name": name, "state": "running", "note": ALREADY_RUNNING}
+        return {"name": name, "state": JobState.RUNNING, "note": ALREADY_RUNNING}
     return {"name": name, "state": job.state, "note": job_run(job).note, "job": str(job.pk)}
 
 

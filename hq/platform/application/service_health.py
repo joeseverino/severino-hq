@@ -13,6 +13,7 @@ from django.utils.text import capfirst, get_text_list
 
 from hq.platform.application.labels import dotted
 
+from .freshness import OUT_OF_DATE
 from .projection import read_once
 from .tone import Tone
 from .ui import agreed, counted, ended
@@ -145,7 +146,7 @@ def _as_last_read(found: Health, service: Any) -> Health:
     said = f"{found.label} when last read, {when(stale.observed_at)}."
     return Health(
         Tone.SERIOUS if found.state == Tone.SERIOUS else Tone.ATTENTION,
-        "Out of date",
+        OUT_OF_DATE,
         " ".join(part for part in (said, found.detail) if part),
     )
 

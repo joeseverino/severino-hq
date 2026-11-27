@@ -161,7 +161,7 @@ class PageListView(_ContentSectionView):
 
 
 class ContentListView(_ContentSectionView):
-    """Both halves at once. Reachable, but not in the nav.
+    """Both halves at once.
 
     The draft and needs-docs queues count across the whole registry, so they
     open here, where the number and the page agree; and a type no section

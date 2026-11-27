@@ -179,6 +179,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 		Seal:       filepath.Join(root, "seal"),
 		SealPublic: filepath.Join(root, "state", "seal", "public.key"),
 		Runtime:    filepath.Join(root, "run"),
+		Backups:    filepath.Join(root, "backups"),
 		Runs:       filepath.Join(root, "run", "severino-hq-runs"),
 		Out:        &f.out,
 	}
@@ -190,6 +191,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	})
 	f.machine.Own = func(string) error { return nil }
 	f.machine.Owner = func(*os.Root, string) error { return nil }
+	f.machine.Lend = func(string) error { return nil }
 	f.machine.Verifier = func(context.Context) error { return nil }
 	f.machine.Sudoers = filepath.Join(root, "sudoers.d")
 	f.machine.HostConfig = filepath.Join(root, "host.json")

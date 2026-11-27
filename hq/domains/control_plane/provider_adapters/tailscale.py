@@ -12,7 +12,7 @@ from hq.platform.application.command_fields import RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 
-from ..connection_shapes import OAUTH_CLIENT
+from ..connection_shapes import OAUTH_CLIENT, BlankOrConnectionRef
 from ..consoles import tailscale_machine
 from ..observations import tailscale as readings
 from ..observations.contract import ReadingPart
@@ -21,6 +21,7 @@ from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
     InboundSpec,
+    Minter,
     ProviderModel,
     ProviderSpec,
     SharedValue,
@@ -45,9 +46,8 @@ class TailnetDeviceSpec(ProviderModel):
     # daemon gave for free, which names no credential, and the reconciler
     # resolves the single Tailscale connection when this is blank. Required, it
     # made every device fail adoption on a field the record could never carry.
-    connection_ref: str = Field(
+    connection_ref: BlankOrConnectionRef = Field(
         default="",
-        max_length=160,
         title="Tailscale",
         description="The connection HQ uses to change this device.",
     )
@@ -74,9 +74,9 @@ class TailnetPolicySpec(ProviderModel):
     reason: there is exactly one, and it arrived with the credential.
     """
 
-    connection_ref: Annotated[str, Describe("", api="The Tailscale connection the policy is read through.")] = Field(
-        default="", max_length=160, title="Tailscale"
-    )
+    connection_ref: Annotated[
+        BlankOrConnectionRef, Describe("", api="The Tailscale connection the policy is read through.")
+    ] = Field(default="", title="Tailscale")
     document: str = Field(
         default="",
         title="Policy",
@@ -382,6 +382,14 @@ CONNECTIONS = {
         create="An OAuth client in the Tailscale admin console, under Settings, Trust credentials.",
         create_url="https://tailscale.com/kb/1215/oauth-clients",
         gives="Your tailnet's devices, who may reach what, and its DNS.",
+        minter=Minter(
+            task="mint:tailscale",
+            stores=(("--store", "CLIENT_SECRET"), ("--store-id", "CLIENT_ID")),
+            bootstrap=(
+                ("TAILSCALE_BOOTSTRAP_CLIENT_ID", "CLIENT_ID"),
+                ("TAILSCALE_BOOTSTRAP_CLIENT_SECRET", "CLIENT_SECRET"),
+            ),
+        ),
     )
 }
 

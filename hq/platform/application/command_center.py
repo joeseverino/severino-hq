@@ -202,7 +202,7 @@ def _live_connection_item(group, connection) -> DiscoveryItem:
         summary=group.spec.label if group.spec.label != named else "",
         url=_live_connection_url(group, connection),
         destination_label="",
-        badges=(instance.status_label,),
+        badges=(connection.lifecycle.label,),
         search_terms=(
             instance.label,
             group.spec.label,

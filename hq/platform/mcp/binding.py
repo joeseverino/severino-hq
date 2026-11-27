@@ -4,12 +4,14 @@ import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from difflib import get_close_matches
 from functools import partial
-from typing import Any
+from typing import Annotated, Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from hq.platform.application import agent_admission
 from hq.platform.application.access import ANYONE
@@ -86,7 +88,9 @@ class Tool:
             named = any(tuple(error["loc"]) == ("name",) for error in exc.errors())
             if named and (refused := name_refusal(self.name, arguments.get("name"))) is not None:
                 raise refused from None
-            raise
+            if (renamed := _renamed(self.arguments, arguments, exc)) is None:
+                raise
+            raise renamed from None
         seconds = settings.SEVERINO_AGENT_CALL_TIMEOUT_SECONDS
         deadline = asyncio.timeout(seconds)
         try:
@@ -106,6 +110,61 @@ class Tool:
             f"HQ stopped waiting for this call after {seconds} seconds. It may still finish: read "
             "before repeating it, and repeat a change with the same idempotency_key.",
         )
+
+
+def _renamed(model: type[BaseModel], arguments: Mapping[str, Any], exc: ValidationError) -> ValidationError | None:
+    """``exc`` with each argument the tool does not take, that one it does
+    would take in its place, said as that one: the required one missing, else
+    the one its name is nearest, where the value sent is of its type. None
+    where no argument is misnamed. The words name the argument to send it
+    as, never the value sent."""
+
+    errors = exc.errors()
+    # An argument's place is its name: the model's own fields are one deep.
+    missing = [str(error["loc"][0]) for error in errors if error["type"] == "missing" and len(error["loc"]) == 1]
+    unsent = [name for name in model.model_fields if name not in arguments]
+    moved: dict[str, str] = {}
+    for error in errors:
+        if error["type"] != "extra_forbidden" or len(error["loc"]) != 1:
+            continue
+        sent = str(error["loc"][0])
+        free = [name for name in unsent if name not in moved.values()]
+        for name in (*(name for name in missing if name in free), *get_close_matches(sent, free, n=1)):
+            if _takes(model, name, arguments[sent]):
+                moved[sent] = name
+                break
+    if not moved:
+        return None
+    said: list[InitErrorDetails] = [
+        {"type": PydanticCustomError("misnamed", _MISNAMED, {"name": name}), "loc": (sent,), "input": arguments[sent]}
+        for sent, name in moved.items()
+    ]
+    told = {*(("missing", name) for name in moved.values()), *(("extra_forbidden", sent) for sent in moved)}
+    kept: list[InitErrorDetails] = []
+    for error in errors:
+        if (error["type"], str(error["loc"][0])) in told:
+            continue
+        details = InitErrorDetails(type=error["type"], loc=error["loc"], input=error["input"])
+        if "ctx" in error:
+            details["ctx"] = error["ctx"]
+        kept.append(details)
+    return ValidationError.from_exception_data(exc.title, [*said, *kept], hide_input=True)
+
+
+# What a misnamed argument is told, naming the argument that takes it.
+_MISNAMED = "is not a known field; send it as {name}"
+
+
+def _takes(model: type[BaseModel], name: str, value: Any) -> bool:
+    """Whether argument ``name`` of ``model`` takes ``value``, as a call's validation reads it."""
+
+    taken = model.model_fields[name]
+    kind: Any = Annotated[taken.annotation, *taken.metadata] if taken.metadata else taken.annotation
+    try:
+        TypeAdapter(kind).validate_python(value, strict=True)
+    except ValidationError:
+        return False
+    return True
 
 
 def _held(handler: Callable[..., Any], requires: Requirement, **arguments: Any) -> Any:

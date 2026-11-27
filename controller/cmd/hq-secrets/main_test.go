@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/secrets"
 	"strings"
 	"testing"
 )
@@ -99,8 +100,8 @@ func TestDefaultsAreTheHostsPaths(t *testing.T) {
 }
 
 func TestEveryFailureClassHasItsOwnExitCode(t *testing.T) {
-	seen := map[int]string{0: "success"}
-	for _, class := range []string{"internal", "config", "host", "busy", "connect_unavailable", "connect_denied", "connect_response", "content", "web_unhealthy"} {
+	seen := map[int]secrets.Failure{0: "success"}
+	for _, class := range secrets.Failures {
 		code, ok := exitCodes[class]
 		if !ok || code == 0 {
 			t.Fatalf("%s has no exit code", class)

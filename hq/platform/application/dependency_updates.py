@@ -35,6 +35,14 @@ lazy from .read_requests import asked_at as read_asked_at
 RUN_NOW = "project.dependency_updates.run"
 # Each outcome a run reports, as the job state every page words and tones.
 SEEN = {"ok": JobState.SUCCEEDED, "handed_off": JobState.RUNNING, "timeout": JobState.LOST}
+
+
+def seen(outcome: str) -> JobState:
+    """A run's reported outcome as the job state every page words and tones."""
+
+    return SEEN.get(outcome, JobState.FAILED)
+
+
 _REPOSITORY = re.compile(REPOSITORY)
 
 
@@ -73,7 +81,7 @@ class Run:
 
     @property
     def seen(self) -> JobState:
-        return SEEN.get(self.outcome, JobState.FAILED)
+        return seen(self.outcome)
 
     @property
     def tone(self) -> Tone:

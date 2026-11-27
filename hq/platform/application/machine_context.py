@@ -13,13 +13,12 @@ from dataclasses import replace
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
 from hq.platform.application.url_query import with_query
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.models import ManagedResource
 lazy from hq.domains.control_plane.providers import service_facets
 
 from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
-from .entity_links import entity_link, kind_label
+from .entity_links import entity_link, kind_label, provider_label
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
@@ -280,7 +279,7 @@ def _reached_through(record: MachineRecord, ref: str):
     providers = connection_providers(ref) if ref.lower() in own else ()
     if not providers:
         return entity_link("connection", ref)
-    kinds = ", ".join(CONNECTION_LABELS.get(provider, provider) for provider in providers)
+    kinds = ", ".join(provider_label(provider) for provider in providers)
     return replace(entity_link("connection", ref, label=kinds), title=ref)
 
 

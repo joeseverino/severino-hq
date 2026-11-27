@@ -56,10 +56,13 @@ class Supply:
     """
 
     def __init__(self, test: TestCase, *manifests: OperationManifest) -> None:
-        # Only a test that may write has a worker to note; one that may not runs nothing.
-        if test.databases:
-            note_automation()
         self(*manifests)
+        # Only a test that may write has workers to note; one that may not runs nothing.
+        if test.databases:
+            from ..automation_runs import READ_PROFILE, login_profile
+
+            for profile in {READ_PROFILE, *(login_profile(manifest) for manifest in manifests)}:
+                note_automation(profile)
         self.machines: tuple[Machine, ...] = (Machine(APP), Machine(DB), Machine(EDGE))
         self.reaches: frozenset[tuple[str, str]] | None = None
         for patcher in (

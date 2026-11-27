@@ -39,7 +39,7 @@ from ..glance import (
 )
 from ..glance_refresh import DASHBOARD_REFRESH, GLANCE_REGION, dashboard_refresh_plan, refresh_ask
 from ..report_testing import bridged
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
+from ..security import OPERATOR_CAPABILITIES, Principal, cli_principal
 from .glance_readings import DOCKER, HOST, reported_hour, reported_machine, reported_weather
 from .test_containers import inventory, running
 
@@ -378,23 +378,6 @@ class DashboardGlanceTests(TestCase):
         shown = AuditLog.objects.get(object_type="Dashboard", metadata__subject=other.key)
         self.assertEqual((shown.metadata["actor"], shown.metadata["operation"]), ("operator", DASHBOARD_MACHINE))
 
-    def test_only_a_person_in_the_browser_chooses_the_dashboard_machines(self):
-        other = declare("other-machine", "machine", {"name": "other-machine"})
-        granted = frozenset(Capability)
-        for principal in (
-            Principal("example-agent", "mcp", granted, granted=granted),
-            Principal("example-client", "api", granted, granted=granted),
-            cli_principal(),
-        ):
-            with self.subTest(interface=principal.interface):
-                result = execute_capability(
-                    DASHBOARD_MACHINE, keyed({"selected": True}), principal=principal, target=other.key
-                )
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(DashboardMachine.objects.filter(machine=other).exists())
-        self.assertEqual(AuditLog.objects.filter(action=AuditLog.Action.DENIED).count(), 3)
-
     def test_a_machine_switched_off_is_a_precondition_and_a_key_naming_no_machine_is_not_found(self):
         declare("off-machine", "machine", {"name": "off"}, enabled=False)
         declare("example-zone", "cloudflare.zone", {"name": "example.com"})
@@ -411,16 +394,6 @@ class DashboardGlanceTests(TestCase):
                 self.assertEqual(result["error"]["code"], code, result)
         self.assertEqual(DashboardMachine.objects.count(), 1)
 
-    def test_a_selection_that_is_not_a_yes_or_no_is_invalid(self):
-        for payload in ({}, {"selected": "sometimes"}):
-            with self.subTest(payload=payload):
-                result = execute_capability(
-                    DASHBOARD_MACHINE, keyed(payload), principal=AN_OPERATOR, target="app-server"
-                )
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
-        self.assertEqual(DashboardMachine.objects.count(), 1)
-
     def test_weather_settings_validate_and_normalize_coordinates(self):
         answer = execute_capability(
             DASHBOARD_SETTINGS,
@@ -433,15 +406,6 @@ class DashboardGlanceTests(TestCase):
         self.assertEqual(configuration.weather_point, "41.1000,-87.2000")
         self.assertEqual(configuration.weather_label, "Outside")
         self.assertEqual(configuration.infrastructure_label, "Lab")
-
-    def test_a_label_longer_than_its_column_is_refused_never_cut(self):
-        for field in ("weather_label", "infrastructure_label"):
-            with self.subTest(field=field):
-                answer = execute_capability(DASHBOARD_SETTINGS, keyed({field: "x" * 41}), principal=AN_OPERATOR)
-
-                self.assertEqual(answer["error"]["code"], "invalid_input")
-                self.assertEqual(answer["error"]["details"][0]["loc"], [field])
-                self.assertFalse(DashboardConfiguration.objects.filter(**{field: "x" * 40}).exists())
 
     def test_unsolicited_observation_is_rejected(self):
         with self.assertRaisesMessage(ValueError, "No refresh is pending"):

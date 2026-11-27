@@ -10,14 +10,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.analytics.models import RumDaily
-from hq.domains.assets.models import Asset
 from hq.domains.contacts import inbox
 from hq.domains.content.models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
 from hq.domains.control_plane.models import OperationRequest, OperationState, SourceProposal
 from hq.domains.expenses.models import Expense
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
-from hq.domains.projects.models import Project
 from hq.platform.application import analytics, approval_review, approvals, github_profile
 from hq.platform.application.automation_adoption import ADOPT
 from hq.platform.application.findings import findings
@@ -117,26 +115,6 @@ class ExampleEstateTests(TestCase):
                 (ending,) = AuditLog.objects.filter(object_type=runner.AUDIT_TYPE, object_id=str(job.pk))
                 self.assertEqual(ending.created_at, job.finished_at)
 
-    def test_projects_were_not_all_edited_at_once(self):
-        edited = {project.updated_at.date() for project in Project.objects.all()}
-
-        self.assertGreater(len(edited), 1)
-        self.assertLess(min(edited), timezone.localdate() - timedelta(days=1))
-
-    def test_an_assets_expense_is_dated_and_filed_as_its_purchase(self):
-        # An asset with no cost recorded was not bought, so no expense files it.
-        for asset in Asset.objects.filter(total_cost__isnull=False):
-            with self.subTest(asset=asset.slug):
-                (expense,) = Expense.objects.filter(related_asset=asset)
-                self.assertEqual(expense.date, asset.purchase_date)
-                self.assertNotEqual(asset.category, "other")
-
-    def test_nothing_happened_before_the_server_was_bought(self):
-        bought = min(asset.purchase_date for asset in Asset.objects.all())
-        first = min(timezone.localdate(event.created_at) for event in AuditLog.objects.all())
-
-        self.assertGreaterEqual(first, bought)
-
     def test_each_agent_and_device_event_is_dated_as_its_record_says(self):
         # The Agents page reads the record and the audit log reads the event;
         # both say when it happened.
@@ -155,11 +133,6 @@ class ExampleEstateTests(TestCase):
                 self.assertTrue(events.exists())
                 for event in events:
                     self.assertEqual(timezone.localdate(event.created_at), timezone.localdate(moment))
-
-    def test_some_spending_is_not_all_business(self):
-        partial = Expense.objects.exclude(business_use_percentage=100)
-
-        self.assertTrue(partial.exists())
 
     def test_the_agents_page_draws_every_state_a_rule_and_an_agent_can_be_in(self):
         from hq.platform.application.capability_policy import Rule

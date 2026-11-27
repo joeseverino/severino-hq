@@ -61,6 +61,9 @@ class Cloudflare(Permission):
     # name the permission group listing has answered;
     # ``mint:cloudflare --list-groups`` prints the current one.
     REGISTRAR_DOMAINS_READ = "Registrar: Domains Read", "account"
+    # As R2's own token page (R2, Manage API tokens) names it, scoped to one
+    # bucket there; the token editor's name for it is the API one.
+    R2_OBJECT_WRITE = "Object Read & Write", "bucket", "Workers R2 Storage Bucket Item Write"
     DNS_WRITE = "DNS Write", "zone"
     PAGE_RULES_READ = "Page Rules Read", "zone"
     SINGLE_REDIRECT_READ = "Single Redirect Read", "zone", "Dynamic URL Redirects Read"
@@ -95,6 +98,7 @@ class GitHub(Permission):
     ADMINISTRATION_READ = "Administration", "read"
     CHECKS_READ = "Checks", "read"
     CODE_SCANNING_ALERTS_READ = "Code scanning alerts", "read", "security_events"
+    COMMIT_STATUSES_READ = "Commit statuses", "read", "statuses"
     COMMIT_STATUSES_WRITE = "Commit statuses", "write", "statuses"
     CONTENTS_READ = "Contents", "read"
     CONTENTS_WRITE = "Contents", "write"
@@ -102,6 +106,7 @@ class GitHub(Permission):
     DEPLOYMENTS_READ = "Deployments", "read"
     ISSUES_READ = "Issues", "read"
     ISSUES_WRITE = "Issues", "write"
+    MERGE_QUEUES_READ = "Merge queues", "read"
     METADATA_READ = "Metadata", "read"
     PACKAGES_READ = "Packages", "read"
     PULL_REQUESTS_READ = "Pull requests", "read"

@@ -12,6 +12,7 @@ tool (
 
 require (
 	filippo.io/age v1.3.2
+	github.com/aws/aws-sdk-go-v2 v1.48.1
 	github.com/coder/websocket v1.8.15
 	github.com/compose-spec/compose-go/v2 v2.17.0
 	github.com/godbus/dbus/v5 v5.2.4
@@ -26,6 +27,7 @@ require (
 require (
 	filippo.io/hpke v0.4.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
+	github.com/aws/smithy-go v1.28.10 // indirect
 	github.com/distribution/reference v0.5.0 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/getkin/kin-openapi v0.153.0 // indirect

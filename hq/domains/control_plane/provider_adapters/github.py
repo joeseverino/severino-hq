@@ -278,12 +278,21 @@ CONNECTIONS = {
 # arrived is one GitHub's log no longer counts as failing; GitHub's docs name
 # the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
-# deployment review is requested the moment a run starts waiting on a reviewer.
+# deployment review is requested the moment a run starts waiting on a reviewer;
+# a merge group, as a pull request joins or leaves a merge queue.
 INBOUND = {
     PROVIDER: InboundSpec(
         dict.fromkeys(
-            ("push", "workflow_run", "check_suite", "pull_request", "deployment_status", "deployment_review"),
-            (readings.REPOSITORY_KIND, readings.WEBHOOK_KIND),
+            (
+                "push",
+                "check_suite",
+                "pull_request",
+                "deployment_status",
+                "deployment_review",
+                "merge_group",
+                *readings.UNPROBED_EVENTS,
+            ),
+            (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
         ),
         path="/github",
         # "sha256=<hex>" over the body alone (docs.github.com, validating
@@ -297,13 +306,17 @@ INBOUND = {
         # "Payloads are capped at 25 MB" (docs.github.com, webhook events and payloads).
         max_body_bytes=25 * 1024 * 1024,
         # The delivery log is not: a delivery that failed never arrives.
-        complete=(readings.REPOSITORY_KIND,),
+        complete=readings.REPOSITORY_KINDS,
         requires=(
             GitHub.CONTENTS_READ,
             GitHub.ACTIONS_READ,
             GitHub.CHECKS_READ,
             GitHub.PULL_REQUESTS_READ,
             GitHub.DEPLOYMENTS_READ,
+            GitHub.MERGE_QUEUES_READ,
+            GitHub.DEPENDABOT_ALERTS_READ,
+            GitHub.CODE_SCANNING_ALERTS_READ,
+            GitHub.SECRET_SCANNING_ALERTS_READ,
         ),
     ),
 }

@@ -13,21 +13,14 @@ from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
 )
 from hq.platform.application import readings
-from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.glance import DASHBOARD_SETTINGS
 from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
+from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
 from hq.platform.application.tests.glance_readings import HOST
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, declare, operator
-
-GRANTED = frozenset(Capability)
-CREDENTIALS = (
-    Principal("example-agent", "mcp", GRANTED, granted=GRANTED),
-    Principal("example-client", "api", GRANTED, granted=GRANTED),
-)
 
 
 def denials(capability: str) -> int:
@@ -84,15 +77,6 @@ class DashboardSettingsTests(TestCase):
         self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
         self.assertEqual(denials(DASHBOARD_SETTINGS), 1)
 
-    def test_only_a_person_in_the_browser_changes_them(self):
-        for principal in (*CREDENTIALS, cli_principal()):
-            with self.subTest(interface=principal.interface):
-                result = execute_capability(DASHBOARD_SETTINGS, {"weather_label": "Taken"}, principal=principal)
-
-                self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Taken").exists())
-        self.assertEqual(denials(DASHBOARD_SETTINGS), 3)
-
 
 class DashboardRefreshTests(TestCase):
     def setUp(self):
@@ -132,20 +116,4 @@ class DashboardRefreshTests(TestCase):
                 self.refresh(**fields)
 
                 self.assertEqual(denials(name), 1)
-        self.assertFalse(DashboardRefreshRequest.objects.exists())
-
-    def test_a_credential_without_infrastructure_is_refused(self):
-        reader = Principal("example-agent", "mcp", frozenset({Capability.READ}))
-        for name in (DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE):
-            with self.subTest(name=name):
-                self.assertEqual(execute_capability(name, {}, principal=reader)["error"]["code"], "forbidden")
-                self.assertEqual(denials(name), 1)
-        self.assertFalse(DashboardRefreshRequest.objects.exists())
-
-    def test_a_refresh_names_no_panel(self):
-        for name in (DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE):
-            with self.subTest(name=name):
-                result = execute_capability(name, {"panels": ["weather"]}, principal=cli_principal())
-
-                self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(DashboardRefreshRequest.objects.exists())

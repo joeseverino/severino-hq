@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"net/netip"
 	"os"
 	"os/exec"
@@ -29,9 +30,12 @@ const automationNetworkJSON = `{"Name":"severino-hq-automation","Id":"4567cdef",
 	`"IPAM":{"Driver":"default","Options":null,"Config":[{"Subnet":"10.231.1.0/24","Gateway":"10.231.1.1"}]},"Internal":false,"Attachable":false,` +
 	`"Containers":{},"Options":{"com.docker.network.bridge.name":"hq-automation0"},"Labels":{}}`
 
+// change is the privilege profile of the fixture's one login that escalates.
+const change = "example.change"
+
 // worker is one launch of the automation worker against a fake docker and
-// nft: every call made, what nft was given, and what the container found
-// lent to it while it ran.
+// nft: every call made, what nft was given, and what each container found
+// lent to it while it ran, by the profile it was told.
 type worker struct {
 	a       *Automation
 	root    string
@@ -39,7 +43,7 @@ type worker struct {
 	docker  string
 	mu      sync.Mutex
 	calls   [][]string
-	lent    map[string][]byte
+	lent    map[string]map[string][]byte
 	owned   []string
 	stderr  bytes.Buffer
 	running func(args []string)
@@ -50,7 +54,7 @@ type worker struct {
 func newWorker(t *testing.T) *worker {
 	t.Helper()
 	root := t.TempDir()
-	w := &worker{root: root, docker: "exit 0", lent: map[string][]byte{}, pulled: true}
+	w := &worker{root: root, docker: "exit 0", lent: map[string]map[string][]byte{}, pulled: true}
 	secrets := filepath.Join(root, "secrets")
 	for _, dir := range []string{filepath.Join(secrets, "ssh"), filepath.Join(root, "journal"), filepath.Join(root, "lib", "deploy", "automation"), filepath.Join(root, "grant")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -71,8 +75,11 @@ func newWorker(t *testing.T) *worker {
 		}
 		return found
 	}
+	changing := transport("192.0.2.10", "22", connections.RunnerRole)
+	changing.User, changing.Profile = "example-change", change
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: "example-server", Provider: "ssh", Store: store, SSHTransport: transport("192.0.2.10", "22", connections.RunnerRole)},
+		{Ref: "example-server-change", Provider: "ssh", Store: store, SSHTransport: changing},
 		{Ref: "example-edge", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", connections.RunnerRole)},
 		{Ref: "example-named", Provider: "ssh", Store: store, SSHTransport: transport("named.example.com", "22", connections.RunnerRole)},
 		{Ref: "example-controller", Provider: "ssh", Store: store, SSHTransport: transport("198.51.100.7", "7722", "")},
@@ -82,7 +89,8 @@ func newWorker(t *testing.T) *worker {
 		t.Fatal(err)
 	}
 	write(filepath.Join(secrets, "controller-connections.json"), string(document))
-	for _, name := range []string{"example-server", "example-server.pub", "example-edge", "example-edge.pub", "example-named", "example-named.pub",
+	for _, name := range []string{"example-server", "example-server.pub", "example-server-change", "example-server-change.pub",
+		"example-edge", "example-edge.pub", "example-named", "example-named.pub",
 		"example-controller", "example-controller.pub", "example-dns.key", "known_hosts"} {
 		write(filepath.Join(secrets, "ssh", name), name+"\n")
 	}
@@ -145,76 +153,115 @@ func (w *worker) command(ctx context.Context, name string, args ...string) *exec
 	return answer("", 0)
 }
 
-// collect keeps every lent file the container would find, by its path in
-// the container: the run's staging is gone once the launch returns.
+// collect keeps every lent file a container would find, by its path in
+// the container, under the profile it is told: the run's staging is gone
+// once the launch returns.
 func (w *worker) collect(args []string) {
+	lent := map[string][]byte{}
+	w.lent[environment(args)["HQ_AUTOMATION_PROFILE"]] = lent
 	for i, arg := range args {
 		source, target, ok := bind(arg)
 		if i == 0 || args[i-1] != "--mount" || !ok {
 			continue
 		}
 		if data, err := os.ReadFile(source); err == nil {
-			w.lent[target] = data
+			lent[target] = data
 			continue
 		}
 		entries, _ := os.ReadDir(source)
 		for _, entry := range entries {
 			if data, err := os.ReadFile(filepath.Join(source, entry.Name())); err == nil {
-				w.lent[target+"/"+entry.Name()] = data
+				lent[target+"/"+entry.Name()] = data
 			}
 		}
 	}
 }
 
-func (w *worker) run(t *testing.T) []string {
+// environment is what a container is told, by each variable's name.
+func environment(args []string) map[string]string {
+	env := map[string]string{}
+	for i, arg := range args {
+		if arg == "--env" {
+			name, value, _ := strings.Cut(args[i+1], "=")
+			env[name] = value
+		}
+	}
+	return env
+}
+
+// run launches the worker and answers each container it ran, in order.
+func (w *worker) run(t *testing.T) [][]string {
 	t.Helper()
 	if err := w.a.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	var ran [][]string
 	for _, call := range w.calls {
 		if runsContainer(call) {
-			return call[1:]
+			ran = append(ran, call[1:])
 		}
 	}
-	t.Fatalf("no container ran: %q", w.calls)
-	return nil
+	if len(ran) == 0 {
+		t.Fatalf("no container ran: %q", w.calls)
+	}
+	return ran
 }
 
-// The worker holds the runner-role connections it can reach and their
-// identities alone: not the controller's connection to the same machine,
-// not a credential of another kind, not a signing key.
-func TestTheWorkerIsLentOnlyItsOwnConnectionsAndKeys(t *testing.T) {
+// Each privilege profile's worker is a container of its own, holding the
+// identities of that profile's runner-role connections alone: never another
+// profile's, the controller's connection to the same machine, a credential
+// of another kind or a signing key. Each reads every runner connection,
+// which names no secret, so the read profile's scan reports every login.
+func TestEachProfilesWorkerIsLentOnlyItsOwnKeys(t *testing.T) {
 	w := newWorker(t)
 
-	w.run(t)
+	ran := w.run(t)
 
-	document, err := connections.Decode(w.lent[automationConnections])
-	if err != nil {
-		t.Fatal(err)
+	journals := map[string]bool{}
+	for _, args := range ran {
+		journals[environment(args)["HQ_AUTOMATION_JOURNAL"]] = true
 	}
-	var refs []string
-	for _, connection := range document.Connections {
-		refs = append(refs, connection.Ref)
+	if len(journals) != len(ran) {
+		t.Errorf("two profiles' workers share a journal: %v", journals)
 	}
-	if !slices.Equal(refs, []string{"example-edge", "example-server"}) {
-		t.Errorf("the worker is lent %v", refs)
+
+	holds := map[string][]string{
+		connections.ReadProfile: {"example-edge", "example-edge.pub", "example-server", "example-server.pub", "known_hosts"},
+		change:                  {"example-server-change", "example-server-change.pub", "known_hosts"},
 	}
-	var files []string
-	for target := range w.lent {
-		if name, ok := strings.CutPrefix(target, automationSSH+"/"); ok {
-			files = append(files, name)
+	if len(w.lent) != len(holds) {
+		t.Fatalf("the workers ran as %v", slices.Sorted(maps.Keys(w.lent)))
+	}
+	for profile, want := range holds {
+		lent := w.lent[profile]
+		document, err := connections.Decode(lent[automationConnections])
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	slices.Sort(files)
-	if want := []string{"example-edge", "example-edge.pub", "example-server", "example-server.pub", "known_hosts"}; !slices.Equal(files, want) {
-		t.Errorf("the worker holds %v, want %v", files, want)
-	}
-	if string(w.lent[automationToken+"/"+automationTokenName]) != "example-token-one" {
-		t.Error("the worker is not lent its grant's token")
-	}
-	for target, data := range w.lent {
-		if strings.Contains(string(data), sentinel) {
-			t.Errorf("%s holds a credential the worker does not use", target)
+		var refs []string
+		for _, connection := range document.Connections {
+			refs = append(refs, connection.Ref)
+		}
+		if !slices.Equal(refs, []string{"example-edge", "example-server", "example-server-change"}) {
+			t.Errorf("the %s worker is lent %v", profile, refs)
+		}
+		var files []string
+		for target := range lent {
+			if name, ok := strings.CutPrefix(target, automationSSH+"/"); ok {
+				files = append(files, name)
+			}
+		}
+		slices.Sort(files)
+		if !slices.Equal(files, want) {
+			t.Errorf("the %s worker holds %v, want %v", profile, files, want)
+		}
+		if string(lent[automationToken+"/"+automationTokenName]) != "example-token-one" {
+			t.Errorf("the %s worker is not lent its grant's token", profile)
+		}
+		for target, data := range lent {
+			if strings.Contains(string(data), sentinel) {
+				t.Errorf("%s holds a credential the worker does not use", target)
+			}
 		}
 	}
 	if !strings.Contains(w.stderr.String(), "example-named") {
@@ -230,13 +277,13 @@ func TestTheWorkerIsLentOnlyItsOwnConnectionsAndKeys(t *testing.T) {
 func TestTheWorkerReachesOnlyItsConnectionsBeyondPublicAddresses(t *testing.T) {
 	w := newWorker(t)
 
-	args := w.run(t)
+	ran := w.run(t)
 
 	var order []string
 	for _, call := range w.calls {
 		order = append(order, call[0]+" "+call[1])
 	}
-	if !slices.Equal(order, []string{"docker image", "docker network", "nft -f", "docker run"}) {
+	if !slices.Equal(order, []string{"docker image", "docker network", "nft -f", "docker run", "docker run"}) {
 		t.Fatalf("ran %q", w.calls)
 	}
 	loaded, err := os.ReadFile(filepath.Join(w.root, "loaded.nft"))
@@ -248,8 +295,10 @@ func TestTheWorkerReachesOnlyItsConnectionsBeyondPublicAddresses(t *testing.T) {
 	if string(loaded) != want.load() {
 		t.Errorf("nft was given\n%s", loaded)
 	}
-	if network := args[slices.Index(args, "--network")+1]; network != AutomationNetwork {
-		t.Errorf("the worker runs on %s", network)
+	for _, args := range ran {
+		if network := args[slices.Index(args, "--network")+1]; network != AutomationNetwork {
+			t.Errorf("the worker runs on %s", network)
+		}
 	}
 }
 
@@ -304,8 +353,13 @@ func TestTheWorkersTableIsTheRenderedOne(t *testing.T) {
 func TestTheWorkersContainerIsConfined(t *testing.T) {
 	w := newWorker(t)
 
-	args := w.run(t)
+	for _, args := range w.run(t) {
+		confined(t, w, args)
+	}
+}
 
+func confined(t *testing.T, w *worker, args []string) {
+	t.Helper()
 	for _, want := range [][]string{
 		{"--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID)},
 		{"--cap-drop", "ALL"},
@@ -331,13 +385,7 @@ func TestTheWorkersContainerIsConfined(t *testing.T) {
 			t.Errorf("the container is lent the controller's bridge: %s", arg)
 		}
 	}
-	env := map[string]string{}
-	for i, arg := range args {
-		if arg == "--env" {
-			name, value, _ := strings.Cut(args[i+1], "=")
-			env[name] = value
-		}
-	}
+	env := environment(args)
 	for name, value := range map[string]string{
 		"HQ_AUTOMATION_REPOSITORY":    "example/playbooks",
 		"HQ_AUTOMATION_BRIDGE_SOCKET": AutomationBridgeSocket, "HQ_AUTOMATION_ID": "example-host",
@@ -361,7 +409,7 @@ func TestTheWorkerIsToldWhatHqRunnerReads(t *testing.T) {
 			read = append(read, "HQ_AUTOMATION_"+strings.TrimSuffix(strings.Fields(value)[0], `"`))
 		}
 	}
-	args := AutomationArgs("example", automationImageRef, "/run", "/journal", "example-host",
+	args := AutomationArgs("example", automationImageRef, "/run", "/journal", "example-host", connections.ReadProfile,
 		AutomationConfig{Repository: "example/playbooks", Grant: "example"})
 	var told []string
 	for i, arg := range args {
@@ -570,7 +618,7 @@ func TestADryLaunchShowsTheWorkersContainer(t *testing.T) {
 	w := newWorker(t)
 	w.a.SecretDir = filepath.Join(w.root, "secrets")
 
-	args := w.run(t)
+	args := w.run(t)[0]
 
 	run := ""
 	for _, arg := range args {

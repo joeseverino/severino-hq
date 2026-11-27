@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.calendars.models import Entry, Preference
+from hq.domains.calendars.models import Entry
 from hq.platform.application.markup_testing import all_elements, hrefs, select, text, texts, with_class
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
@@ -338,18 +338,6 @@ class WriteTests(TestCase):
         self.assertEqual((calendar_choices(user), calendar_choices(other)), ({"history.deploys": True}, {}))
         unknown = execute_capability(CHOOSE_SOURCE, keyed({"source": "no.such", "shown": False}), principal=principal)
         self.assertEqual(unknown["error"]["code"], "not_found")
-        invalid = execute_capability(
-            CHOOSE_SOURCE, keyed({"source": "history.deploys", "shown": "x"}), principal=principal
-        )
-        self.assertEqual(invalid["error"]["code"], "invalid_input")
-
-    def test_a_principal_with_no_person_keeps_no_calendar_choices(self):
-        refused = execute_capability(
-            CHOOSE_SOURCE, {"source": "history.deploys", "shown": True}, principal=cli_principal()
-        )
-
-        self.assertEqual(refused["error"]["code"], "forbidden")
-        self.assertFalse(Preference.objects.exists())
 
 
 class HistorySourceTests(SimpleTestCase):

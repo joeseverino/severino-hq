@@ -10,7 +10,7 @@ from pydantic import Field, field_validator, model_validator
 from hq.platform.application.command_fields import NonEmpty, Reason, RequiredText, checked
 from hq.platform.application.expiry import DEFAULT_RENEWAL_WINDOW_DAYS
 
-from ..connection_shapes import ACME
+from ..connection_shapes import ACME, ConnectionRef
 from ..names import certificate_covers, normalized_hostname
 from ..provider_spec import (
     ConnectionKind,
@@ -35,19 +35,19 @@ class TLSConsumerBase(ProviderModel):
 
 class CaddyTLSConsumer(TLSConsumerBase):
     kind: Literal["caddy"]
-    connection_ref: RequiredText = Field(max_length=160)
+    connection_ref: ConnectionRef
     certificate_directory: RequiredText = Field(max_length=500)
 
 
 class NPMTLSConsumer(TLSConsumerBase):
     kind: Literal["npm"]
-    connection_ref: RequiredText = Field(max_length=160)
+    connection_ref: ConnectionRef
     discover_covered_hosts: bool = False
 
 
 class CPanelTLSConsumer(TLSConsumerBase):
     kind: Literal["cpanel"]
-    connection_ref: RequiredText = Field(max_length=160)
+    connection_ref: ConnectionRef
     # Names whose cPanel *sites* receive the certificate. Empty means every site
     # that serves one of `verify_domains`; the controller asks the account which
     # sites those are before anything is issued.
@@ -71,7 +71,7 @@ class OnePasswordPublication(ProviderModel):
 
     kind: Literal["onepassword"]
     name: RequiredText = Field(max_length=160)
-    connection_ref: RequiredText = Field(max_length=160)
+    connection_ref: ConnectionRef
     vault: RequiredText = Field(max_length=160)
     item: RequiredText = Field(max_length=160)
 

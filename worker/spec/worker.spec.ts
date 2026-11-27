@@ -4,6 +4,7 @@ import arrival from "../src/generated/arrival.json";
 import routes from "../src/generated/routes.json";
 import { SOCKET_PATH } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
+import ping from "./fixtures/ping.json";
 import push from "./fixtures/push.json";
 import tailscaleEvents from "./fixtures/tailscale.json";
 
@@ -114,6 +115,15 @@ describe("a GitHub delivery", () => {
     expect(await listener.next()).toMatchObject({ event: "pull_request.opened", delivery_id: "delivery-pr" });
   });
 
+  it("of an event HQ does not take reaches the listeners, so HQ records it", async () => {
+    const listener = await listen();
+
+    const response = await deliver({ event: "ping", payload: ping, id: "delivery-ping" });
+
+    expect(response.status).toBe(202);
+    expect(await listener.next()).toMatchObject({ event: "ping", subject: "", delivery_id: "delivery-ping" });
+  });
+
   it("is answered 202 with no listener connected", async () => {
     const response = await deliver({ event: "push", payload: push, id: "delivery-alone" });
 
@@ -128,7 +138,6 @@ describe("a delivery that never reaches the listeners", () => {
     ["a wrong signature", { event: "push", signature: "sha256=" + "0".repeat(64) }, 401],
     ["a signature of another body", { event: "push", signature: "sha256=757107ea0eb2509fc211221cce984b8a37570b6d7586c22c46f4379c8b043e17" }, 401],
     ["no signature", { event: "push", signature: null }, 401],
-    ["an event the route does not list", { event: "issues" }, 202],
     ["a length over the provider's largest body", { event: "push", length: String(github.max_body_bytes + 1) }, 413],
     ["no length", { event: "push", length: null }, 411],
   ])("%s", async (_, delivery, status) => {
@@ -142,13 +151,15 @@ describe("a delivery that never reaches the listeners", () => {
   });
 });
 
-describe("a delivery whose names exceed the contract's bounds", () => {
+describe("a delivery whose names are outside the contract's bounds", () => {
   const over = (member: "event" | "subject" | "delivery_id") => "x".repeat(arrival.properties[member].maxLength + 1);
 
   it.each<[string, Omit<Delivery, "signature" | "length">]>([
-    ["its event", { event: "pull_request", payload: { ...pullRequest, action: over("event") }, id: "delivery-long" }],
-    ["its subject", { event: "push", payload: { ...push, repository: { ...push.repository, full_name: over("subject") } }, id: "delivery-long" }],
-    ["its delivery id", { event: "push", payload: push, id: over("delivery_id") }],
+    ["its event's length", { event: "pull_request", payload: { ...pullRequest, action: over("event") }, id: "delivery-long" }],
+    ["its subject's length", { event: "push", payload: { ...push, repository: { ...push.repository, full_name: over("subject") } }, id: "delivery-long" }],
+    ["its delivery id's length", { event: "push", payload: push, id: over("delivery_id") }],
+    ["an empty event", { event: "", payload: push, id: "delivery-unnamed" }],
+    ["an empty delivery id", { event: "push", payload: push, id: "" }],
   ])("is refused alone by %s", async (_, delivery) => {
     const listener = await listen();
 
@@ -175,12 +186,13 @@ async function tailscaleDelivery(events: unknown[], { age = 0, signed }: { age?:
 }
 
 describe("a Tailscale delivery", () => {
-  it("reaches a listener as each event it takes, by name alone", async () => {
+  it("reaches a listener as each event it carries, the console's test event among them, by name alone", async () => {
     const listener = await listen();
 
     const response = await tailscaleDelivery(tailscaleEvents);
 
     expect(response.status).toBe(202);
+    expect(await listener.next()).toMatchObject({ event: "test", subject: "example.com" });
     const created = await listener.next();
     const needs = await listener.next();
     expect(created).toStrictEqual({
@@ -198,20 +210,18 @@ describe("a Tailscale delivery", () => {
     const listener = await listen();
 
     await tailscaleDelivery(tailscaleEvents);
-    const first = [await listener.next(), await listener.next()];
+    const first = [await listener.next(), await listener.next(), await listener.next()];
     await tailscaleDelivery(tailscaleEvents, { age: 60 });
-    const again = [await listener.next(), await listener.next()];
+    const again = [await listener.next(), await listener.next(), await listener.next()];
 
     expect(again).toMatchObject(first.map((event) => ({ delivery_id: (event as { delivery_id: string }).delivery_id })));
   });
 
-  // Tailscale counts a delivery answered 3xx, 4xx or 5xx as failed, so an
-  // event the route does not list is answered as delivered.
   it.each<[string, unknown[], { age?: number; signed?: string | null }, number]>([
     ["a wrong signature", tailscaleEvents, { signed: `t=${Math.floor(Date.now() / 1000)},v1=${"0".repeat(64)}` }, 401],
     ["a signature older than its window", tailscaleEvents, { age: tailscale.scheme.window_seconds + 60 }, 401],
     ["no signature", tailscaleEvents, { signed: null }, 401],
-    ["only events the route does not list", [tailscaleEvents[0], { ...tailscaleEvents[0], type: "webhookUpdated" }], {}, 202],
+    ["an event with no type", [{ ...tailscaleEvents[1], type: undefined }], {}, 400],
   ])("with %s never reaches a listener", async (_, events, delivery, status) => {
     const listener = await listen();
 

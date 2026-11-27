@@ -73,12 +73,8 @@ type GitHubRepositoryRecord struct {
 	PushedAt      string       `json:"pushed_at"`
 	Head          GitHubHead   `json:"head"`
 	Checks        GitHubChecks `json:"checks"`
-	// FailingRuns is each workflow's newest run on the default branch where
-	// it failed, at whatever commit (branchChecks).
-	FailingRuns       []GitHubRun                                `json:"failing_runs"`
-	PullRequests      []GitHubPull                               `json:"pull_requests"`
+	// PullRequestChecks is the check names the newest pull request runs.
 	PullRequestChecks []string                                   `json:"pull_request_checks"`
-	Runs              []GitHubRun                                `json:"runs"`
 	Waiting           []GitHubWaitingRun                         `json:"waiting"`
 	Release           *GitHubRelease                             `json:"release"`
 	Deployments       []GitHubDeployment                         `json:"deployments"`
@@ -125,18 +121,23 @@ type GitHubHead struct {
 	URL     string `json:"url"`
 }
 
-type GitHubPull struct {
-	Number    int      `json:"number"`
-	Title     string   `json:"title"`
-	URL       string   `json:"url"`
-	Author    string   `json:"author"`
-	Draft     bool     `json:"draft"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
-	Head      string   `json:"head"`
-	Base      string   `json:"base"`
-	Branch    string   `json:"branch"`
-	Labels    []string `json:"labels"`
+// GitHubOpenPullRequestRecord is one open pull request, read in the same
+// pass as its repository and carried with it.
+type GitHubOpenPullRequestRecord struct {
+	ConnectionRef string   `json:"connection_ref"`
+	Repository    string   `json:"repository"`
+	Number        int      `json:"number"`
+	Title         string   `json:"title"`
+	URL           string   `json:"url"`
+	Author        string   `json:"author"`
+	Draft         bool     `json:"draft"`
+	CreatedAt     string   `json:"created_at"`
+	UpdatedAt     string   `json:"updated_at"`
+	Head          string   `json:"head"`
+	Base          string   `json:"base"`
+	Branch        string   `json:"branch"`
+	BaseBranch    string   `json:"base_branch"`
+	Labels        []string `json:"labels"`
 	// HeadRepository is the repository its head branch lives in, as
 	// owner/name: another repository's for a fork, "" once the fork is gone.
 	HeadRepository string `json:"head_repository"`
@@ -153,7 +154,39 @@ type GitHubPull struct {
 	// (githubArtifactProblem), read for an update's pull request whose
 	// checks fail.
 	ArtifactProblem []string `json:"artifact_problem,omitempty"`
+	// MergeableState, ReviewState and CheckRuns are what GitHub's GraphQL
+	// says of it (github_pulls.go), left empty where that part is refused.
+	MergeableState string           `json:"mergeable_state"`
+	ReviewState    string           `json:"review_state"`
+	CheckRuns      []GitHubCheckRun `json:"check_runs"`
+	// Carried is false on a record read; a carried repository is sent as
+	// githubCarried.
+	Carried bool `json:"carried"`
 }
+
+// GitHubCheckRun is one check as its last run stands, in GitHub's words,
+// lower-cased: a workflow run's job, another app's check, or a commit status.
+type GitHubCheckRun struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+}
+
+// GitHubWorkflowRunRecord is a github.workflow_run record: one workflow's
+// newest run on one branch, and its jobs, read in the same pass as its
+// repository and carried with it.
+type GitHubWorkflowRunRecord struct {
+	ConnectionRef string `json:"connection_ref"`
+	Repository    string `json:"repository"`
+	GitHubRun
+	Jobs    []GitHubCheckRun `json:"jobs"`
+	Carried bool             `json:"carried"`
+}
+
+// githubRunBranchesKept is the most branches besides the default one whose
+// runs a repository's read keeps: the ones run most lately, each a check-runs
+// call for its jobs.
+const githubRunBranchesKept = 10
 
 // GitHubPullFile is one file a pull request changes, and App the app whose
 // directory holds it (appDirectory), "" for a file outside every app's.
@@ -224,19 +257,67 @@ type GitHubArtifact struct {
 	SHA       string `json:"sha"`
 }
 
+// githubPass is one read of every repository the installations cover, and
+// the records of each kind it is read as: a sweep reads it once, whichever of
+// the kinds asks first (cached), and each kind reports its share.
+type githubPass struct {
+	repositories, runs, pulls []any
+	refused                   []runtime.RefusedPart
+	err                       error
+}
+
+// githubPassReaders are the kinds a repository's read is reported as, each
+// with the refused parts that are its own: a repository refused whole is
+// refused for every kind, and a part for the kind whose records it fills.
+func (r *Registry) githubPassReaders() {
+	share := func(kind runtime.ResourceKind, records func(githubPass) []any, owns func(runtime.ReadingPartName) bool) {
+		r.reader(kind, func(ctx context.Context) ([]any, error) {
+			pass, _ := cached(ctx, r, "github.pass", func() (githubPass, error) { return r.githubRepositories(ctx), nil })
+			if ledger, _ := ctx.Value(refusalKey{}).(*refusals); ledger != nil {
+				ledger.mu.Lock()
+				for _, refused := range pass.refused {
+					if refused.Part == runtime.PartWhole || owns(refused.Part) {
+						ledger.entries = append(ledger.entries, refused)
+					}
+				}
+				ledger.mu.Unlock()
+			}
+			if pass.err != nil {
+				return nil, pass.err
+			}
+			return records(pass), nil
+		})
+	}
+	share(runtime.ResourceKindGitHubRepository, func(pass githubPass) []any { return pass.repositories },
+		func(part runtime.ReadingPartName) bool { return part != runtime.PartPullStates })
+	share(runtime.ResourceKindGitHubWorkflowRun, func(pass githubPass) []any { return pass.runs },
+		func(runtime.ReadingPartName) bool { return false })
+	share(runtime.ResourceKindGitHubOpenPullRequest, func(pass githubPass) []any { return pass.pulls },
+		func(part runtime.ReadingPartName) bool { return part == runtime.PartPullStates })
+}
+
 // githubRepositories reads every repository the installations cover, a few at
 // once, each in full only when GitHub's change query says it moved since the
 // record HQ holds, or HQ's clock says its full read is due; the rest are
-// carried. A repository that cannot be read is refused alone, and carried where
-// HQ holds it; every repository refused is a refused read.
-func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
+// carried, as one record of each kind that names only it. A repository that
+// cannot be read is refused alone, and carried where HQ holds it; every
+// repository refused is a refused read.
+func (r *Registry) githubRepositories(ctx context.Context) githubPass {
+	ledger := &refusals{}
+	ctx = context.WithValue(ctx, refusalKey{}, ledger)
+	pass := r.githubRead(ctx)
+	pass.refused = ledger.entries
+	return pass
+}
+
+func (r *Registry) githubRead(ctx context.Context) githubPass {
 	c, err := r.githubConnection("")
 	if err != nil {
-		return nil, err
+		return githubPass{err: err}
 	}
 	names, err := r.githubInstallationRepositories(ctx, c)
 	if err != nil {
-		return nil, err
+		return githubPass{err: err}
 	}
 	held := map[string]runtime.GitHubRepositoryHeld{}
 	order := map[string]int{}
@@ -247,7 +328,7 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	// in full, as far as the fuse allows.
 	fingerprints, _ := r.githubFingerprints(ctx, c, names)
 	updater := sync.OnceValues(func() (string, error) { return r.githubBot(ctx, c) })
-	records := make([]any, len(names))
+	records := make([]*githubRepositoryRead, len(names))
 	failures := make([]error, len(names))
 	read := func(i int) {
 		if failures[i] = ctx.Err(); failures[i] != nil {
@@ -255,9 +336,9 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 		}
 		g := r.githubRepository(ctx, c, names[i])
 		g.updater = updater
-		record, err := g.read(ctx)
-		record.Fingerprint, record.ReadAt = fingerprints[names[i]], r.Now().UTC().Format(time.RFC3339)
-		records[i], failures[i] = record, err
+		found, err := g.read(ctx)
+		found.record.Fingerprint, found.record.ReadAt = fingerprints[names[i]], r.Now().UTC().Format(time.RFC3339)
+		records[i], failures[i] = &found, err
 	}
 	var group errgroup.Group
 	group.SetLimit(githubReadConcurrency)
@@ -268,7 +349,6 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 			group.Go(func() error { read(i); return nil })
 			continue
 		}
-		records[i] = githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true}
 		if standing.Due {
 			due = append(due, i)
 		}
@@ -285,26 +365,39 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 		read(i)
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return githubPass{err: err}
 	}
-	found := []any{}
+	pass := githubPass{repositories: []any{}, runs: []any{}, pulls: []any{}}
+	carry := func(name string) {
+		carried := githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true}
+		pass.repositories, pass.runs, pass.pulls = append(pass.repositories, carried), append(pass.runs, carried), append(pass.pulls, carried)
+	}
 	var refused []error
 	for i, name := range names {
-		if failures[i] != nil {
+		switch {
+		case failures[i] != nil:
 			refuse(ctx, runtime.PartWhole, c.ref, name, failures[i])
 			if _, isHeld := held[name]; isHeld {
-				found = append(found, githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true})
+				carry(name)
 				continue
 			}
 			refused = append(refused, failures[i])
-			continue
+		case records[i] == nil:
+			carry(name)
+		default:
+			pass.repositories = append(pass.repositories, records[i].record)
+			for _, run := range records[i].runs {
+				pass.runs = append(pass.runs, run)
+			}
+			for _, pull := range records[i].pulls {
+				pass.pulls = append(pass.pulls, pull)
+			}
 		}
-		found = append(found, records[i])
 	}
 	if len(names) > 0 && len(refused) == len(names) {
-		return nil, fmt.Errorf("every repository refused its reading: %w", refused[0])
+		return githubPass{err: fmt.Errorf("every repository refused its reading: %w", refused[0])}
 	}
-	return found, nil
+	return pass
 }
 
 // githubCarried is a repository sent in place of its record: HQ keeps the one
@@ -328,6 +421,18 @@ type githubRepository struct {
 	updater func() (string, error)
 	// token is the one api sends, for a request outside the generated client.
 	token string
+	// checksAt is each commit's check runs and suitesAt each check suite's,
+	// read once in a repository's read.
+	checksAt map[string][]githubapi.CheckRun
+	suitesAt map[int][]githubapi.CheckRun
+}
+
+// githubRepositoryRead is what one repository's read reports: its record, its
+// workflows' runs and its open pull requests.
+type githubRepositoryRead struct {
+	record GitHubRepositoryRecord
+	runs   []GitHubWorkflowRunRecord
+	pulls  []GitHubOpenPullRequestRecord
 }
 
 func (r *Registry) githubRepository(ctx context.Context, c githubConnection, name string) *githubRepository {
@@ -367,22 +472,30 @@ func asRepositoryRefusal(err error) error {
 	return &ProviderError{Message: "not available on this repository (its plan or settings leave it off)"}
 }
 
-func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, error) {
+func (g *githubRepository) read(ctx context.Context) (githubRepositoryRead, error) {
+	found := githubRepositoryRead{}
+	var err error
+	found.record, found.runs, found.pulls, err = g.readAll(ctx)
+	return found, err
+}
+
+func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord, []GitHubWorkflowRunRecord, []GitHubOpenPullRequestRecord, error) {
+	record, runs, pulls := GitHubRepositoryRecord{}, []GitHubWorkflowRunRecord{}, []GitHubOpenPullRequestRecord{}
 	reply, err := g.api.ReposGetWithResponse(ctx, g.owner, g.repo)
 	if err != nil {
-		return GitHubRepositoryRecord{}, err
+		return record, runs, pulls, err
 	}
 	repo := deref(reply.JSON200)
 	branch := orDefault(repo.DefaultBranch, "main")
 	commit, err := json200(g.api.ReposGetCommitWithResponse(ctx, g.owner, g.repo, branch))
 	if err != nil {
-		return GitHubRepositoryRecord{}, err
+		return record, runs, pulls, err
 	}
-	runs, err := json200(g.api.ActionsListWorkflowRunsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListWorkflowRunsForRepoParams{PerPage: new(githubRunsPage)}))
+	page, err := json200(g.api.ActionsListWorkflowRunsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListWorkflowRunsForRepoParams{PerPage: new(githubRunsPage)}))
 	if err != nil {
-		return GitHubRepositoryRecord{}, err
+		return record, runs, pulls, err
 	}
-	record := GitHubRepositoryRecord{
+	record = GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
 		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{}, Builds: []GitHubBuild{},
@@ -400,48 +513,45 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 	}
 	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))
 	if err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
 	onBranch, read, err := g.branchRuns(ctx, branch, workflows.Workflows)
 	if err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
-	githubs := githubOwnSuites(slices.Concat(runs.WorkflowRuns, read))
+	githubs := githubOwnSuites(slices.Concat(page.WorkflowRuns, read))
 	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, githubs); err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
-	record.FailingRuns = []GitHubRun{}
-	for _, run := range onBranch {
-		if githubFailed[run.Conclusion] {
-			record.FailingRuns = append(record.FailingRuns, githubRunOf(run))
-		}
+	if runs, err = g.workflowRuns(ctx, branch, onBranch, page.WorkflowRuns, workflows.Workflows); err != nil {
+		return record, runs, pulls, err
 	}
-	pulls, err := json200(g.api.PullsListWithResponse(ctx, g.owner, g.repo, &githubapi.PullsListParams{State: new(githubapi.PullsListParamsStateOpen), PerPage: new(githubPullsPage)}))
+	listed, err := json200(g.api.PullsListWithResponse(ctx, g.owner, g.repo, &githubapi.PullsListParams{State: new(githubapi.PullsListParamsStateOpen), PerPage: new(githubPullsPage)}))
 	if err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
-	record.PullRequests = githubPulls(pulls)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, record.PullRequests, githubs, githubWorkflowSuites(slices.Concat(runs.WorkflowRuns, read)), layout); err != nil {
-		return record, err
+	pulls = githubPulls(g.c.ref, g.name, listed)
+	if record.PullRequestChecks, err = g.pullChecks(ctx, pulls, githubs, githubWorkflowSuites(slices.Concat(page.WorkflowRuns, read)), layout); err != nil {
+		return record, runs, pulls, err
 	}
-	record.Runs = latestRuns(runs.WorkflowRuns, workflows.Workflows)
-	if record.Waiting, err = g.waiting(ctx, runs.WorkflowRuns); err != nil {
-		return record, err
+	g.pullStates(ctx, pulls)
+	if record.Waiting, err = g.waiting(ctx, page.WorkflowRuns); err != nil {
+		return record, runs, pulls, err
 	}
 	releases, err := json200(g.api.ReposListReleasesWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListReleasesParams{PerPage: new(1)}))
 	if err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
 	if len(releases) > 0 {
 		record.Release = &GitHubRelease{Tag: releases[0].TagName, URL: releases[0].HTMLURL, PublishedAt: releases[0].PublishedAt}
 	}
 	if record.Deployments, err = g.deployments(ctx); err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
 	record.Alerts, record.DependabotAlerts = g.alerts(ctx)
 	artifacts, err := json200(g.api.ActionsListArtifactsForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListArtifactsForRepoParams{PerPage: new(githubRunsPage)}))
 	if err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
 	record.Artifacts = liveArtifacts(artifacts.Artifacts)
 	if rules, ok := part(ctx, g, runtime.PartBranchRules, func() (GitHubRules, error) {
@@ -471,7 +581,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		record.Runners = []GitHubRunner{}
 	}
 	if record.Images, err = g.images(ctx); err != nil {
-		return record, err
+		return record, runs, pulls, err
 	}
 	if access, ok := part(ctx, g, runtime.PartAccess, func() (GitHubAccess, error) { return g.access(ctx, repo, reply.Body) }); ok {
 		record.Access = &access
@@ -484,7 +594,7 @@ func (g *githubRepository) read(ctx context.Context) (GitHubRepositoryRecord, er
 		}
 		return names, err
 	})
-	return record, nil
+	return record, runs, pulls, nil
 }
 
 func githubHead(commit githubapi.Commit) GitHubHead {
@@ -548,17 +658,19 @@ func (g *githubRepository) branchRuns(ctx context.Context, branch string, workfl
 	return found, page.WorkflowRuns, nil
 }
 
-func githubPulls(pulls []githubapi.PullRequestSimple) []GitHubPull {
-	found := []GitHubPull{}
+func githubPulls(ref, repository string, pulls []githubapi.PullRequestSimple) []GitHubOpenPullRequestRecord {
+	found := []GitHubOpenPullRequestRecord{}
 	for _, pull := range pulls {
 		labels := []string{}
 		for _, label := range pull.Labels {
 			labels = append(labels, label.Name)
 		}
-		found = append(found, GitHubPull{
+		found = append(found, GitHubOpenPullRequestRecord{
+			ConnectionRef: ref, Repository: repository,
 			Number: pull.Number, Title: pull.Title, URL: pull.HTMLURL, Author: pull.User.Login,
 			Draft: pull.Draft, CreatedAt: pull.CreatedAt, UpdatedAt: pull.UpdatedAt, Head: pull.Head.Sha, Base: pull.Base.Sha,
-			Branch: pull.Head.Ref, Labels: labels, HeadRepository: pull.Head.Repo.FullName,
+			Branch: pull.Head.Ref, BaseBranch: pull.Base.Ref, Labels: labels, HeadRepository: pull.Head.Repo.FullName,
+			CheckRuns: []GitHubCheckRun{},
 		})
 	}
 	return found
@@ -571,21 +683,24 @@ func githubRunOf(run githubapi.WorkflowRun) GitHubRun {
 	}
 }
 
-// latestRuns is the newest run of each workflow that exists now, under its
-// name now. A run keeps the name its workflow had when it ran, so runs are
-// grouped by workflow id and named by the repository's active workflows.
-// GitHub's own dynamic runs are named per run and are not the repository's.
-func latestRuns(runs []githubapi.WorkflowRun, workflows []githubapi.Workflow) []GitHubRun {
+// workflowRuns is each workflow's newest run on the default branch (onBranch,
+// as branchRuns read them) and on each other branch the page holds of the
+// githubRunBranchesKept run most lately, under the workflow's name now, with
+// each run's jobs (jobsOf). A run keeps the
+// name its workflow had when it ran, so runs are grouped by workflow id and
+// named by the repository's active workflows. GitHub's own dynamic runs are
+// named per run and are not the repository's.
+func (g *githubRepository) workflowRuns(ctx context.Context, branch string, onBranch, page []githubapi.WorkflowRun, workflows []githubapi.Workflow) ([]GitHubWorkflowRunRecord, error) {
 	current := map[string]string{}
 	for _, workflow := range workflows {
 		if workflow.State == githubapi.WorkflowStateActive {
 			current["id:"+strconv.Itoa(workflow.ID)] = workflow.Name
 		}
 	}
-	seen := map[string]bool{}
-	found := []GitHubRun{}
-	for _, run := range runs {
-		if run.Event == "dynamic" {
+	chosen := slices.Clone(onBranch)
+	seen, branches := map[string]bool{}, map[string]bool{}
+	for _, run := range page {
+		if run.Event == "dynamic" || run.HeadBranch == "" || run.HeadBranch == branch {
 			continue
 		}
 		key := "name:" + run.Name
@@ -593,17 +708,24 @@ func latestRuns(runs []githubapi.WorkflowRun, workflows []githubapi.Workflow) []
 			key = "id:" + strconv.Itoa(run.WorkflowID)
 		}
 		name, active := current[key]
-		if seen[key] || (len(current) > 0 && !active) {
+		if seen[run.HeadBranch+"\x00"+key] || (len(current) > 0 && !active) || (!branches[run.HeadBranch] && len(branches) == githubRunBranchesKept) {
 			continue
 		}
-		seen[key] = true
-		record := githubRunOf(run)
+		seen[run.HeadBranch+"\x00"+key], branches[run.HeadBranch] = true, true
 		if active {
-			record.Name = name
+			run.Name = name
 		}
-		found = append(found, record)
+		chosen = append(chosen, run)
 	}
-	return found
+	found := []GitHubWorkflowRunRecord{}
+	for _, run := range chosen {
+		jobs, err := g.jobsOf(ctx, run)
+		if err != nil {
+			return nil, err
+		}
+		found = append(found, GitHubWorkflowRunRecord{ConnectionRef: g.c.ref, Repository: g.name, GitHubRun: githubRunOf(run), Jobs: jobs})
+	}
+	return found, nil
 }
 
 func (g *githubRepository) waiting(ctx context.Context, runs []githubapi.WorkflowRun) ([]GitHubWaitingRun, error) {

@@ -16,38 +16,35 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 	"syscall"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/secret"
 )
 
-// SchemaVersion is the only document version either side accepts.
-const SchemaVersion = 2
-
-// MaxBytes bounds a document on read.
-const MaxBytes = 1 << 20
-
-// RunnerRole is the role of an SSH transport the automation worker reaches a
-// machine through (hq_runner/connections.py reads the same word). Its account
-// takes a shell, where the controller's readers speak to the hq-controller
-// forced command, so it is never the controller's to dial or to hold.
-const RunnerRole = "runner"
-
-// ReadProfile is the privilege profile of a runner transport whose login
-// reads and escalates to nothing: a procedure that names no privilege runs
-// through it. Any other profile is a procedure's privilege, by its name.
-const ReadProfile = "read"
-
+// What a document is checked against, read from the bridge contract HQ's
+// registry declares each in (hq/domains/control_plane/connection_shapes.py).
 var (
-	refPattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
-	namePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-	// A machine as HQ names it, and a profile as a procedure names its
-	// privilege (DOTTED_NAME in hq/platform/application/contracts.py).
-	machinePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,252}$`)
-	profilePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+	// SchemaVersion is the only document version either side accepts.
+	SchemaVersion = api.MustLimit("ConnectionsVersion", "const")
+	// MaxBytes bounds a document on read.
+	MaxBytes = api.MustLimit("ConnectionsDocument", "maxLength")
+	// RunnerRole is the role of an SSH transport the automation worker
+	// reaches a machine through. Its account takes a shell, where the
+	// controller's readers speak to the hq-controller forced command, so it
+	// is never the controller's to dial or to hold.
+	RunnerRole = api.MustKeyword("RunnerRole", "const")
+	// ReadProfile is the privilege profile of a runner transport whose login
+	// reads and escalates to nothing: a procedure that names no privilege
+	// runs through it. Any other profile is a procedure's privilege, by its name.
+	ReadProfile = api.MustKeyword("ReadProfile", "const")
+
+	refPattern     = api.MustPattern("ConnectionRef")
+	namePattern    = api.MustPattern("SettingName")
+	machinePattern = api.MustPattern("RunnerMachine")
+	profilePattern = api.MustPattern("PrivilegeProfile")
 )
 
 // ValidRef reports whether ref is a connection reference.
@@ -362,7 +359,7 @@ func ReadFile(path string, uid int) (Document, error) {
 	if info.Mode().Perm()&0o077 != 0 {
 		return Document{}, invalid("readable or writable by another account")
 	}
-	data, err := io.ReadAll(io.LimitReader(file, MaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(file, int64(MaxBytes)+1))
 	if err != nil {
 		return Document{}, invalid("not readable")
 	}

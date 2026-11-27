@@ -280,7 +280,7 @@ func appDirectory(file string) (string, bool) {
 // to an app's build inputs alone (its Dockerfile, its lock file) moves no
 // image and is still that app's change. layout is the default branch's
 // Compose files, which name the files an app keeps unchanged.
-func (g *githubRepository) appChanges(ctx context.Context, pull GitHubPull, layout []string) []GitHubAppChange {
+func (g *githubRepository) appChanges(ctx context.Context, pull GitHubOpenPullRequestRecord, layout []string) []GitHubAppChange {
 	files := map[string][]string{}
 	for _, file := range pull.Files {
 		if app, ok := appDirectory(file.Path); ok && files[app] == nil {

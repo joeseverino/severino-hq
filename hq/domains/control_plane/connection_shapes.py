@@ -7,11 +7,14 @@ these (``bridge_registry``), so a setting's name, whether it is required and
 whether it is secret are stated here and nowhere else.
 """
 
-from typing import Any
+from typing import Annotated, Any, Literal, get_args
 
 from django.conf import settings
+from pydantic import Field
 
-from .provider_spec import ConnectionShape, Setting
+from hq.platform.application.contracts import DOTTED_NAME
+
+from .provider_spec import ConnectionShape, Setting, SharedValue
 lazy from .connection_kinds import SHAPES
 
 ACME: ConnectionShape = ConnectionShape(
@@ -53,6 +56,17 @@ OAUTH_CLIENT: ConnectionShape = ConnectionShape(
         Setting("CLIENT_SECRET", item_field="credential"),
     ),
 )
+# An S3-compatible bucket: the endpoint, the bucket, and an access key pair
+# scoped to that bucket.
+S3_BUCKET: ConnectionShape = ConnectionShape(
+    "s3_bucket",
+    (
+        Setting("ACCESS_KEY_ID", item_field="username"),
+        Setting("BUCKET", label="bucket"),
+        Setting("SECRET_ACCESS_KEY", item_field="credential"),
+        Setting("URL", label="website"),
+    ),
+)
 SERVICE_ACCOUNT: ConnectionShape = ConnectionShape(
     "service_account",
     (Setting("API_TOKEN", item_field="credential"),),
@@ -75,6 +89,48 @@ SSH_TRANSPORT: ConnectionShape = ConnectionShape(
     ),
     # A transport is a way in to a machine; what is read through it says so.
     default_provider="ssh",
+)
+
+# A connection's name, as its vault item gives it and the renderer files it: a
+# file name, since an SSH transport's ref names its identity's file.
+_REF = r"[a-zA-Z0-9][a-zA-Z0-9_.-]*"
+ConnectionRef = Annotated[str, Field(max_length=160, pattern=rf"^{_REF}$")]
+# A declaration's connection, or blank where it may name none.
+BlankOrConnectionRef = Annotated[str, Field(max_length=160, pattern=rf"^(?:{_REF})?$")]
+# The role of an SSH transport HQ's automation worker reaches a machine
+# through. Its account takes a shell, so the controller never dials it.
+RunnerRole = Literal["runner"]
+RUNNER_ROLE: str = get_args(RunnerRole)[0]
+# The profile of a runner transport whose login escalates to nothing: a
+# procedure that names no privilege runs through it.
+ReadProfile = Literal["read"]
+READ_PROFILE: str = get_args(ReadProfile)[0]
+# The connections document's one version, and the most bytes it may be.
+ConnectionsVersion = Literal[2]
+CONNECTIONS_VERSION: int = get_args(ConnectionsVersion)[0]
+RegistryVersion = Literal[2]
+
+SHARED = (
+    SharedValue("ConnectionRef", ConnectionRef, "A connection's name: a file name in the renderer's directories."),
+    SharedValue("RunnerRole", RunnerRole, "The role of an SSH transport the automation worker runs playbooks through."),
+    SharedValue("ReadProfile", ReadProfile, "The privilege profile of a runner login that escalates to nothing."),
+    SharedValue(
+        "RunnerMachine",
+        Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9.-]{0,252}$")],
+        "The machine a runner transport reaches, by its name in HQ.",
+    ),
+    SharedValue(
+        "PrivilegeProfile",
+        Annotated[str, Field(pattern=DOTTED_NAME.pattern)],
+        "A runner transport's privilege profile, as a procedure names its privilege.",
+    ),
+    SharedValue("ConnectionsVersion", ConnectionsVersion, "The only connections document version either side accepts."),
+    SharedValue(
+        "ConnectionsDocument",
+        Annotated[str, Field(max_length=1 << 20)],
+        "The connections document as written: maxLength is the most bytes it may be.",
+    ),
+    SharedValue("RendererRegistryVersion", RegistryVersion, "The only renderer registry version the renderer reads."),
 )
 
 
@@ -120,7 +176,7 @@ def renderer_registry() -> dict[str, Any]:
     """
 
     return {
-        "schema_version": 2,
+        "schema_version": get_args(RegistryVersion)[0],
         "projections": projections(),
         "required_app_variables": sorted(settings.REQUIRED_APP_VARIABLES),
     }

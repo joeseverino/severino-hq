@@ -1,5 +1,5 @@
-"""The events page: what HQ was told happened outside it, and whether each
-channel that tells it is listening."""
+"""The events page: what HQ was told happened outside it, whether each
+channel that tells it is listening, and every event it takes."""
 
 from typing import override
 
@@ -7,7 +7,7 @@ from django.template.loader import render_to_string
 from django.views.generic import TemplateView
 
 from hq.domains.control_plane.models import InboundEvent, InboundSource
-from hq.platform.application.inbound_events import channel_standing, setup_guide
+from hq.platform.application.inbound_events import channel_standing, setup_guide, taken
 from hq.platform.application.inbound_reads import INBOUND_EVENTS
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction
@@ -15,7 +15,7 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import Capability
 from hq.platform.application.tables import DataTable
 
-from .inbound_tables import EVENT_COLUMNS, grouped
+from .inbound_tables import EVENT_COLUMNS, grouped, taken_table
 
 
 class InboundEventListView(ListPageMixin, TemplateView):
@@ -27,7 +27,7 @@ class InboundEventListView(ListPageMixin, TemplateView):
     resource = INBOUND_EVENTS
     # The rows are the read's; a stored event is what a derived page fills it with.
     model = InboundEvent
-    template_name = "list_page.html"
+    template_name = "control_plane/event_list.html"
     page_title = "Events"
     page_size = 50
     table_empty = "No events yet."
@@ -48,4 +48,5 @@ class InboundEventListView(ListPageMixin, TemplateView):
         standings = [(source.label, channel_standing(source)) for source in InboundSource]
         channels = [(label, standing, setup_guide(standing)) for label, standing in standings]
         context["page_facts"] = render_to_string("control_plane/_inbound_summary.html", {"channels": channels})
+        context["taken"] = taken_table(taken())
         return context

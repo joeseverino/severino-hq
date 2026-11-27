@@ -7,22 +7,27 @@ being given a credential rather than by anything here being edited.
 """
 
 from collections import Counter
+from datetime import timedelta
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
+from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 from hq.domains.control_plane.provider_spec import NameContext
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.inventory_testing import store
 from hq.platform.application.markup_testing import all_elements, hrefs, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.testing import SignedInTestCase, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
-from ..connections import connection_readings, connections_for, reachable_through
+from ..connection_lifecycle import Lifecycle
+from ..connections import connections_for, reachable_through
 from ..derivation_testing import frozen
 from ..derivations import counting
 from ..provider_choices import container, zone
@@ -94,14 +99,8 @@ class RecordingTests(TestCase):
 
         sweep({**A_DNS_TOKEN, "ok": False, "detail": "Token is not valid."})
 
-        reading = connection_readings()[0]
-        self.assertEqual(reading.status, "unreachable")
-        self.assertEqual(reading.detail, "Token is not valid.")
-
-    def test_an_unprobed_connection_is_not_a_broken_one(self):
-        sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
-
-        self.assertEqual(connection_readings()[0].status, "unprobed")
+        (row,) = ProviderConnection.objects.all()
+        self.assertEqual(row.detail, "Token is not valid.")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
         sweep({"connection_ref": " ", "provider": "portainer"}, A_PORTAINER)
@@ -211,7 +210,7 @@ class DerivationTests(TestCase):
         refs = [ref for ref, _ in container(NameContext())["connection_ref"]]
         labels = dict(container(NameContext())["connection_ref"])
         self.assertEqual(refs, ["a-portainer", "a-broken-one"])
-        self.assertIn("(unreachable)", labels["a-broken-one"])
+        self.assertIn(f"({Lifecycle.UNREACHABLE.label.lower()})", labels["a-broken-one"])
 
     def test_menus_are_empty_before_the_first_sweep(self):
         """And the fields stay typeable. An empty menu is a smaller failure
@@ -243,19 +242,11 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertEqual(groups[0].spec.name, CONTROLLER_CONNECTIONS)
         self.assertTrue(groups[0].connections)
 
-    def test_a_probed_whole_account_credential_is_ready(self):
+    def test_a_probed_whole_account_credential_says_so(self):
         sweep(A_PORTAINER)
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        (row,) = [
-            row
-            for _purpose, rows in response.context["connections"].purposes
-            for row in rows
-            if row.instance.connection_ref == "a-portainer"
-        ]
-        # Reached and proven: the lifecycle rather than the raw probe result.
-        self.assertEqual(row.lifecycle, "ready")
         self.assertContains(response, A_PORTAINER["endpoint"])
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
@@ -301,6 +292,35 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertEqual(len(named), sum(count for count, _state in row.sight.tally))
         self.assertIn(PROVIDERS["tls.certificate"].label, changes)
         self.assertNotIn(PROVIDERS["tls.certificate"].label, named)
+
+    def test_a_reading_no_subject_joins_shows_its_newest_record_on_its_connection(self):
+        """Its records reach no other page, so the row that read them names the
+        newest, by when it happened: what it is, what it holds and when."""
+
+        sweep(
+            {"connection_ref": "example-backups", "provider": "r2", "endpoint": "https://backups.example", "ok": True},
+            controller_id="example-controller",
+        )
+        now = timezone.now()
+        copy = {"connection_ref": "example-backups", "bucket": "example-backups", "size_bytes": 2048, "copies": 2}
+        store(
+            BACKUP_KIND,
+            {**copy, "key": "examplenewer", "uploaded_at": (now - timedelta(hours=1)).isoformat()},
+            {**copy, "key": "exampleolder", "uploaded_at": (now - timedelta(days=1)).isoformat()},
+        )
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        (row,) = [
+            row
+            for _purpose, rows in response.context["connections"].purposes
+            for row in rows
+            if row.instance.connection_ref == "example-backups"
+        ]
+        (read,) = [read for read in row.reads if read.sight is not None and read.sight.kind == BACKUP_KIND]
+        self.assertIn("examplenewer", text(response))
+        self.assertNotIn("exampleolder", text(response))
+        self.assertEqual(read.newest_at, now - timedelta(hours=1))
 
     def test_the_page_never_carries_a_secret(self):
         plant_credentials()

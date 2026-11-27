@@ -15,17 +15,27 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, StrictInt
 from pydantic.json_schema import SkipJsonSchema
 
+lazy from hq.platform.application import dependency_updates
 lazy from hq.platform.application.moments import moment, since_when, when
+lazy from hq.platform.application.ui import counted
 
 from ..permissions import GitHub
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 PROVIDER = "github_app"
 REPOSITORY_KIND = "github.repository"
+# Read in the same pass as each repository, and carried with it.
+WORKFLOW_RUN_KIND = "github.workflow_run"
+PULL_REQUEST_KIND = "github.open_pull_request"
+REPOSITORY_KINDS: tuple[str, ...] = (REPOSITORY_KIND, WORKFLOW_RUN_KIND, PULL_REQUEST_KIND)
 # How often each repository is read in full when GitHub's change query sees
 # nothing new: the bound on how stale what the query cannot see gets (alerts,
 # variables, runners, environments, branch rules, access, artifacts).
 FULL_READ_EVERY = timedelta(hours=1)
+# The App's events about what the change query cannot see, so one makes its
+# repository's full read due (``github_repositories.plan``): an alert, and a
+# run on a branch no pull request heads.
+UNPROBED_EVENTS: tuple[str, ...] = ("dependabot_alert", "code_scanning_alert", "secret_scanning_alert", "workflow_run")
 
 # Refusable one at a time: a private repository on a free plan has no code
 # scanning, and that should not hide its pull requests.
@@ -51,6 +61,14 @@ WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=(G
 COMPOSE = ReadingPart("compose", "Compose apps", requires=(GitHub.CONTENTS_READ, GitHub.ISSUES_READ))
 # A failing job's step log, refused one job at a time while the checks read.
 JOB_LOGS = ReadingPart("job_logs", "Failed job logs", requires=(GitHub.ACTIONS_READ,))
+# Of each open pull request, what GitHub's GraphQL answers in one query per
+# repository: its merge state, its review decision and every check on its head,
+# commit statuses among them.
+PULL_STATES = ReadingPart(
+    "pull_states",
+    "Merge, review and check states",
+    requires=(GitHub.PULL_REQUESTS_READ, GitHub.CHECKS_READ, GitHub.COMMIT_STATUSES_READ),
+)
 PARTS = (
     CODE_SCANNING,
     DEPENDABOT,
@@ -170,16 +188,30 @@ class Checks(ObservationRecord):
     failures: dict[str, JobFailure] = Field(default={}, max_length=FAILURES_KEPT)
 
 
-class PullRequest(ObservationRecord):
-    """One open pull request. For one Renovate opened (its branch under
-    ``renovate/``), ``checks`` is the head's, ``files`` each file it changes, one page of them, and
-    ``changed_files`` how many GitHub says it changes; they are None and 0
-    for any other. ``apps`` is
+class CheckRun(ObservationRecord):
+    """One check as its last run stands: a workflow run's job, another app's
+    check, or a commit status, in GitHub's words, lower-cased."""
+
+    name: str = ""
+    status: str = ""
+    conclusion: str = ""
+
+
+class PullRequestRecord(ObservationRecord):
+    """One open pull request. ``check_runs`` is every check on its head, and
+    ``mergeable_state`` and ``review_state`` GitHub's own words for whether it
+    can merge and where its review stands (``github_pulls.go``). For one
+    Renovate opened (its branch under ``renovate/``), ``checks`` is the head's
+    with why each failing job failed, ``files`` each file it changes, one page
+    of them, and ``changed_files`` how many GitHub says it changes; they are
+    None and 0 for any other. ``apps`` is
     ``{app, read, images: [{service, before, after}]}`` per app whose
     directory it changes, each service whose image differs at its head, in a
     repository opted in to updates, and None otherwise (``github_compose.go``).
     """
 
+    connection_ref: str
+    repository: str
     number: int = 0
     title: str = ""
     url: str = ""
@@ -188,13 +220,22 @@ class PullRequest(ObservationRecord):
     draft: bool = False
     created_at: Stamp = None
     updated_at: Stamp = None
+    # The head and base commits, and the branches they are the tips of.
     head: str = ""
     base: str = ""
     branch: str = ""
+    base_branch: str = ""
     labels: list[str] = []
     # The repository its head branch lives in, owner/name: another
     # repository's for a fork, "" once that fork is gone.
     head_repository: str = ""
+    # GitHub's merge state (``clean``, ``blocked``, ``behind``, ``dirty``,
+    # ``unstable``, ``has_hooks``, ``unknown``) and review decision
+    # (``approved``, ``changes_requested``, ``review_required``, or "" where
+    # none is asked for).
+    mergeable_state: str = ""
+    review_state: str = ""
+    check_runs: list[CheckRun] = []
     checks: Checks | None = None
     files: list[PullFile] | None = None
     changed_files: int = 0
@@ -202,6 +243,29 @@ class PullRequest(ObservationRecord):
     # What the update run's artifact problem comment says it could not
     # update, read while its checks fail.
     artifact_problem: list[str] = []
+    # Sent in place of a repository's records when the change query found
+    # it unchanged (``carry_held``).
+    carried: bool = False
+
+
+class WorkflowRunRecord(ObservationRecord):
+    """A workflow's newest run on one branch, under the workflow's name now,
+    and each of its jobs. On the default branch a pull request's run is not
+    the branch's; on any other the newest run of either is."""
+
+    connection_ref: str
+    repository: str
+    branch: str = ""
+    name: str = ""
+    id: int = 0
+    event: str = ""
+    sha: str = ""
+    status: str = ""
+    conclusion: str = ""
+    url: str = ""
+    created_at: Stamp = None
+    jobs: list[CheckRun] = []
+    carried: bool = False
 
 
 class RepositoryRecord(ObservationRecord):
@@ -215,14 +279,8 @@ class RepositoryRecord(ObservationRecord):
     pushed_at: Stamp = None
     head: dict[str, Any] = {}
     checks: Checks = Checks()
-    # Each workflow's newest run on the default branch where it failed, at
-    # whatever commit, shaped as ``runs``' entries.
-    failing_runs: list[dict[str, Any]] = []
-    # Each open pull request, newest first.
-    pull_requests: list[PullRequest] = []
     # The check names the newest pull request runs.
     pull_request_checks: list[str] = []
-    runs: list[dict[str, Any]] = []
     waiting: list[dict[str, Any]] = []
     release: dict[str, Any] | None = None
     deployments: list[dict[str, Any]] = []
@@ -279,16 +337,18 @@ class RepositoryRecord(ObservationRecord):
 
 
 def carry_held(last: Iterable[Mapping[str, Any]], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The records, each carried one replaced by the one HQ holds of the
-    same repository, and dropped where HQ holds none."""
+    """The records, each carried one replaced by every record HQ holds of the
+    same repository, and by none where HQ holds none."""
 
-    held = {str(record.get("repository", "")): dict(record) for record in last}
-    kept = []
+    held: dict[str, list[dict[str, Any]]] = {}
+    for record in last:
+        held.setdefault(str(record.get("repository", "")), []).append(dict(record))
+    kept: list[dict[str, Any]] = []
     for record in records:
-        if not record.get("carried"):
+        if record.get("carried"):
+            kept.extend(held.get(str(record.get("repository", "")), ()))
+        else:
             kept.append(record)
-        elif (standing := held.get(str(record.get("repository", "")))) is not None:
-            kept.append(standing)
     return kept
 
 
@@ -502,6 +562,41 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         from_last=carry_held,
     ),
     ObservationSpec(
+        WORKFLOW_RUN_KIND,
+        PROVIDER,
+        "GitHub workflow run",
+        WorkflowRunRecord,
+        requires=(GitHub.METADATA_READ, GitHub.ACTIONS_READ, GitHub.CHECKS_READ),
+        title=lambda record: f"{record.get('repository', '')} {record.get('branch', '')}: {record.get('name', '')}",
+        read_with=REPOSITORY_KIND,
+        describe=lambda record: str(record.get("conclusion") or record.get("status") or ""),
+        relation="Workflow run of",
+        console=lambda record: str(record.get("url", "")),
+        at=lambda record: str(record.get("created_at") or ""),
+        from_last=carry_held,
+    ),
+    ObservationSpec(
+        PULL_REQUEST_KIND,
+        PROVIDER,
+        "Open pull request",
+        PullRequestRecord,
+        requires=(
+            GitHub.METADATA_READ,
+            GitHub.CONTENTS_READ,
+            GitHub.PULL_REQUESTS_READ,
+            GitHub.CHECKS_READ,
+            GitHub.COMMIT_STATUSES_READ,
+            GitHub.ACTIONS_READ,
+        ),
+        parts=(PULL_STATES,),
+        title=lambda record: f"{record.get('repository', '')}#{record.get('number', '')}",
+        describe=lambda record: str(record.get("title", "")),
+        read_with=REPOSITORY_KIND,
+        relation="Open pull request of",
+        console=lambda record: str(record.get("url", "")),
+        from_last=carry_held,
+    ),
+    ObservationSpec(
         PROFILE_KIND,
         PUBLIC_PROVIDER,
         "GitHub profile",
@@ -527,7 +622,12 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             GitHub.DEPENDABOT_ALERTS_READ,
         ),
         title=lambda record: str(record.get("owner", "")),
+        describe=lambda record: (
+            f"{counted(len(record.get('repositories') or ()), 'repository', 'repositories')}"
+            f" · {dependency_updates.seen(str(record.get('outcome', ''))).label}"
+        ),
         relation="Dependency updates of",
+        at=lambda record: str(record.get("finished_at") or record.get("started_at") or ""),
         every=_DEPENDENCY_RUN_EVERY,
     ),
     ObservationSpec(

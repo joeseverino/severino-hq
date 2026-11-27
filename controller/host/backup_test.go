@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +55,6 @@ func (f *fakeHost) volumes(t *testing.T) (map[string]string, *age.HybridIdentity
 	}
 	identity := hybridIdentity(t)
 	return map[string]string{
-		"SEVERINO_BACKUP_DIR":            filepath.Join(f.root, "backups"),
 		"SEVERINO_BACKUP_AGE_RECIPIENTS": identity.Recipient().String(),
 	}, identity
 }
@@ -114,14 +114,27 @@ func restore(t *testing.T, archive io.Reader) string {
 func TestABackupRestoresIntoAFreshDatabase(t *testing.T) {
 	f := newFakeHost(t)
 	settings, identity := f.volumes(t)
+	// The pass reads the archive as the controller's group, given before the
+	// archive appears, so it is never in place readable by root alone.
+	dir := f.machine.Backups
+	var inPlace []int
+	f.machine.Lend = func(path string) error {
+		if filepath.Dir(path) == dir {
+			placed, _ := filepath.Glob(filepath.Join(dir, ArchivePrefix+"*"))
+			inPlace = append(inPlace, len(placed))
+		}
+		return nil
+	}
 
 	if err := f.backup(t, settings); err != nil {
 		t.Fatal(err)
 	}
 
-	dir := settings["SEVERINO_BACKUP_DIR"]
-	if info, _ := os.Stat(archives(t, dir)[0]); info.Mode().Perm() != 0o600 {
-		t.Errorf("the archive is %v, readable beyond root", info.Mode().Perm())
+	if info, _ := os.Stat(archives(t, dir)[0]); info.Mode().Perm() != 0o640 {
+		t.Errorf("the archive is %v, readable beyond root and the controller's group", info.Mode().Perm())
+	}
+	if !slices.Equal(inPlace, []int{0}) {
+		t.Errorf("the archive was lent with %v archives in place, want once before it appeared", inPlace)
 	}
 	restored := restore(t, decrypt(t, dir, identity))
 	value, err := exec.CommandContext(t.Context(), "sqlite3", filepath.Join(restored, Database), "SELECT value FROM proof;").Output()
@@ -156,7 +169,7 @@ func TestEveryRecipientCanReadTheArchiveAndNoPlaintextReachesTheDisk(t *testing.
 		t.Fatal(err)
 	}
 
-	dir := settings["SEVERINO_BACKUP_DIR"]
+	dir := f.machine.Backups
 	sealed, _ := os.ReadFile(archives(t, dir)[0])
 	if !bytes.HasPrefix(sealed, []byte("age-encryption.org/v1\n")) {
 		t.Errorf("the archive on disk is not an age file: %q", sealed[:min(len(sealed), 32)])
@@ -201,8 +214,8 @@ func TestABackupThatCannotBeWhatTheUnitAsksWritesNothing(t *testing.T) {
 			if !strings.Contains(err.Error(), refusal.names) {
 				t.Errorf("the refusal does not name %s: %v", refusal.names, err)
 			}
-			if _, statErr := os.Stat(settings["SEVERINO_BACKUP_DIR"]); statErr == nil {
-				t.Errorf("wrote %v", archives(t, settings["SEVERINO_BACKUP_DIR"]))
+			if _, statErr := os.Stat(f.machine.Backups); statErr == nil {
+				t.Errorf("wrote %v", archives(t, f.machine.Backups))
 			}
 			for _, call := range f.log {
 				if strings.HasPrefix(call, "sqlite3 ") {
@@ -228,7 +241,7 @@ func TestAFailedArchiveLeavesNoArchive(t *testing.T) {
 	if err := f.backup(t, settings); err == nil {
 		t.Fatal("an archive missing a file read as a backup")
 	}
-	if found := archives(t, settings["SEVERINO_BACKUP_DIR"]); len(found) != 0 {
+	if found := archives(t, f.machine.Backups); len(found) != 0 {
 		t.Errorf("left %v", found)
 	}
 }
@@ -237,7 +250,6 @@ func TestNoDatabaseNoBackup(t *testing.T) {
 	f := newFakeHost(t)
 
 	err := f.backup(t, map[string]string{
-		"SEVERINO_BACKUP_DIR":            filepath.Join(f.root, "backups"),
 		"SEVERINO_BACKUP_AGE_RECIPIENTS": hybridIdentity(t).Recipient().String(),
 	})
 
@@ -286,7 +298,7 @@ func TestTheArchiveIsRootedAtTheRunbooksNames(t *testing.T) {
 	if err := f.backup(t, settings); err != nil {
 		t.Fatal(err)
 	}
-	unzipped, err := gzip.NewReader(decrypt(t, settings["SEVERINO_BACKUP_DIR"], identity))
+	unzipped, err := gzip.NewReader(decrypt(t, f.machine.Backups, identity))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +328,7 @@ func TestAHostWithNoSealingKeyStillBacksUp(t *testing.T) {
 	if err := f.backup(t, settings); err != nil {
 		t.Fatalf("a host with no sealing key yet fails its backup: %v", err)
 	}
-	restored := restore(t, decrypt(t, settings["SEVERINO_BACKUP_DIR"], identity))
+	restored := restore(t, decrypt(t, f.machine.Backups, identity))
 	if _, err := os.Stat(filepath.Join(restored, Database)); err != nil {
 		t.Error("the database was not archived")
 	}
