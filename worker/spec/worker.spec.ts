@@ -2,7 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import arrival from "../src/generated/arrival.json";
 import routes from "../src/generated/routes.json";
-import { LAST_EVENT_ID, LOG_AGE_MS, LOG_EVENTS, SOCKET_PATH, type InboundEvent, type Logged, type Opening } from "../src/hub";
+import { LAST_EVENT_ID, LOG_AGE_MS, LOG_EVENTS, type InboundEvent, type Logged, type Opening } from "../src/hub";
 import pullRequest from "./fixtures/pull_request.opened.json";
 import ping from "./fixtures/ping.json";
 import push from "./fixtures/push.json";
@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 function upgrade(headers: Record<string, string>): Promise<Response> {
-  return exports.default.fetch(`${ORIGIN}${SOCKET_PATH}`, { headers: { Upgrade: "websocket", ...headers } });
+  return exports.default.fetch(`${ORIGIN}${routes.socket}`, { headers: { Upgrade: "websocket", ...headers } });
 }
 
 type HubStub = ReturnType<Env["HUB"]["getByName"]>;
@@ -40,7 +40,7 @@ type HubStub = ReturnType<Env["HUB"]["getByName"]>;
 async function listen(lastEventId: number | string = 0, hub?: HubStub): Promise<Listener> {
   const headers = { Authorization: `Bearer ${env.SOCKET_TOKEN}`, [LAST_EVENT_ID]: String(lastEventId) };
   const response = hub
-    ? await hub.fetch(`${ORIGIN}${SOCKET_PATH}`, { headers: { Upgrade: "websocket", ...headers } })
+    ? await hub.fetch(`${ORIGIN}${routes.socket}`, { headers: { Upgrade: "websocket", ...headers } })
     : await upgrade(headers);
   expect(response.status).toBe(101);
   const socket = response.webSocket!;
@@ -266,7 +266,7 @@ describe("a listener's socket", () => {
     await deliver({ event: "push", payload: push, id: "delivery-missed" });
     // The Hub as a new version finds it: a socket the Worker let through
     // under the token it held before, presenting an id the log holds.
-    const opened = await env.HUB.getByName("hub").fetch(`${ORIGIN}${SOCKET_PATH}`, {
+    const opened = await env.HUB.getByName("hub").fetch(`${ORIGIN}${routes.socket}`, {
       headers: { Upgrade: "websocket", Authorization: "Bearer example-rotated-token", [LAST_EVENT_ID]: String(id) },
     });
     const stale = opened.webSocket!;
@@ -400,7 +400,7 @@ describe("a request's log", () => {
     await deliver({ event: "push", payload: push, id: "delivery-logged" });
 
     expect(logged.mock.calls).toStrictEqual([
-      [{ method: "GET", path: SOCKET_PATH, status: 101 }],
+      [{ method: "GET", path: routes.socket, status: 101 }],
       [{ method: "POST", path: github.path, status: 202 }],
     ]);
   });

@@ -1,9 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import arrival from "./generated/arrival.json";
 
-/** The path a host listener opens its socket to the Hub on. */
-export const SOCKET_PATH = "/socket";
-
 /**
  * What reaches a listener for one verified delivery: its names, never its
  * body, as the bridge contract's InboundArrival has them.
