@@ -21,6 +21,8 @@
 !templates/
 !tests/
 !uv.lock
+# The tag worker:deploy gives the events Worker, which HQ compares with the one Cloudflare serves.
+!worker/src/generated/deploy-tag
 
 # Inside those, what a checkout builds or caches.
 **/__pycache__

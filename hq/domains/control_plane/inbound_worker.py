@@ -167,25 +167,30 @@ def _worker_files() -> dict[Path, str]:
 
 def _digest(files: dict[Path, str]) -> str:
     # Each file's path in the checkout, then its content, so a renamed file
-    # moves the tag as a changed one does.
+    # moves the tag as a changed one does. A SHA-256 in hex, within the 100
+    # bytes Cloudflare allows a version's tag.
     digest = hashlib.sha256()
     for path, content in sorted(files.items()):
         digest.update(f"{path.relative_to(settings.BASE_DIR)}\0{content}\0".encode())
     return digest.hexdigest()
 
 
-def deploy_tag() -> str:
-    """The tag ``worker:deploy`` gives the Worker's version: a digest of every
-    file HQ derives for it, so a deployed version whose tag differs was built
-    from other declarations. A SHA-256 in hex, within the 100 bytes Cloudflare
-    allows a version's tag."""
+def _tag_file() -> Path:
+    return Path(settings.BASE_DIR) / "worker" / "src/generated/deploy-tag"
 
-    return _digest(_worker_files())
+
+def deploy_tag() -> str:
+    """The tag ``worker:deploy`` gives the Worker's version, read from the
+    file it reads: a digest of every file HQ derives for it, so a deployed
+    version whose tag differs was built from other declarations. Read rather
+    than derived again, since the pages it covers draw through settings a
+    deployment moves (the static storage, the site's name)."""
+
+    return _tag_file().read_text().strip()
 
 
 def emitted() -> dict[Path, str]:
     """Every file, with its content."""
 
     files = _worker_files()
-    tag = Path(settings.BASE_DIR) / "worker" / "src/generated/deploy-tag"
-    return {**files, tag: _digest(files) + "\n"}
+    return {**files, _tag_file(): _digest(files) + "\n"}

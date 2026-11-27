@@ -21,8 +21,8 @@ cd worker
 rm -rf public/static
 mkdir public/static
 cp -R ../static/css ../static/fonts ../static/img ../static/js public/static/
-# The version is tagged with the digest of what HQ derived it from
-# (control_plane.inbound_worker.deploy_tag), so HQ can tell whether the
+# The version is tagged with the digest of what HQ derived it from, from the
+# file control_plane.inbound_worker.deploy_tag reads, so HQ can tell whether the
 # version Cloudflare runs is the one its declarations make, and its message
 # names the commit it was built from. --strict refuses a deploy over a
 # setting changed outside wrangler.jsonc since the last one, which belongs in

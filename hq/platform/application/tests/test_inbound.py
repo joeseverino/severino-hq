@@ -1,10 +1,14 @@
 """An event HQ is told of makes the readings its provider declares due, once
 per delivery, and makes nothing due that no declaration names."""
 
+import json
+import tempfile
 from contextlib import contextmanager
 from datetime import timedelta
+from pathlib import Path
 from unittest import mock
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -274,30 +278,42 @@ class BridgeEventsTests(TestCase):
         self.assertEqual(asked(), PUSHED)
 
 
-# What HQ's routes tag the Worker's version with, and an older deploy's tag.
-TAG = "0123456789abcdef0123456789abcdef"
+# The tag worker:deploy gives the Worker's version, read where it reads it,
+# and an older deploy's tag.
+TAG = (Path(settings.BASE_DIR) / "worker/src/generated/deploy-tag").read_text().strip()
 OLD = "fedcba9876543210fedcba9876543210"
 
 
-@mock.patch("hq.domains.control_plane.inbound_worker.deploy_tag", return_value=TAG)
 class EventsWorkerTests(TestCase):
-    def test_a_worker_serving_a_version_of_other_routes_is_behind(self, _tag):
+    def test_a_worker_serving_a_version_of_other_routes_is_behind_however_the_deployment_serves_hq(self):
         from hq.platform.application.inbound_events import events_worker
         from hq.platform.application.inventory_testing import store
+        from hq.platform.core.stylesheets import SHEETS
 
-        for tags, behind in (((TAG,), False), ((OLD,), True), ((TAG, OLD), True), ((), False)):
-            with self.subTest(tags=tags):
-                versions = [
-                    {"id": f"example-{tag}", "number": 1, "percentage": 100 / len(tags), "tag": tag} for tag in tags
-                ]
-                store(
-                    "cloudflare.worker",
-                    {"connection_ref": "example-cloudflare", "name": "hq-events", "versions": versions},
-                )
+        with tempfile.TemporaryDirectory() as collected:
+            # As the image's collectstatic leaves it: each sheet named by its content.
+            hashed = {sheet: sheet.replace(".css", ".0123456789ab.css") for sheet in SHEETS}
+            (Path(collected) / "staticfiles.json").write_text(json.dumps({"version": "1.1", "paths": hashed}))
+            image = {"BACKEND": "hq.platform.core.static.HashedStaticStorage"}
+            for served in (
+                {},
+                {"STORAGES": {**settings.STORAGES, "staticfiles": image}, "STATIC_ROOT": collected},
+                {"SEVERINO_SITE_NAME": "Example HQ"},
+            ):
+                for tags, behind in (((TAG,), False), ((OLD,), True), ((TAG, OLD), True), ((), False)):
+                    with self.subTest(served=sorted(served), tags=tags), override_settings(**served):
+                        versions = [
+                            {"id": f"example-{tag}", "number": 1, "percentage": 100 / len(tags), "tag": tag}
+                            for tag in tags
+                        ]
+                        store(
+                            "cloudflare.worker",
+                            {"connection_ref": "example-cloudflare", "name": "hq-events", "versions": versions},
+                        )
 
-                self.assertEqual(events_worker().behind, behind)
+                        self.assertEqual(events_worker().behind, behind)
 
-    def test_each_route_the_worker_serves_is_counted_by_what_it_answered(self, _tag):
+    def test_each_route_the_worker_serves_is_counted_by_what_it_answered(self):
         from hq.platform.application.inbound_events import events_worker
         from hq.platform.application.inventory_testing import store
 
@@ -320,7 +336,7 @@ class EventsWorkerTests(TestCase):
         self.assertEqual((routes["/socket"].accepted, routes["/tailscale"].refused), (4, 0))
         self.assertEqual(github.secret, "GITHUB_WEBHOOK_SECRET")
 
-    def test_a_worker_whose_answers_were_not_read_counts_no_route(self, _tag):
+    def test_a_worker_whose_answers_were_not_read_counts_no_route(self):
         from hq.platform.application.inbound_events import events_worker
         from hq.platform.application.inventory_testing import store
 
