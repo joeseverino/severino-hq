@@ -105,6 +105,18 @@ class WriteLockTests(TransactionTestCase):
         self.assertEqual(self.written(), ["saw 1"])
         self.assertIn("database is locked", after[-1])
 
+    def test_a_statement_holds_the_lock_only_when_it_writes(self):
+        statements = {
+            "WITH seen AS (SELECT 'delete' AS word) SELECT word FROM seen": False,
+            'WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT "i" FROM n': False,
+            "WITH seen AS (SELECT 1 AS i) INSERT INTO core_auditlog (action) SELECT 'x' FROM seen WHERE 0": True,
+            "UPDATE core_auditlog SET message = '' WHERE 0": True,
+        }
+        for sql, held in statements.items():
+            with self.subTest(sql=sql), connection.optimistically(), transaction.atomic():
+                connection.cursor().execute(sql)
+                self.assertEqual(database.holds_write_lock(), held)
+
     def test_a_writer_that_gives_up_names_what_holds_the_lock(self):
         with (
             bindings.operation_context(interface="web", actor="example", operation="example.slow"),

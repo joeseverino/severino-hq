@@ -19,6 +19,7 @@ server error log keeps.
 
 import json
 import os
+import re
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -35,11 +36,31 @@ lazy from hq.platform.core import attribution, tracing
 UNLOCKED = ("SELECT", "PRAGMA", "EXPLAIN", "VALUES", "BEGIN")
 # Statements that mark or end a transaction's part, which change no row.
 MARKS = ("SAVEPOINT", "RELEASE", "ROLLBACK")
+# What ``writes`` reads of a statement that opens with common table
+# expressions: its quoted text and parenthesized parts, which it drops, and the
+# verb of what remains, the statement they lead (sqlite.org/lang_with.html).
+_QUOTED = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"")
+_NESTED = re.compile(r"\([^()]*\)")
+_VERB = re.compile(r"\b(SELECT|VALUES|INSERT|REPLACE|UPDATE|DELETE)\b", re.IGNORECASE)
 LOCKED = "database is locked"
 # SQLite's answers to a read transaction's first write: another connection
 # holds the lock (SQLITE_BUSY), or committed after this one's snapshot
 # (SQLITE_BUSY_SNAPSHOT).
 BUSY, BUSY_SNAPSHOT = 5, 517
+
+
+def writes(sql: str) -> bool:
+    """Whether a statement asks for the write lock: the one answer HQ gives of
+    every statement it runs."""
+
+    head = sql.lstrip()[:9].upper()
+    if not head.startswith("WITH"):
+        return not head.startswith(UNLOCKED + MARKS)
+    flat = _QUOTED.sub("''", sql)
+    while (fewer := _NESTED.sub(" ", flat)) != flat:
+        flat = fewer
+    verb = _VERB.search(flat)
+    return verb is not None and verb[1].upper() not in UNLOCKED
 
 
 class Stale(DatabaseError):
@@ -82,9 +103,6 @@ class DatabaseWrapper(base.DatabaseWrapper):
         # Inside a transaction begun optimistically that has not written yet.
         self.reading = False
         self.stale = False
-        # How many statements that change rows this connection has run, so a
-        # projection knows when what it read may have changed under it.
-        self.writes = 0
 
     @override
     def create_cursor(self, name=None):
@@ -125,10 +143,7 @@ class DatabaseWrapper(base.DatabaseWrapper):
         # Marks still run, so the blocks it is inside end as they began.
         if self.stale and not head.startswith(MARKS):
             raise Stale("This transaction read what another has since changed.")
-        changes = not head.startswith(UNLOCKED + MARKS)
-        if changes:
-            self.writes += 1
-        upgrades = changes and self.reading
+        upgrades = self.reading and writes(query)
         try:
             ran = execute(query, *args)
         except base.Database.OperationalError as exc:
@@ -146,7 +161,7 @@ class DatabaseWrapper(base.DatabaseWrapper):
     def _waits(self) -> bool:
         """Whether a write here would wait for the lock (``database.without_waiting`` says not)."""
 
-        # The raw connection's own cursor: no wrapper counts it as a statement.
+        # The raw connection's own cursor, outside ``running``.
         (waits,) = self.connection.execute("PRAGMA busy_timeout").fetchone()
         return int(waits) > 0
 

@@ -63,10 +63,15 @@ def serialized[T](work: Callable[[], T], using: str = DEFAULT_DB_ALIAS) -> T:
 
 
 def writes(using: str = DEFAULT_DB_ALIAS) -> int | None:
-    """How many statements that change rows this thread's connection has run; None where HQ cannot count them."""
+    """How many rows this thread's connection has changed, SQLite's own count
+    (``total_changes``), so a projection knows when what it read may have
+    changed under it; None where HQ cannot count them."""
 
     connection = connections[using]
-    return connection.writes if isinstance(connection, sqlite.DatabaseWrapper) else None
+    if not isinstance(connection, sqlite.DatabaseWrapper):
+        return None
+    connection.ensure_connection()
+    return connection.connection.total_changes
 
 
 def holds_write_lock(using: str = DEFAULT_DB_ALIAS) -> bool:
@@ -148,7 +153,7 @@ def gives_way(using: str = DEFAULT_DB_ALIAS, *, sleep: Callable[[float], None] =
     def taking_turns(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: Any) -> Any:
         head = sql.lstrip()[:14].upper()
         takes_lock = (head.startswith("BEGIN") and head != "BEGIN DEFERRED") or (
-            not holds_write_lock(using) and head.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
+            not holds_write_lock(using) and sqlite.writes(sql)
         )
         pause = turns.before(takes_lock=takes_lock)
         if pause:

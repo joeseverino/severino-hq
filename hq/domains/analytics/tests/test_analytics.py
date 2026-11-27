@@ -20,6 +20,7 @@ from hq.platform.application.markup_testing import hrefs, text
 from hq.platform.application.report_testing import bridged
 from hq.platform.application.resources import InvalidResourceInput, list_resource
 from hq.platform.application.security import AuthorizationError, Capability, Principal
+from hq.platform.core.sqlite import base as sqlite
 from hq.platform.core.testing import SignedInTestCase, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
@@ -123,7 +124,7 @@ class IngestTests(TestCase):
 
         def restate(size):
             _result, restated = self.ingest(report(size), vitals)
-            written = [sql for sql in restated if sql.startswith(("INSERT", "UPDATE"))]
+            written = [sql for sql in restated if sqlite.writes(sql)]
             self.assertLessEqual(len(written), len(tables), written)
 
         assert_cost_does_not_grow(

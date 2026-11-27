@@ -31,13 +31,14 @@ from hq.platform.application.derivations import counting
 from hq.platform.core.ahead import keeping
 from hq.platform.core.bench import Seeded, seed, unchanged_sweep
 from hq.platform.core.outside_requests import connections_of_its_own
+from hq.platform.core.sqlite import base as sqlite
 lazy from hq.domains.expenses.models import Expense
 lazy from hq.domains.jobs import runner
 
 from .bench_pages import _held_outside, _machine_client, _pages
 
-# A statement that writes, and the table it writes to.
-WRITE = re.compile(r'^\s*(INSERT(?: OR \w+)? INTO|UPDATE|DELETE FROM|REPLACE INTO)\s+"?(\w+)', re.IGNORECASE)
+# The first table a statement names, as Django quotes it.
+NAMED = re.compile(r'"(\w+)"')
 
 
 @dataclass
@@ -79,8 +80,9 @@ def _statements() -> Iterator[dict[str, Any]]:
             # timeout that turns a long wait into an error.
             if sql.lstrip()[:5].upper() == "BEGIN":
                 seen["waits"].append(took)
-            elif written := WRITE.match(sql):
-                seen["writes"][f"{written[1].split()[0].upper()} {written[2]}"] += 1
+            elif sqlite.writes(sql):
+                named = NAMED.search(sql)
+                seen["writes"][f"{sql.split()[0].upper()} {named[1] if named else ''}"] += 1
                 if not connection.in_atomic_block:
                     # Outside a transaction the statement takes the lock itself.
                     seen["waits"].append(took)
