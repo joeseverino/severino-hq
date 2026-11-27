@@ -9,6 +9,7 @@ from django.db import models
 from django.db.models.fields.json import KT
 from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
+from pydantic import BaseModel
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
@@ -20,6 +21,7 @@ from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, has_text, one_of, singleton
 from hq.platform.core.stored_json import StoredJSONField
+lazy from hq.domains.control_plane.provider_adapters import INBOUND
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
 lazy from hq.platform.application.approval_review import title as approval_title
 lazy from hq.platform.application.automation_adoption import adopted_procedures, playbook_titles
@@ -387,11 +389,22 @@ class InboundOutcome(TonedChoices):
     IGNORED = "ignored", Tone.NEUTRAL, "Ignored"
 
 
+def told_fact(event: InboundEvent) -> BaseModel | None:
+    """What ``event``'s body said, as its declaration's fact reads it, or
+    None for an event with no fact."""
+
+    spec = INBOUND.get(event.provider)
+    declared = spec.facts.get(spec.declared(event.event)) if spec else None
+    return declared.shape.model_validate(event.fact) if declared and event.fact else None
+
+
 class InboundEvent(TimestampedModel):
     """One event a provider or HQ's host said happened, once per delivery.
 
-    It holds the event's name and never its body: what changed is read again
-    with HQ's own credentials (``application.inbound``).
+    It holds the event's names and never its body: what changed is read again
+    with HQ's own credentials (``application.inbound``). An event its
+    declaration gives a fact also holds what its body said, which a page shows
+    as told until the next read (``inbound_events.told``).
     """
 
     provider = models.CharField(max_length=64)
@@ -407,6 +420,11 @@ class InboundEvent(TimestampedModel):
     outcome = models.CharField(max_length=16, choices=InboundOutcome.choices)
     # The reading kinds it made due.
     reads = models.JSONField(default=list, blank=True)
+    # Its fact: what it is about, when its signed body says it was said, and
+    # each value, read through its declaration's shape (``told_fact``).
+    about = models.CharField(max_length=255, blank=True)
+    said_at = models.DateTimeField(null=True, blank=True)
+    fact = StoredJSONField(default=dict, blank=True, load=told_fact)
 
     class Meta:
         ordering = ("-applied_at",)

@@ -2840,7 +2840,7 @@
       "InboundArrival": {
         "type": "object",
         "additionalProperties": false,
-        "description": "One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.",
+        "description": "One event by its names: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; when it arrived; and, for an event its declaration gives one, its fact: the text at each of the declaration's pointers into the signed body, never the body.",
         "required": [
           "provider",
           "event",
@@ -2866,6 +2866,28 @@
           "received_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "about": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "What the fact is about, such as the commit a check ran on."
+          },
+          "said_at": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "When the body says the fact was said, in the provider's words."
+          },
+          "fact": {
+            "type": "object",
+            "maxProperties": 12,
+            "propertyNames": {
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "description": "Each value of the fact, by its field."
           }
         }
       }

@@ -6,10 +6,15 @@ event is stored once per delivery and makes due the readings its provider's
 ``INBOUND`` declaration names, through ``cadence.ask``, so a push is read in
 seconds rather than at the next sweep.
 
-Security: an event carries no truth, only a name. HQ never reads its body or
-acts on what it claims; it asks for readings it would take anyway and reads
-them with its own credentials. A forged event costs one read, coalesced with
-any already asked; a delivery repeated under its own ID is the stored event
+Security: an event carries no truth, only names and, where its declaration
+gives one, a fact: the text at the declaration's pointers into its signed
+body, never the body. HQ never acts on what it claims; it asks for readings
+it would take anyway and reads them with its own credentials. A fact changes
+no reading, operation, approval or gate: a page shows it as told until its
+subject's next read, ordered by the time its body states, so a body replayed
+later stands where it was said and is gone once that subject is read again.
+A forged event costs one read, coalesced with any already asked, and a told
+state until it; a delivery repeated under its own ID is the stored event
 and asks nothing, but GitHub signs the body alone, so its delivery ID is
 outside the signature and a captured body sent again under a new one is a new
 event, bounded by that same coalesced read; an event no declaration names is
@@ -30,6 +35,7 @@ from typing import Any
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from pydantic import ValidationError
 
 from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource
 lazy from hq.domains.control_plane.bridge_contract import departs
@@ -91,6 +97,7 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         if delivery in stored or delivery in new:
             continue
         kinds = INBOUND[arrived["provider"]].reads(arrived["event"])
+        told = _told(arrived)
         new[delivery] = InboundEvent(
             provider=arrived["provider"],
             event=arrived["event"],
@@ -98,8 +105,9 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
             delivery_id=arrived["delivery_id"],
             source=source,
             received_at=moment(arrived["received_at"]),
-            outcome=InboundOutcome.APPLIED if kinds else InboundOutcome.IGNORED,
+            outcome=InboundOutcome.APPLIED if kinds or told else InboundOutcome.IGNORED,
             reads=list(kinds),
+            **told,
         )
         asked.setdefault(new[delivery].subject, {}).update(dict.fromkeys(kinds))
     # One statement for the batch; a delivery stored meanwhile by another
@@ -114,6 +122,23 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         if kinds:
             ask(reads=kinds, subject=subject)
     return {"ok": True, **counts, "asked": list(dict.fromkeys(kind for kinds in asked.values() for kind in kinds))}
+
+
+def _told(arrived: Mapping[str, Any]) -> dict[str, Any]:
+    """The fact ``arrived`` holds, as ``InboundEvent`` stores it: one its
+    declaration's shape reads, said at a time its body states; else none,
+    and the event is only its names."""
+
+    spec = INBOUND[arrived["provider"]]
+    declared = spec.facts.get(spec.declared(arrived["event"]))
+    said_at = moment(arrived.get("said_at", ""))
+    if not declared or not arrived.get("fact") or not arrived.get("about") or said_at is None:
+        return {}
+    try:
+        declared.shape.model_validate(arrived["fact"])
+    except ValidationError:
+        return {}
+    return {"about": arrived["about"], "said_at": said_at, "fact": arrived["fact"]}
 
 
 def prune_events(_progress: Any = None, *, subject: str = "", principal: Any = None) -> dict[str, Any]:

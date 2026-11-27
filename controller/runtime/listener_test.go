@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -249,7 +250,7 @@ func TestTheTokenGoesOnlyToAWSSAddress(t *testing.T) {
 // a name HQ would store whole is never refused, and one it would refuse
 // never reaches it.
 func TestAnEventIsHeldToTheContractsBounds(t *testing.T) {
-	with := func(member, value string) []byte {
+	with := func(member string, value any) []byte {
 		var event map[string]any
 		if err := json.Unmarshal([]byte(pushEvent), &event); err != nil {
 			t.Fatal(err)
@@ -258,14 +259,25 @@ func TestAnEventIsHeldToTheContractsBounds(t *testing.T) {
 		data, _ := json.Marshal(event)
 		return data
 	}
-	for _, kept := range [][]byte{with("subject", strings.Repeat("é", 255)), with("subject", "")} {
+	values := func(count, length int) map[string]string {
+		fact := map[string]string{}
+		for i := range count {
+			fact[strconv.Itoa(i)] = strings.Repeat("é", length)
+		}
+		return fact
+	}
+	for _, kept := range [][]byte{
+		with("subject", strings.Repeat("é", 255)), with("subject", ""), with("fact", values(12, 512)),
+	} {
 		if _, err := ReadArrival(kept); err != nil {
 			t.Errorf("%s refused: %v", kept, err)
 		}
 	}
 	for _, refused := range [][]byte{
 		with("subject", strings.Repeat("a", 256)), with("event", strings.Repeat("a", 121)),
-		with("delivery_id", strings.Repeat("a", 129)),
+		with("delivery_id", strings.Repeat("a", 129)), with("about", strings.Repeat("a", 256)),
+		with("fact", values(13, 1)), with("fact", values(1, 513)),
+		with("fact", map[string]string{strings.Repeat("a", 65): ""}),
 	} {
 		if _, err := ReadArrival(refused); err == nil {
 			t.Errorf("%.80s... is read", refused)

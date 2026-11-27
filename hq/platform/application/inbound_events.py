@@ -10,8 +10,9 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 from django.utils.text import capfirst
+from pydantic import BaseModel
 
-from hq.domains.control_plane.models import InboundSource
+from hq.domains.control_plane.models import InboundEvent, InboundSource, told_fact
 from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
 lazy from hq.domains.control_plane import inbound_worker
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -267,3 +268,28 @@ def _routes(answers: list[dict[str, Any]]) -> tuple[RouteAnswers, ...]:
 
 def _milliseconds(micros: float | None) -> float | None:
     return None if micros is None else micros / 1000
+
+
+@dataclass(frozen=True, slots=True)
+class Told:
+    """What one event's body said of what it is about, and when it says so."""
+
+    said_at: datetime
+    fact: BaseModel
+
+
+def told(provider: str, subject: str, since: datetime | None) -> dict[str, tuple[Told, ...]]:
+    """The facts ``provider``'s events said of ``subject`` after ``since``,
+    when its reading was read, by what each is about, in the order they were
+    said: what a page shows as told until that subject is read again. A body
+    replayed later is ordered where it was said, so it never stands over a
+    newer fact, and one said before the read is gone."""
+
+    events = InboundEvent.objects.filter(provider=provider, subject=subject, said_at__isnull=False).exclude(about="")
+    if since is not None:
+        events = events.filter(said_at__gt=since)
+    found: dict[str, list[Told]] = {}
+    for event in events.order_by("said_at", "applied_at"):
+        if (fact := told_fact(event)) is not None:
+            found.setdefault(event.about, []).append(Told(event.said_at, fact))
+    return {about: tuple(facts) for about, facts in found.items()}

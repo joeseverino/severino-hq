@@ -235,6 +235,43 @@ class ApplyEventsTests(TestCase):
             self.assertEqual(sorted(read.kind for read in forced_reads()), PUSHED)
             self.assertTrue(sweep_due()["due"])
 
+    def test_each_declared_fact_is_told_from_its_example_until_its_subject_is_read(self):
+        """Walks every fact a declaration gives an event, from its example
+        body as the Worker forwards it; a replay of an older body stands
+        where it was said, and the subject's next read ends what was told."""
+
+        from hq.domains.control_plane.provider_adapters import INBOUND
+        from hq.domains.control_plane.provider_spec import pointed
+
+        from ..inbound_events import told
+        from ..moments import moment
+
+        walked = 0
+        for provider, spec in INBOUND.items():
+            for event, fact in spec.facts.items():
+                with self.subTest(provider=provider, event=event):
+                    said = fact.read(fact.example)
+                    action = pointed(fact.example, spec.action_pointer) if spec.action_pointer else ""
+                    subject = pointed(fact.example, spec.subject_pointer)
+                    arrived = {
+                        **PUSH,
+                        "provider": provider,
+                        "event": f"{event}.{action}" if action else event,
+                        "subject": subject,
+                        "delivery_id": f"fact-{walked}",
+                        **said,
+                    }
+                    self.assertEqual(self.apply(worker(arrived))["applied"], 1)
+                    self.assertEqual(ReadRequest.objects.exists(), fact.settles, "a fact that draws asks nothing")
+                    replayed = {**arrived, "delivery_id": f"replayed-{walked}", "said_at": "2000-01-01T00:00:00Z"}
+                    self.apply(worker(replayed))
+
+                    *_, newest = told(provider, subject, None)[said["about"]]
+                    self.assertEqual(newest.fact, fact.shape.model_validate(said["fact"]))
+                    self.assertEqual(told(provider, subject, moment(said["said_at"])), {})
+                    walked += 1
+        self.assertTrue(walked, "a declaration gives an event a fact")
+
     def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent
 

@@ -1,5 +1,5 @@
-// HQ's inbound events: providers' webhooks in, their names out to the host
-// listeners that hold a socket open to the Hub.
+// HQ's inbound events: providers' webhooks in, their names and declared
+// facts out to the host listeners that hold a socket open to the Hub.
 //
 // Security properties:
 // - The Worker holds no route and no credential into HQ. It answers webhooks
@@ -18,14 +18,18 @@
 //   only a socket that presented the token the Worker holds now, so a
 //   rotation closes every socket opened with the old one.
 // - Every event a verified request carries is forwarded, one HQ takes or
-//   not: HQ records one it does not take and reads nothing for it. Only an
+//   not: HQ records one it does not take and reads nothing for it. An
 //   event's names are forwarded (provider, event, subject, delivery id,
-//   time), never its body, so a valid sender can only make HQ re-read with
-//   its own credentials. An event outside the bridge contract's bounds (a
-//   name or delivery id empty or too long) is answered 400 and never sent.
-// - The Hub logs each event it sends, its names alone as the socket carries
-//   them, for a day at most, so a listener that reconnects is sent what it
-//   missed. Only a socket of the current token is sent the log.
+//   time), and, for an event its declaration gives a fact, the text at each
+//   of the fact's pointers into the signed body; never the body. A valid
+//   sender can make HQ re-read with its own credentials, and show a told
+//   state its fact says until that read, never change what HQ read. An
+//   event outside the bridge contract's bounds (a name or delivery id empty
+//   or too long, a fact with too many values or one too long) is answered
+//   400 and never sent.
+// - The Hub logs each event it sends, as the socket carries it, for a day at
+//   most, so a listener that reconnects is sent what it missed. Only a
+//   socket of the current token is sent the log.
 // - Every secret is a Worker secret, named by the route that uses it.
 // - A request is logged as its method, path and status alone, never a header
 //   or the body, and counted in Analytics Engine by its path and status alone.
@@ -36,6 +40,13 @@ import { sameSecret, verify } from "./verify";
 export { Hub };
 
 type Route = (typeof routes.providers)[number];
+
+/** Where in an event's body its fact is (InboundSpec.facts). */
+interface Fact {
+  values: Record<string, string>;
+  about: string;
+  said_at: string[];
+}
 
 const ROUTES = new Map(routes.providers.map((route): [string, Route] => [route.path, route]));
 
@@ -52,6 +63,26 @@ function pointer(document: unknown, path: string): unknown {
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+/**
+ * What the body says of the event named `name`, the action after its dot, by
+ * the fact its route declares for that event or its name: the text at each
+ * pointer, a value the body leaves empty left out. Nothing for an event with
+ * no fact.
+ */
+function told(route: Route, name: string, item: unknown): Pick<InboundEvent, "about" | "said_at" | "fact"> {
+  const facts: Record<string, Fact> = route.facts;
+  const fact = facts[name] ?? facts[name.split(".")[0] ?? ""];
+  if (!fact) return {};
+  const at = (path: string) => text(pointer(item, path));
+  return {
+    about: at(fact.about),
+    said_at: fact.said_at.map(at).find(Boolean) ?? "",
+    fact: Object.fromEntries(
+      Object.entries(fact.values).flatMap(([field, path]) => (at(path) ? [[field, at(path)]] : [])),
+    ),
+  };
+}
 
 /** Whether `header` is `Bearer <token>` for a configured token, compared in constant time. */
 async function bearerMatches(header: string | null, token: string): Promise<boolean> {
@@ -103,12 +134,14 @@ async function webhook(request: Request, env: Env, route: Route): Promise<Respon
   const events = sent.map((item: unknown, index): InboundEvent => {
     const name = named ?? (text(pointer(item, route.event_pointer)) || route.unnamed_event);
     const action = route.action_pointer ? text(pointer(item, route.action_pointer)) : "";
+    const event = action ? `${name}.${action}` : name;
     return {
       provider: route.provider,
-      event: action ? `${name}.${action}` : name,
+      event,
       subject: route.subject_pointer ? text(pointer(item, route.subject_pointer)) : "",
       delivery_id: route.batched ? `${delivery}.${index}` : delivery,
       received_at,
+      ...told(route, event, item),
     };
   });
   const within = events.filter(withinContract);

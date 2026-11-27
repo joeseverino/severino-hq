@@ -23,6 +23,7 @@ from ..observations.github import PROVIDER
 from ..permissions import GitHub
 from ..provider_spec import (
     ConnectionKind,
+    EventFact,
     InboundSpec,
     ProviderModel,
     ProviderSpec,
@@ -279,24 +280,29 @@ CONNECTIONS = {
 # the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
 # deployment review is requested the moment a run starts waiting on a reviewer;
-# a merge group, as a pull request joins or leaves a merge queue.
+# a merge group, as a pull request joins or leaves a merge queue. A job's
+# fact draws it as told on the pull requests its commit heads until their next
+# read, and asks nothing: the check suite's end reads them.
 INBOUND = {
     PROVIDER: InboundSpec(
-        dict.fromkeys(
-            (
-                "push",
-                "check_suite",
-                "pull_request",
-                "deployment_status",
-                "deployment_review",
-                "merge_group",
-                "dependabot_alert",
-                "code_scanning_alert",
-                "secret_scanning_alert",
-                "workflow_run",
+        {
+            **dict.fromkeys(
+                (
+                    "push",
+                    "check_suite",
+                    "pull_request",
+                    "deployment_status",
+                    "deployment_review",
+                    "merge_group",
+                    "dependabot_alert",
+                    "code_scanning_alert",
+                    "secret_scanning_alert",
+                    "workflow_run",
+                ),
+                (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
             ),
-            (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
-        ),
+            "workflow_job": (readings.PULL_REQUEST_KIND,),
+        },
         path="/github",
         # "sha256=<hex>" over the body alone (docs.github.com, validating
         # webhook deliveries).
@@ -321,5 +327,41 @@ INBOUND = {
             GitHub.CODE_SCANNING_ALERTS_READ,
             GitHub.SECRET_SCANNING_ALERTS_READ,
         ),
+        facts={
+            # A job's lifecycle, as GitHub's job object says it
+            # (docs.github.com, REST workflow jobs): the one event that says a
+            # check started.
+            "workflow_job": EventFact(
+                readings.CheckRun,
+                {
+                    "name": "/workflow_job/name",
+                    "status": "/workflow_job/status",
+                    "conclusion": "/workflow_job/conclusion",
+                    "started_at": "/workflow_job/started_at",
+                    "completed_at": "/workflow_job/completed_at",
+                    "url": "/workflow_job/html_url",
+                },
+                about="/workflow_job/head_sha",
+                said_at=("/workflow_job/completed_at", "/workflow_job/started_at", "/workflow_job/created_at"),
+                example={
+                    "action": "in_progress",
+                    "workflow_job": {
+                        "id": 2,
+                        "run_id": 1,
+                        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+                        "html_url": "https://github.com/example/app/actions/runs/1/job/2",
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "created_at": "2026-01-15T12:00:00Z",
+                        "started_at": "2026-01-15T12:00:05Z",
+                        "completed_at": None,
+                        "name": "build",
+                        "workflow_name": "CI",
+                        "head_branch": "renovate/example",
+                    },
+                    "repository": {"full_name": "example/app"},
+                },
+            ),
+        },
     ),
 }

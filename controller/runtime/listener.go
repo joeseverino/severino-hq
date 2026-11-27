@@ -25,8 +25,9 @@ const (
 	// ListenerPing is how often the socket is pinged; a ping unanswered by the
 	// next one ends the connection.
 	ListenerPing = 30 * time.Second
-	// listenerReadLimit bounds one message: an event is its names alone.
-	listenerReadLimit = 16 << 10
+	// listenerReadLimit bounds one message: an event is its names and its
+	// fact's values, each within the contract's bounds.
+	listenerReadLimit = 64 << 10
 )
 
 // Listener holds the inbound-events Worker's socket open, outbound, and tells
@@ -249,7 +250,17 @@ var arrivalTexts = []arrivalText{
 	boundedText("event", func(e InboundArrival) string { return e.Event }),
 	boundedText("subject", func(e InboundArrival) string { return e.Subject }),
 	boundedText("delivery_id", func(e InboundArrival) string { return e.DeliveryID }),
+	boundedText("about", func(e InboundArrival) string { return e.About }),
+	boundedText("said_at", func(e InboundArrival) string { return e.SaidAt }),
 }
+
+// The contract's bounds on a fact: how many values, and each field's and
+// value's length.
+var (
+	factValues = api.MustLimit("InboundArrival", "properties", "fact", "maxProperties")
+	factField  = api.MustLimit("InboundArrival", "properties", "fact", "propertyNames", "maxLength")
+	factValue  = api.MustLimit("InboundArrival", "properties", "fact", "additionalProperties", "maxLength")
+)
 
 // ReadArrival is one event as the contract's InboundArrival holds it: no
 // member it does not name, a provider HQ declares, and each text within its
@@ -266,6 +277,14 @@ func ReadArrival(data []byte) (InboundArrival, error) {
 	for _, text := range arrivalTexts {
 		if length := utf8.RuneCountInString(text.of(event)); length > text.max {
 			return event, fmt.Errorf("%s of %d characters: %w", text.member, length, ErrOutOfBounds)
+		}
+	}
+	if len(event.Fact) > factValues {
+		return event, fmt.Errorf("a fact of %d values: %w", len(event.Fact), ErrOutOfBounds)
+	}
+	for field, value := range event.Fact {
+		if utf8.RuneCountInString(field) > factField || utf8.RuneCountInString(value) > factValue {
+			return event, fmt.Errorf("fact %.64q out of its bounds: %w", field, ErrOutOfBounds)
 		}
 	}
 	return event, nil

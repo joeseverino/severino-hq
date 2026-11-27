@@ -2723,15 +2723,23 @@ type IdlePassOutput struct {
 	OK   bool     `json:"ok"`
 }
 
-// InboundArrival One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.
+// InboundArrival One event by its names: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; when it arrived; and, for an event its declaration gives one, its fact: the text at each of the declaration's pointers into the signed body, never the body.
 type InboundArrival struct {
+	// About What the fact is about, such as the commit a check ran on.
+	About      string `json:"about,omitempty"`
 	DeliveryID string `json:"delivery_id"`
 	Event      string `json:"event"`
+
+	// Fact Each value of the fact, by its field.
+	Fact map[string]string `json:"fact,omitempty"`
 
 	// Provider A provider whose events HQ takes, as an admitted module's INBOUND declares it.
 	Provider   InboundProvider `json:"provider"`
 	ReceivedAt time.Time       `json:"received_at"`
-	Subject    string          `json:"subject,omitempty"`
+
+	// SaidAt When the body says the fact was said, in the provider's words.
+	SaidAt  string `json:"said_at,omitempty"`
+	Subject string `json:"subject,omitempty"`
 }
 
 // InboundBatch What one source was told happened (inbound.apply_events). No events says it is listening.
