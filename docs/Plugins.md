@@ -948,7 +948,11 @@ this section names each such shape (a `<section>`, a heading, a fold, a form
 that writes, a notice and the rest) beside the part to write instead. HQ's
 template loaders refuse a template that draws one as it loads, with its line
 and what to write (`hq/platform/core/hand_drawn.py`), and `hq plugin check`
-reads every template of the extension the same way.
+reads every template of the extension the same way. A literal a host filter or
+tag refuses (a `counted` phrase without its plural, a `when` form, an icon the
+sheet lacks, a value outside an option's choices) fails the same way as its
+template loads, read by the function its parameter declares
+(`hq/platform/core/template_literals.py`).
 `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose head
 `{% section %}` draws, and publishes `partials/_icon.html`.
 `PLUGIN_API_VERSION` 12 retires the classes a page drew by hand before the

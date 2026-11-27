@@ -409,7 +409,9 @@ TEMPLATES = [
         "APP_DIRS": False,
         "OPTIONS": {
             "loaders": (
-                [("django.template.loaders.cached.Loader", _TEMPLATE_LOADERS)] if TEMPLATE_CACHE else _TEMPLATE_LOADERS
+                [("hq.platform.core.template_engine.CachedLoader", _TEMPLATE_LOADERS)]
+                if TEMPLATE_CACHE
+                else _TEMPLATE_LOADERS
             ),
             "context_processors": [
                 "django.template.context_processors.request",

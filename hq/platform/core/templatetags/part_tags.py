@@ -15,7 +15,8 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import LAST_LEVEL, SECTION_PARTIAL, TOP_LEVEL, SectionPart
 from hq.platform.core.part_examples import section
-from hq.platform.core.template_parts import Option, Part, choices_of
+from hq.platform.core.template_literals import choices_of
+from hq.platform.core.template_parts import Option, Part
 
 register = template.Library()
 
@@ -130,6 +131,7 @@ SECTION = _section()
 class SectionNode(TagHelperNode):
     def __init__(self, args, kwargs, parts: dict[str, template.NodeList]) -> None:
         super().__init__(SECTION, takes_context=False, args=args, kwargs=kwargs)
+        SECTION.compiled(kwargs)
         self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
         for name, nodelist in parts.items():
             setattr(self, f"nodelist_{name}", nodelist)

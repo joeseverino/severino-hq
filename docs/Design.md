@@ -380,7 +380,9 @@ value (a `?month=` address) is built by the view. Extensions get all five from
 *Gate:* `test_a_template_that_writes_a_moment_itself_fails_as_it_compiles`.
 
 A count's plural has one owner too: `counted`, which spells a single noun
-through `labels.plural` ("2 entries"). An audit type's plural is
+through `labels.plural` ("2 entries"). A phrase gives its plural too
+(`counted:"newer release,newer releases"`); one without fails as its template
+loads. An audit type's plural is
 `object_type_plural`: the model's `verbose_name_plural` where declared.
 
 A figure and the word it counts or measures share one line, held by the

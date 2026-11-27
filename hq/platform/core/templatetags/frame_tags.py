@@ -6,9 +6,11 @@ from django import template
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.application.tone import tone_of
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
+from hq.platform.core.templatetags.icon_tags import drawn
 
 register = template.Library()
 
@@ -134,8 +136,8 @@ slotted(
         partial="partials/_step.html",
         about="One step or check of a `{% steps %}` list: its icon, or its number, then what it says.",
         options={
-            "icon": Option(about="The icon before what it says."),
-            "tone": Option(about="How the step stands, the color of its icon."),
+            "icon": Option(reads=drawn, about="The icon before what it says."),
+            "tone": Option(reads=tone_of, about="How the step stands, the color of its icon."),
             "done": Option(about="A finished step, drawn quiet."),
             "title": Option(about="Its tooltip."),
         },

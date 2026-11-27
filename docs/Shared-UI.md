@@ -1699,7 +1699,7 @@ Docker's "exited" reads "Exited" beside a model's "Done". Its color is one of th
 (`good`, `attention`, `serious`, `neutral`), never a word of its own: `tone` takes a `Tone`, and a
 subject's state is a `Toned` member that carries its words and its tone (a machine's
 `MachineState`, a model's stored status declared as `TonedChoices`, `ARCHIVED = "archived",
-Tone.NEUTRAL, "Archived"`). Any other word is refused where it is drawn. Several parts are one
+Tone.NEUTRAL, "Archived"`). Any other word is refused, a literal as its template compiles. Several parts are one
 label (`{% status "HQ expects" desired tone="serious" %}`); `href`, `title`, `tip`, `css` and
 `data_*` say the rest. No template or module writes a pill by hand. A pill or a chip sets its own
 line height (cards.css), so it is one height wherever it stands, in a cell or beside a run of links

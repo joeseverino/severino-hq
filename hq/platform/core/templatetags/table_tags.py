@@ -72,6 +72,11 @@ def _server_sort(context: Any, ascending: str, descending: str) -> dict[str, str
     }
 
 
+def _one_sort(*, label, sort, local_sort):
+    if sort and local_sort:
+        raise ValueError(f"Column {label!r} sorts on the server or on the page, not both.")
+
+
 def table_heading(
     context: Any,
     label: Annotated[str, Describe("The column's name.")],
@@ -90,8 +95,7 @@ def table_heading(
 ) -> dict[str, Any]:
     """One column heading (its Part's rules)."""
 
-    if sort and local_sort:
-        raise ValueError(f"Column {label!r} sorts on the server or on the page, not both.")
+    _one_sort(label=label, sort=sort, local_sort=local_sort)
     kind = "control" if select_all else column_kind(kind, css)
     if local_sort is None:
         local_sort = not sort and kind != "control" and not hidden and bool(label)
@@ -184,6 +188,7 @@ TABLE_HEADING = Part(
     about="One column heading of a table: its kind, the rank it leaves by and its sort control.",
     partial="partials/_table_heading.html",
     function=table_heading,
+    refuses=(_one_sort,),
     example=tags.TABLE_HEADING,
 )
 ROW_GROUP = Part(

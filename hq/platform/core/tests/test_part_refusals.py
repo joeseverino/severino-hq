@@ -14,7 +14,7 @@ from hq.platform.application.tables import Cell, DataTable, Row, RowEditor, Tabl
 from hq.platform.core.table_layout import TRACKS
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE, head_actions
 from hq.platform.core.templatetags.status_tags import status_pill
-from hq.platform.core.templatetags.value_tags import cell_line, or_empty
+from hq.platform.core.templatetags.value_tags import or_empty
 from hq.platform.core.testing import leaving, render
 
 
@@ -136,8 +136,25 @@ class StatusRefusalTests(SimpleTestCase):
             '{% status "Example" tone=tone icon="shield" pill=False %}',
         ):
             for word in ("goood", "archived", "drifted"):
-                with self.subTest(source, word=word), self.assertRaises(ValueError):
+                refused = self.assertRaises((ValueError, TemplateSyntaxError))
+                with self.subTest(source, word=word), refused:
                     engines["django"].from_string(source).render({"tone": word})
+
+
+class WrittenRefusalTests(SimpleTestCase):
+    """What a tag refuses of a value, or of values together, written as
+    literals is refused as its template compiles, before any page draws it."""
+
+    def test_what_a_tag_refuses_of_its_literals_is_refused_as_the_template_compiles(self):
+        for source in (
+            '{% status "Up" tone="goood" %}',
+            '{% status "Up" chip=True tone="good" %}',
+            '{% button "Open" "/example/" icon="hq-no-such-icon" %}',
+            '{% button "Example" "/example/" look="ghost" css="example-pin" %}',
+            '{% table_heading "Name" sort="name" local_sort=True %}',
+        ):
+            with self.subTest(source), self.assertRaises(TemplateSyntaxError):
+                Template(source)
 
 
 class SectionRefusalTests(SimpleTestCase):
@@ -214,10 +231,6 @@ class ValueRefusalTests(SimpleTestCase):
     def test_a_value_with_no_words_of_its_own_is_refused(self):
         with self.assertRaises(Unprintable):
             or_empty(type("Named", (), {"__str__": lambda self: "example-operator"})())
-
-    def test_a_cell_line_is_one_line_or_its_own_count(self):
-        with self.assertRaises(ValueError):
-            cell_line("example-agent", lines=3)
 
     def test_a_count_of_decimals_that_is_not_a_number_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):

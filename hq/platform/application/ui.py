@@ -165,16 +165,16 @@ def _decimals(number: Decimal, places: int | None) -> int | None:
 def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
     """The singular and plural ``counted`` says, or ValueError when they cannot agree.
 
-    The one rule, shared by ``counted`` at render time and by the system check
-    that reads every literal phrase before anything renders.
+    The one rule, which the ``counted`` filter reads a template's literal
+    phrase by as the template compiles (``template_literals``).
     """
     if not one.strip():
         raise ValueError("A count needs the words it counts.")
     if many is None:
-        # Only one word is pluralized by a rule; a phrase or a list of forms
-        # ("mount,mounts") passed as one argument is said by the caller.
+        # Only one word is pluralized by a rule; a phrase has a verb or a
+        # qualifier, which the caller pluralizes.
         if not re.fullmatch(r"[\w-]+", one.strip()):
-            raise ValueError(f"Give the plural of {one!r} as its own argument.")
+            raise ValueError(f"{one!r} is a phrase, so its plural is given too.")
         many = plural(one)
     return one, many
 

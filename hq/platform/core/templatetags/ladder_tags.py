@@ -9,6 +9,7 @@ from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.standards import Standing
 from hq.platform.core.part_examples import tags
 from hq.platform.core.template_parts import Option, Part, slotted
+from hq.platform.core.templatetags.icon_tags import drawn
 from hq.platform.core.templatetags.list_tags import LIST
 from hq.platform.core.templatetags.status_tags import tone_class
 
@@ -87,7 +88,9 @@ CHECK_RUNG = Part(
     options={
         "state": Option(choices=("", *Standing), about="How its check stands, unavailable when not read."),
         "kind": Option(about="What kind of check it is."),
-        "icon": Option(about="On a route, a stop no check reads: what it is, drawn untoned in place of the tick."),
+        "icon": Option(
+            reads=drawn, about="On a route, a stop no check reads: what it is, drawn untoned in place of the tick."
+        ),
         "evidence": Option(about="What it was read from."),
         "open": Option(about="Drawn opened."),
     },

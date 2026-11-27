@@ -230,6 +230,7 @@ LINE_LEAD = 3
 
 class LineListNode(template.Node):
     def __init__(self, nodelist: Any, values: Any, name: str, kind: Any) -> None:
+        LINE_LIST.compiled({"kind": kind} if kind else {})
         self.nodelist = nodelist
         self.values = values
         self.name = name

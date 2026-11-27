@@ -1,8 +1,8 @@
 """What every shared part promises a page, held for each part written as its
 ``example``, given what its catalog entry gives it: what it does not take, or
-a required option left out, is refused as the template compiles, a value
-outside an option's choices as it draws, and words a page gives are never
-drawn as markup."""
+a required option left out, or a value outside an option's choices, is
+refused as the template compiles, and words a page gives are never drawn as
+markup."""
 
 import re
 from dataclasses import replace
@@ -69,12 +69,12 @@ class EveryPartTests(SimpleTestCase):
                 with self.subTest(part.name, option=name), self.assertRaisesMessage(TemplateSyntaxError, name):
                     Template(_written(part, _without(part, name)))
 
-    def test_a_value_outside_an_option_s_choices_is_refused_as_the_part_draws(self):
+    def test_a_value_outside_an_option_s_choices_is_refused_as_the_template_compiles(self):
         for part in _tags():
             for name in (name for name, option in (part.ordered | part.options).items() if option.choices):
                 refused = self.assertRaisesMessage(TemplateSyntaxError, f"{part.name} {name}= is one of")
                 with self.subTest(part.name, option=name), refused:
-                    _drawn(part, [*_without(part, name), f'{name}="hq-no-such-choice"'])
+                    Template(_written(part, [*_without(part, name), f'{name}="hq-no-such-choice"']))
 
     def test_words_a_page_gives_are_never_drawn_as_markup(self):
         """Each option that takes words, and each word the example's own tag
