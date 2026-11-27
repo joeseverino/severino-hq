@@ -1,11 +1,9 @@
 """A run's task outcomes, struck of secrets and held to the bridge's bounds, and what its playbook stated.
 
 An event takes four fields of what Ansible said, never its whole result, so
-what a module returned beside its message never leaves the worker. The one
-exception is a retry's stdout: a task that polls with ``until:`` says how far
-it has got in what it prints, and its message is that line, struck and clipped
-as a message is. A playbook writes that line for HQ to read, as it writes its
-``msg``; no other event's stdout leaves the worker. HQ strikes known
+what a module returned beside its message never leaves the worker, and no
+program's output does. A task that polls with ``until:`` stands as started
+until it ends: a pass that goes again is no event. HQ strikes known
 credential shapes again at the bridge; this is the worker's own strike, of
 what it alone knows to be secret.
 """
@@ -35,10 +33,6 @@ _OUTCOMES = {
     "runner_on_failed": "failed",
     "runner_on_skipped": "skipped",
     "runner_on_unreachable": "unreachable",
-    # One pass of a task that polls with ``until:`` and goes again, still under
-    # way, its ``res`` the module's whole result (ansible-runner 2.4.3,
-    # ``display_callback/callback/awx_display.py``, ``v2_runner_retry``).
-    "runner_retry": STARTED,
 }
 
 # The action of Ansible's own check of a role's arguments, which it runs
@@ -111,7 +105,7 @@ def _one_line(value: Any) -> str:
 
 def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Event | None:
     """The outcome one ansible-runner event reports, ``STARTED`` for a task it
-    begins or goes again on a machine, or None for an event that is neither."""
+    begins on a machine, or None for an event that is neither."""
 
     outcome = _OUTCOMES.get(str(event.get("event", "")))
     data = event.get("event_data")
@@ -125,8 +119,7 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     if outcome == "ok" and result.get("changed") is True:
         outcome = "changed"
     # "censored" is Ansible's own stand-in for the result of a task marked no_log.
-    said = result.get("stdout" if event.get("event") == "runner_retry" else "msg", "")
-    message = HIDDEN if "censored" in result else strike(_one_line(said), secrets)
+    message = HIDDEN if "censored" in result else strike(_one_line(result.get("msg", "")), secrets)
     host = strike(_one_line(data.get("host", "")), secrets)
     task = strike(_one_line(data.get("task", "")), secrets)
     return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
@@ -401,10 +394,9 @@ _KEPT_FIRST = frozenset({STARTED, "changed", "failed", "unreachable"})
 
 
 class Tasks:
-    """A run's tasks so far, as HQ is told them: a task's retry or outcome
-    takes the place of its start on the same machine, so a task still under
-    way is one whose start stands, saying its latest retry's line. ``changed``
-    says whether HQ has yet to hear the latest."""
+    """A run's tasks so far, as HQ is told them: a task's outcome takes the
+    place of its start on the same machine, so a task still under way is one
+    whose start stands. ``changed`` says whether HQ has yet to hear the latest."""
 
     def __init__(self) -> None:
         self._events: list[Event] = []
