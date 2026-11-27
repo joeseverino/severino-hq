@@ -1,5 +1,6 @@
-"""Work outside Django's request cycle gets a thread of its own, and connections
-checked before it and closed after it, except one inside an open transaction."""
+"""Work outside Django's request cycle gets a thread of its own, and its
+connections are closed after it. A connection inside an open transaction is
+left to its opener, as every TestCase's transaction holds."""
 
 import asyncio
 import threading
@@ -8,41 +9,7 @@ from asgiref.sync import sync_to_async
 from django.db import connection, connections
 from django.test import TestCase
 
-from ..outside_requests import connections_of_its_own, thread_of_its_own
-
-
-def _query() -> object:
-    """This thread's connection, after a query has opened it."""
-
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT 1")
-    return connections["default"]
-
-
-class ConnectionsOfItsOwnTests(TestCase):
-    def test_a_thread_closes_its_connection_when_the_work_ends(self):
-        seen: list[object] = []
-
-        def work() -> None:
-            with connections_of_its_own():
-                seen.append(_query())
-                seen.append(seen[0].connection is not None)
-
-        thread = threading.Thread(target=work)
-        thread.start()
-        thread.join()
-
-        opened, open_inside = seen
-        self.assertTrue(open_inside)
-        self.assertIsNone(opened.connection)
-
-    def test_a_connection_inside_a_transaction_is_left_to_its_opener(self):
-        _query()
-        with connections_of_its_own():
-            _query()
-
-        self.assertTrue(connection.in_atomic_block)
-        self.assertIsNotNone(connection.connection)
+from ..outside_requests import thread_of_its_own
 
 
 class ThreadOfItsOwnTests(TestCase):
@@ -50,10 +17,11 @@ class ThreadOfItsOwnTests(TestCase):
         both_in = threading.Barrier(2, timeout=10)
 
         def work() -> tuple[int, object]:
-            opened = _query()
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
             # Each waits for the other, which a shared thread would never reach.
             both_in.wait()
-            return threading.get_ident(), opened
+            return threading.get_ident(), connections["default"]
 
         async def call() -> tuple[int, object]:
             async with thread_of_its_own():

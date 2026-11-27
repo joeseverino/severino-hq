@@ -241,8 +241,8 @@ is refused the audit log (`read_audit_log`) and the calendar
   `SET_NULL`, and a coalesced refusal's count, which only grows, and its last
   time, which only moves forward. The triggers are installed after every
   migrate, so a migration that rebuilds the table gets them back, and
-  `test_append_only` holds that the database's triggers match what the code
-  generates. A test's flush lifts them, and a production flush is refused.
+  `test_append_only` holds that no write path changes or removes a row. A
+  test's flush lifts them, and a production flush is refused.
 - Each row says who acted in its own text (`actor`, `interface`, stored
   columns over its metadata), and a signed-in user's row names them there
   too, so a deleted account's rows still say who it was.
