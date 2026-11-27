@@ -19,6 +19,7 @@ from .card_items import Counted
 from .composed_providers import DERIVED_PROVIDERS, derived_calendars, provided, provided_under
 from .derivations import forget, holds_until, present
 from .lists import split_list
+from .non_empty import RequiredText, holds_something
 from .tone import Tone
 from .ui import DomainOverview
 lazy from . import finding_model, finding_steps
@@ -143,18 +144,11 @@ class NavigationGroup:
     own groups say theirs (``host_sections.NAVIGATION_GROUPS``).
     """
 
-    name: str
-    description: str
+    name: RequiredText
+    description: RequiredText
 
     def __post_init__(self) -> None:
-        if violations := _violations(self, NAVIGATION_GROUP_CHECKS):
-            raise DeclarationRefused(f"Navigation group {self.name!r}", violations)
-
-
-NAVIGATION_GROUP_CHECKS: tuple[Check, ...] = (
-    ("name", _filled, "is blank"),
-    ("description", _filled, "is blank"),
-)
+        holds_something(self)
 
 
 @dataclass(frozen=True, slots=True)
