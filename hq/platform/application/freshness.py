@@ -75,7 +75,7 @@ def age_of(reading: Freshness | None = None, *, at: datetime | None = None, unre
         if reading.observed_at is None:
             return Age(reading.state, note=reading.label)
         stale = reading.stale
-        return Age(reading.state, reading.observed_at, f"{reading.label.lower()}{reading.cadence}" * stale, stale)
+        return Age(reading.state, reading.observed_at, f"{reading.label.lower()}; {reading.cadence}" * stale, stale)
     if at is not None:
         return Age("read", at)
     return Age(NEVER, note=capfirst(unread))
@@ -280,10 +280,10 @@ class Freshness:
 
     @property
     def cadence(self) -> str:
-        """How often its kind is read, as the words an out-of-date age ends with."""
+        """How often its kind is read, in words: what an out-of-date age ends with."""
 
         # One of a unit is said as the unit alone; the count and its unit hold on a non-breaking space.
-        return f"; read every {duration(self.every).removeprefix('1\xa0')}"
+        return f"read every {duration(self.every).removeprefix('1\xa0')}"
 
     @property
     def label(self) -> str:

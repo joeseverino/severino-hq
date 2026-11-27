@@ -119,13 +119,14 @@ def _reading(row: Standing) -> Cell:
 
 
 def _age(row: Standing) -> Cell:
-    """How old its reading is, with its own clock beneath where it is read
+    """When it was last read, the moment alone since its column's header and
+    its state say the rest, with its own clock beneath where it is read
     slower than every sweep, and when it was tried where that try failed."""
 
     seen = row.sight
     clock = (
-        (Cell(capfirst(f"{row.age.cadence.removeprefix('; ')}{' and on each event' * covers(seen.kind)}"), muted=True),)
-        if swept(seen.kind) and not every_sweep(seen.kind) and not row.stale
+        (Cell(capfirst(f"{row.age.cadence}{' and on each event' * covers(seen.kind)}"), muted=True),)
+        if swept(seen.kind) and not every_sweep(seen.kind)
         else ()
     )
     tried = (
@@ -133,7 +134,7 @@ def _age(row: Standing) -> Cell:
         if row.failed and seen.tried_at
         else ()
     )
-    return Cell.reading(reading=row.age, lines=clock + tried)
+    return Cell(moment=seen.observed_at, lines=clock + tried)
 
 
 def _state(row: Standing) -> Cell:

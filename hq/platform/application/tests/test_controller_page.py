@@ -77,6 +77,30 @@ class ControllerPageTests(TestCase):
         self.assertIn(f"{listed} readings", text(response))
         self.assertIn("machine.telemetry", [named.attrs["title"] for named in select(response, "title")])
 
+    def test_a_reading_row_says_its_state_its_last_read_and_its_cadence_once_each(self):
+        from ..credential_sight import NEVER_SWEPT, READABLE
+        from ..freshness import LAST_READ, OUT_OF_DATE, cadence, freshness
+
+        # Read on a clock of its own, so its row says its cadence in every state.
+        kind = "github.dependency_run"
+        late = cadence(kind).stale_after + timedelta(hours=1)
+        # A reader's words hold the cadence's non-breaking space as a space.
+        every = " ".join(freshness(kind, None).cadence.split())
+        store("github.repository")
+        operator(self.client, "someone")
+        for state, age in ((NEVER_SWEPT.label, None), (READABLE.label, timedelta(0)), (OUT_OF_DATE, late)):
+            with self.subTest(state):
+                if age is not None:
+                    store(kind, age=age)
+
+                (named,) = select(self.client.get(reverse("control_plane:controller")), "title", kind)
+                row = next(ancestor for ancestor in named.ancestors if ancestor.tag == "tr").words.lower()
+
+                self.assertEqual(row.count(state.lower()), 1)
+                self.assertNotIn(LAST_READ.lower(), row)
+                self.assertNotIn(freshness(kind, None).label.lower(), row)
+                self.assertEqual(row.count(every), 1)
+
     def test_a_reading_still_current_is_never_overdue_however_short_the_live_interval(self):
         marker = Path(tempfile.mkdtemp()) / "activity"
         with override_settings(SEVERINO_ACTIVITY_MARKER=str(marker), SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200):
