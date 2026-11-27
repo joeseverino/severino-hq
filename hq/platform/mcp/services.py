@@ -138,10 +138,16 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
 
 
 @tool("Connection catalog", requires=ANYONE, budget=Budget(16_000))
-def describe_connections() -> ConnectionCatalog:
-    """The installed connection families, with their abilities, scopes and routes, and whether you may use each."""
+def describe_connections(name: str | None = None) -> ConnectionCatalog:
+    """The installed connection families, with their routes, what each of their abilities is, and whether you may
+    use each.
 
-    return describe_application_connections(principal=current_principal())
+    Pass a family as `name` to get, for each ability, its `summary`, the
+    `required_scopes` its credential needs, how HQ checks them (`grant`), the
+    `capability` that uses it and what it acts on.
+    """
+
+    return describe_application_connections(principal=current_principal(), name=name or "")
 
 
 @tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery, budget=Budget(5_000))

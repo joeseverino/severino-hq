@@ -22,6 +22,7 @@ from ..integrations import (
     compile_integration_graph,
     held_graph,
 )
+from ..record_errors import RecordNotFound
 from ..resources import EmptyQuery, ResourceSpec, describe_resources
 from ..search_contracts import SearchDefinition
 from ..security import Capability, Principal
@@ -418,3 +419,24 @@ class IntegrationGraphTests(TestCase):
                 {item.name for group in ("resources", "commands", "connections") for item in discovery[group]},
                 {resource.name, capability.name, connection.name},
             )
+
+
+class ConnectionCatalogTests(TestCase):
+    def test_the_catalog_says_what_each_ability_is_and_the_family_named_what_it_needs(self):
+        ability = ConnectionAbility(
+            "example.read", "Read examples", "Reads the examples.", grant="scoped", required_scopes=("example:read",)
+        )
+        connection = ConnectionSpec(
+            "example.gateway", "Example gateway", "Example gateway.", "read", lambda: (), (ability,)
+        )
+        with override_integration_graph(
+            compile_integration_graph(capabilities=(), resources=(), connections=(connection,))
+        ):
+            (listed,) = describe_connections()["connections"]
+            (named,) = describe_connections(name="example.gateway")["connections"]
+            with self.assertRaises(RecordNotFound):
+                describe_connections(name="example.missing")
+
+        self.assertEqual(listed["abilities"], [{"name": "example.read", "label": "Read examples", "effect": "read"}])
+        (whole,) = named["abilities"]
+        self.assertEqual((whole["required_scopes"], whole["grant"]), (["example:read"], "scoped"))

@@ -4424,7 +4424,7 @@
     "schemas": {
       "AbilityDescription": {
         "additionalProperties": false,
-        "description": "One ability a connection family offers, as ``describe_connections`` names it.",
+        "description": "One ability a connection family offers, as ``describe_connections``\nnames it: what it is, and with the family named, what it needs and acts on.",
         "properties": {
           "capability": {
             "anyOf": [
@@ -4492,13 +4492,7 @@
         "required": [
           "name",
           "label",
-          "summary",
-          "effect",
-          "required_scopes",
-          "grant",
-          "capability",
-          "governs_kinds",
-          "subject_resource"
+          "effect"
         ],
         "type": "object"
       },
@@ -9348,7 +9342,7 @@
         "description": "What ``describe_connections`` answers.",
         "properties": {
           "connections": {
-            "description": "Every type of connection HQ knows.",
+            "description": "Each type of connection asked for: every one HQ knows, or the one named.",
             "items": {
               "$ref": "#/components/schemas/ConnectionDescription"
             },
@@ -38588,9 +38582,28 @@
       "get": {
         "description": "The connection contracts, and whether your token may use each.",
         "operationId": "connectionsV2",
+        "parameters": [
+          {
+            "description": "One type of connection, answered with what each ability needs and acts on. Absent, every type.",
+            "in": "query",
+            "name": "name",
+            "required": false,
+            "schema": {
+              "enum": [
+                "hq.nws",
+                "hq.public_registries",
+                "infrastructure.controllers"
+              ],
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "$ref": "#/components/responses/ConnectionCatalogSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"

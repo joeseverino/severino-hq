@@ -279,9 +279,7 @@ class PerConnectionSightTests(TestCase):
 class CanDoTests(TestCase):
     def test_a_provider_can_do_every_reading_it_feeds_with_the_permissions_it_declares(self):
         _, by_provider_names = _controller_contract()
-        (family,) = (
-            found for found in describe_connections()["connections"] if found["name"] == CONTROLLER_CONNECTIONS
-        )
+        (family,) = describe_connections(name=CONTROLLER_CONNECTIONS)["connections"]
         described = {ability["name"]: ability for ability in family["abilities"]}
 
         for kind, spec in OBSERVATIONS.items():

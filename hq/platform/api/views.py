@@ -60,6 +60,7 @@ from hq.platform.application.integration_specs import (
     CapabilitySpec,
     answer_type,
 )
+from hq.platform.application.integrations import held_graph
 from hq.platform.application.json_schemas import merged_definitions, sent_schema
 from hq.platform.application.lists import split_list
 from hq.platform.application.pages import page_refusal
@@ -559,16 +560,16 @@ def resources(request: APIRequest) -> HttpResponse:
     return _ok(describe_resources(principal=request.principal, **_narrowing(request, resource_query())))
 
 
-def resource_query() -> QueryFields:
-    """What the resource catalog narrows by: one resource, by its name."""
+def _one_named(names: Iterable[str], description: str) -> QueryFields:
+    """What a catalog narrows by: one of its entries, by its name."""
 
-    return {
-        "name": {
-            "type": "string",
-            "enum": sorted(resource_registry()),
-            "description": "One resource, answered with its list's whole query schema. Absent, every resource.",
-        }
-    }
+    return {"name": {"type": "string", "enum": sorted(names), "description": description}}
+
+
+def resource_query() -> QueryFields:
+    return _one_named(
+        resource_registry(), "One resource, answered with its list's whole query schema. Absent, every resource."
+    )
 
 
 # The narrowing input, for the OpenAPI document's query parameters.
@@ -726,15 +727,32 @@ findings: View = _projection(
 
 
 @_endpoint(
-    ("GET",), title="List connections", requires=ANYONE, data=ConnectionCatalog, page="control_plane:connections"
+    ("GET",),
+    title="List connections",
+    requires=ANYONE,
+    data=ConnectionCatalog,
+    codes=(Code.INVALID_INPUT,),
+    page="control_plane:connections",
 )
 def connections(request: APIRequest) -> HttpResponse:
     """The connection contracts, and whether your token may use each.
 
-    A family's instances are the ``connections`` resource.
+    `?name=` returns one family with what each ability needs and acts on. A
+    family's instances are the ``connections`` resource.
     """
 
-    return _ok(describe_connections(principal=request.principal))
+    return _ok(describe_connections(principal=request.principal, **_judged(request, connection_query())))
+
+
+def connection_query() -> QueryFields:
+    return _one_named(
+        held_graph().connections,
+        "One type of connection, answered with what each ability needs and acts on. Absent, every type.",
+    )
+
+
+# The narrowing input, for the OpenAPI document's query parameters.
+connections.__dict__.update(__hq_query_fields__=connection_query)
 
 
 RESOURCE_CODES = answered_by(Door.RESOURCE)

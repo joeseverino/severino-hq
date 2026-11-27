@@ -243,9 +243,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
 class ConnectionRegistrationTests(TestCase):
     def test_one_spec_drives_machine_discovery(self):
         with offering(_finance_spec()):
-            described = describe_connections()
-
-        finance = next(item for item in described["connections"] if item["name"] == "example.finance")
+            (finance,) = describe_connections(name="example.finance")["connections"]
         self.assertEqual(finance["secret_store"], "Example Vault")
         self.assertEqual(
             finance["abilities"][1]["required_scopes"],
@@ -332,9 +330,7 @@ class ConnectionRegistrationTests(TestCase):
         self.assertEqual(discovered["connections"], ())
 
     def test_core_connection_describes_every_tailscale_ability(self):
-        core = next(
-            item for item in describe_connections()["connections"] if item["name"] == "infrastructure.controllers"
-        )
+        (core,) = describe_connections(name="infrastructure.controllers")["connections"]
         tailscale = [ability for ability in core["abilities"] if ability["name"].startswith("tailscale.")]
         changes = [ability for ability in tailscale if ability["effect"] != "read"]
 
