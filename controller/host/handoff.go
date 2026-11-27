@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
@@ -44,6 +45,8 @@ const (
 	SpoolName  = "handoff.json"
 	handoffV1  = 1
 	ownerLimit = 39
+	// branchLimit is far more than the branches one Open PR names.
+	branchLimit = 50
 )
 
 // Handoff is a dependency run the controller asks root for: per owner, the
@@ -53,10 +56,14 @@ type Handoff struct {
 	Runs    []HandoffRun `json:"runs"`
 }
 
-// HandoffRun is one owner's share of a Handoff.
+// HandoffRun is one owner's share of a Handoff. Branches are the branches
+// Renovate is to open, as if their boxes on the Dependency Dashboard were
+// ticked (its checkedBranches): a run that names any names one repository,
+// since Renovate applies them to every repository it is given.
 type HandoffRun struct {
 	Owner        string       `json:"owner"`
 	Repositories []string     `json:"repositories"`
+	Branches     []string     `json:"branches"`
 	Token        secret.Value `json:"token"`
 	ExpiresAt    time.Time    `json:"expires_at"`
 }
@@ -69,6 +76,9 @@ var (
 	// A token is one line of printable characters: it is written into an
 	// environment file, where a newline would start another variable.
 	tokenShape = regexp.MustCompile(`^[\x21-\x7e]{1,512}$`)
+	// A branch Renovate names, as HQ records one; never with "..". It is
+	// written into the environment file as one JSON line.
+	branchShape = api.MustPattern("GitHubDependencyRunBranch", "properties", "branch")
 )
 
 // ParseHandoff is data as a Handoff when it has exactly the shape the
@@ -125,6 +135,17 @@ func checkRun(run HandoffRun) error {
 	}
 	if sorted := slices.Sorted(slices.Values(run.Repositories)); len(slices.Compact(sorted)) != len(run.Repositories) {
 		return errors.New("a repository is named twice")
+	}
+	if len(run.Branches) > 0 && len(run.Repositories) != 1 {
+		return errors.New("a run that names branches names one repository")
+	}
+	if len(run.Branches) > branchLimit {
+		return errors.New("it names more branches than one run opens")
+	}
+	for _, branch := range run.Branches {
+		if !branchShape.MatchString(branch) || strings.Contains(branch, "..") {
+			return errors.New("a branch is not a branch Renovate names")
+		}
 	}
 	if !run.Token.Holds(tokenShape.MatchString) {
 		return errors.New("its token is empty or not one printable line")

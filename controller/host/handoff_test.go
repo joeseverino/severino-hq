@@ -143,6 +143,14 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 		"a repository of another owner": func(t *testing.T, out string) {
 			writeHandoff(t, out, func(run, _ map[string]any) { run["repositories"] = []string{"example/app", "other/app"} })
 		},
+		"branches across two repositories": func(t *testing.T, out string) {
+			writeHandoff(t, out, func(run, _ map[string]any) { run["branches"] = []string{"renovate/app-2.x"} })
+		},
+		"a branch that is no branch": func(t *testing.T, out string) {
+			writeHandoff(t, out, func(run, _ map[string]any) {
+				run["repositories"], run["branches"] = []string{"example/app"}, []string{"renovate/x\nRENOVATE_X=1"}
+			})
+		},
 		"an owner GitHub would refuse": func(t *testing.T, out string) {
 			writeHandoff(t, out, func(run, _ map[string]any) { run["owner"] = "-example"; run["repositories"] = []string{"-example/app"} })
 		},

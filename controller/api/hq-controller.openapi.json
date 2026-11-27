@@ -2485,12 +2485,21 @@
               "type": "string"
             },
             "description": "Repositories as owner/name, lower-cased, as GitHubDependencyRunRecord's repositories."
+          },
+          "branches": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "The branches Renovate is to open, as if their boxes on the Dependency Dashboard were ticked (its checkedBranches), each as GitHubDependencyRunRecord's branches name one, in the one repository a run that names any covers; empty for a run of every repository named."
           }
         },
         "additionalProperties": false,
         "required": [
           "owner",
-          "repositories"
+          "repositories",
+          "branches"
         ]
       },
       "TLSCertificateDomain": {
@@ -3966,42 +3975,6 @@
         ],
         "type": "object"
       },
-      "GitHubDashboardBoxSpec": {
-        "additionalProperties": false,
-        "description": "A github.dashboard_box declaration: the box a reconcile ticks.",
-        "properties": {
-          "repository": {
-            "$ref": "#/components/schemas/GitHubDashboardBoxSpecRepository"
-          },
-          "branch": {
-            "description": "The branch Renovate holds.",
-            "maxLength": 200,
-            "pattern": "^[A-Za-z0-9_./-]+$",
-            "type": "string"
-          },
-          "marker": {
-            "description": "The word Renovate marks its box with.",
-            "enum": [
-              "unpend",
-              "approve",
-              "unschedule",
-              "unlimit"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "repository",
-          "branch",
-          "marker"
-        ],
-        "type": "object"
-      },
-      "GitHubDashboardBoxSpecRepository": {
-        "description": "The repository, as owner/name.",
-        "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
-        "type": "string"
-      },
       "GitHubDeliveryProduction": {
         "type": "string",
         "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
@@ -4045,6 +4018,44 @@
         ],
         "type": "object"
       },
+      "GitHubDependencyRunBranch": {
+        "description": "One branch as the run's report says Renovate left it\n(``controller/host/renovate.go`` readReport).",
+        "properties": {
+          "repository": {
+            "pattern": "^([a-z0-9-]{1,39})/[a-z0-9._-]{1,100}$",
+            "type": "string"
+          },
+          "branch": {
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}$",
+            "type": "string"
+          },
+          "result": {
+            "pattern": "^[a-z][a-z-]{0,39}$",
+            "type": "string"
+          },
+          "pull_request": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "files": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          }
+        },
+        "required": [
+          "repository",
+          "branch",
+          "result"
+        ],
+        "type": "object"
+      },
       "GitHubDependencyRunRecord": {
         "description": "One account's update run: what root reported of it, never its log.",
         "properties": {
@@ -4083,6 +4094,14 @@
               "string",
               "null"
             ]
+          },
+          "branches": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubDependencyRunBranch"
+            },
+            "maxItems": 500,
+            "type": "array"
           }
         },
         "required": [
@@ -4789,22 +4808,11 @@
             "maxItems": 500,
             "type": "array"
           },
-          "dashboard": {
-            "default": "",
-            "type": "string"
-          },
           "updater": {
             "default": "",
             "type": "string"
           },
           "compose_images": {
-            "default": [],
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "held_branches": {
             "default": [],
             "items": {
               "type": "object"
@@ -5497,10 +5505,12 @@
         "description": "An event HQ's own host tells it of from the controller.",
         "enum": [
           "unit.job",
+          "dependency_run",
           "docker.container"
         ],
         "x-enum-varnames": [
           "HostEventUnitJob",
+          "HostEventDependencyRun",
           "HostEventDockerContainer"
         ]
       },
@@ -7170,7 +7180,6 @@
           "cloudflare.zone",
           "dns.reverse",
           "github.allowance",
-          "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
           "github.open_pull_request",
@@ -7245,7 +7254,6 @@
           "ResourceKindCloudflareZone",
           "ResourceKindDNSReverse",
           "ResourceKindGitHubAllowance",
-          "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubOpenPullRequest",

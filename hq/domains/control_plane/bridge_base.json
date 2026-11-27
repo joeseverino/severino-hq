@@ -2485,12 +2485,21 @@
               "type": "string"
             },
             "description": "Repositories as owner/name, lower-cased, as GitHubDependencyRunRecord's repositories."
+          },
+          "branches": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "The branches Renovate is to open, as if their boxes on the Dependency Dashboard were ticked (its checkedBranches), each as GitHubDependencyRunRecord's branches name one, in the one repository a run that names any covers; empty for a run of every repository named."
           }
         },
         "additionalProperties": false,
         "required": [
           "owner",
-          "repositories"
+          "repositories",
+          "branches"
         ]
       },
       "TLSCertificateDomain": {

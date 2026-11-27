@@ -11,6 +11,7 @@ lazy from hq.platform.application.labels import human_bytes
 
 from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
+from .github import DEPENDENCY_RUN_KIND
 from .portainer import CONTAINER_KIND, ENVIRONMENT_KIND, IMAGE_KIND, RUNTIME_KIND
 
 
@@ -472,6 +473,9 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 UNIT_FAILED = "unit.failed"
 UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
+# A job of the dependency run's unit that ended, told apart from any other so
+# its end reads the run's outcome at once (``controller/host/renovate.go``).
+DEPENDENCY_RUN = "dependency_run"
 # The runs held on a unit their playbook left running on HQ's host, which HQ
 # reads itself by asking each its settling read (``host_work``).
 AUTOMATION_HELD = "automation.held"
@@ -487,6 +491,10 @@ INBOUND = {
         {
             UNIT_FAILED: (UNIT_KIND,),
             **{f"{UNIT_JOB}.{result}": kinds for result, kinds in JOB_ENDS.items()},
+            **{
+                f"{DEPENDENCY_RUN}.{result}": (DEPENDENCY_RUN_KIND, *(kind for kind in kinds if kind == UNIT_KIND))
+                for result, kinds in JOB_ENDS.items()
+            },
             DOCKER_CONTAINER: (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND),
         }
     )
@@ -494,7 +502,11 @@ INBOUND = {
 # The events severino-hq-events.service tells, and the ends of a job it tells,
 # which the controller spells from the contract.
 SHARED = (
-    SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
+    SharedValue(
+        "HostEvent",
+        (UNIT_JOB, DEPENDENCY_RUN, DOCKER_CONTAINER),
+        "An event HQ's own host tells it of from the controller.",
+    ),
     SharedValue("HostJobResult", tuple(JOB_ENDS), "How a job HQ's host tells it of ended, as systemd says it."),
     SharedValue("UnitName", UnitName, "A systemd unit's name, as systemd spells it."),
     SharedValue(

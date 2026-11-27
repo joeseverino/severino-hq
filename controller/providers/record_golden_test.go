@@ -89,6 +89,7 @@ const instant = "2030-01-01T00:00:00Z"
 var admittedMembers = map[string]any{
 	"GitHubDependencyRunRecord.Repositories": []string{"example/example"},
 	"GitHubDependencyRunRecord.Outcome":      "ok",
+	"DependencyRunResultBranch.Repository":   "example/example",
 	"GitHubRepositoryRecord.Alerts":          map[runtime.ReadingPartName]map[string]int{runtime.PartDependabot: {"high": 1}},
 	"GitHubAccess.Token":                     "read",
 	"HostRenderStatusRecord.State":           runtime.HostRenderStatusRecordStateRead,

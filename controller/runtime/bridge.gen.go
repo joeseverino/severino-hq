@@ -176,30 +176,6 @@ func (e FailureClass) Valid() bool {
 	}
 }
 
-// Defines values for GitHubDashboardBoxSpecMarker.
-const (
-	Approve    GitHubDashboardBoxSpecMarker = "approve"
-	Unlimit    GitHubDashboardBoxSpecMarker = "unlimit"
-	Unpend     GitHubDashboardBoxSpecMarker = "unpend"
-	Unschedule GitHubDashboardBoxSpecMarker = "unschedule"
-)
-
-// Valid indicates whether the value is a known member of the GitHubDashboardBoxSpecMarker enum.
-func (e GitHubDashboardBoxSpecMarker) Valid() bool {
-	switch e {
-	case Approve:
-		return true
-	case Unlimit:
-		return true
-	case Unpend:
-		return true
-	case Unschedule:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for GitHubDeliveryProduction.
 const (
 	GitHubDeliveryProductionCurrent GitHubDeliveryProduction = "Every extension's latest admission, confirmed on GitHub"
@@ -460,6 +436,7 @@ func (e GlancePanelID) Valid() bool {
 
 // Defines values for HostEvent.
 const (
+	HostEventDependencyRun   HostEvent = "dependency_run"
 	HostEventDockerContainer HostEvent = "docker.container"
 	HostEventUnitJob         HostEvent = "unit.job"
 )
@@ -467,6 +444,8 @@ const (
 // Valid indicates whether the value is a known member of the HostEvent enum.
 func (e HostEvent) Valid() bool {
 	switch e {
+	case HostEventDependencyRun:
+		return true
 	case HostEventDockerContainer:
 		return true
 	case HostEventUnitJob:
@@ -911,7 +890,6 @@ const (
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindDNSReverse                   ResourceKind = "dns.reverse"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
-	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubOpenPullRequest        ResourceKind = "github.open_pull_request"
@@ -1010,8 +988,6 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindDNSReverse:
 		return true
 	case ResourceKindGitHubAllowance:
-		return true
-	case ResourceKindGitHubDashboardBox:
 		return true
 	case ResourceKindGitHubDelivery:
 		return true
@@ -1947,6 +1923,9 @@ type ControllerReport struct {
 
 // DependencyUpdatesOwner One account's opted-in repositories, each as owner/name under that account: what one token names.
 type DependencyUpdatesOwner struct {
+	// Branches The branches Renovate is to open, as if their boxes on the Dependency Dashboard were ticked (its checkedBranches), each as GitHubDependencyRunRecord's branches name one, in the one repository a run that names any covers; empty for a run of every repository named.
+	Branches []string `json:"branches"`
+
 	// Owner A GitHub login, lower-cased, as GitHubDependencyRunRecord's owner.
 	Owner string `json:"owner"`
 
@@ -1990,24 +1969,6 @@ type GitHubAllowanceRecord struct {
 	Used          int    `json:"used"`
 }
 
-// GitHubDashboardBoxSpec A github.dashboard_box declaration: the box a reconcile ticks.
-type GitHubDashboardBoxSpec struct {
-	// Branch The branch Renovate holds.
-	Branch string `json:"branch"`
-
-	// Marker The word Renovate marks its box with.
-	Marker GitHubDashboardBoxSpecMarker `json:"marker"`
-
-	// Repository The repository, as owner/name.
-	Repository GitHubDashboardBoxSpecRepository `json:"repository"`
-}
-
-// GitHubDashboardBoxSpecMarker The word Renovate marks its box with.
-type GitHubDashboardBoxSpecMarker string
-
-// GitHubDashboardBoxSpecRepository The repository, as owner/name.
-type GitHubDashboardBoxSpecRepository = string
-
 // GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
 type GitHubDeliveryProduction string
 
@@ -2026,14 +1987,25 @@ type GitHubDeliverySpec struct {
 	Workflow string `json:"workflow"`
 }
 
+// GitHubDependencyRunBranch One branch as the run's report says Renovate left it
+// (“controller/host/renovate.go“ readReport).
+type GitHubDependencyRunBranch struct {
+	Branch      string   `json:"branch"`
+	Files       []string `json:"files,omitempty"`
+	PullRequest int      `json:"pull_request,omitempty"`
+	Repository  string   `json:"repository"`
+	Result      string   `json:"result"`
+}
+
 // GitHubDependencyRunRecord One account's update run: what root reported of it, never its log.
 type GitHubDependencyRunRecord struct {
-	ExitCode     int      `json:"exit_code"`
-	FinishedAt   string   `json:"finished_at,omitempty"`
-	Outcome      string   `json:"outcome"`
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories,omitempty"`
-	StartedAt    string   `json:"started_at,omitempty"`
+	Branches     []GitHubDependencyRunBranch `json:"branches,omitempty"`
+	ExitCode     int                         `json:"exit_code"`
+	FinishedAt   string                      `json:"finished_at,omitempty"`
+	Outcome      string                      `json:"outcome"`
+	Owner        string                      `json:"owner"`
+	Repositories []string                    `json:"repositories,omitempty"`
+	StartedAt    string                      `json:"started_at,omitempty"`
 }
 
 // GitHubMergeRefusal Why GitHub refused a merge, as a refused merge's status says it.
@@ -2227,14 +2199,12 @@ type GitHubRepositoryRecord struct {
 	Compose           []string               `json:"compose,omitempty"`
 	ComposeImages     []map[string]any       `json:"compose_images,omitempty"`
 	ConnectionRef     string                 `json:"connection_ref"`
-	Dashboard         string                 `json:"dashboard,omitempty"`
 	DefaultBranch     string                 `json:"default_branch,omitempty"`
 	DependabotAlerts  []map[string]any       `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]any       `json:"deployments,omitempty"`
 	Environments      []map[string]any       `json:"environments,omitempty"`
 	Fingerprint       string                 `json:"fingerprint,omitempty"`
 	Head              map[string]any         `json:"head,omitempty"`
-	HeldBranches      []map[string]any       `json:"held_branches,omitempty"`
 	Images            []map[string]any       `json:"images,omitempty"`
 	Pins              []map[string]any       `json:"pins,omitempty"`
 	Private           bool                   `json:"private,omitempty"`

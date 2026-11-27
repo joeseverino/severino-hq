@@ -27,8 +27,10 @@ type renovation struct {
 	// envs is each run's environment file as docker would read it, and its mode.
 	envs  []string
 	modes []os.FileMode
-	// docker is what the fake's `docker run` does: a shell command.
-	docker string
+	// docker is what the fake's `docker run` does: a shell command, given
+	// docker's arguments and dockerEnv beside the environment.
+	docker    string
+	dockerEnv []string
 	// network is what `docker network inspect` prints, empty while there is
 	// no network; `docker network create` makes it renovateNetworkJSON.
 	network string
@@ -75,7 +77,9 @@ func newRenovation(t *testing.T) *renovation {
 			info, _ := os.Lstat(env)
 			v.envs = append(v.envs, string(data))
 			v.modes = append(v.modes, info.Mode().Perm())
-			return exec.CommandContext(ctx, "/bin/sh", "-c", v.docker)
+			command := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", v.docker, "sh"}, args...)...)
+			command.Env = append(os.Environ(), v.dockerEnv...)
+			return command
 		}
 		answer := func(out string, code int) *exec.Cmd {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
@@ -146,7 +150,8 @@ func (v *renovation) nothingLeft(t *testing.T) {
 }
 
 func TestTheRenovateContainerReachesNothingOfTheHosts(t *testing.T) {
-	args := RenovateArgs("severino-hq-renovate-x", exampleImage, "/run/severino-hq-renovate/run.1/0.env", "/usr/local/lib/severino-hq/deploy/renovate/config.json", "Example")
+	reports := "/run/severino-hq-renovate/run.1/0.report"
+	args := RenovateArgs("severino-hq-renovate-x", exampleImage, "/run/severino-hq-renovate/run.1/0.env", "/usr/local/lib/severino-hq/deploy/renovate/config.json", reports, "Example")
 
 	want := []string{
 		"run", "--rm", "--name", "severino-hq-renovate-x",
@@ -163,9 +168,12 @@ func TestTheRenovateContainerReachesNothingOfTheHosts(t *testing.T) {
 		"--mount", "type=volume,target=/home/ubuntu",
 		"--mount", "type=volume,source=severino-hq-renovate-cache-example,target=/runner/cache",
 		"--mount", "type=bind,source=/usr/local/lib/severino-hq/deploy/renovate/config.json,target=/run/renovate/config.json,readonly",
+		"--mount", "type=bind,source=/run/severino-hq-renovate/run.1/0.report,target=/run/renovate/report",
 		"--env-file", "/run/severino-hq-renovate/run.1/0.env",
 		"--env", "RENOVATE_CONFIG_FILE=/run/renovate/config.json",
 		"--env", "RENOVATE_CACHE_DIR=/runner/cache",
+		"--env", "RENOVATE_REPORT_TYPE=file",
+		"--env", "RENOVATE_REPORT_PATH=/run/renovate/report/report.json",
 		exampleImage,
 	}
 	if !slices.Equal(args, want) {
@@ -177,8 +185,9 @@ func TestTheRenovateContainerReachesNothingOfTheHosts(t *testing.T) {
 			t.Errorf("the container is given %q", absent)
 		}
 	}
+	// The one host path it may write is the run's own report directory.
 	for i, arg := range args {
-		if arg == "--mount" && strings.Contains(args[i+1], "type=bind") && !strings.HasSuffix(args[i+1], ",readonly") {
+		if arg == "--mount" && strings.Contains(args[i+1], "type=bind") && !strings.HasSuffix(args[i+1], ",readonly") && !strings.Contains(args[i+1], "source="+reports+",") {
 			t.Errorf("a host path is mounted writable: %s", args[i+1])
 		}
 	}
@@ -213,6 +222,43 @@ func TestEachOwnerRunsWithItsOwnTokenAndNothingIsLeft(t *testing.T) {
 	if log, err := os.ReadFile(filepath.Join(v.r.LogDir, "renovate.log")); err != nil || !strings.Contains(string(log), "example-org") || strings.Contains(string(log), exampleToken) {
 		t.Errorf("log %q", log)
 	}
+}
+
+// Open PR's run names one repository and has Renovate open its branches as
+// if their boxes were ticked; the report the run writes, as Renovate 45
+// writes one (testdata/renovate-report-45.json), gives the outcome each
+// branch of that repository: its result and its pull request. A branch of a
+// repository the run was not given, or one that is not a branch's shape, is
+// left out.
+func TestARunsOutcomeCarriesEachBranchItsReportNames(t *testing.T) {
+	v := newRenovation(t)
+	report, err := filepath.Abs(filepath.Join("testdata", "renovate-report-45.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fake container writes the report where its mount puts it, as
+	// Renovate writes RENOVATE_REPORT_PATH.
+	v.docker = `for arg in "$@"; do case "$arg" in type=bind,source=*,target=/run/renovate/report) dir=${arg#type=bind,source=}; dir=${dir%%,*};; esac; done; cp "$REPORT" "$dir/report.json"`
+	v.dockerEnv = []string{"REPORT=" + report}
+	run := exampleRun("example")
+	run.Branches = []string{"renovate/example-app-2.x"}
+	v.spool(t, run)
+
+	if err := v.r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	if v.envs[0] != "RENOVATE_TOKEN="+exampleToken+"\nRENOVATE_REPOSITORIES=example/app\nRENOVATE_CHECKED_BRANCHES=[\"renovate/example-app-2.x\"]\n" {
+		t.Errorf("environment %q", v.envs[0])
+	}
+	got, _ := json.Marshal(v.outcome(t).Runs[0].Branches)
+	want := `[{"repository":"example/app","branch":"renovate/example-app-2.x","result":"pr-created","pull_request":52,"files":["compose/example/compose.yml"]},` +
+		`{"repository":"example/app","branch":"renovate/example-worker-5.x","result":"pending","pull_request":null,"files":["compose/example/compose.yml","compose/web/compose.yaml"]},` +
+		`{"repository":"example/app","branch":"renovate/example-cache-7.x","result":"needs-approval","pull_request":null,"files":["compose/example/compose.yml"]}]`
+	if string(got) != want {
+		t.Errorf("branches\n%s\nwant\n%s", got, want)
+	}
+	v.nothingLeft(t)
 }
 
 func TestAFailedRunIsRecordedAndLeavesNothing(t *testing.T) {

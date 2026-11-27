@@ -308,21 +308,15 @@ class RepositoryRecord(ObservationRecord):
     # not: what it uses in turn is not read here.
     called_workflows: list[str] | None = None
     # Each app's Compose files on the default branch, ``compose/<app>/<file>``,
-    # and the open Dependency Dashboard's address, of a repository opted in to
-    # updates: empty for any other, or where the Compose part was refused.
+    # of a repository opted in to updates: empty for any other, or where the
+    # Compose part was refused.
     compose: list[str] = Field(default=[], max_length=COMPOSE_KEPT)
-    dashboard: str = ""
-    # The login HQ's dependency update run opens its pull requests and its
-    # Dashboard as, the App's bot, read with the Compose part.
+    # The login HQ's dependency update run opens its pull requests as, the
+    # App's bot, read with the Compose part.
     updater: str = ""
     # ``{path, service, image}`` per service of those files as compose-go
     # loads them at the default branch's head (``head``): what a merge pins.
     compose_images: list[dict[str, Any]] = []
-    # ``{branch, marker, apps}`` per branch the Dependency Dashboard lists
-    # with a box to tick and no pull request, the marker's word (``unpend``,
-    # ``approve``, ``unschedule``, ``unlimit``) and the apps whose image its
-    # line names.
-    held_branches: list[dict[str, Any]] = []
     # ``{app, commits}`` per app with a service built on its host: each commit
     # from the newest that changed ``compose/<app>/`` to the head, newest
     # first, the revisions that build what a merge does.
@@ -399,6 +393,23 @@ _DEPENDENCY_RUN_EVERY = timedelta(days=1)
 # The controller reads both from this record's schema in the bridge contract.
 OWNER = r"^[a-z0-9-]{1,39}$"
 REPOSITORY = r"^([a-z0-9-]{1,39})/[a-z0-9._-]{1,100}$"
+# A branch Renovate names, as the hand-off spells one.
+BRANCH = r"^[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}$"
+
+
+class Branch(ObservationRecord):
+    """One branch as the run's report says Renovate left it
+    (``controller/host/renovate.go`` readReport)."""
+
+    repository: str = Field(pattern=REPOSITORY)
+    branch: str = Field(pattern=BRANCH)
+    # Renovate's word for what it did with the branch (its ``BranchResult``):
+    # ``pr-created``, ``needs-approval``, ``pending``, ``not-scheduled``…
+    result: str = Field(pattern=r"^[a-z][a-z-]{0,39}$")
+    # The number of the pull request the branch has, None for none.
+    pull_request: int | None = None
+    # The package files its upgrades change, as the repository names them.
+    files: list[str] = Field(default=[], max_length=20)
 
 
 class DependencyRunRecord(ObservationRecord):
@@ -413,6 +424,8 @@ class DependencyRunRecord(ObservationRecord):
     exit_code: int | None
     started_at: Stamp = None
     finished_at: Stamp = None
+    # Each branch of its repositories its report names, once it has finished.
+    branches: list[Branch] = Field(default=[], max_length=500)
 
 
 ALLOWANCE_KIND = "github.allowance"

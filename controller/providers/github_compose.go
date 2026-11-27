@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -21,18 +20,13 @@ import (
 )
 
 // What a repository a project opts in to updates holds of its apps: each
-// app's Compose files on the default branch, the Dependency Dashboard
-// Renovate keeps open, and for each update's pull request every service's
-// image before and after, as Docker Compose itself loads the app's files.
+// app's Compose files on the default branch, and for each update's pull
+// request every service's image before and after, as Docker Compose itself
+// loads the app's files.
 
-const (
-	// githubApps is the directory each app's Compose files sit under, one
-	// directory per app.
-	githubApps = "compose"
-	// githubDashboard is the title Renovate gives the issue that lists every
-	// update it holds back or has not opened yet.
-	githubDashboard = "Dependency Dashboard"
-)
+// githubApps is the directory each app's Compose files sit under, one
+// directory per app.
+const githubApps = "compose"
 
 var githubComposeKept = api.MustLimit("GitHubRepositoryRecord", "properties", "compose", "maxItems")
 
@@ -73,20 +67,6 @@ type GitHubComposeImage struct {
 	Build   bool   `json:"build"`
 }
 
-// GitHubHeldBranch is a branch the Dependency Dashboard lists with a box to
-// tick and no pull request: Marker is the box's word, and Apps each app whose
-// image its line names.
-type GitHubHeldBranch struct {
-	Branch string   `json:"branch"`
-	Marker string   `json:"marker"`
-	Apps   []string `json:"apps"`
-}
-
-// githubHeldLine is a Dashboard line whose box, ticked, has Renovate open the
-// branch's pull request: the four kinds it lists with none open, as
-// dependency-dashboard.ts writes them (getCheckbox, getListItem).
-var githubHeldLine = regexp.MustCompile(`(?m)^ - \[ \] <!-- (unpend|approve|unschedule|unlimit)-branch=(\S+) -->(.*)$`)
-
 // GitHubBuild is an app with a service that builds its image on its host,
 // and each commit from the newest that changed its directory to the head,
 // newest first: a host that applied one of them builds what a merge does.
@@ -95,15 +75,13 @@ type GitHubBuild struct {
 	Commits []string `json:"commits"`
 }
 
-// githubLayout is the apps part: the Compose files, the images they pin, the
-// apps built on their host and the Dashboard with the branches it holds.
+// githubLayout is the apps part: the Compose files, the images they pin and
+// the apps built on their host.
 type githubLayout struct {
-	compose   []string
-	images    []GitHubComposeImage
-	builds    []GitHubBuild
-	dashboard string
-	held      []GitHubHeldBranch
-	updater   string
+	compose []string
+	images  []GitHubComposeImage
+	builds  []GitHubBuild
+	updater string
 }
 
 func (g *githubRepository) apps(ctx context.Context, branch, head string) (githubLayout, error) {
@@ -116,8 +94,7 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 		app, _ := composeApp(file)
 		files[app] = append(files[app], file)
 	}
-	layout := githubLayout{compose: compose, images: []GitHubComposeImage{}, held: []GitHubHeldBranch{}}
-	named := map[string][]string{}
+	layout := githubLayout{compose: compose, images: []GitHubComposeImage{}}
 	built := []string{}
 	for _, app := range sortedKeys(files) {
 		// An app that does not load pins nothing HQ can say.
@@ -128,9 +105,6 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 		for _, name := range sortedKeys(services) {
 			service := services[name]
 			layout.images = append(layout.images, GitHubComposeImage{Path: files[app][0], Service: name, Image: service.image, Build: service.build})
-			if service.image != "" {
-				named[app] = append(named[app], imageName(service.image))
-			}
 			if service.build && !slices.Contains(built, app) {
 				built = append(built, app)
 			}
@@ -139,20 +113,7 @@ func (g *githubRepository) apps(ctx context.Context, branch, head string) (githu
 	if layout.builds, err = g.builds(ctx, head, built); err != nil {
 		return githubLayout{}, err
 	}
-	if layout.updater, err = g.updater(); err != nil {
-		return githubLayout{}, err
-	}
-	issue, err := g.dashboard(ctx)
-	layout.dashboard = issue.HTMLURL
-	for _, line := range githubHeldLine.FindAllStringSubmatch(issue.Body, -1) {
-		held := GitHubHeldBranch{Branch: line[2], Marker: line[1], Apps: []string{}}
-		for _, app := range sortedKeys(named) {
-			if slices.ContainsFunc(named[app], func(name string) bool { return namesImage(line[3], name) }) {
-				held.Apps = append(held.Apps, app)
-			}
-		}
-		layout.held = append(layout.held, held)
-	}
+	layout.updater, err = g.updater()
 	return layout, err
 }
 
@@ -187,22 +148,6 @@ func (g *githubRepository) builds(ctx context.Context, head string, built []stri
 		found = append(found, build)
 	}
 	return found, nil
-}
-
-// imageName is an image reference without its tag or digest, as Renovate
-// names the package in a Dashboard line.
-func imageName(image string) string {
-	image, _, _ = strings.Cut(image, "@")
-	if colon := strings.LastIndex(image, ":"); colon > strings.LastIndex(image, "/") {
-		image = image[:colon]
-	}
-	return image
-}
-
-// namesImage is whether a Dashboard line names an image whole, never as part
-// of a longer name.
-func namesImage(line, name string) bool {
-	return regexp.MustCompile("(^|[\\s`(])" + regexp.QuoteMeta(name) + "($|[\\s`),])").MatchString(line)
 }
 
 // composeApp is the app a path's Compose file belongs to: a file directly in
@@ -243,26 +188,6 @@ func (g *githubRepository) composeFiles(ctx context.Context, branch string) ([]s
 	}
 	slices.Sort(found)
 	return found[:min(len(found), githubComposeKept)], nil
-}
-
-// dashboard is the open Dependency Dashboard the update run opened, or the
-// zero issue: Renovate edits it every run, so it is among the issues updated
-// last. An issue anyone else opened under its title is not it, since HQ ticks
-// its boxes.
-func (g *githubRepository) dashboard(ctx context.Context) (githubapi.Issue, error) {
-	updater, err := g.updater()
-	if err != nil {
-		return githubapi.Issue{}, err
-	}
-	issues, err := json200(g.api.IssuesListForRepoWithResponse(ctx, g.owner, g.repo, &githubapi.IssuesListForRepoParams{
-		State: new(githubapi.IssuesListForRepoParamsStateOpen), Sort: new(githubapi.IssuesListForRepoParamsSortUpdated), PerPage: new(githubListPage),
-	}))
-	for _, issue := range issues {
-		if issue.PullRequest.URL == "" && issue.Title == githubDashboard && issue.User.Login == updater {
-			return issue, err
-		}
-	}
-	return githubapi.Issue{}, err
 }
 
 // appDirectory is the app whose directory, compose/<app>/, holds a path at
