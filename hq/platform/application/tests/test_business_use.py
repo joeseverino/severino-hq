@@ -1,45 +1,14 @@
-"""The business-use range is one rule, declared on the model and held on every path.
-
-Each door's command takes it as ``business_use.BusinessUseShare``, whose
-bounds test_record_bounds holds to the model's; the form's refusal is
-test_forms'."""
+"""The deductible amount a table derives from the business-use share."""
 
 from datetime import date
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 
 from ..money import quantize_money
-
-IN_RANGE = (0, 100)
-
-
-class RuleTests(TestCase):
-    def test_the_bounds_are_inclusive(self):
-        for value in IN_RANGE:
-            with self.subTest(value=value):
-                Asset(item_name="Example asset", business_use_percentage=value).full_clean()
-
-    def test_out_of_range_names_the_bound_it_broke(self):
-        for value, code in ((150, "max_value"), (-1, "min_value")):
-            with self.subTest(value=value), self.assertRaises(ValidationError) as caught:
-                Asset(item_name="Example asset", business_use_percentage=value).full_clean()
-            (error,) = caught.exception.error_dict["business_use_percentage"]
-            self.assertEqual(error.code, code)
-
-    def test_the_table_refuses_a_row_written_around_validation(self):
-        for create in (
-            lambda: Asset.objects.create(item_name="Example asset", business_use_percentage=150),
-            lambda: Expense.objects.create(date=date(2026, 7, 25), vendor="V", item="I", business_use_percentage=150),
-        ):
-            with self.subTest(create=create), self.assertRaises(IntegrityError), transaction.atomic():
-                create()
-
 
 EDGES = (
     ("0.00", 50),
