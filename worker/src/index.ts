@@ -25,7 +25,7 @@
 // - A request is logged as its method, path and status alone, never a header
 //   or the body.
 import routes from "./generated/routes.json";
-import { bearer, Hub, SOCKET_PATH, tag, withinContract, type InboundEvent } from "./hub";
+import { bearer, Hub, tag, withinContract, type InboundEvent } from "./hub";
 import { verify } from "./verify";
 
 export { Hub };
@@ -118,7 +118,7 @@ async function webhook(request: Request, env: Env, route: Route): Promise<Respon
 }
 
 function answered(request: Request, env: Env, path: string): Promise<Response> | Response {
-  if (path === SOCKET_PATH) return socket(request, env);
+  if (path === routes.socket) return socket(request, env);
   const route = ROUTES.get(path);
   return route ? webhook(request, env, route) : answer(404);
 }

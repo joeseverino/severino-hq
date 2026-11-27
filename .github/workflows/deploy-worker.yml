@@ -18,6 +18,11 @@ on:
     paths:
       - "worker/**"
       - "mise-tasks/worker/**"
+      # What worker:deploy serves beside the Worker's pages.
+      - "static/css/**"
+      - "static/fonts/**"
+      - "static/img/**"
+      - "static/js/**"
   workflow_dispatch:
 
 permissions:

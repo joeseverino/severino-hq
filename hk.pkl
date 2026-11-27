@@ -88,6 +88,9 @@ hooks {
       // an extension's files to as well; each rule names the files it reads.
       ["file-rules"] {
         glob = List("**/*.html", "**/*.css", "**/*.js", "hq/**/*.py")
+        // The inbound-events Worker's pages are HQ's templates rendered, and
+        // the rules read those templates.
+        exclude = List("worker/public/**")
         check = "uv run python -m hq.platform.application.file_rules . {{files}}"
       }
       ["file-rules-whole"] {

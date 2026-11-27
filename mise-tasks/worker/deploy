@@ -17,7 +17,15 @@ set -eu
 export WRANGLER_SEND_METRICS=false
 
 cd worker
-set -- deploy --domain "$HQ_INBOUND_HOSTNAME"
+# The pages in public/ link HQ's own stylesheet, font, icons and scripts by
+# the names static/ gives them, so the deploy serves the same files beside them.
+rm -rf public/static
+mkdir public/static
+cp -R ../static/css ../static/fonts ../static/img ../static/js public/static/
+# The version is tagged with the digest of what HQ derived it from
+# (control_plane.inbound_worker.deploy_tag), so HQ can tell whether the
+# version Cloudflare runs is the one its declarations make.
+set -- deploy --domain "$HQ_INBOUND_HOSTNAME" --tag "$(cat src/generated/deploy-tag)"
 if [ "${usage_dry_run:-}" = true ]; then
     set -- "$@" --dry-run
 fi

@@ -3,16 +3,26 @@
 and the operator subscribes each provider to exactly the events HQ takes.
 
 ``routes.json`` is the one place the Worker and its tests learn each
-provider's route, ``arrival.json`` the bridge contract's ``InboundArrival``,
-the one shape the Worker sends, and ``wrangler.jsonc`` requires each route's
-secret.
+provider's route and the listener's socket, ``arrival.json`` the bridge
+contract's ``InboundArrival``, the one shape the Worker sends, and
+``wrangler.jsonc`` requires each route's secret and sends only those paths to
+the Worker. Every other request is answered from ``public/``: HQ's page frame
+rendered once, naming the providers and their events, and its not-found page.
+The stylesheet, font and scripts those pages link are HQ's own ``static/``,
+which ``worker:deploy`` copies beside them.
 """
 
+import hashlib
 import json
 from dataclasses import asdict, fields, is_dataclass
 from pathlib import Path
 
 from django.conf import settings
+from django.template.loader import render_to_string
+
+from hq.platform.application.entity_links import provider_label
+from hq.platform.application.pages import Page
+from hq.platform.core import source
 
 from .provider_adapters import INBOUND
 lazy from .bridge_contract import contract
@@ -20,6 +30,10 @@ lazy from .bridge_contract import contract
 # The Worker secret the listener's socket presents as its bearer: the
 # Worker's own, never a provider's, so no INBOUND declaration names it.
 SOCKET_TOKEN = "SOCKET_TOKEN"  # noqa: S105 - the Worker secret's name, never its value
+# Where the listener opens its socket to the Worker.
+SOCKET_PATH = "/socket"
+# The directory the Worker's static pages are served from, beside wrangler.jsonc.
+PUBLIC = "public"
 
 HEADER = """\
 // The inbound-events Worker (src/index.ts). The account and the route's
@@ -81,15 +95,72 @@ def arrival() -> dict[str, object]:
     return {**shape, "properties": members}
 
 
-def emitted() -> dict[Path, str]:
-    """Every file, with its content."""
+def _drawn(template: str, context: dict[str, object]) -> str:
+    """``template`` in HQ's page frame, for nobody signed in: drawn for no
+    request, so it holds no nonce, token or reader of its own."""
+
+    drawn = render_to_string(template, {"SITE_NAME": settings.SEVERINO_SITE_NAME, **context})
+    # Without the blank lines and trailing spaces template tags leave.
+    return "".join(line.rstrip() + "\n" for line in drawn.splitlines() if line.strip())
+
+
+def pages(served: list[dict[str, object]]) -> dict[str, str]:
+    """The Worker's static pages, by file: its root, then what any path the
+    Worker does not answer is given."""
+
+    head = Page(title="Inbound events", lede="Receives HQ's signed webhooks")
+    listed = [{"label": provider_label(str(route["provider"])), "events": route["events"]} for route in served]
+    links = (("Demo", source.DEMO), ("Repository", source.REPOSITORY))
+    return {
+        "index.html": _drawn("control_plane/inbound_worker.html", {"page": head, "routes": listed, "links": links}),
+        "404.html": _drawn("404.html", {"back": "Back to inbound events"}),
+    }
+
+
+def _worker_files() -> dict[Path, str]:
+    """Every file the Worker is deployed from that HQ derives, with its content."""
 
     worker = Path(settings.BASE_DIR) / "worker"
     served = routes()
     secrets = [*dict.fromkeys(str(route["secret_binding"]) for route in served), SOCKET_TOKEN]
-    wrangler = {**SETTINGS, "secrets": {"required": secrets}}
+    # The Worker runs for its own paths alone; every other request is a page
+    # of public/, or its 404.html, and never invokes it.
+    assets = {
+        "directory": f"./{PUBLIC}",
+        "not_found_handling": "404-page",
+        "run_worker_first": [*(str(route["path"]) for route in served), SOCKET_PATH],
+    }
+    wrangler = {**SETTINGS, "assets": assets, "secrets": {"required": secrets}}
+    generated = {"providers": served, "socket": SOCKET_PATH}
     return {
         worker / "wrangler.jsonc": HEADER + json.dumps(wrangler, indent=2) + "\n",
-        worker / "src/generated/routes.json": json.dumps({"providers": served}, separators=(",", ":")) + "\n",
+        worker / "src/generated/routes.json": json.dumps(generated, separators=(",", ":")) + "\n",
         worker / "src/generated/arrival.json": json.dumps(arrival(), indent=2) + "\n",
+        **{worker / PUBLIC / name: page for name, page in pages(served).items()},
     }
+
+
+def _digest(files: dict[Path, str]) -> str:
+    # Each file's path in the checkout, then its content, so a renamed file
+    # moves the tag as a changed one does.
+    digest = hashlib.sha256()
+    for path, content in sorted(files.items()):
+        digest.update(f"{path.relative_to(settings.BASE_DIR)}\0{content}\0".encode())
+    return digest.hexdigest()
+
+
+def deploy_tag() -> str:
+    """The tag ``worker:deploy`` gives the Worker's version: a digest of every
+    file HQ derives for it, so a deployed version whose tag differs was built
+    from other declarations. A SHA-256 in hex, within the 100 bytes Cloudflare
+    allows a version's tag."""
+
+    return _digest(_worker_files())
+
+
+def emitted() -> dict[Path, str]:
+    """Every file, with its content."""
+
+    files = _worker_files()
+    tag = Path(settings.BASE_DIR) / "worker" / "src/generated/deploy-tag"
+    return {**files, tag: _digest(files) + "\n"}

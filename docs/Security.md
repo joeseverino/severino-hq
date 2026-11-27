@@ -706,6 +706,12 @@ path from the public internet. Setting it up is
   (`workers_dev: false`). The hostname and the account reach the deploy from
   its environment (`HQ_INBOUND_HOSTNAME`, `CLOUDFLARE_ACCOUNT_ID`), never
   from this repository.
+- The Worker runs only for its routes and its socket, which `wrangler.jsonc`
+  names (`assets.run_worker_first`). Any other request is answered by
+  Cloudflare from `worker/public/`, static pages HQ renders once for nobody
+  signed in (`manage.py inbound_worker`), and a path with no page gets its
+  `404.html`. Those pages hold no secret, token or reading, and the Worker
+  holds no binding to them.
 - A webhook's body is read only when its `Content-Length` is within the
   largest its provider's route declares (GitHub's 25 MB, Tailscale's 1 MB).
   Its signature is checked over the raw body before anything parses it, by

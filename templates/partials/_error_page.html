@@ -8,7 +8,8 @@ stands outside the page frame and so titles itself.
 what to do, in words; `request_id`, where the page has one, is the id the log
 line for this failure carries, linked to `error_url`, its error's page, where
 the reader may open it; `search` offers the search field. Every error
-page ends with the one way out, back to the dashboard. Deliberately plain: the
+page ends with the one way out, to the site's root, which `back` names where
+that is not the dashboard. Deliberately plain: the
 reader is here by accident, so the page orients and offers a way on rather
 than decorating the mistake.
 {% endcomment %}
@@ -21,6 +22,6 @@ than decorating the mistake.
   {% filter_bar search="Find anything" verb="Search" action=search_url %}{% endfilter_bar %}
   {% endif %}
   <p class="page-actions">
-    {% url 'dashboard' as dashboard_url %}{% button "Back to dashboard" dashboard_url look="primary" %}
+    {% url 'dashboard' as dashboard_url %}{% button back|default:"Back to dashboard" dashboard_url look="primary" %}
   </p>
 </div>
