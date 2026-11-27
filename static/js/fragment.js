@@ -67,7 +67,8 @@ const hqFetch = async (input, options = {}) => {
   const headers = new Headers(rest.headers);
   headers.set("X-Requested-With", "XMLHttpRequest");
   // eslint-disable-next-line no-restricted-properties -- HQ's one request, which every enhanced request crosses
-  const response = await window.fetch(input, { ...rest, headers });
+  const send = () => window.fetch(input, { ...rest, headers });
+  const response = await send().catch((error) => resent(error, rest, send));
   spendKey(rest.body, response);
   const refreshUrl =
     response.status === 403 ? response.headers.get("refresh_url") : "";
@@ -78,6 +79,37 @@ const hqFetch = async (input, options = {}) => {
   return response;
 };
 window.hqFetch = hqFetch;
+
+// A write that got no answer may still have reached HQ: the network dropped
+// it, or WebKit ended it as the reader began to reload, while the old page
+// stays up until the new one answers. So it is never said to have failed:
+// it is sent again with the same retry key, which HQ acts on once, on the one
+// loop (`hqEvery`), until HQ answers or the hour a follow lasts ends. Its
+// press stays under way meanwhile, and a page that is going away sends it no
+// more. A request without a key, which HQ cannot tell from a second one,
+// fails as it did.
+const resent = (error, { body, signal }, send) => {
+  if (error.name === "AbortError" || !(body instanceof FormData) || !body.get(RETRY_KEY)) throw error;
+  return new Promise((resolve, reject) => {
+    hqEvery(
+      async () => {
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return false;
+        }
+        try {
+          resolve(await send());
+          return false;
+        } catch (again) {
+          if (again.name !== "AbortError") return "failed";
+          reject(again);
+          return false;
+        }
+      },
+      { ms: 2000, follows: true, expired: () => reject(error) },
+    );
+  });
+};
 
 // The one loop. Anything that asks again later is a task here: a region that
 // polls, work being followed, a figure that ticks. One timer serves them all.

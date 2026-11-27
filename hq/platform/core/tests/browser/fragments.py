@@ -368,7 +368,8 @@ class FragmentBrowserTests(BrowserGate):
         server's own, or none at all."""
 
         self.posted.append((answer, _posted(route.request)))
-        if answer == "lost":
+        # The first sending of a write gets no answer; its second, HQ's.
+        if answer == "lost" and sum(each == "lost" for each, _ in self.posted) == 1:
             return route.abort()
         if answer == "broken":
             return route.fulfill(status=500, body="Example failure")
@@ -691,7 +692,10 @@ class FragmentBrowserTests(BrowserGate):
         self.assertFalse(self.page.evaluate("() => window.kept === true"))
 
     def test_a_write_form_takes_a_new_key_once_hq_has_answered_and_keeps_it_when_none_did(self):
-        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", False)):
+        """A write no answer came back for is sent again with its key, so
+        HQ acts on it once, until HQ answers, and is never said to have failed."""
+
+        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", True)):
             with self.subTest(answer):
                 self.start()
                 self.page.goto(f"{ORIGIN}/probe-keyed-form/", wait_until="load")
@@ -707,8 +711,8 @@ class FragmentBrowserTests(BrowserGate):
                 self.page.evaluate(SETTLE)
                 after = self.page.locator(key).input_value()
 
-                ((_, fields),) = [entry for entry in self.posted if entry[0] == answer]
-                self.assertEqual(fields["__retry_key"], before)
+                sent = [fields["__retry_key"] for each, fields in self.posted if each == answer]
+                self.assertEqual(sent, [before] * (2 if answer == "lost" else 1))
                 if spent:
                     self.assertRegex(after, r"^web:[0-9a-f]{48}$")
                 else:
