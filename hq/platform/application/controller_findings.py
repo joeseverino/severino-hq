@@ -16,16 +16,14 @@ from .entity_links import kind_label, node_link, node_name
 from .finding_model import (
     Finding,
     FindingEstate,
-    FindingRemedy,
     FindingRule,
     Said,
     cannot_run_commands,
     fact_values,
-    journal_step,
-    machine_step,
     per_connection,
     reconcile_remedy,
 )
+from .finding_steps import ByHand, Does, Why
 from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
@@ -51,8 +49,8 @@ def _when(label: str, at: date | str | None) -> tuple[str, str]:
     return (label, "never" if at is None else when(at))
 
 
-def _read_again(variant: str = "") -> FindingRemedy:
-    return FindingRemedy(capability=CONTROLLER_REFRESH.name, target="", variant=variant)
+def _read_again(variant: str = "") -> Does:
+    return Does(CONTROLLER_REFRESH.name, variant=variant)
 
 
 def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -87,7 +85,7 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                     _when("Others read" if others else LAST_READ, newest),
                     *((("Others", counted(others, noun, plural(noun))),) if others else ()),
                 ),
-                remedies=_skipped_remedies(node),
+                fixes=_skipped_remedies(node),
             )
         )
     return tuple(found)
@@ -173,10 +171,11 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
         holder, label = _holder(environment)
         last = max(estate.observed[node.id] for node in containers)
         restart = (
-            machine_step(
-                f"Restart {holder} on {machine}, so it opens the Docker socket again",
+            ByHand.on(
                 machine,
+                f"Restart {holder} on {machine}, so it opens the Docker socket again",
                 f"sh -c 'docker restart $(docker ps -q --filter label={label})'",
+                Why.CHANNEL,
             )
             if holder
             else ()
@@ -208,38 +207,29 @@ def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
                     *((_when(LAST_READ, newest),) if newest else ()),
                     *(("Not listed", node_link(node)) for node in containers),
                 ),
-                remedies=(_read_again(),),
-                steps=restart,
+                fixes=(_read_again(), *restart),
                 no_help_reason=cannot_run_commands(machine),
             )
         )
     return tuple(found)
 
 
-def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
+def _skipped_remedies(node: TopologyNode) -> tuple[Does, ...]:
     """What to do about a record the last read missed, as the actions that do it.
 
     A record missing from a sweep is gone: HQ can create it again from its
-    config, or stop holding it. A container is either one that runs now and
-    then, or one that is gone, and HQ cannot create a container; nor a record
-    whose declaration only says what HQ watches.
+    config. A container is either one that runs now and then, or one that is
+    gone, and HQ cannot create a container; nor a record whose declaration
+    only says what HQ watches. Removing the record destroys, so it is never
+    a press here.
     """
 
-    remove = FindingRemedy(capability="infrastructure.resource.remove", target=node.label)
     if node.kind_key == CONTAINER_KIND:
-        return (
-            FindingRemedy(
-                capability="infrastructure.resource.update",
-                target=node.label,
-                intent="Mark it as running only sometimes",
-            ),
-            remove,
-        )
+        return (Does("infrastructure.resource.update", node.label, intent="Mark it as running only sometimes"),)
     provider = PROVIDERS.get(node.kind_key)
     if provider is not None and provider.declaration_only:
-        return (remove,)
-    recreate = tuple(replace(remedy, intent="Create it again") for remedy in reconcile_remedy(node))
-    return (*recreate, remove)
+        return ()
+    return tuple(replace(remedy, intent="Create it again") for remedy in reconcile_remedy(node))
 
 
 REFRESH_OR_FIX = "Refresh them, or fix the connection that reads them."
@@ -277,7 +267,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                     _when(LAST_READ, newest),
                     ("Read every", duration(sweep_interval())),
                 ),
-                remedies=(_read_again(),),
+                fixes=(_read_again(),),
             )
         )
     # A kind with no observation at all has no newest to be behind, so the loop
@@ -299,7 +289,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("In HQ", str(estate.declared_counts.get(kind_key, 0))),
                     ("Read every", duration(sweep_interval())),
                 ),
-                remedies=(_read_again(),),
+                fixes=(_read_again(),),
             )
         )
     return tuple(found)
@@ -342,28 +332,28 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
             ("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),
             *((_when(LAST_READ, last),) if last else ()),
         ),
-        remedies=(_read_again("all"),),
-        steps=_controller_steps(machine),
+        fixes=(_read_again("all"), *_controller_steps(machine)),
         no_help_reason=cannot_run_commands(machine),
         affected_scopes=tuple(sorted(kinds)),
     )
 
 
-def _controller_steps(machine: str):
+def _controller_steps(machine: str) -> tuple[ByHand, ...]:
     """How the owner looks at the controller on its machine."""
 
     return (
-        *machine_step(
-            "Check the controller is running",
+        *ByHand.on(
             machine,
+            "Check the controller is running",
             f"systemctl status {CONTROLLER_UNIT} --no-pager",
+            Why.NOT_GRANTED,
         ),
-        *journal_step("Read its log", machine, CONTROLLER_UNIT),
+        *ByHand.journal(machine, "Read its log", CONTROLLER_UNIT),
     )
 
 
-def _keep_live(node: TopologyNode) -> FindingRemedy:
-    return FindingRemedy(capability="infrastructure.resource.accept_observed", target=node.label)
+def _keep_live(node: TopologyNode) -> Does:
+    return Does("infrastructure.resource.accept_observed", node.label)
 
 
 def drift_evidence(node: TopologyNode) -> tuple[tuple[str, str], ...]:
@@ -425,7 +415,7 @@ def _what(node: TopologyNode, name: str) -> str:
     return f"{kind_label(node.kind_key)} {name}"
 
 
-def _fault_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
+def _fault_remedies(node: TopologyNode) -> tuple[Does, ...]:
     """Drift has two honest answers, and reconciling alone is the destructive one.
 
     Something changed the live record outside HQ. Reconciling pushes HQ's copy
@@ -471,7 +461,7 @@ def _reporting_a_fault(estate: FindingEstate) -> tuple[Finding, ...]:
             severity=Tone.SERIOUS if node.status == Tone.SERIOUS else Tone.ATTENTION,
             explanation=explanation,
             evidence=_fault_evidence(node),
-            remedies=_fault_remedies(node),
+            fixes=_fault_remedies(node),
             no_help_reason=_cannot_fix_report(node),
         )
         for node in estate.nodes()
@@ -510,10 +500,10 @@ def _reconciled_but_still_wrong(estate: FindingEstate) -> tuple[Finding, ...]:
             evidence=_fault_evidence(node),
             # Applying again is the one thing already known not to work. Where
             # the live record was changed, the choice is which side to keep.
-            remedies=(
+            fixes=(
                 (
                     _keep_live(node),
-                    FindingRemedy(capability="infrastructure.resource.update", target=node.label),
+                    Does("infrastructure.resource.update", node.label),
                 )
                 if node.status_label == DRIFT_LABEL
                 else ()
@@ -551,7 +541,7 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
             severity=Tone.ATTENTION,
             explanation="Check its name on the service.",
             evidence=(_when("Last seen", None), _when("Others read", estate.latest_by_kind[node.kind_key])),
-            remedies=reconcile_remedy(node),
+            fixes=reconcile_remedy(node),
         )
         for node in estate.nodes()
         if node.kind == "resource"
@@ -584,7 +574,7 @@ def _unchecked(estate: FindingEstate) -> tuple[Finding, ...]:
                 else "Its reading reports no state of its own."
             ),
             evidence=(_when(LAST_READ, node.observed_at or None),),
-            remedies=reconcile_remedy(node),
+            fixes=reconcile_remedy(node),
         )
         for node in estate.nodes()
         if node.kind == "resource" and node.managed and node.status_label in (NOT_READ_LABEL, OUT_OF_DATE)
@@ -611,7 +601,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Could not check", _settings(node)),
                 _when(LAST_READ, node.observed_at),
             ),
-            remedies=reconcile_remedy(node),
+            fixes=reconcile_remedy(node),
         )
         for node in estate.nodes()
         if node.kind == "resource" and node.managed and node.unconfirmed_fields
@@ -653,7 +643,7 @@ def _keeps_failing(node: TopologyNode, unfinished: tuple[str, ...], machine: str
     return {
         "title": f"Work through {node.label} keeps failing",
         "explanation": "The controller retries it every few minutes, and each try has failed.",
-        "steps": journal_step("Read the controller's log", machine, CONTROLLER_UNIT),
+        "fixes": ByHand.journal(machine, "Read the controller's log", CONTROLLER_UNIT),
     }
 
 
@@ -687,21 +677,20 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(("Last reported", node_link(each)) for each in sorted(connections, key=lambda each: each.label)),
                     ("None since", since),
                 ),
-                remedies=(_read_again(),),
-                steps=_refresh_steps(node.label),
+                fixes=(_read_again(), *_refresh_steps(node.label)),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
     return tuple(found)
 
 
-def _refresh_steps(machine: str):
+def _refresh_steps(machine: str) -> tuple[ByHand, ...]:
     """How the owner runs the refresh job again on its machine and reads what it wrote."""
 
     unit = SECRETS_UNIT
     return (
-        *machine_step("Run the refresh job now", machine, f"systemctl start {unit}"),
-        *journal_step("Read the refresh job's log", machine, unit),
+        *ByHand.on(machine, "Run the refresh job now", f"systemctl start {unit}", Why.NOT_GRANTED),
+        *ByHand.journal(machine, "Read the refresh job's log", unit),
         *_controller_steps(machine),
     )
 
@@ -727,7 +716,7 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Reason", refusal.detail),
                 ("Last refused", when(refusal.refused_at, estate.now)),
             ),
-            steps=_controller_steps(node.label),
+            fixes=_controller_steps(node.label),
             no_help_reason=cannot_run_commands(node.label),
         )
         for node, held in refusals(estate)

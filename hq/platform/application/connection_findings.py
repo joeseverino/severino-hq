@@ -52,7 +52,7 @@ def _connection_not_answering(estate: FindingEstate) -> tuple[Finding, ...]:
                     *((("Cause", credential_findings.FAILURE_LABELS[failure]),) if failure and not refused else ()),
                     *((("Last checked", when(node.observed_at)),) if node.observed_at else ()),
                 ),
-                steps=mint_steps(node) if refused else credential_findings.answer_steps(node),
+                fixes=mint_steps(node) if refused else credential_findings.answer_steps(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -107,7 +107,7 @@ def _unreachable_consumer(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(("Did not answer", entity_link("service", name)) for name in names),
                     *(("Blocked by tailnet policy", path) for path in refused),
                 ),
-                remedies=open_the_path(node) if refused else reconcile_remedy(node),
+                fixes=open_the_path(node) if refused else reconcile_remedy(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))

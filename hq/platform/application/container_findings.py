@@ -27,13 +27,11 @@ from .finding_model import (
     Fact,
     Finding,
     FindingEstate,
-    FindingRemedy,
     FindingRule,
     distinct,
-    on_machine,
     opens,
 )
-from .finding_steps import Do, Run
+from .finding_steps import Advice, ByHand, Do, Does, Why
 from .images import fixed_in
 from .projection import read_once
 from .references import Kind
@@ -213,7 +211,7 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
     # HQ plans only what it watches; the containers page stands in for any other.
     page = opens("Upgrade plan", f"{lead.url}#upgrade") if plan is not None and lead.running.watcher else _containers()
     if not _moves(lead.standing, plan):
-        return {"primary": page, "steps": ()}
+        return {"primary": page}
     state = state or update_state(lead)
     evidence = (
         *(state.update.evidence if state.update else ()),
@@ -223,11 +221,11 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
     if state.kind == UpdateKind.BY_HAND and plan is not None:
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
-        return {"primary": opens(label, page.url), "steps": _by_hand(running, plan), "evidence": evidence}
+        return {"primary": opens(label, page.url), "fixes": _by_hand(running, plan), "evidence": evidence}
     if state.action is None:
         # What holds it back is what to clear, so it is the one step, said once.
-        return {"steps": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
-    return {"steps": (), "evidence": evidence, "remedies": (state.action.remedy,)}
+        return {"fixes": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
+    return {"evidence": evidence, "fixes": (state.action.remedy,)}
 
 
 def _standing(state: UpdateState) -> tuple[Fact, ...]:
@@ -318,12 +316,12 @@ def _unpinned_finding(running: list[Container], subject: str) -> Finding:
         title=f"{running[0].running.image} runs by tag alone",
         explanation="A tag can later name a different build.",
         evidence=tuple(("Pin it as", Code(pin)) for pin in pins),
-        steps=_compose_steps(running, _pin),
+        fixes=_compose_steps(running, _pin),
         primary=_containers(),
     )
 
 
-def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
+def _by_hand(running: list[Container], plan: Plan) -> tuple[Advice, ...]:
     """How the image is moved to the plan's target on its machine where no
     repository holds its Compose files: one step for each compose project that runs it."""
 
@@ -336,7 +334,7 @@ def _by_hand(running: list[Container], plan: Plan) -> tuple[Run | Do, ...]:
     return _compose_steps(running, lambda _item: wanted)
 
 
-def _compose_steps(running: list[Container], image: Callable[[Container], str]) -> tuple[Run | Do, ...]:
+def _compose_steps(running: list[Container], image: Callable[[Container], str]) -> tuple[Advice, ...]:
     """For each compose project among ``running``, the image to set and the
     file that sets it, with the command that recreates its containers when HQ
     read the project. Without that, only what to set."""
@@ -344,27 +342,29 @@ def _compose_steps(running: list[Container], image: Callable[[Container], str]) 
     projects: dict[tuple[str, str], list[Container]] = {}
     for item in running:
         projects.setdefault((item.running.stack or item.running.name, image(item)), []).append(item)
-    steps = []
+    steps: list[Advice] = []
     for (_project, wanted), members in projects.items():
         machine, names = members[0].machine.name, _names(members)
         files = tuple(members[0].compose_files)
         services = [str((item.runtime or {}).get("service", "") or "") for item in members]
-        command = (
-            on_machine(
+        start = (
+            ByHand.on(
                 machine,
+                "Then start it again",
                 "docker compose "
                 + " ".join(f"-f {shlex.quote(path)}" for path in files)
                 + " up -d "
                 + " ".join(shlex.quote(service) for service in services),
+                Why.NOT_GRANTED,
             )
             if files and all(services)
-            else ""
+            else ()
         )
-        if command:
+        if start:
             steps.append(
                 Do(ended(f"On {machine}, set the image of {names} in {_sets_image(files)}"), value=f"image: {wanted}")
             )
-            steps.append(Run("Then start it again", command))
+            steps.extend(start)
         else:
             steps.append(
                 Do(
@@ -382,12 +382,12 @@ def _sets_image(files: tuple[str, ...]) -> str:
     return next((path for path in files if path.rsplit("/", 1)[-1] in OVERRIDES), files[0])
 
 
-def _adopt(item: Container, intent: str) -> FindingRemedy:
+def _adopt(item: Container, intent: str) -> Does:
     """Take the container on: HQ plans and hardens only what it watches."""
 
-    return FindingRemedy(
-        capability="infrastructure.resource.create",
-        target=item.running.name,
+    return Does(
+        "infrastructure.resource.create",
+        item.running.name,
         intent=intent,
         url=reverse("control_plane:adopt_record", kwargs={"kind": CONTAINER_KIND, "token": item.running.token}),
         method="POST",
@@ -432,23 +432,18 @@ def help_for(item: Container, check: Check) -> Help:
     adopts it or marks it as holding the socket."""
 
     if not item.running.watcher:
-        remedies: tuple[FindingRemedy, ...] = (_adopt(item, "Adopt it"),)
+        remedies: tuple[Does, ...] = (_adopt(item, "Adopt it"),)
     elif check.id == "no-docker-socket":
-        remedies = (
-            FindingRemedy(capability=UPDATE_CAPABILITY, target=item.running.watcher, intent=SOCKET_HOLDER_INTENT),
-        )
+        remedies = (Does(UPDATE_CAPABILITY, item.running.watcher, intent=SOCKET_HOLDER_INTENT),)
     else:
         remedies = ()
     step = item.hardening.step(check)
-    return Help(steps=(step,) if step else (), remedies=remedies)
+    return Help(fixes=(*remedies, *((step,) if step else ())))
 
 
 def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
     helps = [help_for(about.measurement.subject, check) for about in subjects]
-    return Help(
-        steps=tuple(step for help in helps for step in help.steps),
-        remedies=tuple(remedy for help in helps for remedy in help.remedies),
-    )
+    return Help(fixes=tuple(fix for help in helps for fix in help.fixes))
 
 
 SOCKET_HOLDER_INTENT = "Mark as intended"

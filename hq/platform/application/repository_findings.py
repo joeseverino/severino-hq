@@ -17,7 +17,7 @@ from .action_links import read_link
 from .derivations import reached, whole
 from .entity_links import web_url
 from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
-from .finding_steps import Do, Run
+from .finding_steps import Advice, ByHand, Do, Why
 from .github_estate import (
     ARTIFACT_ATTENTION_DAYS,
     ARTIFACT_SERIOUS_DAYS,
@@ -124,7 +124,9 @@ def _failing(repo: Repository) -> Iterator[Said]:
     sha = repo.head.get("sha", "")
     # With no failing workflow run, what fails is a check on the head
     # commit that no workflow owns, and this lists it.
-    listed = () if runs or not sha else (Run("See the failing checks", _failing_checks(repo.name, sha)),)
+    listed = (
+        () if runs or not sha else (ByHand("See the failing checks", _failing_checks(repo.name, sha), Why.NOT_GRANTED),)
+    )
     finding = _about(
         repo,
         FAILING,
@@ -134,7 +136,7 @@ def _failing(repo: Repository) -> Iterator[Said]:
         evidence=(("Failing", str(len(failing) or 1)),),
         primary=opens("Open run", one.url) if one else opens("Open checks", f"{repo.url}/commit/{sha}"),
         offers=() if one else runs,
-        steps=(*dict.fromkeys(step for job in jobs if (step := _next_step(failures.get(job) or {}))), *listed),
+        fixes=(*dict.fromkeys(step for job in jobs if (step := _next_step(failures.get(job) or {}))), *listed),
     )
     yield finding, f"{repo.short} was failing on {repo.default_branch}"
 
@@ -146,13 +148,13 @@ _UNLOCKED = re.compile(r"mise ERROR .*(is not in the lockfile|cannot lock)")
 _FIXED_IN_GO = re.compile(r"^Fixed in: (\S+)@(go\d\S*)")
 
 
-def _next_step(failure: Mapping[str, Any]) -> Run | Do | None:
+def _next_step(failure: Mapping[str, Any]) -> Advice | None:
     """What to do about a job's failure in its own terms, where its log says
     which: none for any other, which the rule's step answers."""
 
     log = [line.strip() for line in JobFailure.model_validate(failure).log]
     if any(_UNLOCKED.search(line) for line in log):
-        return Run("Lock every tool mise.toml pins, then commit mise.lock", "mise lock")
+        return ByHand("Lock every tool mise.toml pins, then commit mise.lock", "mise lock", Why.OTHER_MACHINE)
     vulnerability = next((found[1] for line in log if (found := VULNERABILITY.match(line))), "")
     fixed = next((found for line in log if (found := _FIXED_IN_GO.match(line))), None)
     if fixed:
@@ -260,7 +262,7 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
     derive = COMMANDS.get(check.id)
     if derive is None:
         return Help(no_help_reason=REASONS[check.id], offers=settings)
-    runs = tuple(Run(label, command) for repo in missing for label, command in derive(repo))
+    runs = tuple(ByHand(label, command, Why.NOT_GRANTED) for repo in missing for label, command in derive(repo))
     called = tuple(
         Do(f"{repo.short}: check that this workflow pins its own actions, then require pinning.", value=workflow)
         for repo in missing
@@ -268,8 +270,8 @@ def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:
     )
     said = left_out(check, missing)
     if not runs:
-        return Help(steps=called, no_help_reason=said, offers=settings)
-    return Help(steps=runs + called + ((Do(said),) if said else ()), offers=settings)
+        return Help(fixes=called, no_help_reason=said, offers=settings)
+    return Help(fixes=runs + called + ((Do(said),) if said else ()), offers=settings)
 
 
 def repositories_measured(_estate: FindingEstate | None = None) -> tuple[Measured, ...]:

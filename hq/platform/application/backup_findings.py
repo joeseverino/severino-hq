@@ -15,7 +15,7 @@ from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 
 from . import unit_timers
 from .finding_model import Finding, FindingEstate, FindingRule
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .freshness import missed
 from .moments import duration, moment, when
 from .projection import read_once
@@ -120,11 +120,12 @@ def _late(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Allowed age", _ALLOWED),
                     *((("Copies kept", counted(copy.copies, "copy", "copies")),) if copy.copies else ()),
                 ),
-                steps=(
+                fixes=(
                     (
-                        Run(
-                            label="Read the backup's last runs",
-                            command=f"sudo journalctl -u {BACKUP_UNIT} -n 50 --no-pager",
+                        ByHand(
+                            "Read the backup's last runs",
+                            f"sudo journalctl -u {BACKUP_UNIT} -n 50 --no-pager",
+                            Why.NOT_GRANTED,
                         ),
                     )
                     if copy.manages

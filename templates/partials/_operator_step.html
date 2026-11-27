@@ -1,13 +1,13 @@
 {% comment %}
 One step an operator takes, as one step of a numbered {% steps %} list: a
-command to run on their own machine (a `Run`) or what to do in words (a
-`Do`) with the value it sets, each with its notes. What goes in code, a
+command to run on their own machine (a `ByHand`, with why it is theirs) or
+what to do in words (a `Do`) with the value it sets, each with its notes. What goes in code, a
 command or a value, is copied rather than read. HQ offers it and never runs
 it; it is built from references, so it carries no secret. `#said` is what the
 step says, wherever a list draws it.
 {% endcomment %}
 {% partialdef said %}
 {% if step.kind == "run" %}<strong>{{ step.label }}</strong>{% command text=step.command %}{% elif step.value %}<strong>{{ step.text }}</strong>{% command text=step.value %}{% else %}<span>{{ step.text }}</span>{% endif %}
-{% for note in step.notes %}{% muted %}{{ note }}{% endmuted %}{% endfor %}
+{% for note in step.notes %}{% muted %}{{ note }}{% endmuted %}{% endfor %}{% if step.kind == "run" %}{% muted %}{{ step.why }}{% endmuted %}{% endif %}
 {% endpartialdef %}
 {% step %}{% partial said %}{% endstep %}

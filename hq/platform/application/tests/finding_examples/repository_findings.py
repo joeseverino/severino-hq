@@ -1,6 +1,6 @@
 from typing import Any
 
-from ...finding_steps import Do, Run
+from ...finding_steps import Do
 from ...github_posture import EXAMPLES as POSTURE
 from ...tone import Tone
 from . import NOW, Ago, Example, Examples, Raised, ago
@@ -127,7 +127,6 @@ EXAMPLES = (
                         title="alpha is failing on main",
                         explanation="Failing job: ci (at Install tools). mise ERROR Failed to install"
                         " aqua:astral-sh/uv@0.13.10: uv@0.13.10 is not in the lockfile",
-                        steps=(Run("Lock every tool mise.toml pins, then commit mise.lock", "mise lock"),),
                     ),
                 ),
             ),

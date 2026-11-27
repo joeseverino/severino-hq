@@ -22,11 +22,9 @@ from .finding_model import (
     FindingEstate,
     FindingRule,
     cannot_run_commands,
-    journal_step,
-    machine_step,
     matter_key,
 )
-from .finding_steps import Run
+from .finding_steps import ByHand, Why
 from .moments import duration, moment, when
 from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
@@ -252,7 +250,7 @@ def stopped_reporting(
     severity: Tone,
     primary: ActionLink,
     part: str = "",
-    steps: tuple[Run, ...] = (),
+    fixes: tuple[ByHand, ...] = (),
 ) -> Finding:
     """The one finding for a worker on HQ's machine, run by ``unit``, that
     stopped reporting: when it was last seen and how to read why, beneath its
@@ -267,9 +265,9 @@ def stopped_reporting(
         severity=severity,
         explanation=explanation,
         evidence=(("Last seen", when(seen_at, now=estate.now)),),
-        steps=(
-            *steps,
-            Run(label="Read why it stopped", command=f"sudo journalctl -u {shlex.quote(unit)} -n 50 --no-pager"),
+        fixes=(
+            *fixes,
+            ByHand("Read why it stopped", f"sudo journalctl -u {shlex.quote(unit)} -n 50 --no-pager", Why.NOT_GRANTED),
         ),
         primary=primary,
         follows=unit_causes(estate, unit),
@@ -332,15 +330,16 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Failed", _failed_when(node.label, unit, estate.now)),
                     )
                 ),
-                steps=tuple(
+                fixes=tuple(
                     step
                     for unit in failed
                     for step in (
-                        *journal_step(f"See why {unit.named} failed", node.label, unit.unit),
-                        *machine_step(
-                            f"Start {unit.named} again",
+                        *ByHand.journal(node.label, f"See why {unit.named} failed", unit.unit),
+                        *ByHand.on(
                             node.label,
+                            f"Start {unit.named} again",
                             f"systemctl restart {shlex.quote(unit.unit)}",
+                            Why.NOT_GRANTED,
                         ),
                     )
                 ),
@@ -395,7 +394,7 @@ SETUP = {
 }
 
 
-def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[Run, ...]]:
+def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[ByHand, ...]]:
     """What sets ``absent`` up on ``node``: a sentence per state and each
     distinct command once, both from ``SETUP``."""
 
@@ -403,12 +402,12 @@ def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tup
     sentence = " ".join(
         SETUP[state].sentence.format(it=agreed(len(units), "it", "them")) for state, units in states.items()
     )
-    steps: dict[str, Run] = {}
+    steps: dict[str, ByHand] = {}
     for unit in absent:
         setup = SETUP[unit.absent]
         command = setup.command(unit)
         if command not in steps:
-            steps[command] = machine_step(setup.label.format(unit=unit.named), node.label, command)[0]
+            steps[command] = ByHand.on(node.label, setup.label.format(unit=unit.named), command, Why.NOT_GRANTED)[0]
     return sentence, tuple(steps.values())
 
 
@@ -438,7 +437,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS,
                 explanation=sentence,
                 evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
-                steps=steps,
+                fixes=steps,
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -517,17 +516,18 @@ def _stalled_finding(
                 ("Last ran", when(timer.last_trigger_at, now)),
             )
         ),
-        steps=tuple(
+        fixes=tuple(
             step
             for timer in timers
             for step in (
-                *machine_step(
-                    f"See when {timer.named} last ran and is next due",
+                *ByHand.on(
                     node.label,
+                    f"See when {timer.named} last ran and is next due",
                     f"systemctl list-timers {shlex.quote(timer.unit)}",
+                    Why.NOT_GRANTED,
                 ),
                 *(
-                    journal_step("See what the job it starts last did", node.label, timer.activates)
+                    ByHand.journal(node.label, "See what the job it starts last did", timer.activates)
                     if timer.activates
                     else ()
                 ),
@@ -565,10 +565,13 @@ _restarting = OnEachMachine(
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
         ("How it last ended", _ended(unit)),
     ),
-    steps=lambda node, unit: (
-        *journal_step(f"See why {unit.named} keeps stopping", node.label, unit.unit),
-        *machine_step(
-            "Once it is fixed, clear its restart count", node.label, f"systemctl reset-failed {shlex.quote(unit.unit)}"
+    fixes=lambda node, unit: (
+        *ByHand.journal(node.label, f"See why {unit.named} keeps stopping", unit.unit),
+        *ByHand.on(
+            node.label,
+            "Once it is fixed, clear its restart count",
+            f"systemctl reset-failed {shlex.quote(unit.unit)}",
+            Why.NOT_GRANTED,
         ),
     ),
 )
@@ -603,10 +606,11 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         )
                     )
                 ),
-                steps=machine_step(
-                    "See whether systemd answers for HQ's jobs",
+                fixes=ByHand.on(
                     node.label,
+                    "See whether systemd answers for HQ's jobs",
                     "systemctl list-units 'severino-hq-*' --all --no-pager",
+                    Why.NOT_GRANTED,
                     ("If that works and this stays, deploy HQ.",),
                 ),
                 no_help_reason=cannot_run_commands(node.label),

@@ -19,7 +19,7 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 from .connection_lifecycle import UNREPORTED_FACT
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, connections_carrying, fact_values
-from .finding_steps import Do, Run, told
+from .finding_steps import ByHand, Do, Why, told
 from .moments import moment
 from .tone import Tone
 from .ui import counted, ended
@@ -58,17 +58,17 @@ def credential_facts(fix: Any) -> tuple[tuple[str, str], ...]:
 
 def operator_steps(
     command: str, notes: tuple[str, ...], by_hand: str, missing: tuple[str, ...]
-) -> tuple[Run | Do, ...]:
+) -> tuple[ByHand | Do, ...]:
     """The mint step for one credential, or none when there is nothing to offer."""
 
     if not command and not notes and not by_hand:
         return ()
     if by_hand:
         notes += (ended(f"Or by hand: {by_hand}" + (f", adding {', '.join(missing)}" if missing else "")),)
-    return (told("Make a new token on your Mac" if command else "Make a new token", command, notes),)
+    return (told("Make a new token on your Mac" if command else "Make a new token", command, Why.TOUCH_ID, notes),)
 
 
-def fix_steps(fix: Any) -> tuple[Run | Do, ...]:
+def fix_steps(fix: Any) -> tuple[ByHand | Do, ...]:
     """The mint step a ``CredentialFix`` offers, for a page that holds the fix."""
 
     if fix is None or not fix.needed:
@@ -76,7 +76,7 @@ def fix_steps(fix: Any) -> tuple[Run | Do, ...]:
     return operator_steps(fix.command, fix.gaps, fix.by_hand, fix.missing)
 
 
-def mint_steps(node: Any) -> tuple[Run | Do, ...]:
+def mint_steps(node: Any) -> tuple[ByHand | Do, ...]:
     """The mint step a connection node's facts describe, for a finding."""
 
     return operator_steps(
@@ -102,7 +102,7 @@ def failure_of_node(node: Any) -> str:
     return next(iter(fact_values(node, FAILURE)), "")
 
 
-def answer_steps(node: Any) -> tuple[Run | Do, ...]:
+def answer_steps(node: Any) -> tuple[ByHand | Do, ...]:
     """The fix for a connection that does not answer, following why it did not."""
 
     failure = failure_of_node(node)
@@ -155,7 +155,7 @@ def missing_permissions(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(("Missing", name) for name in missing),
                     *(("Cannot read", label) for label in unseen),
                 ),
-                steps=mint_steps(node),
+                fixes=mint_steps(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -185,7 +185,7 @@ def expiring(estate: FindingEstate) -> tuple[Finding, ...]:
                     else ended(f"After that, HQ cannot read {node.label}")
                 ),
                 evidence=(("Expires", expiry_phrase(stamp)),),
-                steps=mint_steps(node),
+                fixes=mint_steps(node),
             )
         )
     return tuple(sorted(found, key=lambda finding: finding.title))

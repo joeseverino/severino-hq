@@ -16,7 +16,8 @@ from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import entity_link, node_name
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_steps import Does
 from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -88,13 +89,8 @@ def _missing_parents(resources: Iterable[Any]) -> dict[str, tuple[str, str]]:
     return found
 
 
-def _edit(node: TopologyNode) -> tuple[FindingRemedy, ...]:
-    return (
-        FindingRemedy(
-            capability="infrastructure.resource.update",
-            target=node.label,
-        ),
-    )
+def _edit(node: TopologyNode) -> tuple[Does, ...]:
+    return (Does("infrastructure.resource.update", node.label),)
 
 
 def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> Finding:
@@ -109,7 +105,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
             ("Connection it names", entity_link("connection", ref)),
             ("Connections the controllers have", counted(len(reported), "connection")),
         ),
-        remedies=_edit(node),
+        fixes=_edit(node),
     )
 
 
@@ -123,7 +119,7 @@ def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
         severity=Tone.ATTENTION,
         explanation="It cannot be applied anywhere.",
         evidence=((f"{what.capitalize()} it names", missing),),
-        remedies=_edit(node),
+        fixes=_edit(node),
     )
 
 

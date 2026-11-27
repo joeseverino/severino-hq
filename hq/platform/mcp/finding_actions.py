@@ -16,7 +16,7 @@ from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.capabilities import command_spec
 from hq.platform.application.describe import Describe
 from hq.platform.application.finding_model import Finding
-from hq.platform.application.finding_steps import Do, Press, Run
+from hq.platform.application.finding_steps import ByHand, Do, Press
 from hq.platform.application.findings import (
     NODE_READ,
     FindingFacts,
@@ -29,7 +29,7 @@ from hq.platform.application.security import Principal
 from hq.platform.application.workflow_contracts import ActionLink
 
 # The shape get_findings answers in, apart from the API's: it moves when this shape does.
-AGENT_FINDINGS_SCHEMA_VERSION = 4
+AGENT_FINDINGS_SCHEMA_VERSION = 5
 
 _CLOSED = ConfigDict(extra="forbid")
 
@@ -132,7 +132,7 @@ class AgentPress(TypedDict):
     call: RemedyCall
 
 
-type AgentStep = AgentPress | Annotated[dict[str, Any], Written(Run)] | Annotated[dict[str, Any], Written(Do)]
+type AgentStep = AgentPress | Annotated[dict[str, Any], Written(ByHand)] | Annotated[dict[str, Any], Written(Do)]
 
 
 @with_config(_CLOSED)
@@ -217,7 +217,7 @@ def _unique[T: Call](calls: list[T | None]) -> list[T]:
     return kept
 
 
-def _step(step: Press | Run | Do) -> AgentStep:
+def _step(step: Press | ByHand | Do) -> AgentStep:
     if isinstance(step, Press):
         link = step.link
         return {"kind": "press", "call": {**_command(link.label, link.capability, link.target), "effect": link.effect}}

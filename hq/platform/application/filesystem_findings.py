@@ -12,8 +12,8 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import FILESYSTEM_KIND
 
-from .finding_model import FindingRule, cannot_run_commands, machine_step
-from .finding_steps import Run
+from .finding_model import FindingRule, cannot_run_commands
+from .finding_steps import ByHand, Why
 from .labels import human_bytes
 from .reading_facts import OnEachMachine, ReadingRow
 from .thresholds import Threshold
@@ -85,14 +85,15 @@ def _share(filesystem: FilesystemSpace) -> str:
     return measured(filesystem.free * 100 / filesystem.total, "%", 1)
 
 
-def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[Run, ...]:
+def _steps(node: TopologyNode, row: FilesystemSpace) -> tuple[ByHand, ...]:
     mount = shlex.quote(row.mount)
     return (
-        *machine_step(f"See the space on {row.mount}", node.label, f"df -h {mount}"),
-        *machine_step(
-            f"Find what fills {row.mount}",
+        *ByHand.on(node.label, f"See the space on {row.mount}", f"df -h {mount}", Why.NOT_GRANTED),
+        *ByHand.on(
             node.label,
+            f"Find what fills {row.mount}",
             f"du -xh --max-depth=1 {mount} | sort -h | tail",
+            Why.NOT_GRANTED,
             ("Free space there.",),
         ),
     )
@@ -116,7 +117,7 @@ _nearly_full = OnEachMachine(
     evidence=lambda row: (
         (f"Free on {row.mount}", f"{human_bytes(row.free)} of {human_bytes(row.total)} ({_share(row)})"),
     ),
-    steps=_steps,
+    fixes=_steps,
 )
 
 

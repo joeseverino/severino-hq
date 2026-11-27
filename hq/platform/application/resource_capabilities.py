@@ -24,7 +24,7 @@ from hq.domains.control_plane.providers import (
 from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
-lazy from .finding_model import on_machine
+lazy from .finding_steps import ByHand, Why
 lazy from .machines import connections_inside, container_context
 lazy from .pages import PageAction
 
@@ -280,9 +280,9 @@ class ConnectionInside:
     connection_ref: str
     machines: tuple[str, ...]
     carries_its_verbs: bool
-    # How the owner starts it again on its machine; "" when no command can be
-    # written for that machine's name.
-    start_command: str
+    # How the owner starts it again on its machine; None when no command can
+    # be written for that machine's name.
+    start: ByHand | None
 
 
 def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
@@ -299,11 +299,18 @@ def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
     # A container its unit runs is started by starting the unit, which also
     # starts what the unit runs first.
     supervised = resource_operations.supervision(resource)
-    start_command = on_machine(
-        host,
-        f"sudo systemctl start {shlex.quote(supervised.unit)}"
-        if supervised is not None
-        else f"docker start {shlex.quote(name)}",
+    start = next(
+        iter(
+            ByHand.on(
+                host,
+                f"Start it again on {host}",
+                f"systemctl start {shlex.quote(supervised.unit)}"
+                if supervised is not None
+                else f"docker start {shlex.quote(name)}",
+                Why.CHANNEL,
+            )
+        ),
+        None,
     )
     inside = (rows for (on, named), rows in connections_inside().items() if (on.lower(), named) == (host.lower(), name))
     return tuple(
@@ -311,7 +318,7 @@ def channels_inside(resource: ManagedResource) -> tuple[ConnectionInside, ...]:
             connection_ref=row.connection_ref,
             machines=tuple(dict.fromkeys(str(item) for item in row.reaches or () if item)),
             carries_its_verbs=row.provider in acts_through and own_ref in ("", row.connection_ref),
-            start_command=start_command,
+            start=start,
         )
         for rows in inside
         for row in rows

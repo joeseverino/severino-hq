@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from hq.domains.control_plane.models import RefusedReport
 
 from .cadence import CONTROLLER_REFRESH
-from .finding_model import Finding, FindingEstate, FindingRemedy, cannot_run_commands
-from .finding_steps import Do, Run
+from .finding_model import Finding, FindingEstate, cannot_run_commands
+from .finding_steps import Advice, Does
 from .freshness import LAST_READ, freshness
 from .moments import when
 from .references import Kind
@@ -191,7 +191,7 @@ class OnEachMachine[R: ReadingRow]:
     title: Callable[[TopologyNode, tuple[R, ...]], str]
     explanation: Callable[[tuple[R, ...]], str]
     evidence: Callable[[R], Iterable[tuple[str, str]]]
-    steps: Callable[[TopologyNode, R], Iterable[Run | Do]]
+    fixes: Callable[[TopologyNode, R], Iterable[Advice]]
     service_unit: Callable[[R], str] | None = None
 
     def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
@@ -210,7 +210,7 @@ class OnEachMachine[R: ReadingRow]:
                     severity=self.severity(picked),
                     explanation=self.explanation(picked),
                     evidence=tuple(item for row in picked for item in self.evidence(row)),
-                    steps=tuple(step for row in picked for step in self.steps(node, row)),
+                    fixes=tuple(step for row in picked for step in self.fixes(node, row)),
                     no_help_reason=cannot_run_commands(node.label),
                     observed_at=reading.taken,
                     reads=self.row.KIND,
@@ -252,7 +252,7 @@ class Unjudged:
             severity=Tone.ATTENTION,
             explanation=self.explanation,
             evidence=self.evidence,
-            remedies=() if self.refusal else (FindingRemedy(capability=CONTROLLER_REFRESH.name, target=""),),
+            fixes=() if self.refusal else (Does(CONTROLLER_REFRESH.name),),
         )
 
 

@@ -9,8 +9,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
-from .finding_steps import Do, Run
+from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_steps import Advice, Do, Does
 from .labels import lower_first
 from .standards import Check, CheckResult, Measurement
 from .tone import Tone
@@ -41,10 +41,10 @@ class Measured:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Help:
-    """What a standard's finding offers for one check beyond its fix in words."""
+    """What a standard's finding offers for one check beyond its fix in words:
+    the commands HQ runs, and the steps that stand in for its fix."""
 
-    steps: tuple[Run | Do, ...] = ()
-    remedies: tuple[FindingRemedy, ...] = ()
+    fixes: tuple[Advice, ...] = ()
     offers: tuple[ActionLink, ...] = ()
     no_help_reason: str = ""
 
@@ -145,12 +145,17 @@ def worded(
             ),
         ),
         primary=primary,
-        steps=tuple(
-            step
-            for check, help in zip(checks, helped, strict=True)
-            for step in (help.steps or ((Do(check.fix, notes=why(check, explanation)),) if check.fix else ()))
+        fixes=(
+            *dict.fromkeys(fix for help in helped for fix in help.fixes if isinstance(fix, Does)),
+            *(
+                step
+                for check, help in zip(checks, helped, strict=True)
+                for step in (
+                    tuple(fix for fix in help.fixes if not isinstance(fix, Does))
+                    or ((Do(check.fix, notes=why(check, explanation)),) if check.fix else ())
+                )
+            ),
         ),
-        remedies=tuple(dict.fromkeys(remedy for help in helped for remedy in help.remedies)),
         offers=tuple(dict.fromkeys(offer for help in helped for offer in help.offers)),
         no_help_reason=next((help.no_help_reason for help in helped if help.no_help_reason), ""),
         read_capabilities=tuple(

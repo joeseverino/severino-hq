@@ -32,7 +32,7 @@ COMMAND_BUILDERS = {
     builder.__name__: builder for builder in (ask, command_action, capability_action_link, read_now_link)
 }
 # Calls that name a command and one of its declared variants.
-VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "FindingRemedy")
+VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "Does")
 # Text a template writes that is a declared word for something no command does.
 TEMPLATE_EXEMPT = {
     ("dashboard.html", "Edit"): "opens the chooser of the dashboard's links, whose save is a preference",
@@ -195,7 +195,7 @@ class CallSiteWordsTests(SimpleTestCase):
                 'confirm = {"url": url, "label": "Stop tracking in HQ" if forget else "Remove", "cancel_url": back}\n'
                 'row = {"label": "Remove", "value": 1}\n'
                 'PageAction(capability_words("infrastructure.resource.remove"), url)\n'
-                'FindingRemedy("example.fix", subject, intent="Remove")\n',
+                'Does("example.fix", subject, intent="Remove")\n',
                 encoding="utf-8",
             )
             found = sorted(

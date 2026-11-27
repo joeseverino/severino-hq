@@ -283,7 +283,7 @@ class CredentialFixPart(TypedDict):
     expired: Annotated[bool, Describe("Whether it has run out.")]
     permissions: Annotated[list[str], Describe("Every permission the replacement is issued with.")]
     steps: Annotated[
-        list[Annotated[dict[str, Any], Written(finding_steps.Run | finding_steps.Do)]],
+        list[Annotated[dict[str, Any], Written(finding_steps.ByHand | finding_steps.Do)]],
         Describe("What you do to replace it, in order."),
     ]
 

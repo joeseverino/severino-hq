@@ -205,31 +205,6 @@ class FindingsTests(SentinelMixin, TestCase):
 
         self.assertLessEqual(subjects, visible)
 
-    def test_no_rule_offers_a_destructive_capability(self):
-        """A finding may link to a review page; it may never hand over a delete."""
-
-        from ..capabilities import capability_registry
-
-        destructive = {spec.name for spec in capability_registry() if spec.effect == "destructive"}
-        observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
-        observed(self.rewrite("swept"), self.now)
-
-        offered = {remedy.capability for f in self.raised() for remedy in f.remedies}
-
-        self.assertEqual(offered & destructive, set())
-
-    def test_every_remedy_names_a_capability_the_registry_holds(self):
-        from ..capabilities import capability_registry
-
-        known = {spec.name for spec in capability_registry()}
-        observed(self.rewrite("skipped"), self.now - timedelta(hours=9))
-        observed(self.rewrite("swept"), self.now)
-
-        for finding in self.raised():
-            for remedy in finding.remedies:
-                with self.subTest(rule=finding.rule):
-                    self.assertIn(remedy.capability, known)
-
     def test_no_rule_names_an_installed_extension(self):
         """The host does not name its extensions, stated as a test."""
 

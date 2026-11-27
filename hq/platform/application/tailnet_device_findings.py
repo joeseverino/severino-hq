@@ -12,8 +12,8 @@ from typing import Any
 from hq.domains.control_plane.consoles import tailscale_machine
 
 from .expiry import days_until
-from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRemedy, FindingRule
-from .finding_steps import Do, Run
+from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRule
+from .finding_steps import ByHand, Do, Does, Why
 from .images import compare, version
 from .moments import moment, when_day
 from .projection import read_once
@@ -155,7 +155,7 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
                 else "Its key ran out, so nothing on the tailnet reaches it until it signs in again."
             ),
             evidence=(("Key expires" if days > 0 else "Key expired", when_day(expires)),),
-            steps=(
+            fixes=(
                 Do(
                     (
                         f"Sign in to Tailscale again on {name}, or turn off key expiry for it in the Tailscale admin "
@@ -177,14 +177,15 @@ def _console(row: TailnetDevice) -> tuple[str, ...]:
     return (row.console,) if row.console else ()
 
 
-def _sign_key(name: str) -> tuple[Run, ...]:
+def _sign_key(name: str) -> tuple[ByHand, ...]:
     """Signing takes a tailnet lock key, which only a signing machine holds."""
 
     return (
-        Run(
-            label=f"On a machine that can sign, list the keys waiting, then run tailscale lock sign with the key it "
+        ByHand(
+            f"On a machine that can sign, list the keys waiting, then run tailscale lock sign with the key it "
             f"lists for {name}",
-            command="tailscale lock status",
+            "tailscale lock status",
+            Why.OTHER_MACHINE,
         ),
     )
 
@@ -205,7 +206,7 @@ def _locked_out(estate: FindingEstate) -> tuple[Finding, ...]:
             title=f"{node.label} is locked out of the tailnet",
             explanation=NOT_SIGNED,
             evidence=(("Device status", "healthy"),),
-            steps=_sign_key(node.label),
+            fixes=_sign_key(node.label),
         )
         for node, _names in by_node(estate, (("", name, name) for name in policy().locked_out))
     )
@@ -223,7 +224,7 @@ def _unauthorized(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS,
                 title=f"{node.label} is waiting for tailnet approval",
                 explanation="It cannot reach anything yet.",
-                steps=(Do("Approve it in the Tailscale admin console, under Machines.", notes=_console(row)),),
+                fixes=(Do("Approve it in the Tailscale admin console, under Machines.", notes=_console(row)),),
             )
             if row.unauthorized
             else None
@@ -244,7 +245,7 @@ def _lock_unsigned(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=f"{node.label} is not signed for tailnet lock",
                 explanation=NOT_SIGNED,
                 evidence=(("Tailscale says", row.lock_error),),
-                steps=_sign_key(node.label),
+                fixes=_sign_key(node.label),
             )
             if row.lock_error
             else None
@@ -263,11 +264,8 @@ def _server_signs(estate: FindingEstate) -> tuple[Finding, ...]:
             severity=Tone.SERIOUS,
             title=f"{node.label} can sign devices onto the tailnet",
             explanation="Whoever takes it over can add devices.",
-            steps=tuple(
-                Run(
-                    label="On another signing device, remove its key",
-                    command=f"tailscale lock remove {key}",
-                )
+            fixes=tuple(
+                ByHand("On another signing device, remove its key", f"tailscale lock remove {key}", Why.OTHER_MACHINE)
                 for key in keys
             ),
         )
@@ -295,7 +293,7 @@ def _client_update(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.ATTENTION,
                 title=f"Tailscale update available for {node.label}",
                 explanation=_update_said(row),
-                steps=(Run(f"On {node.label}, as an administrator", "tailscale update"),),
+                fixes=(ByHand(f"On {node.label}, as an administrator", "tailscale update", Why.OTHER_MACHINE),),
             )
             if row.update
             else None
@@ -321,9 +319,7 @@ def _routes_unapproved(estate: FindingEstate) -> tuple[Finding, ...]:
                 *((("Exit node", "not usable until its route is approved"),) if row.exit_unapproved else ()),
             ),
             # The approval the machine's own page offers.
-            remedies=(FindingRemedy(capability="tailnet.routes.approve", target=node.label, url=node.url),)
-            if node.url
-            else (),
+            fixes=(Does("tailnet.routes.approve", node.label, url=node.url),) if node.url else (),
         )
 
     return _each(estate, says)

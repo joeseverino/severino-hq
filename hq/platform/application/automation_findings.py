@@ -9,7 +9,7 @@ the host declined to start one.
 from typing import Any
 
 from .finding_model import Finding, FindingEstate, FindingRule, matter_key, opens
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .security import Principal
 from .tone import Tone
 from .unit_findings import HQ_HOST, WORKER_READ, stopped_reporting, unit_causes
@@ -27,16 +27,13 @@ HOST_CONFIGURATION = "/etc/severino-hq/host.json"
 # As deploy/host.example.json shows it: the grant is one of the file's own,
 # and reads that repository's contents.
 _ENTRY = (
-    Run(label="On HQ's machine, open its configuration", command=f"sudoedit {HOST_CONFIGURATION}"),
+    ByHand("On HQ's machine, open its configuration", f"sudoedit {HOST_CONFIGURATION}", Why.FIRST_INSTALL),
     Do(
         "Add this, naming the repository your playbooks are in and, for a private one, the grant that reads it",
         value='"automation": {"repository": "OWNER/REPOSITORY", "grant": "GRANT"}',
     ),
 )
-_START = Run(
-    label="Start the worker, which names anything still missing",
-    command=f"sudo {HQ_HOST} automation",
-)
+_START = ByHand("Start the worker, which names anything still missing", f"sudo {HQ_HOST} automation", Why.FIRST_INSTALL)
 
 
 def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
@@ -80,7 +77,7 @@ def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
             severity=Tone.ATTENTION,
             explanation=explanation,
             evidence=(("Last seen", "never"),),
-            steps=(*_ENTRY, _START) if read else (_START,),
+            fixes=(*_ENTRY, _START) if read else (_START,),
             primary=playbooks,
             follows=unit_causes(estate, AUTOMATION_UNIT),
         )
@@ -94,7 +91,7 @@ def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
         explanation=explanation,
         severity=Tone.SERIOUS,
         primary=playbooks,
-        steps=(_START,),
+        fixes=(_START,),
     )
 
 

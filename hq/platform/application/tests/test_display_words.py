@@ -10,7 +10,7 @@ import hq_sdk.ui
 from ..card_items import Kpi, ListRow
 from ..display_words import in_words
 from ..finding_model import Finding, written_fact
-from ..finding_steps import Do, Run
+from ..finding_steps import ByHand, Do, Why
 from ..service_context import Cell
 
 DIGEST = "example/app:1.2@sha256:" + "0f" * 32
@@ -56,7 +56,7 @@ class ConstructionTests(SimpleTestCase):
             lambda: Cell("[{'name': 'web'}]"),
             lambda: Finding("example", "example", "Device", "good", "Body", evidence=(("Seen", "True"),)),
             lambda: Do(f"Pin it to {DIGEST}"),
-            lambda: Run(f"Pin it to {DIGEST}", "example-cli up"),
+            lambda: ByHand(f"Pin it to {DIGEST}", "example-cli up", Why.NOT_GRANTED),
         ):
             with self.assertRaisesRegex(ValueError, "say it in words"):
                 build()
@@ -74,7 +74,9 @@ class ConstructionTests(SimpleTestCase):
         from ..display_words import Code
 
         self.assertEqual(Do("Pin its image by its digest", value=DIGEST).value, DIGEST)
-        self.assertEqual(Run("Pin it", f"example-cli pin {DIGEST}").command, f"example-cli pin {DIGEST}")
+        self.assertEqual(
+            ByHand("Pin it", f"example-cli pin {DIGEST}", Why.NOT_GRANTED).command, f"example-cli pin {DIGEST}"
+        )
         pinned = Finding("example", "example", "Device", "good", "Body", evidence=(("Pin it as", Code(DIGEST)),))
         self.assertEqual(written_fact(*pinned.evidence[0])["code"], True)
         with self.assertRaisesRegex(ValueError, "say it in words"):

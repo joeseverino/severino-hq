@@ -514,7 +514,7 @@ def source_attention(
                 title=f"{label} could not be read",
                 explanation="What it reports is missing from this queue until it reads again. The failure is logged.",
                 why="Asking this source for its items raised an error, so anything it would report is missing.",
-                steps=(
+                fixes=(
                     finding_steps.Do(
                         f"Find the line in HQ's log with this event whose message names {source_id}; the traceback "
                         "under it says what failed.",
@@ -565,7 +565,7 @@ def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Finding, 
         # An item the queue shows is never a problem alone: a step or remedy,
         # the page the work is done on, the reason HQ cannot help, or a held
         # request's decision.
-        helped = item.steps or item.remedies or item.primary or item.no_help_reason.strip() or item.held
+        helped = item.steps or item.fixes or item.primary or item.no_help_reason.strip() or item.held
         if item.severity.acted_on and not helped:
             raise ImproperlyConfigured(f"{source_id!r} produced an attention item with no help: {item.title!r}.")
     return items

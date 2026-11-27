@@ -52,6 +52,8 @@
               "steps.kind",
               "steps.label",
               "steps.command",
+              "steps.why",
+              "steps.machine",
               "steps.notes",
               "steps.text",
               "steps.value",
@@ -532,6 +534,8 @@
               "credential_fix.steps",
               "credential_fix.steps.label",
               "credential_fix.steps.command",
+              "credential_fix.steps.why",
+              "credential_fix.steps.machine",
               "credential_fix.steps.notes",
               "credential_fix.steps.kind",
               "credential_fix.steps.text",
@@ -2746,6 +2750,8 @@
               "findings.steps.kind",
               "findings.steps.label",
               "findings.steps.command",
+              "findings.steps.why",
+              "findings.steps.machine",
               "findings.steps.notes",
               "findings.steps.text",
               "findings.steps.value",
@@ -7619,6 +7625,73 @@
         "minimum": 0,
         "type": "integer"
       },
+      "ByHand": {
+        "additionalProperties": false,
+        "description": "A command a person runs on their own machine, and why HQ does not.",
+        "properties": {
+          "command": {
+            "description": "The exact command to paste into a shell on the machine it names.",
+            "type": "string"
+          },
+          "kind": {
+            "const": "run",
+            "default": "run",
+            "description": "A command you run.",
+            "type": "string"
+          },
+          "label": {
+            "description": "What running it does, said before the command.",
+            "type": "string"
+          },
+          "machine": {
+            "default": "",
+            "description": "The machine it acts on over ssh; empty for one run where you are.",
+            "type": "string"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          },
+          "why": {
+            "$ref": "#/components/schemas/Why"
+          }
+        },
+        "required": [
+          "label",
+          "command",
+          "why",
+          "machine",
+          "notes",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "ByHandPartial": {
+        "additionalProperties": false,
+        "description": "A command a person runs on their own machine, and why HQ does not.",
+        "properties": {
+          "command": {
+            "$ref": "#/components/schemas/ByHand/properties/command"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ByHand/properties/kind"
+          },
+          "label": {
+            "$ref": "#/components/schemas/ByHand/properties/label"
+          },
+          "machine": {
+            "$ref": "#/components/schemas/ByHand/properties/machine"
+          },
+          "notes": {
+            "$ref": "#/components/schemas/StepNotes",
+            "default": []
+          },
+          "why": {
+            "$ref": "#/components/schemas/Why"
+          }
+        },
+        "type": "object"
+      },
       "CaddyRouteSpec": {
         "additionalProperties": false,
         "description": "One name Caddy serves, and where it hands each request off to.",
@@ -11704,8 +11777,8 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Run",
-                  "title": "Run"
+                  "$ref": "#/components/schemas/ByHand",
+                  "title": "By hand"
                 },
                 {
                   "$ref": "#/components/schemas/Do",
@@ -11761,8 +11834,8 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/RunPartial",
-                  "title": "Run"
+                  "$ref": "#/components/schemas/ByHandPartial",
+                  "title": "By hand"
                 },
                 {
                   "$ref": "#/components/schemas/DoPartial",
@@ -15733,7 +15806,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 3
+            "const": 4
           },
           "summary": {
             "$ref": "#/components/schemas/FindingsSummary"
@@ -23768,7 +23841,7 @@
       },
       "Press": {
         "additionalProperties": false,
-        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``FindingRemedy``: a detector\nnames the command, and never the link a reader presses.",
+        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``Does``: a detector names the\ncommand, and never the link a reader presses.",
         "properties": {
           "kind": {
             "const": "press",
@@ -23788,7 +23861,7 @@
       },
       "PressPartial": {
         "additionalProperties": false,
-        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``FindingRemedy``: a detector\nnames the command, and never the link a reader presses.",
+        "description": "A command HQ runs through its own route, offered only to a reader who may run it.\n\nDerivation writes it, from a detector's ``Does``: a detector names the\ncommand, and never the link a reader presses.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/Press/properties/kind"
@@ -27745,37 +27818,6 @@
         "pattern": "^[A-Za-z0-9]{1,16}$",
         "type": "string"
       },
-      "Run": {
-        "additionalProperties": false,
-        "description": "A command an operator runs on their own machine. HQ never runs it.",
-        "properties": {
-          "command": {
-            "description": "The exact command to paste into a shell on the machine it names.",
-            "type": "string"
-          },
-          "kind": {
-            "const": "run",
-            "default": "run",
-            "description": "A command the operator runs.",
-            "type": "string"
-          },
-          "label": {
-            "description": "What running it does, said before the command.",
-            "type": "string"
-          },
-          "notes": {
-            "$ref": "#/components/schemas/StepNotes",
-            "default": []
-          }
-        },
-        "required": [
-          "label",
-          "command",
-          "notes",
-          "kind"
-        ],
-        "type": "object"
-      },
       "RunAsked": {
         "additionalProperties": false,
         "description": "A playbook's run as asking for it or cancelling it answers: the run\nthat `runs` reads by its `operation.id`.",
@@ -27820,26 +27862,6 @@
           "ok",
           "data"
         ],
-        "type": "object"
-      },
-      "RunPartial": {
-        "additionalProperties": false,
-        "description": "A command an operator runs on their own machine. HQ never runs it.",
-        "properties": {
-          "command": {
-            "$ref": "#/components/schemas/Run/properties/command"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/Run/properties/kind"
-          },
-          "label": {
-            "$ref": "#/components/schemas/Run/properties/label"
-          },
-          "notes": {
-            "$ref": "#/components/schemas/StepNotes",
-            "default": []
-          }
-        },
         "type": "object"
       },
       "RunRecord": {
@@ -29851,7 +29873,7 @@
           "mapping": {
             "do": "#/components/schemas/Do",
             "press": "#/components/schemas/Press",
-            "run": "#/components/schemas/Run"
+            "run": "#/components/schemas/ByHand"
           },
           "propertyName": "kind"
         },
@@ -29861,8 +29883,8 @@
             "title": "Press"
           },
           {
-            "$ref": "#/components/schemas/Run",
-            "title": "Run"
+            "$ref": "#/components/schemas/ByHand",
+            "title": "By hand"
           },
           {
             "$ref": "#/components/schemas/Do",
@@ -29885,8 +29907,8 @@
             "title": "Press"
           },
           {
-            "$ref": "#/components/schemas/RunPartial",
-            "title": "Run"
+            "$ref": "#/components/schemas/ByHandPartial",
+            "title": "By hand"
           },
           {
             "$ref": "#/components/schemas/DoPartial",
@@ -32487,6 +32509,19 @@
         "minimum": 1,
         "type": "integer"
       },
+      "Why": {
+        "description": "Why a command is a person's to run rather than HQ's: the closed set of\nreasons, each said as the sentence a reader is shown.",
+        "enum": [
+          "It asks for a sudo password HQ does not hold.",
+          "It asks for Touch ID, which only you can give.",
+          "It asks for a sign-in only you can make.",
+          "It runs on a machine HQ has no way to reach.",
+          "HQ is not set up there yet, so nothing of HQ's can run it.",
+          "It restores the way HQ reaches the machine, so HQ cannot do it through that way.",
+          "HQ is not granted this on the machine."
+        ],
+        "type": "string"
+      },
       "WorkItem": {
         "additionalProperties": false,
         "description": "One job or run as Jobs lists it, its evidence beneath.",
@@ -32802,14 +32837,14 @@
         "type": "string"
       },
       "WrittenSteps": {
-        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine (`run`), or what to do in words (`do`).",
+        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine with why it is yours (`run`), or what to do in words (`do`).",
         "items": {
           "$ref": "#/components/schemas/Step"
         },
         "type": "array"
       },
       "WrittenStepsPartial": {
-        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine (`run`), or what to do in words (`do`).",
+        "description": "What to do about it, in order: a command HQ runs (`press`), a command you run on your own machine with why it is yours (`run`), or what to do in words (`do`).",
         "items": {
           "$ref": "#/components/schemas/StepPartial"
         },

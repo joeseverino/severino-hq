@@ -17,7 +17,8 @@ from .action_links import command_url
 from .entity_links import node_link
 from .expiry import days_until
 from .facts import Joined, inventory_records
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_steps import Does
 from .labels import lower_first
 from .moments import expiry_words, moment
 from .references import Kind
@@ -280,13 +281,7 @@ def renewals_judged(found: Iterable[tuple[Any, Expiry]], now: datetime) -> tuple
                 explanation="Its renewal has not run.",
                 evidence=(("Expires", expiry_phrase(expiry.expires)),),
                 primary=opens("Open certificate", expiry.url),
-                remedies=(
-                    FindingRemedy(
-                        capability="certificate.renew",
-                        target=node.label,
-                        url=command_url("certificate.renew", node.label),
-                    ),
-                ),
+                fixes=(Does("certificate.renew", node.label, url=command_url("certificate.renew", node.label)),),
             )
         )
     return tuple(findings)

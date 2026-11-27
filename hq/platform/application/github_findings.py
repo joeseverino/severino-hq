@@ -26,7 +26,7 @@ from hq.domains.control_plane.provider_adapters import INBOUND
 from .entity_links import web_url
 from .facts import records_for_connection
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .moments import moment, when, when_at
 from .tone import Tone
 from .ui import counted
@@ -42,9 +42,10 @@ STEPS = (
     Do(
         "Open the App's settings on GitHub and count the keys under Private keys. Each one listed can sign for the App."
     ),
-    Run(
-        label="Take the fingerprint of the key HQ holds, and compare it with the ones GitHub lists.",
-        command=FINGERPRINT_COMMAND,
+    ByHand(
+        "Take the fingerprint of the key HQ holds, and compare it with the ones GitHub lists.",
+        FINGERPRINT_COMMAND,
+        Why.OTHER_MACHINE,
         notes=(
             "The GitHub App connection in HQ shows the same fingerprint beside the App's name.",
             "GitHub lists no key through its API, so only its settings page can say how many there are.",
@@ -115,7 +116,7 @@ def others_spent(estate: FindingEstate) -> tuple[Finding, ...]:
                         *((("Account", account),) if account else ()),
                         ("Usual at most", f"{OTHERS_SPENT_ATTENTION:,} an hour"),
                     ),
-                    steps=STEPS,
+                    fixes=STEPS,
                 )
             )
     return tuple(sorted(found, key=lambda finding: finding.title))
@@ -165,7 +166,7 @@ def _webhook(record: Mapping[str, Any], subject: str, now) -> Finding | None:
         explanation="Changes on GitHub show only once HQ next reads them.",
         evidence=tuple(facts),
         primary=opens("Open the App's settings", settings) if settings else None,
-        steps=(
+        fixes=(
             *((Do(f"Tick {events} under Subscribe to events, then save."),) if missing else ()),
             *((Do("Read the failed delivery's answer under Advanced, in Recent Deliveries."),) if failing else ()),
         ),

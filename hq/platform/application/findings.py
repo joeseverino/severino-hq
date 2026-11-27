@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, cast
 
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, observed
@@ -74,13 +73,12 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingEvidence,
-    FindingRemedy,
     FindingRule,
     Gathered,
     parse_stamp,
     written_fact,
 )
-from .finding_steps import Do, Press, Run, WrittenReason, WrittenSteps
+from .finding_steps import ByHand, Do, Does, Press, Step, WrittenReason, WrittenSteps
 from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import held_graph
@@ -219,21 +217,6 @@ if len(_RULE_BY_NAME) != len(RULES):
     raise ValueError("Two finding modules use the same rule name.")
 
 
-def finding_steps(finding: Finding, *, pressed: bool = False) -> tuple[Run | Do, ...]:
-    """What a person does to resolve it: its own steps, else, where nothing
-    is ``pressed`` either, its rule's ``operator_action`` in words.
-
-    A detector names its remedies and never a press, whose link is the
-    reader's to be offered or not (``_presses``), so one that writes a press
-    is refused."""
-
-    told = tuple(step for step in finding.steps if not isinstance(step, Press))
-    if len(told) < len(finding.steps):
-        raise ImproperlyConfigured(f"A finding of {finding.rule!r} carries a press; its detector names remedies.")
-    found = _RULE_BY_NAME.get(finding.rule)
-    return told or ((Do(found.operator_action),) if found and not pressed else ())
-
-
 def finding_rules() -> tuple[FindingRule, ...]:
     """Every claim HQ knows how to make about itself."""
 
@@ -320,22 +303,23 @@ def _permitted(capability: str, principal: Principal) -> tuple[bool, Effect | No
 
 def _playbooks(
     finding: Finding, subject: TopologyNode | None, principal: Principal
-) -> tuple[list[FindingRemedy], list[ActionLink]]:
+) -> tuple[list[Does], list[ActionLink]]:
     """Adopted fixes and read-only investigations for this rule and machine."""
 
-    remedies: list[FindingRemedy] = []
+    fixes: list[Does] = []
     investigations: list[ActionLink] = []
     if subject is None or subject.kind != MACHINE_KIND:
-        return remedies, investigations
+        return fixes, investigations
     machine = normalized_hostname(subject.label)
     for manifest in automation_runs.playbooks_for(finding.rule, machine):
         name = automation_runs.capability_name(manifest.id)
         if finding.rule not in manifest.investigates:
             # A fix is run as it stands, so one whose run needs an input of
-            # its own is the press of whatever supplies that input.
-            if automation_runs.asks_nothing(manifest):
+            # its own is the press of whatever supplies that input; one that
+            # destroys is never a finding's press.
+            if automation_runs.asks_nothing(manifest) and manifest.effect != Effect.DESTRUCTIVE:
                 url = automation_runs.run_here_url(manifest.id, (machine,))
-                remedies.append(FindingRemedy(capability=name, target="", url=url))
+                fixes.append(Does(name, url=url))
             continue
         allowed, _ = _permitted(name, principal)
         if not allowed:
@@ -346,72 +330,89 @@ def _playbooks(
             investigations.append(
                 command_action(PLAYBOOK_INVESTIGATION, name, url, intent=capabilities.command_spec(name).label)
             )
-    return remedies, investigations
+    return fixes, investigations
 
 
-def _presses(
-    remedies: Iterable[FindingRemedy], principal: Principal, subject: TopologyNode | None
-) -> tuple[Press, ...]:
-    """Each remedy this principal may run, as the press that runs it, each route once.
+def _press(fix: Does, principal: Principal, subject: TopologyNode | None) -> Press | None:
+    """The press that runs ``fix`` for this principal, or None for one who may
+    not run it, or where its command is not mounted.
 
     Absent rather than disabled: an offer that cannot work is worse than no
-    offer. The effect is the capability registry's rather than the rule's, so
-    a capability that becomes destructive tomorrow is never offered tomorrow
-    without anyone editing a rule.
+    offer. The effect is the capability registry's, so a command that becomes
+    destructive tomorrow is never offered tomorrow without anyone editing a rule.
     """
 
+    allowed, effect = _permitted(fix.capability, principal)
+    if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
+        return None
+    action = next(
+        (
+            candidate
+            for candidate in (subject.actions if subject else ())
+            if candidate.capability == fix.capability and candidate.target == fix.target
+        ),
+        None,
+    )
+    url, method = (action_with_return(action, "control_plane:findings").url, action.method) if action else fix.reach
+    if not url:
+        return None
+    return Press(
+        command_action(
+            "remedy",
+            fix.capability,
+            url,
+            method=method,
+            target=fix.target,
+            variant=fix.variant,
+            intent=fix.intent,
+            recommended=True,
+        )
+    )
+
+
+def _steps(
+    finding: Finding, adopted: Iterable[Does], principal: Principal, subject: TopologyNode | None
+) -> tuple[Step, ...]:
+    """What this principal is shown to do about ``finding``: each command HQ
+    runs that they may press, each route once, then the rest in the detector's
+    order, a ``Does`` they may not press said by its ``by_hand``; else, where
+    nothing is left, its rule's ``operator_action`` in words."""
+
     pressed: dict[tuple[str, str], Press] = {}
-    for remedy in remedies:
-        allowed, effect = _permitted(remedy.capability, principal)
-        if not allowed or effect is None or effect is Effect.DESTRUCTIVE:
-            continue
-        action = next(
-            (
-                candidate
-                for candidate in (subject.actions if subject else ())
-                if candidate.capability == remedy.capability and candidate.target == remedy.target
-            ),
-            None,
-        )
-        url, method = (
-            (action_with_return(action, "control_plane:findings").url, action.method) if action else remedy.reach
-        )
-        if url:
-            link = command_action(
-                "remedy",
-                remedy.capability,
-                url,
-                method=method,
-                target=remedy.target,
-                variant=remedy.variant,
-                intent=remedy.intent,
-                recommended=True,
-            )
-            pressed.setdefault((link.method, link.url), Press(link))
-    return tuple(pressed.values())
+    rest: list[ByHand | Do] = []
+    for fix in (*finding.fixes, *adopted):
+        if not isinstance(fix, Does):
+            rest.append(fix)
+        elif (press := _press(fix, principal, subject)) is not None:
+            pressed.setdefault((press.link.method, press.link.url), press)
+        elif fix.by_hand is not None:
+            rest.append(fix.by_hand)
+    if pressed or rest:
+        return (*pressed.values(), *rest)
+    found = _RULE_BY_NAME.get(finding.rule)
+    return (Do(found.operator_action),) if found else ()
 
 
 def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
-    """What derivation adds to a detector's finding: its remedies as the
-    presses this principal may make, then its steps, its reason, the read
-    that checks it again and the pages about its subject."""
+    """What derivation adds to a detector's finding: its fixes as the steps
+    this principal is shown, its reason, the read that checks it again and
+    the pages about its subject."""
 
-    remedies, diagnostics = _playbooks(finding, subject, principal)
+    adopted, diagnostics = _playbooks(finding, subject, principal)
     subject_reads = tuple(
         action
         for action in (subject.actions if subject else ())
         if action.effect == Effect.READ and action.method == "GET"
     )
     investigations = topology_investigation_links(subject.id) if subject else ()
-    presses = _presses((*finding.remedies, *remedies), principal, subject)
     wanted = _read_subject(finding, subject)
     # Every field the detector set carries through; only what derivation adds changes.
     return replace(
         finding,
-        remedies=(),
+        fixes=(),
         offers=(*finding.offers, *diagnostics, *subject_reads),
         investigations=investigations,
-        steps=(*presses, *finding_steps(finding, pressed=bool(presses))),
+        steps=_steps(finding, adopted, principal, subject),
         no_help_reason=_no_help_reason(finding),
         subject_link=read_link("subject", subject.label, subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
@@ -480,14 +481,12 @@ def _no_help_reason(finding: Finding) -> str:
     offer and no exact command to name. Judged before a principal's remedies
     are filtered: a remedy this reader may not run is still a remedy."""
 
-    if finding.remedies or any(
-        isinstance(step, Run) or (isinstance(step, Do) and step.value) for step in finding.steps
-    ):
+    if any(not isinstance(fix, Do) or fix.value for fix in finding.fixes):
         return ""
     found = _RULE_BY_NAME.get(finding.rule)
     reason = finding.no_help_reason or (found.no_help_reason if found else "")
     # A reason its step already says is said once, as the step.
-    return "" if any(isinstance(step, Do) and step.text == reason for step in finding.steps) else reason
+    return "" if any(isinstance(fix, Do) and fix.text == reason for fix in finding.fixes) else reason
 
 
 def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.ControllerSweepCommand | None:
@@ -666,7 +665,7 @@ FindingsQuery = create_model(
 
 
 # The shape findings answers in; it moves when that shape does.
-FINDINGS_SCHEMA_VERSION = 3
+FINDINGS_SCHEMA_VERSION = 4
 
 
 class FindingsSummary(TypedDict):

@@ -17,9 +17,9 @@ the command that starts it again on its machine.
 {% for channel in channels %}
 {% notice tone="warning" data_cuts_connection=channel.connection_ref %}
   <p>The connection <code>{{ channel.connection_ref }}</code> runs in it. Once it stops, HQ can no longer read or change anything through that connection{% if channel.carries_its_verbs %}, so it cannot start this container again either{% endif %}.</p>
-  {% if channel.start_command %}
+  {% if channel.start %}
   <p>To start it again on {{ host }}, run:</p>
-  {% command text=channel.start_command %}
+  {% command text=channel.start.command %}
   {% else %}
   <p>To start it again, start the container on {{ host }} itself.</p>
   {% endif %}

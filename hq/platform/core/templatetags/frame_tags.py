@@ -112,7 +112,7 @@ slotted(
         icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
         done in order are `{% steps numbered=True %}`: read down wider columns, as many as fit up to
         three, so a short run fills a wide frame; each step's number stands where its icon would be, so
-        its steps take no icon. A step an operator takes on their own machine (a `Run`) or in words (a
+        its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
         `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
         runs it, and it carries no secret.
         """,

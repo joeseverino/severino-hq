@@ -61,7 +61,7 @@ def wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(("Device address", _device(owners, address)) for address in addresses),
                     *(("Subnet route", route) for route in routes),
                 ),
-                steps=(
+                fixes=(
                     Do(
                         "Set this where HQ is deployed, then restart HQ",
                         value=f"SEVERINO_TRUSTED_NETWORKS={narrowed(wide, addresses, routes)}",

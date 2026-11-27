@@ -22,7 +22,7 @@ lazy from hq.platform.application.display_words import Code
 lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import Finding, opens
-lazy from hq.platform.application.finding_steps import Do, Run
+lazy from hq.platform.application.finding_steps import ByHand, Do, Why
 lazy from hq.platform.application.freshness import CURRENT, NEVER, STALE, Freshness, ReadCadence
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
@@ -843,9 +843,20 @@ def opened_problems():
                     evidence=facts,
                     investigations=_INVESTIGATIONS,
                     offers=(read_link("open", "Open example-host-01", "/example/machines/example-host-01/"),),
-                    steps=(
-                        Run("See what waits on the restart", 'ssh example-host-01 "cat /run/reboot-required.pkgs"'),
-                        Run("See when", 'ssh example-host-01 "shutdown --show"', notes=("shutdown -c cancels it.",)),
+                    fixes=(
+                        *ByHand.on(
+                            "example-host-01",
+                            "See what waits on the restart",
+                            "cat /run/reboot-required.pkgs",
+                            Why.NOT_GRANTED,
+                        ),
+                        *ByHand.on(
+                            "example-host-01",
+                            "See when",
+                            "shutdown --show",
+                            Why.NOT_GRANTED,
+                            ("shutdown -c cancels it.",),
+                        ),
                     ),
                 ),
                 Finding(
@@ -855,7 +866,7 @@ def opened_problems():
                     title="Example certificate expired",
                     explanation="It serves no name, so nothing breaks when it expires.",
                     evidence=(("Certificate", "example.com"), ("Held in", "example-proxy")),
-                    steps=(Do("Renew the certificate where it is held."),),
+                    fixes=(Do("Renew the certificate where it is held."),),
                     no_help_reason="HQ cannot renew this certificate.",
                 ),
             ),

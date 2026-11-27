@@ -10,7 +10,7 @@ from hq.domains.control_plane.models import InboundSource
 from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
 
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .moments import when
 from .tone import Tone
 from .unit_findings import stopped_reporting
@@ -73,8 +73,8 @@ def _behind(estate: FindingEstate) -> tuple[Finding, ...]:
                     for number, tag in worker.versions
                 ),
             ),
-            steps=(
-                Run(label="Deploy it from main", command="mise run worker:deploy"),
+            fixes=(
+                ByHand("Deploy it from main", "mise run worker:deploy", Why.NOT_GRANTED),
                 Do("Or run the Deploy Worker job on main."),
             ),
             primary=opens("Open events", reverse("control_plane:events")),
@@ -100,9 +100,9 @@ def _refusing(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Accepted, last hour", str(route.accepted_last_hour)),
                 ("Secret", route.secret),
             ),
-            steps=(
+            fixes=(
                 Do(f"Set the Worker's {route.secret} to the one {route.named} uses."),
-                Run(label="Upload it", command="mise run worker:deploy --with-secrets"),
+                ByHand("Upload it", "mise run worker:deploy --with-secrets", Why.NOT_GRANTED),
             ),
             primary=opens("Open events", reverse("control_plane:events")),
             observed_at=worker.standing.sight.observed_at,

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from ...finding_steps import Do, Run
+from ...finding_steps import ByHand, Do
 from ...tone import Tone
 
 # The instant every example is walked at, the clock held there, so what a
@@ -66,7 +66,7 @@ class Raised:
     explanation: str | None = None
     presses: tuple[str, ...] = ()
     evidence: tuple[tuple[str, str], ...] | None = None
-    steps: tuple[Run | Do, ...] | None = None
+    steps: tuple[ByHand | Do, ...] | None = None
     primary: tuple[str, str] | None = None
     # The titles of what follows from it, said beneath it once every rule is derived.
     beneath: tuple[str, ...] = ()

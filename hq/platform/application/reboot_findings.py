@@ -10,8 +10,8 @@ from typing import Any
 
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
-from .finding_model import Finding, FindingEstate, FindingRule, cannot_run_commands, machine_step
-from .finding_steps import Run
+from .finding_model import Finding, FindingEstate, FindingRule, cannot_run_commands
+from .finding_steps import ByHand, Why
 from .moments import moment, since_when, when_at
 from .reading_facts import OnEachMachine, ReadingRow
 from .tone import Tone
@@ -124,23 +124,26 @@ def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
     )
 
 
-def _steps(node: TopologyNode, row: RebootState) -> tuple[Run, ...]:
+def _steps(node: TopologyNode, row: RebootState) -> tuple[ByHand, ...]:
     waits = (
-        machine_step("See what waits on the restart", node.label, "cat /run/reboot-required.pkgs")
+        ByHand.on(node.label, "See what waits on the restart", "cat /run/reboot-required.pkgs", Why.NOT_GRANTED)
         if row.waiting
         else ()
     )
     if row.scheduled:
         return (
             *waits,
-            *machine_step("See what is scheduled", node.label, "shutdown --show", ("shutdown -c cancels it.",)),
+            *ByHand.on(
+                node.label, "See what is scheduled", "shutdown --show", Why.NOT_GRANTED, ("shutdown -c cancels it.",)
+            ),
         )
     return (
         *waits,
-        *machine_step(
-            "Schedule the restart for a quiet hour",
+        *ByHand.on(
             node.label,
+            "Schedule the restart for a quiet hour",
             "shutdown -r 03:00",
+            Why.NOT_GRANTED,
             ("HQ reads the time back and shows it here.",),
         ),
     )
@@ -155,7 +158,7 @@ _waiting = OnEachMachine(
     title=_title,
     explanation=_explanation,
     evidence=_evidence,
-    steps=_steps,
+    fixes=_steps,
 )
 # The same, of each edge.
 _edge_waiting = replace(_waiting, row=EdgeRebootState)

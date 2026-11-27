@@ -7,7 +7,8 @@ every file field composed (``uploads``).
 
 from hq.domains.control_plane.providers import PROVIDERS
 
-from .finding_model import Finding, FindingEstate, FindingRemedy, FindingRule
+from .finding_model import Finding, FindingEstate, FindingRule
+from .finding_steps import Does
 from .references import Kind
 from .tone import Tone
 lazy from . import uploads
@@ -39,7 +40,7 @@ def _refusing(_estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS,
                 explanation="A larger upload fails before it reaches HQ.",
                 evidence=(("Proxy lets through", f"{limit} MB"), ("HQ takes", f"{needed} MB")),
-                remedies=(FindingRemedy(capability=ALLOW_UPLOADS, target=resource.key),),
+                fixes=(Does(ALLOW_UPLOADS, resource.key),),
             )
         )
     return tuple(found)

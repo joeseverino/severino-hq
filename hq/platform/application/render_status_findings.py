@@ -25,10 +25,8 @@ from .finding_model import (
     FindingEstate,
     FindingRule,
     cannot_run_commands,
-    journal_step,
-    machine_step,
 )
-from .finding_steps import Do, Run
+from .finding_steps import ByHand, Do, Why
 from .freshness import missed
 from .moments import duration, moment, since_when, when
 from .projection import iso
@@ -191,25 +189,27 @@ def _run_again(
     renderings: tuple[Rendering, ...],
     label: str,
     notes: tuple[str, ...] = (),
-) -> tuple[Run, ...]:
+) -> tuple[ByHand, ...]:
     """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in machine_step(label + _job(rendering, renderings), node.label, f"systemctl start {unit}", notes)
+        for step in ByHand.on(
+            node.label, label + _job(rendering, renderings), f"systemctl start {unit}", Why.NOT_GRANTED, notes
+        )
     )
 
 
-def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[Run, ...]:
+def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[ByHand, ...]:
     return tuple(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in journal_step(
-            "See why" + _job(rendering, renderings),
+        for step in ByHand.journal(
             node.label,
+            "See why" + _job(rendering, renderings),
             unit,
             ("Look for the line with event=secrets.render.failed. The lines above it say what was refused.",),
         )
@@ -264,7 +264,7 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Last refreshed", when(rendering.confirmed_at, estate.now)),
                     )
                 ),
-                steps=_journal(node, failed) + _run_again(node, failed, "Run it again"),
+                fixes=_journal(node, failed) + _run_again(node, failed, "Run it again"),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
@@ -326,14 +326,15 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                     ("Due", f"Every {duration(RENDER_EVERY)}, in full every {duration(FULL_READ_EVERY)}"),
                 ),
-                steps=tuple(
+                fixes=tuple(
                     step
                     for rendering in stale
                     if (unit := RENDERER_UNITS.get(rendering.renderer))
-                    for step in machine_step(
-                        "See when it last ran and is next due" + _job(rendering, stale),
+                    for step in ByHand.on(
                         node.label,
+                        "See when it last ran and is next due" + _job(rendering, stale),
                         f"systemctl list-timers {unit.removesuffix('.service')}.timer",
+                        Why.NOT_GRANTED,
                     )
                 )
                 + _journal(node, stale)
@@ -377,7 +378,7 @@ def _sync_stalled(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Connect last read", when(rendering.sync_read_at, estate.now)),
                     )
                 ),
-                steps=(
+                fixes=(
                     Do(
                         f"Restart 1Password Connect on {node.label} and read its sync container's log",
                         notes=("TOKEN_NEEDED means it has not been given its credentials file.",),
@@ -425,7 +426,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                         ),
                     )
                 ),
-                steps=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
+                fixes=_run_again(node, unread, "Run it once", ("If this stays, deploy HQ.",)),
                 no_help_reason=cannot_run_commands(node.label),
             )
         )
