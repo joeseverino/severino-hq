@@ -361,7 +361,9 @@ def list_resource(
         raise unlisted(spec)
     read = spec.listing
     try:
-        parsed = read.query.model_validate(query or {}, strict=strict)
+        # Read as JSON, the form every caller sends it in, as a record's
+        # identifier is: a strict day is its text there.
+        parsed = read.query.model_validate_json(to_json(query or {}), strict=strict)
     except ValidationError as exc:
         raise InvalidResourceInput(name, exc.errors()) from exc
     asked = parsed.model_dump()

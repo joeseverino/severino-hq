@@ -94,12 +94,20 @@ def query_schema(kind):
     return listing(kind)["query_schema"]
 
 
-def described_value(schema):
-    """A value the field's own schema offers: its default, or else its first choice."""
+# A value of each format a filter's schema names, as JSON carries it.
+FORMATTED = {"date": "2026-01-02", "date-time": "2026-01-02T03:04:05Z"}
 
-    if "default" in schema:
+
+def described_value(schema):
+    """A value the field's own schema offers: its default where it holds one,
+    else its first choice, else one of the format it names."""
+
+    if schema.get("default") is not None:
         return schema["default"]
-    return (enum_of(schema) or [None])[0]
+    if choices := enum_of(schema):
+        return choices[0]
+    formats = [option.get("format") for option in (schema, *schema.get("anyOf", ()))]
+    return next((FORMATTED[each] for each in formats if each in FORMATTED), None)
 
 
 class FiltersInTheSchemaTests(TestCase):
