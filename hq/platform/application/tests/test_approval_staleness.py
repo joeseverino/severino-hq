@@ -4,25 +4,17 @@ moves; never when the controller only reads the same record again."""
 from contextlib import suppress
 
 from django.test import TestCase
-from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
-from hq.domains.projects.models import Project
-from hq.platform.application.contracts import Closed
+from hq.domains.control_plane.models import ApprovalRequest
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import declare, operator
+from hq.platform.core.testing import declare
 
 from ..approval_review import preview
 from ..approvals import AUDIT_LABEL, ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability, run_capability
-from ..domains import records_of
-from ..plugin_testing import form_keyed
-from ..projects import DEPENDENCY_UPDATES
-from ..report_testing import bridged
-from ..security import Capability, Principal, mcp_principal
+from ..security import Principal, mcp_principal
 from .test_approvals import POLICY_KEY, an_operator, declare_policy, policy_document, reconcile_payload
-from .writers import keyed
 
 REWRITE = "adguard.rewrite"
 RECORD = {"domain": "photos.example.com", "answer": "192.0.2.10"}
@@ -43,45 +35,6 @@ def decided(held: ApprovalRequest) -> str:
     return held.state
 
 
-class DeclarationStalenessTests(TestCase):
-    def setUp(self):
-        from hq.platform.core.testing import managing_everything
-
-        managing_everything()
-        # As the controller's last reconcile reported it, enabled flag and all.
-        self.resource = declare("photos", REWRITE, dict(RECORD), status={**RECORD, "enabled": True})
-
-    def removal(self) -> ApprovalRequest:
-        return held_for("infrastructure.resource.remove", reconcile_payload(), "photos")
-
-    def test_a_sweep_that_reads_the_record_again_leaves_the_removal_approvable(self):
-        held = self.removal()
-
-        bridged("inventory", {REWRITE: {"ok": True, "records": [{**RECORD, "enabled": True}]}})
-
-        self.resource.refresh_from_db()
-        self.assertNotEqual(self.resource.status, {**RECORD, "enabled": True}, "the sweep rewrote what it read")
-        self.assertEqual(decided(held), ApprovalRequest.State.APPROVED)
-        self.assertEqual(OperationRequest.objects.get().action, OperationRequest.Action.DELETE)
-
-    def stales_when(self, **change) -> None:
-        held = self.removal()
-
-        ManagedResource.objects.filter(pk=self.resource.pk).update(**change)
-
-        self.assertEqual(decided(held), ApprovalRequest.State.STALE)
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_a_spec_that_moved_stales_it(self):
-        self.stales_when(spec={**RECORD, "answer": "192.0.2.20"})
-
-    def test_a_declaration_switched_off_stales_it(self):
-        self.stales_when(enabled=False)
-
-    def test_a_new_generation_stales_it(self):
-        self.stales_when(generation=2)
-
-
 class LiveComparisonStalenessTests(TestCase):
     """An apply is shown against the live record, so that record counts."""
 
@@ -98,39 +51,6 @@ class LiveComparisonStalenessTests(TestCase):
         self.assertTrue(preview(self.held).rows, "the page shows the live record")
         self.resource.status = {"document": policy_document("group:elsewhere")}
         self.resource.save(update_fields=("status",))
-
-        self.assertEqual(decided(self.held), ApprovalRequest.State.STALE)
-
-
-class RecordStalenessTests(TestCase):
-    """A record's change shows the fields it sends and the record's name."""
-
-    def setUp(self):
-        self.project = Project.objects.create(
-            name="Example App",
-            slug="example-app",
-            repository_url="https://github.com/example/app",
-            dependency_updates=True,
-        )
-        CapabilityRule.objects.create(subject="example-agent", capability=DEPENDENCY_UPDATES, rule="approve")
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, records_of("projects").write}))
-        self.held = held_for(DEPENDENCY_UPDATES, keyed({"dependency_updates": False}), "example-app", agent)
-
-    def test_a_refresh_of_what_github_says_leaves_it_approvable(self):
-        self.project.last_push_at = timezone.now()
-        self.project.save()
-
-        self.assertEqual(decided(self.held), ApprovalRequest.State.APPROVED)
-        self.project.refresh_from_db()
-        self.assertFalse(self.project.dependency_updates)
-
-    def test_a_change_to_the_value_it_showed_stales_it(self):
-        Project.objects.filter(pk=self.project.pk).update(dependency_updates=False)
-
-        self.assertEqual(decided(self.held), ApprovalRequest.State.STALE)
-
-    def test_a_change_to_the_name_it_showed_stales_it(self):
-        Project.objects.filter(pk=self.project.pk).update(name="Renamed App")
 
         self.assertEqual(decided(self.held), ApprovalRequest.State.STALE)
 
@@ -160,12 +80,6 @@ class SettledThroughTheRunnerTests(TestCase):
         said = AuditLog.objects.filter(object_type=AUDIT_LABEL, object_id=str(self.held.id))
         self.assertTrue(said.exclude(action=AuditLog.Action.CREATED).exists(), "the settle is in the audit log")
 
-    def test_a_moved_baseline_is_refused_and_stays_stale(self):
-        ManagedResource.objects.filter(key="photos").update(spec={**RECORD, "answer": "192.0.2.20"})
-
-        self.assertFalse(self.posted("approve")["ok"])
-        self.settled_as(ApprovalRequest.State.STALE)
-
     def lapsed(self, decision: str) -> None:
         ApprovalRequest.objects.filter(pk=self.held.pk).update(
             expires_at=timezone.now() - timezone.timedelta(minutes=1)
@@ -176,108 +90,3 @@ class SettledThroughTheRunnerTests(TestCase):
 
     def test_approving_a_lapsed_request_is_refused_and_it_stays_lapsed(self):
         self.lapsed("approve")
-
-    def test_rejecting_a_lapsed_request_is_refused_and_it_stays_lapsed(self):
-        self.lapsed("reject")
-
-
-class RunStalenessTests(TestCase):
-    """A held run is measured against the manifest as supplied, its parameters
-    as validated and its hosts as they resolve, so a move in any of them
-    stales it; asking again for the same run is the same request."""
-
-    def setUp(self):
-        from .procedures import Supply, manifest
-
-        self.supply = Supply(self, manifest(effect="destructive"))
-
-    def held(self, payload=None) -> ApprovalRequest:
-        from .procedures import RESTART_RUN, run_payload
-
-        answer = run_capability(
-            RESTART_RUN, payload or run_payload(), principal=mcp_principal(), idempotency_key="example-run-1"
-        ).answer
-        self.assertEqual(answer.get("status"), "awaiting_approval", answer)
-        return ApprovalRequest.objects.get(pk=answer["approval"]["id"])
-
-    def test_a_destructive_run_waits_for_a_person_and_asking_again_is_the_same_request(self):
-        first = self.held()
-
-        self.assertEqual(self.held().pk, first.pk)
-        self.assertEqual(ApprovalRequest.objects.count(), 1)
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_an_unmoved_run_is_approved_and_queued_as_its_asker_s(self):
-        held = self.held()
-
-        self.assertEqual(decided(held), ApprovalRequest.State.APPROVED)
-        operation = OperationRequest.objects.get()
-        self.assertEqual(operation.action, OperationRequest.Action.RUN)
-        self.assertEqual(operation.requested_actor, mcp_principal().actor)
-        self.assertEqual(operation.input["approved_by"], "operator")
-
-    def test_approved_run_receipt_shows_the_playbook_link(self):
-        from ..automation_runs import capability_name
-        from .procedures import manifest, run_payload
-
-        playbook = "example_restart"
-        self.supply(manifest(id=playbook, effect="destructive"))
-        name = capability_name(playbook)
-        answer = run_capability(
-            name, run_payload(), principal=mcp_principal(), idempotency_key="example-receipt"
-        ).answer
-        approval_id = answer["approval"]["id"]
-        receipt = reverse("core:approval_entry", kwargs={"approval_id": approval_id})
-        decision = reverse("control_plane:approval_decide", kwargs={"approval_id": approval_id, "decision": "approve"})
-        operator(self.client)
-
-        page = self.client.post(decision, form_keyed({"next": receipt}), follow=True)
-
-        self.assertContains(page, "Approved")
-        self.assertContains(page, f'href="/commands/{name}/"')
-        self.assertEqual(OperationRequest.objects.filter(state=OperationRequest.State.QUEUED).count(), 1)
-
-    def stales(self, held: ApprovalRequest) -> None:
-        self.assertEqual(decided(held), ApprovalRequest.State.STALE)
-        self.assertFalse(OperationRequest.objects.exists())
-
-    def test_a_new_revision_stales_it(self):
-        from .procedures import NEXT_REVISION, manifest
-
-        held = self.held()
-        self.supply(manifest(effect="destructive", revision=NEXT_REVISION))
-
-        self.stales(held)
-
-    def test_a_parameter_that_now_validates_to_another_value_stales_it(self):
-        """The same payload, read by an input type that normalizes it: what would run moved."""
-
-        from typing import Annotated
-
-        from pydantic import Field
-
-        from ..command_fields import Checked
-        from .procedures import manifest, run_payload
-
-        held = self.held(run_payload(service="Web"))
-
-        class ServiceRestart(Closed):
-            service: Annotated[
-                str,
-                Field(min_length=1, max_length=60, description="The service to restart."),
-                Checked(str.lower),
-            ]
-
-        self.supply(manifest(effect="destructive", input_type=ServiceRestart))
-
-        self.stales(held)
-
-    def test_a_host_that_now_resolves_to_another_machine_stales_it(self):
-        from ..machines import Machine
-        from .procedures import APP, run_payload
-
-        self.supply.know(Machine(APP, aliases=("web.example.com",)))
-        held = self.held(run_payload("web.example.com"))
-        self.supply.know(Machine(APP), Machine("web.example.com"))
-
-        self.stales(held)

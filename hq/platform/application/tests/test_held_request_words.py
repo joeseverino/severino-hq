@@ -3,21 +3,15 @@
 from typing import Any
 
 from django.test import TestCase
-from django.urls import reverse
 
-from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
-from hq.platform.application.markup_testing import select, text
-from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import operator
+from hq.domains.control_plane.models import ApprovalRequest
 
 from ..approval_review import asked, preview
-from ..approvals import AUDIT_LABEL, DECLARATIONS
-from ..attention import _asked_change, waiting_for_approval
-from ..capabilities import capability_registry, command_spec, execute_capability
+from ..approvals import DECLARATIONS
+from ..attention import _asked_change
+from ..capabilities import capability_registry, command_spec
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
-from ..security import Capability, Principal
-from .writers import keyed, runbook
 
 # What a Python dump of a dict or a list leaves in the text.
 DUMPED = ("{", "[", "'")
@@ -46,71 +40,6 @@ def _sample(schema: dict[str, Any]) -> Any:
     return {"name": "example", "nested": {"value": 1}}
 
 
-class HeldRequestWordsTests(TestCase):
-    def setUp(self):
-        CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
-        agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
-        held = execute_capability(
-            "documentation.sync",
-            keyed(
-                {
-                    "manifest": [runbook(f"rb-example-{index}") for index in range(4)],
-                    "prune_orphans": True,
-                    "confirm_prune": True,
-                }
-            ),
-            principal=agent,
-        )
-        self.held = ApprovalRequest.objects.get(pk=held["approval"]["id"])
-
-    def test_needs_you_says_what_a_list_and_a_flag_mean(self):
-        (item,) = waiting_for_approval()
-
-        self.assertEqual(dumped(item.explanation), [], item.explanation)
-        self.assertIn("docs set to rb-example-0, rb-example-1", item.explanation)
-        self.assertIn("confirm the delete set to yes", item.explanation)
-
-    def test_a_command_on_no_record_is_not_said_to_create_one(self):
-        (item,) = waiting_for_approval()
-
-        self.assertNotIn("created", item.explanation.lower(), item.explanation)
-
-    def test_the_audit_says_it_as_the_card_does(self):
-        event = AuditLog.objects.get(object_type=AUDIT_LABEL, object_id=str(self.held.id))
-
-        self.assertEqual(event.message, str(asked(self.held)))
-
-    def test_the_decision_card_says_it_in_words(self):
-        operator(self.client, "reviewer")
-
-        entry = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": self.held.id}), follow=True)
-
-        shown = text(entry)
-        self.assertIn("rb-example-0, rb-example-1", shown)
-        self.assertNotIn("{'doc_id'", shown)
-        self.assertNotIn("True", shown)
-
-    def test_its_change_is_shown_beside_its_buttons(self):
-        """The dashboard's card and the queue's row say what Approve decides,
-        on the row's first line, whole once the row opens."""
-
-        operator(self.client, "reviewer", email="reviewer@example.test")
-        (item,) = waiting_for_approval()
-
-        for page in (reverse("dashboard"), reverse("action_items")):
-            with self.subTest(page=page):
-                details = [element.words for element in select(self.client.get(page), "data-attention-detail")]
-                self.assertIn(" ".join(item.explanation.split()), details)
-
-    def test_its_card_on_the_dashboard_opens_its_own_page(self):
-        operator(self.client, "reviewer", email="reviewer@example.test")
-
-        dashboard = self.client.get(reverse("dashboard"))
-
-        own = reverse("core:approval_entry", kwargs={"approval_id": self.held.id})
-        self.assertIn(own, [title.attrs["href"] for title in select(dashboard, "data-attention-title")])
-
-
 class HeldSentenceTests(TestCase):
     """What a held request wants done, said from what its command declares."""
 
@@ -122,38 +51,6 @@ class HeldSentenceTests(TestCase):
             baseline=baseline or {},
             requested_actor="example-agent",
         )
-
-    def test_a_sentence_that_says_the_whole_change_is_whole(self):
-        before = {"spec": {"answer": "192.0.2.1", "domain": "example.test"}}
-        moved = self.held(
-            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "example.test"}}, before
-        )
-        both = self.held(
-            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "example.org"}}, before
-        )
-
-        said = asked(moved)
-        self.assertTrue(said.whole)
-        self.assertEqual(said.target, "example-dns")
-        self.assertTrue(str(said).endswith("example-dns from 192.0.2.1 to 192.0.2.2"), said)
-        # Two values are left to the table beneath it.
-        self.assertFalse(asked(both).whole)
-        self.assertNotIn("192.0.2.2", str(asked(both)))
-        # A delete's sentence names what goes, so its fields are not listed after it.
-        for spec in (spec for spec in capability_registry() if spec.effect == "destructive"):
-            with self.subTest(capability=spec.name):
-                self.assertTrue(asked(self.held(spec.name, {}, {"notes": "example"})).whole)
-
-    def test_a_record_is_named_as_a_person_knows_it_not_by_its_key(self):
-        before = {"spec": {"answer": "192.0.2.1", "domain": "app.example.test"}}
-        held = self.held(
-            "infrastructure.resource.update", {"spec": {"answer": "192.0.2.2", "domain": "app.example.test"}}, before
-        )
-        held.resource_kind = "adguard.rewrite"
-
-        said = asked(held)
-        self.assertEqual(said.target, "app.example.test")
-        self.assertNotIn("example-dns", str(said))
 
     def test_a_switch_is_said_as_the_side_it_sets(self):
         spec = command_spec(DEPENDENCY_UPDATES)

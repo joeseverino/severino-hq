@@ -21,7 +21,6 @@ from ..security import mcp_principal
 from .test_approvals import (
     GATED_KIND,
     POLICY_KEY,
-    UNGATED_KIND,
     an_operator,
     declare_policy,
     policy_document,
@@ -29,6 +28,8 @@ from .test_approvals import (
 )
 from .writers import keyed
 
+# A kind whose changes apply without a person's approval.
+UNGATED_KIND = "adguard.rewrite"
 CONTROLLER = "controller-example"
 
 

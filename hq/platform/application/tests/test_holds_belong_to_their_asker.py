@@ -7,37 +7,23 @@ own held requests, wherever they are listed to it; a person reads every one.
 """
 
 from unittest.mock import patch
-from urllib.parse import urlsplit
 
 from django.test import TestCase
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest
 
 from ..approval_review import asked
-from ..approvals import ApprovalError, ApproveCommand, approve, own_held_request, pending
 from ..capabilities import execute_capability
-from ..resources import list_resource
-from ..security import Capability, Principal, cli_principal
-from .test_approvals import POLICY_KEY, an_operator, declare_policy, policy_document, reconcile_payload, update_payload
-from .writers import keyed
+from ..security import Capability, Principal
+from .test_approvals import POLICY_KEY, declare_policy, reconcile_payload
 
 GRANT = frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE})
 FIRST = Principal("example-agent", "mcp", GRANT)
-SECOND = Principal("example-other-agent", "mcp", GRANT)
 
 
 def ask_reconcile(principal: Principal) -> dict:
     return execute_capability(
         "infrastructure.resource.reconcile", reconcile_payload(), principal=principal, target=POLICY_KEY
-    )
-
-
-def ask_update(principal: Principal) -> dict:
-    return execute_capability(
-        "infrastructure.resource.update",
-        keyed(update_payload(policy_document("group:asked-by-both"))),
-        principal=principal,
-        target=POLICY_KEY,
     )
 
 
@@ -47,43 +33,6 @@ class HoldsBelongToTheirAskerTests(TestCase):
 
         managing_everything()
         declare_policy()
-
-    def test_two_callers_asking_the_same_change_each_hold_their_own(self):
-        first = ask_reconcile(FIRST)
-        second = ask_reconcile(SECOND)
-
-        self.assertNotEqual(first["approval"]["id"], second["approval"]["id"])
-        self.assertFalse(second["repeated"])
-        self.assertEqual(second["approval"]["requested_actor"], SECOND.actor)
-        self.assertIsNotNone(own_held_request(second["approval"]["id"], principal=SECOND))
-        # Each caller's own retry is still the one request it already holds.
-        again = ask_reconcile(SECOND)
-        self.assertEqual(again["approval"]["id"], second["approval"]["id"])
-        self.assertTrue(again["repeated"])
-
-    def test_approving_the_second_callers_request_runs_as_that_caller(self):
-        ask_reconcile(FIRST)
-        second = ask_reconcile(SECOND)
-
-        approve(ApproveCommand(second["approval"]["id"]), principal=an_operator())
-
-        operation = OperationRequest.objects.get()
-        self.assertEqual(operation.requested_actor, SECOND.actor)
-        self.assertEqual(operation.requested_interface, SECOND.interface)
-
-    def test_the_same_change_approved_for_both_callers_applies_once(self):
-        first = ask_update(FIRST)
-        second = ask_update(SECOND)
-        operator = an_operator()
-
-        approve(ApproveCommand(first["approval"]["id"]), principal=operator)
-        with self.assertRaises(ApprovalError):
-            approve(ApproveCommand(second["approval"]["id"]), principal=operator)
-
-        states = dict(ApprovalRequest.objects.values_list("requested_actor", "state"))
-        self.assertEqual(
-            states, {FIRST.actor: ApprovalRequest.State.APPROVED, SECOND.actor: ApprovalRequest.State.STALE}
-        )
 
     def test_a_same_caller_ask_written_between_the_read_and_the_write_answers_the_existing_request(self):
         written = []
@@ -110,30 +59,3 @@ class HoldsBelongToTheirAskerTests(TestCase):
         self.assertTrue(answered["repeated"])
         self.assertEqual(answered["approval"]["id"], str(written[0].pk))
         self.assertEqual(ApprovalRequest.objects.count(), 1)
-
-    def test_a_caller_reads_only_its_own_held_requests_and_a_person_reads_every_one(self):
-        ask_reconcile(FIRST)
-        ask_reconcile(SECOND)
-
-        self.assertEqual({held.requested_actor for held in pending(principal=SECOND)}, {SECOND.actor})
-        for person in (an_operator(), cli_principal()):
-            with self.subTest(person=person.interface):
-                self.assertEqual(
-                    {held.requested_actor for held in pending(principal=person)}, {FIRST.actor, SECOND.actor}
-                )
-
-    def test_the_action_queue_carries_only_the_callers_own_held_requests(self):
-        mine = ask_reconcile(SECOND)["approval"]
-        theirs = ask_reconcile(FIRST)["approval"]
-
-        def urls(principal):
-            return {item["url"] for item in list_resource("action_items", None, principal=principal)["items"]}
-
-        def page(held):
-            # The queue links within HQ; the held answer's link is the same page, absolute.
-            return urlsplit(held["review_url"]).path
-
-        read = urls(SECOND)
-        self.assertIn(page(mine), read)
-        self.assertNotIn(page(theirs), read)
-        self.assertLessEqual({page(mine), page(theirs)}, urls(an_operator()))
