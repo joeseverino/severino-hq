@@ -36,27 +36,23 @@ func release(t *testing.T) (*Runner, *[]string) {
 }
 
 func TestEachShippedVerbActsOnAUnitTheReleaseShips(t *testing.T) {
-	for _, line := range []string{"start example-job.timer", "restart example-job.service", "reset-failed example-job.service", "enable example-job.timer"} {
+	// A start or restart is queued without waiting.
+	for line, ran := range map[string]string{
+		"start example-job.timer":          "systemctl start --no-block -- example-job.timer",
+		"restart example-job.service":      "systemctl restart --no-block -- example-job.service",
+		"reset-failed example-job.service": "systemctl reset-failed -- example-job.service",
+		"enable example-job.timer":         "systemctl enable -- example-job.timer",
+	} {
 		runner, calls := release(t)
 		if result := runner.Run(context.Background(), line); result.Outcome != Done {
 			t.Fatalf("%q: %+v", line, result)
 		}
-		verb, name, _ := strings.Cut(line, " ")
-		acted := (*calls)[len(*calls)-1]
-		if !strings.HasPrefix(acted, "systemctl "+verb+" ") || !strings.HasSuffix(acted, " -- "+name) {
+		if (*calls)[len(*calls)-1] != ran {
 			t.Errorf("%q ran %v", line, *calls)
 		}
 		if slices.ContainsFunc(*calls, func(call string) bool { return strings.HasPrefix(call, "docker") }) {
 			t.Errorf("%q read docker: %v", line, *calls)
 		}
-	}
-}
-
-func TestAStartIsQueuedWithoutWaiting(t *testing.T) {
-	runner, calls := release(t)
-	runner.Run(context.Background(), "start example-job.service")
-	if (*calls)[len(*calls)-1] != "systemctl start --no-block -- example-job.service" {
-		t.Fatalf("ran %v", *calls)
 	}
 }
 
