@@ -43,6 +43,7 @@ lazy from .app_update_flow import update_flow
 lazy from .app_update_open import OPEN, open_standing, open_target
 lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
+lazy from .dependency_updates import last_run
 lazy from .finding_model import Fact
 lazy from .finding_steps import Does
 lazy from .labels import lower_first
@@ -52,6 +53,7 @@ lazy from .sequences import Step
 lazy from .work_runs import standing_of as run_standing
 
 if TYPE_CHECKING:
+    from .dependency_updates import Branch
     from .work_runs import WorkRun
 
 # What an update's new pins bring of their own, as every page labels it.
@@ -212,9 +214,6 @@ class Managed:
 
     repository: str
     app: str
-    # Its Dependency Dashboard, where Renovate lists an update it has not
-    # opened yet, or "" where it keeps none.
-    dashboard: str
     url: str
 
 
@@ -231,7 +230,7 @@ def _managed() -> dict[str, Managed]:
     found: dict[str, Managed] = {}
     for name, repository in sorted(repositories().items()):
         for path in repository.compose:
-            found.setdefault(_tail(path), Managed(name, _app(path), str(repository.dashboard), str(repository.url)))
+            found.setdefault(_tail(path), Managed(name, _app(path), str(repository.url)))
     return found
 
 
@@ -371,7 +370,7 @@ class UpdateKind(StrEnum):
     OPEN = "open"
     # Its repository's default branch pins it, and the container runs the pin before.
     MERGED = "merged"
-    # Renovate holds its branch on the Dependency Dashboard, with no pull request.
+    # Renovate holds its branch, with no pull request, as its last run's report says.
     HELD = "held"
     # Its repository holds it, and Renovate has opened nothing for the release.
     UNOPENED = "unopened"
@@ -413,7 +412,7 @@ class MergeStanding:
     # ended, the step it stopped on, what that said and each app the run did
     # not release.
     lines: tuple[str, ...] = ()
-    # The run or reconcile it stands on; None for Renovate's run, which is a
+    # The run or merge it stands on; None for Renovate's run, which is a
     # read asked of the controller rather than an operation.
     operation: OperationRequest | None = None
     # That operation as every list of work shows it, whose page and standing
@@ -530,19 +529,11 @@ class UpdateState:
 
 
 UNOPENED = "Renovate has not seen the release yet."
-# What Renovate waits for, by the marker of the box it holds the branch under
-# (its ``dependency-dashboard.ts``).
-UNTIL = {
-    "unpend": "until its checks pass",
-    "approve": "until it is approved",
-    "unschedule": "until its schedule allows",
-    "unlimit": "while it is at its pull request limit",
-}
 
 
 def update_state(item: Container) -> UpdateState:
     """Where ``item``'s update stands: decided here alone, from the open pull
-    request, its repository's default branch, Renovate's dashboard and the
+    request, its repository's default branch, Renovate's last run and the
     playbook that applies it, so no page and no finding decide it twice."""
 
     plan = plan_for(item)
@@ -580,15 +571,14 @@ def update_state(item: Container) -> UpdateState:
             managed=managed,
         )
     action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
-    held = held_branch(repository, managed.app)
-    standing = open_standing(managed.repository, held)
+    held = app_branch(managed.repository, managed.app)
+    standing = open_standing(managed.repository, managed.app)
     # While an Open PR is under way it is held back, as an approval is (``_decided``).
     offered = {"action": action} if standing is None or not standing.taken else {"reason": standing.words}
-    if held:
-        until = UNTIL.get(str(held.get("marker", "")), "")
-        words = ended(" ".join(("Renovate is holding its branch", until)).strip())
-        said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        answer = standing.answer if standing else Answer("Held by Renovate", (capfirst(until),))
+    if held is not None and held.held:
+        words = ended(f"Renovate is holding its branch {held.until}")
+        said = ended(f"Asks Renovate to open {held.branch}")
+        answer = standing.answer if standing else Answer("Held by Renovate", (capfirst(held.until),))
         return UpdateState(
             UpdateKind.HELD, latest, words, answer, said=said, standing=standing, managed=managed, **offered
         )
@@ -672,10 +662,12 @@ def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:
     return None
 
 
-def held_branch(repository: Any, app: str) -> Mapping[str, Any] | None:
-    """The branch Renovate holds on the Dependency Dashboard for ``app``, with no pull request."""
+def app_branch(repository: str, app: str) -> Branch | None:
+    """The branch of ``app``'s update the last run of ``repository`` reported:
+    the first whose upgrades change a file of the app's directory."""
 
-    return next((each for each in repository.held_branches or () if app in (each.get("apps") or ())), None)
+    run = last_run(repository)
+    return next((each for each in run.branches if any(_app(path) == app for path in each.files)), None) if run else None
 
 
 def _unmatched(item: Container) -> tuple[str, str] | None:

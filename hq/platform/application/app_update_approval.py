@@ -35,7 +35,6 @@ from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
 from .work_runs import StatedKind
-lazy from .app_update_open import ticked
 lazy from .app_updates import AppUpdate, app_updates, merged_of
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
@@ -382,15 +381,14 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
 
 
 def succeeded(operation: OperationRequest) -> None:
-    """Queue the step ``operation`` carries now that it succeeded (a ticked
-    Dashboard box's run, a preview's merge, a merge's apply), and say on it
-    what was queued or why nothing was."""
+    """Queue the step ``operation`` carries now that it succeeded (a
+    preview's merge, a merge's apply), and say on it what was queued or why
+    nothing was."""
 
     then = (operation.input or {}).get(THEN)
     step = {
         OperationRequest.Action.RUN: _merge,
         OperationRequest.Action.MERGE: _follow,
-        OperationRequest.Action.RECONCILE: ticked,
     }.get(operation.action)
     if not isinstance(then, dict) or step is None:
         return
