@@ -5,13 +5,13 @@ record sent as a name."""
 
 import difflib
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, Final
 
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 
 from .integration_specs import ResourceSpec
-from .record_errors import HostRefusal, RecordNotFound, Sentence
+from .record_errors import HostRefusal, RecordNotFound, worded
 from .refusal_codes import Code
 from .refusal_status import next_call
 
@@ -42,13 +42,13 @@ class UnsupportedResourceOperation(HostRefusal, ResourceError):
 
 
 # What a missed identifier adds to its refusal's sentence.
-FOUND_BY = (
+FOUND_BY: Final = (
     " details.identifier names the field this resource's records are addressed by, and details.next "
     "the listing that finds a record's value."
 )
 # And what a refusal adds where it names the nearest.
-NEAREST_RECORDS = " details.closest reads each record whose identifier is nearest the one asked for."
-NEAREST_RESOURCES = " details.closest describes each resource whose name is nearest the one asked for."
+NEAREST_RECORDS: Final = " details.closest reads each record whose identifier is nearest the one asked for."
+NEAREST_RESOURCES: Final = " details.closest describes each resource whose name is nearest the one asked for."
 
 # How many of the nearest a refusal offers, each as the call that reads it.
 CLOSEST = 3
@@ -86,7 +86,7 @@ def missed(refusal: RecordNotFound, spec: ResourceSpec, identifier: object, held
         refusal.details["closest"] = [
             next_call("get_resource", name=spec.name, identifier=values[value]) for value in nearest
         ]
-        refusal.reason += NEAREST_RECORDS
+        refusal.reason = worded(refusal.reason + NEAREST_RECORDS)
     return refusal
 
 
@@ -118,11 +118,11 @@ def unknown(name: str, names: Iterable[str]) -> UnknownResource:
             "and details.next reads it with its records.",
             details={"next": next_call("get_resource", name=READINGS, identifier=name)},
         )
-    reason: Sentence = "HQ serves no resource by that name; describe_resources names each one."
+    reason = worded("HQ serves no resource by that name; describe_resources names each one.")
     details: dict[str, Any] = {"next": next_call("describe_resources")}
     if nearest := closest(name, names):
         details["closest"] = [next_call("describe_resources", name=value) for value in nearest]
-        reason += NEAREST_RESOURCES
+        reason = worded(reason + NEAREST_RESOURCES)
     return UnknownResource(reason, details=details)
 
 

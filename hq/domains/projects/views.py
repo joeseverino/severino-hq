@@ -31,7 +31,7 @@ from hq.platform.application.projects import (
     repository_key,
 )
 from hq.platform.application.quoted import Quoted
-from hq.platform.application.record_errors import Sentence
+from hq.platform.application.record_errors import Sentence, worded
 from hq.platform.application.references import Kind
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Cell, DataTable, Row, StatusMark, TableColumn
@@ -439,7 +439,7 @@ class WatchingRefreshView(AskMixin, View):
 
     @override
     def cannot(self) -> Sentence:
-        return "" if self.login else "Your sign-in names no GitHub account."
+        return worded("" if self.login else "Your sign-in names no GitHub account.")
 
     @override
     def payload(self):

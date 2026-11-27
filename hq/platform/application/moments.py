@@ -6,7 +6,7 @@ raises its own.
 """
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 lazy from django.utils import dateformat, timezone
 lazy from django.utils.timesince import timesince
@@ -15,6 +15,9 @@ from .figured import Figure
 lazy from .derivations import reached, since, this_year
 lazy from .expiry import days_until
 lazy from .ui import counted
+
+if TYPE_CHECKING:
+    from .record_errors import Sentence
 
 # How a stamp without an offset is read: "utc" is what every provider that
 # omits one means; "keep" leaves it naive, for a caller comparing it only with
@@ -100,7 +103,7 @@ def _written(value, layout: str) -> str:
     return dateformat.format(value, layout)
 
 
-def when_day(value: date) -> str:
+def when_day(value: date) -> Sentence:
     """A date as HQ writes one: "Oct 3", and "Oct 3, 2025" outside this year.
 
     The year is said only when it is not the one being lived in, the same
@@ -109,7 +112,8 @@ def when_day(value: date) -> str:
 
     if isinstance(value, datetime):
         value = _local(value)
-    return _written(value, DAY_FORMAT if value.year == this_year() else DAY_YEAR_FORMAT)
+    # A date's words are HQ's, whatever the date.
+    return cast("Sentence", _written(value, DAY_FORMAT if value.year == this_year() else DAY_YEAR_FORMAT))
 
 
 # How near now a moment is said as how far it lies ("3 minutes ago", "in 3
@@ -246,13 +250,13 @@ def when_range(start: date, end: date) -> str:
     return f"{first} – {when_day(end)}"
 
 
-def duration(delta: timedelta, *, short: bool = False, depth: int = 2) -> str:
+def duration(delta: timedelta, *, short: bool = False, depth: int = 2) -> Sentence:
     """A length of time in the phrasing ``when`` gives an age, without the "ago", in up to ``depth`` units, one as
     Docker says an uptime; ``short``, a run time as ``ask.js``'s ``elapsed`` ticks one: "45 s", "4 min 33 s",
     "1 h 2 min", never a zero part after a larger one."""
 
     delta = max(delta, timedelta(0))
-    return Figure(_lasted(delta, short=short, depth=depth), delta.total_seconds())
+    return cast("Sentence", Figure(_lasted(delta, short=short, depth=depth), delta.total_seconds()))
 
 
 def _lasted(delta: timedelta, *, short: bool, depth: int) -> str:

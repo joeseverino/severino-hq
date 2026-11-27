@@ -22,7 +22,9 @@ REWRITE = {"domain": "app.example.com", "answer": "192.0.2.10"}
 def claim_and_report() -> None:
     """The controller claims the queued request and reports it done, through the bridge."""
 
-    operation = bridge_client.call("claim", controller_id="example-controller", capability=["adguard.rewrite:reconcile", "adguard.rewrite:delete"])
+    operation = bridge_client.call(
+        "claim", controller_id="example-controller", capability=["adguard.rewrite:reconcile", "adguard.rewrite:delete"]
+    )
     operation = operation["operation"]
     generation = OperationRequest.objects.get(pk=operation["id"]).input["generation"]
     bridge_client.call(

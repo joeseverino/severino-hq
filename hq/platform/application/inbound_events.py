@@ -7,7 +7,7 @@ finding reads here without being able to say an event happened.
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from django.utils.text import capfirst
 
@@ -23,6 +23,7 @@ from .derivations import passed
 from .entity_links import provider_label
 from .moments import moment
 from .projection import read_once
+from .record_errors import worded
 lazy from .cadence import WorkerStanding, WorkerState
 lazy from .connection_setup import docs_url
 lazy from .credential_sight import standing
@@ -33,8 +34,8 @@ if TYPE_CHECKING:
 
 # What each channel's reader is called in a sentence about it, as its
 # channel's label (``InboundSource``) says it at the head of one.
-LISTENER_NAMED = "event listener"
-HOST_NAMED = "host event reader"
+LISTENER_NAMED: Final = "event listener"
+HOST_NAMED: Final = "host event reader"
 
 # How often each channel's reader (the Worker's listener, the Docker reader)
 # says it is listening when nothing happens, as the contract's
@@ -69,7 +70,7 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
     """When ``source`` last reported, and whether that is too long ago. A
     channel never heard is never silent (``unheard``)."""
 
-    named = LISTENER_NAMED if source == InboundSource.WORKER else HOST_NAMED
+    named = worded(LISTENER_NAMED if source == InboundSource.WORKER else HOST_NAMED)
     seen_at = readings.heard(channel(source))
     if seen_at is None:
         return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard(source))

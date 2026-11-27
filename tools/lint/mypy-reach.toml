@@ -8,7 +8,7 @@ files = ["hq", "hq_sdk"]
 exclude = "(^|/)(tests/|tests\\.py|test_[^/]*\\.py|migrations/)"
 follow_imports = "silent"
 # The seams pass's plugin; a path here is read from this file's directory.
-plugins = ["mypy_django.py"]
+plugins = ["mypy_django.py", "mypy_sentence.py"]
 # Its own cache: per-module options differ from the seams pass, and a shared
 # cache would be rebuilt by each pass in turn.
 cache_dir = ".mypy_cache/reach"
@@ -44,3 +44,24 @@ disable_error_code = [
 
 [tool.django-stubs]
 django_settings_module = "hq.config.settings_typecheck"
+
+# The modules that name Sentence: mypy holds each value one returns or binds to
+# be a sentence (mypy_sentence.py, which refuses a module left off this list).
+[[tool.mypy.overrides]]
+module = [
+    "hq.domains.control_plane.provider_spec",
+    "hq.domains.control_plane.providers",
+    "hq.domains.projects.views",
+    "hq.platform.application.adoption",
+    "hq.platform.application.app_update_approval",
+    "hq.platform.application.asks",
+    "hq.platform.application.cadence",
+    "hq.platform.application.forms",
+    "hq.platform.application.labels",
+    "hq.platform.application.moments",
+    "hq.platform.application.record_errors",
+    "hq.platform.application.record_saves",
+    "hq.platform.application.resource_operations",
+    "hq.platform.application.resource_refusals",
+]
+enable_error_code = ["return-value", "assignment"]

@@ -26,7 +26,7 @@ lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
 
 from .describe import Describe, listed
 from .moments import duration
-from .record_errors import Sentence
+from .record_errors import Sentence, worded
 from .routes import reverse
 from .ui import button_classes, ended
 lazy from . import cadence
@@ -282,7 +282,7 @@ class AskMixin:
     def cannot(self) -> Sentence:
         """Why the person cannot ask at all, before anything runs; "" when they can."""
 
-        return ""
+        return worded("")
 
     def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
         """To the page's script: how the work stands and where to watch it, 202
@@ -307,8 +307,8 @@ class AskMixin:
                 status=202 if standing.live else 200,
             )
         failed = standing.state == FAILED
-        if (failed or not result.get("message")) and (said := asked.message or standing.note):
-            (messages.error if failed else messages.success)(request, said)
+        if (failed or not result.get("message")) and (note := asked.message or standing.note):
+            (messages.error if failed else messages.success)(request, note)
         return redirect(safe_next(request, fallback=self.back()))
 
 

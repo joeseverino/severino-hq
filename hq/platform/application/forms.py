@@ -15,7 +15,7 @@ lazy from hq.platform.core.held_values import format_html, format_html_join
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .labels import human_bytes
-from .record_errors import Sentence
+from .record_errors import Sentence, worded
 from .ui import button_classes, counted
 
 
@@ -35,7 +35,7 @@ def larger_than(limit: int) -> Sentence:
     """What is said after a file's name when it is over ``limit`` bytes, by the
     page before it sends one and by the field when one arrives."""
 
-    return f"is larger than {human_bytes(limit)}."
+    return worded(f"is larger than {human_bytes(limit)}.")
 
 
 def at_most(count: int) -> str:

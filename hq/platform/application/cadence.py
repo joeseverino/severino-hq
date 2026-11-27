@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Final, Literal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -58,7 +58,7 @@ from .labels import sentence
 from .moments import duration
 from .projection import read_once
 from .read_requests import ForcedRead, connection_providers, due_reads, forced_kinds, forced_reads
-from .record_errors import Sentence
+from .record_errors import Sentence, worded
 from .refusal_codes import Code
 from .security import Capability, Principal
 from .tone import Absent, Tone, Toned
@@ -199,8 +199,8 @@ CONTROLLER_SILENT_AFTER = 2 * CONTROLLER_FLOOR
 
 
 # What each worker that pulls HQ's work is called in a sentence about it.
-CONTROLLER_NAMED = "controller"
-PLAYBOOK_WORKER_NAMED = "playbook worker"
+CONTROLLER_NAMED: Final = "controller"
+PLAYBOOK_WORKER_NAMED: Final = "playbook worker"
 
 
 class WorkerState(Toned):
@@ -225,7 +225,7 @@ class WorkerStanding:
     # Seen by its heartbeat, written only as it reaches this HQ, rather than
     # by readings that may have come with a database copied from elsewhere.
     here: bool = False
-    named: Sentence = CONTROLLER_NAMED
+    named: Sentence = worded(CONTROLLER_NAMED)
     # What never heard from means of it.
     unheard: WorkerState = WorkerState.NOT_CONFIGURED
     # When it last took work, for a worker that claims it.
@@ -260,18 +260,18 @@ class WorkerStanding:
         worker it is."""
 
         if self.seen_at is None or not self.here:
-            late = ""
+            late = worded("")
         elif self.silent:
-            late = f"{duration(since(self.seen_at, now=now))}"
+            late = duration(since(self.seen_at, now=now))
         else:
-            return ""
+            return worded("")
         if not doing:
-            return (
+            return worded(
                 f"Starts when a {self.named} reports; {late} since one last did."
                 if late
                 else f"Starts when a {self.named} reports; none ever has."
             )
-        return (
+        return worded(
             f"Cannot {doing}: {late} since a {self.named} last reported."
             if late
             else f"Cannot {doing}: no {self.named} reports to this HQ."
@@ -385,7 +385,7 @@ def automation_standing(profile: str) -> WorkerStanding:
     # runs once a connection lends its profile a login.
     # A profile's name is the operator's, so a refusal says "its profile".
     read = profile == READ_PROFILE
-    named = PLAYBOOK_WORKER_NAMED if read else f"{PLAYBOOK_WORKER_NAMED} for its privilege profile"
+    named = worded(PLAYBOOK_WORKER_NAMED if read else f"{PLAYBOOK_WORKER_NAMED} for its privilege profile")
     unheard = WorkerState.NOT_CONFIGURED if read else WorkerState.UNHEARD
     claimed, leased = _automation_claims().get(profile, (None, None))
     seen = [moment for moment in (readings.heard(_automation(profile)), claimed) if moment is not None]

@@ -74,18 +74,6 @@ hooks {
         glob = List("hq/platform/application/plugin_validation.py") + toolchain
         check = "uv run python -m hq.platform.application.plugin_validation . hq/platform/application hq/domains"
       }
-      // A sentence a refusal carries can be declared in another module, so
-      // the check reads every module and holds those it is handed and the
-      // modules that import one of them.
-      ["refusal-text"] {
-        glob = List("hq/**/*.py")
-        exclude = List("**/tests/**")
-        check = "uv run python -m hq.platform.application.tests.refusal_text {{files}}"
-      }
-      ["refusal-text-whole"] {
-        glob = List("hq/platform/application/tests/refusal_text.py", "hq/platform/application/plugin_validation.py") + toolchain
-        check = "uv run python -m hq.platform.application.tests.refusal_text"
-      }
       // The scans read every language a command line sits in, so the step
       // is handed every file and reads those that are text.
       ["source-scans"] {

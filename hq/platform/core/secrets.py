@@ -8,6 +8,7 @@ is worse than none. controller/internal/sealing/sealing.go owns the format.
 import base64
 import binascii
 import hashlib
+from typing import Final
 
 from cryptography.hazmat.primitives import hpke
 from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
@@ -21,7 +22,9 @@ class SecretsUnavailable(UpstreamUnavailable):
 
 
 # What sealing says without the controller's public key.
-NO_SEAL_KEY = "HQ has not been given the controller's sealing key, so it cannot hold a secret. Nothing was stored."
+NO_SEAL_KEY: Final = (
+    "HQ has not been given the controller's sealing key, so it cannot hold a secret. Nothing was stored."
+)
 
 # HPKE (RFC 9180): ML-KEM-768+X25519, HKDF-SHA256, AES-256-GCM.
 _SUITE = hpke.Suite(hpke.KEM.MLKEM768_X25519, hpke.KDF.HKDF_SHA256, hpke.AEAD.AES_256_GCM)

@@ -8,7 +8,7 @@ from functools import cache, lru_cache
 from typing import Any, Literal
 
 from hq.platform.application.labels import human_label
-from hq.platform.application.record_errors import Sentence
+from hq.platform.application.record_errors import Sentence, worded
 lazy from hq.platform.application.default_hold import needs_approval
 lazy from hq.platform.application.entity_links import page_url
 lazy from hq.platform.application.references import Kind
@@ -306,10 +306,10 @@ def controller_action_policy(kind: str, action: str) -> tuple[bool, Sentence]:
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get(action) if capability else None
     if not policy:
-        return False, "HQ does not do that to this type of record."
+        return False, worded("HQ does not do that to this type of record.")
     if policy.mode != "apply":
         return False, policy.why_locked()
-    return True, "HQ can run this action."
+    return True, worded("HQ can run this action.")
 
 
 def describe_providers() -> dict[str, Any]:

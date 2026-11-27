@@ -10,7 +10,7 @@ import logging
 import threading
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -91,7 +91,7 @@ class Progress:
 
 
 # What a person is told when a job of the same kind is live, whatever the kind.
-ALREADY_RUNNING = "Already running."
+ALREADY_RUNNING: Final = "Already running."
 
 
 class Failed(RuntimeError):

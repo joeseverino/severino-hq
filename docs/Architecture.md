@@ -847,10 +847,9 @@ management commands are break-glass recovery, not a second transport.
 2. Implement validation, authorization, locking, persistence and audit there.
    It refuses with a host refusal from `record_errors.py` (`not_found`,
    `conflict`, `precondition`, `invalid_material`, `invalid_input`). Every
-   adapter answers with its reason as it stands: a literal, or a `Sentence`
-   carried from where HQ wrote it, never a request's or a dependency's text
-   (`RefusalTextTests` reads every one). Any other exception's text stays
-   inside HQ.
+   adapter answers with its reason as it stands: a `Sentence`, which mypy
+   holds to words HQ wrote (`tools/lint/mypy_sentence.py`), never a request's
+   or a dependency's text. Any other exception's text stays inside HQ.
 3. Register it. The web form, API, MCP and CLI derive from the registry; add an
    adapter only where one needs translating.
 4. Prove identical result shapes with an adapter-parity test.

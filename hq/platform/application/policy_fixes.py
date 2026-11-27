@@ -8,7 +8,7 @@ controller applies it only through a connection that manages.
 """
 
 import json
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 lazy from hq.domains.control_plane.models import ManagedResource
 
@@ -21,7 +21,7 @@ lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .resource_operations import refuse_while_drifted
 lazy from .tailnet import POLICY_KIND
 
-UNREADABLE = "HQ cannot read the policy as a JSON object, so it cannot edit it. Edit the policy by hand."
+UNREADABLE: Final = "HQ cannot read the policy as a JSON object, so it cannot edit it. Edit the policy by hand."
 
 # Where a rule names who it admits and what it admits to.
 _RULE_SIDES = ("src", "dst")
