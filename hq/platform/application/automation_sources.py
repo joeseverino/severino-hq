@@ -163,12 +163,12 @@ def judged(procedures: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return found
 
 
-def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourceProposal:
-    """Store what one scan found, held to the bridge contract at its door."""
+def proposal(catalog: dict[str, Any]) -> SourceProposal:
+    """What one scan found, held to the bridge contract at its door, as HQ
+    judges it, unsaved."""
 
     verification = catalog["verification"]
-    return models.SourceProposal.objects.create(
-        operation=operation,
+    return models.SourceProposal(
         repository=catalog["repository"],
         branch=catalog["branch"],
         revision=catalog["revision"],
@@ -180,6 +180,15 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
         unpinned=catalog["unpinned"],
         reaches=catalog["reaches"],
     )
+
+
+def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourceProposal:
+    """Store what one scan found."""
+
+    found = proposal(catalog)
+    found.operation = operation
+    found.save(force_insert=True)
+    return found
 
 
 def _source(principal: Principal) -> ManagedResource:

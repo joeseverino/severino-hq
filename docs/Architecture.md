@@ -1485,30 +1485,24 @@ fills a declared `service_unit` input that accepts its exact name. Multiple
 services leave that field for the reader to fill. The form still validates
 every input and a run still goes through the canonical capability.
 
-The sidecar's format is published as a JSON Schema,
-`hq/platform/application/hq-procedure.schema.json`, written from
-`ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the
-model HQ holds a sidecar to, by the generator every schema HQ publishes comes
-from (`hq/platform/application/json_schemas.py`, Pydantic's own beneath). `mise run fix` rewrites it,
-and `lint:drift-procedure-schema` fails while it is behind the model. A
-repository of procedures lints its sidecars against the file at the HQ commit
-it targets, with [check-jsonschema](https://check-jsonschema.readthedocs.io/):
+### Checking a repository of playbooks
+
+A repository of playbooks checks its own checkout with the code HQ's adoption
+runs, as a client's linter is the server's own validator (`kubectl apply
+--dry-run=server`): the worker's scan (`hq_runner.catalog.read`) reads it as
+its next commit would hold it, every file git would commit, and HQ's judgment
+(`automation_adoption.refusals`) names every reason it would refuse the commit
+or one of its playbooks, all but the signature, which GitHub says of a pushed
+commit alone. It runs in the worker's environment, the runner group with the
+collections it ships, from a checkout of HQ at the commit the repository
+targets, `main` for one HQ deploys:
 
 ```sh
-check-jsonschema --schemafile hq-procedure.schema.json playbooks/*.hq.yml
+tools/pipeline/check-playbooks.sh <checkout>
 ```
 
-check-jsonschema reads YAML as it reads JSON, takes a schema by path or URL,
-and ships as a pre-commit hook and as a Python tool (`pipx:check-jsonschema`
-in mise). It validates with python-jsonschema, the library HQ's own test of
-the schema judges a sidecar with.
-
-The schema holds a sidecar's shape: every key, its type and range, the dotted
-names, the enumerations, and the inputs' names. What it cannot say HQ still
-refuses at a scan, naming each in the proposal. That is a read that names a
-privilege, a host not in HQ's spelling, a statement that is only whitespace, an
-input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
-a kind in `readings` HQ declares no words for, and two sidecars with one id.
+It exits 1 with each reason, worded as the Playbooks page says it, so a
+commit HQ would refuse fails the repository's CI before it merges.
 
 ### Running a playbook
 
