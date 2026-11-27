@@ -148,7 +148,7 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 | Outcome | Response | Client should |
 |---|---|---|
 | Allowed | `200`, the capability's result | carry on |
-| Held | `202 Accepted`, since nothing has happened yet: the `AwaitingApproval` the document lists under `202` on every capability that changes something, `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#held-changes-as-mcp-tasks)) | report it, then read `approvals` by its id or wait on the task; retrying returns the same request, at `202` |
+| Held | `202 Accepted`, since nothing has happened yet: the `AwaitingApproval` the document lists under `202` on every capability that changes something, `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#calls-as-mcp-tasks)) | report it, then read `approvals` by its id or wait on the task; retrying returns the same request, at `202` |
 | Refused | `403`, error code `denied_by_policy` | stop |
 
 With no rules set, changes to gated infrastructure are held, and so is
@@ -175,9 +175,10 @@ A held call's `approval.id` reads where it stands at
 `GET /v2/resources/approvals/<id>/` (MCP: `get_resource` of `approvals`, or
 `hq://approvals/{id}`): `done`, `said`, the `operation` its approved call
 queued, and once done the call's `answer`, as a task's `result` reads it
-([below](#held-changes-as-mcp-tasks)). A playbook's run reads at
+([below](#calls-as-mcp-tasks)). A playbook's run reads at
 `GET /v2/resources/runs/<operation_id>/` by the `operation.id` its answer
-carried. Runs list with HQ's jobs at `/v2/resources/work/`, by `kind` (a
+carried, and over MCP a client of the tasks extension waits on it as a task
+instead ([below](#calls-as-mcp-tasks)). Runs list with HQ's jobs at `/v2/resources/work/`, by `kind` (a
 playbook's command), `host`, `correlation` and `state`.
 
 - Each is a read under the caller's own `read` grant.
@@ -1074,30 +1075,43 @@ Security properties:
   action queue carries them to that caller, with the request's fields and not
   its payload.
 
-### Held changes as MCP tasks
+### Calls as MCP tasks
 
 A client on a protocol version the SDK lists in `MODERN_PROTOCOL_VERSIONS`
 may declare the `io.modelcontextprotocol/tasks` extension on a request
 (`_meta["io.modelcontextprotocol/clientCapabilities"].extensions`). A call of
-its that HQ holds is then answered with a task in place of the held answer: `resultType: "task"`, whose `taskId` is the hold's
-`approval.id`. The SDK ships no tasks implementation, so HQ serves the
-extension's methods over its holds (`hq/platform/mcp/tasks.py`) through the
-low-level server's `add_request_handler`, and advertises the extension in its
-capabilities. A client that declares nothing keeps the held answer.
+its that HQ holds is then answered with a task in place of the held answer:
+`resultType: "task"`, whose `taskId` is the hold's `approval.id`. A call that
+queues work (an answer carrying `operation`, such as a playbook's run) is
+answered with a task whose `taskId` is that `operation.id`, while the work is
+still to end. The SDK ships no tasks implementation, so HQ serves the
+extension's methods over its holds and operations (`hq/platform/mcp/tasks.py`)
+through the low-level server's `add_request_handler`, and advertises the
+extension in its capabilities. A client that declares nothing keeps the
+call's answer.
 
 | Hold | `tasks/get` answers |
 |---|---|
 | Waiting for a person | `working` |
 | Approved, its operation queued or running | `working`, polled every 2,000 ms |
 | Approved and applied, or approved with no operation to run | `completed`, `result` the call's answer, carrying its operation as it ended |
-| Approved, and its operation failed or was cancelled | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
+| Approved, and its operation failed | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
+| Approved, and its run cancelled before it started | `cancelled`, with no `result` |
 | Rejected | `completed`, `result` a tool error coded `operator_rejected`, with the operator's note |
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
 | Withdrawn by its asker, through `tasks/cancel` or `approval.withdraw` | `cancelled`, with no `result` |
 
+| Queued work | `tasks/get` answers |
+|---|---|
+| Queued or running | `working`, polled every 2,000 ms |
+| Succeeded | `completed`, `result` the call's answer, carrying its operation as it ended |
+| Failed | `completed`, `result` a tool error coded `operation_failed`, whose `details` is that answer |
+| Cancelled before it started, through `tasks/cancel` or `automation.run.cancel` | `cancelled`, with no `result` |
+
 Every answer carries a `statusMessage`, since a client shows the last one it
-was sent. It is the sentence the approval card and the audit log say the hold
-by (`approval_review.asked`), then where it stands. While it waits, it adds the
+was sent. A hold's is the sentence the approval card and the audit log say the
+hold by (`approval_review.asked`), then where it stands. Queued work's is how
+Jobs says it stands (`work_runs.standing_of`). While it waits, it adds the
 review page's absolute address (`hq_self.site_url`, built from the declared
 site host, never from the request).
 
@@ -1112,23 +1126,31 @@ Code honors. A person answers in minutes or hours, so a sooner poll only reads
 the same hold again. `ttlMs` is the hold's own window, from its request to its
 expiry. Once it is settled, the controller applies it in seconds, so the poll
 is 2,000 ms, and `ttlMs` is null: HQ keeps every settled hold, so the task
-never lapses while its change applies.
+never lapses while its change applies. Queued work is polled every
+2,000 ms with a null `ttlMs`: HQ keeps an operation as long as the record it
+acts on.
 
 Security properties:
 
-- The task is the hold, read afresh at each `tasks/get`; no task state is
-  kept apart from it. Its id is the hold's random UUID.
+- The task is the hold, or the operation its call queued, read afresh at each
+  `tasks/get`; no task state is kept apart from it. Its id is that record's
+  random UUID. A hold's task follows the operation its approved call queued,
+  so a run held for approval is one task across the hold and the run.
 - Nothing in the extension approves or rejects a hold. A hold asks for no
   input, so `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
   the asker withdrawing its own hold while it waits: it runs `approval.withdraw`,
   under that command's rules and audit, and the task then reads `cancelled`,
-  with no result. A hold already decided goes on as it was, since cancellation
-  is cooperative (tasks.extensions.modelcontextprotocol.io, specification,
+  with no result. A run nothing has started, the task's own or the one its
+  approved hold queued, is cancelled through `automation.run.cancel`, under
+  that command's rules and audit. Anything else (a hold already decided, a
+  run the runner started, work that is not a run) goes on as it was, since
+  cancellation is cooperative (tasks.extensions.modelcontextprotocol.io, specification,
   Cancellation); either way the answer is the empty result the specification
   requires.
 - The review address carries the hold's id and nothing else; reading it
   takes a person signed in to HQ.
-- A task answers only the actor and interface that asked. Every task method
+- A task answers only the actor and interface that asked, read from the
+  hold's or the operation's own record of who asked. Every task method
   refuses any other id with the same `-32602`, so an agent cannot tell
   another's task from an id nothing holds. A call that repeats what another
   agent already asked is a request of its own, held as its own task, which

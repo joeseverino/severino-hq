@@ -7,6 +7,7 @@ same standing as a task's state. Only the caller that asked reads a request
 The commands that decide or withdraw one are declared here too, on the same domain.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -25,9 +26,7 @@ from .resource_operations import serialize_operation
 from .resources import EmptyQuery
 from .security import Capability, Principal
 from .ui import ended
-
-# An operation still to finish, so the call it answers is not yet done.
-UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
+lazy from .work_runs import UNENDED
 
 
 class HeldRequestItem(HeldRequest):
@@ -84,18 +83,29 @@ def standing(held: ApprovalRequest) -> HoldStanding:
     if queued is None:
         return HoldStanding(settled, "It was approved in HQ, and it is done.")
     field, operation = queued
-    if operation.state in UNFINISHED:
+    answered = ran(settled, field, operation, failed=_APPLY_FAILED)
+    if answered is None:
         return HoldStanding(None, f"It was approved in HQ, at {review_url}, and HQ is applying it now.", operation)
-    # The call's own answer, carrying its operation as it ended.
-    answered = {**settled, field: serialize_operation(operation)}
     if operation.state == OperationRequest.State.SUCCEEDED:
         return HoldStanding(answered, "It was approved in HQ, and it is applied.", operation)
-    failed = refuse(
-        Code.OPERATION_FAILED,
-        "This change was approved in HQ, but applying it failed. `details` holds the operation.",
-        answered,
-    )
-    return HoldStanding(failed, "It was approved in HQ, but applying it failed.", operation)
+    return HoldStanding(answered, "It was approved in HQ, but applying it failed.", operation)
+
+
+_APPLY_FAILED = "This change was approved in HQ, but applying it failed. `details` holds the operation."
+
+
+def ran(answer: Mapping[str, Any], field: str, operation: OperationRequest, *, failed: str) -> dict[str, Any] | None:
+    """What a call that queued ``operation`` answers once that has ended: its
+    own answer carrying the operation as it ended, or else a refusal coded
+    ``operation_failed`` saying ``failed``, with that answer as its details.
+    None while the operation is still to end, so the call is not yet done."""
+
+    if operation.state in UNENDED:
+        return None
+    answered = {**answer, field: serialize_operation(operation)}
+    if operation.state == OperationRequest.State.SUCCEEDED:
+        return answered
+    return refuse(Code.OPERATION_FAILED, failed, answered)
 
 
 def _item(held: ApprovalRequest) -> dict[str, Any]:
