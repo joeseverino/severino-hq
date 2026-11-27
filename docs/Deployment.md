@@ -191,13 +191,15 @@ Every log is public, so each failure is reported at two levels:
 | :--- | :--- | :--- |
 | the run's log and summary | the failed step and its error, failing host test ids, counts | nothing that names an extension or the host |
 | the sealed `failure-logs` artifacts, one per failed job | what the log withheld: the composed suite's output, an extension's check against the host, a refused composition's reason, a container's log | readable only with the operator's identity |
+| Fuzz's `failure-logs-fuzz` artifact | each input that failed, at its path under `controller/` | public, as the inputs are |
 | the host, `/var/log/severino-hq/` | the pull, sync, install and failed-health output, root-only | the host's own detail |
 
 Compose writes what it withholds to `WITHHELD_DIR`;
 `tools/pipeline/seal-failure-logs.sh` encrypts it with [age](https://age-encryption.org)
 to `FAILURE_LOG_RECIPIENT` in [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env).
 `mise run failure-logs RUN_ID` opens it with the identity in
-`SEVERINO_FAILURE_LOG_IDENTITY`. To rotate, generate a pair with
+`SEVERINO_FAILURE_LOG_IDENTITY`, and fetches Fuzz's inputs beside it as they
+are. To rotate, generate a pair with
 `age-keygen -pq`, store the identity, and replace the recipient; runs sealed
 before then need the old identity.
 

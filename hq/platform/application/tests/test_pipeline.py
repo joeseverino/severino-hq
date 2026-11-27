@@ -683,13 +683,19 @@ class PublicLogTests(SimpleTestCase):
         for upload in uploads:
             with self.subTest(step=label(upload)):
                 self.assertRegex(upload["with"]["path"], r"\.age$")
-                # What `mise run failure-logs` downloads.
-                self.assertTrue(upload["with"]["name"].startswith("failure-logs"))
         names = [upload["with"]["name"] for upload in uploads]
         self.assertEqual(len(names), len(set(names)), "two jobs that fail in one run upload under one name")
-        self.assertIn("--pattern 'failure-logs*'", (ROOT / "mise-tasks" / "failure-logs").read_text())
         self.assertIn("tools/pipeline/seal-failure-logs.sh", self.compose)
         self.assertTrue((ROOT / "tools" / "pipeline" / "seal-failure-logs.sh").is_file())
+
+    def test_every_upload_of_a_failure_is_one_failure_logs_fetches(self):
+        task = (ROOT / "mise-tasks" / "failure-logs").read_text()
+        self.assertIn("--pattern 'failure-logs*'", task)
+        for path in workflows():
+            for step in every_step(path):
+                if step.get("uses", "").startswith("actions/upload-artifact@") and "failure()" in condition(step):
+                    with self.subTest(workflow=path.name, step=label(step)):
+                        self.assertTrue(step["with"]["name"].startswith("failure-logs"))
 
     def test_sealed_logs_are_encrypted_to_a_post_quantum_key(self):
         pins = (ROOT / "tools" / "pipeline" / "toolchain.env").read_text()

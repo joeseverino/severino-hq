@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-#MISE description="Open a failed Compose run's sealed logs"
+#MISE description="Open a failed run's failure-logs artifacts"
 #MISE hide=true
 #MISE raw=true
 #MISE env={SEVERINO_FAILURE_LOG_IDENTITY={required="The identity that decrypts sealed logs, an op:// reference or a file, set in mise.local.toml (docs/Development.md, The extension set)"}}
-#USAGE arg "<run>" help="The Compose run whose logs were sealed"
+#USAGE arg "<run>" help="The failed run whose failure-logs artifacts to open"
 #USAGE arg "[dir]" help="Where to unpack them; a private temporary directory by default"
 
-# Downloads the run's failure-logs artifacts, one from each Compose job that
-# failed, decrypts them with the identity named by SEVERINO_FAILURE_LOG_IDENTITY
-# (an op:// reference or a file; mise.local.toml sets it) and unpacks them.
+# Downloads the run's failure-logs artifacts, one from each job that failed.
+# A sealed one (failure-logs.tar.age, Compose's) is decrypted with the
+# identity named by SEVERINO_FAILURE_LOG_IDENTITY (an op:// reference or a
+# file; mise.local.toml sets it) and unpacked into the directory; an open one
+# (Fuzz's failing inputs, which are public) is copied in under its name.
 set -euo pipefail
 
 identity="$SEVERINO_FAILURE_LOG_IDENTITY"
@@ -18,16 +20,27 @@ dir="${usage_dir:-$(mktemp -d)}"
 download="$(mktemp -d)"
 trap 'rm -rf "$download"' EXIT
 gh run download "${usage_run:?}" --pattern 'failure-logs*' --dir "$download"
-
-# Read first, so a 1Password unlock that times out is reported as one.
-case "$identity" in
-  op://*) key="$(op read "$identity")" || { echo "1Password did not release the identity; approve the unlock and run again." >&2; exit 1; } ;;
-  *) key="$(cat "$identity")" ;;
-esac
 mkdir -p "$dir"
-while IFS= read -r -d '' sealed; do
-  age --decrypt --identity <(printf '%s\n' "$key") "$sealed" | tar -xzf - -C "$dir"
-done < <(find "$download" -name failure-logs.tar.age -print0)
-unset key
+
+sealed=()
+for artifact in "$download"/*/; do
+  if [ -f "$artifact/failure-logs.tar.age" ]; then
+    sealed+=("$artifact/failure-logs.tar.age")
+  else
+    cp -R "$artifact" "$dir/$(basename "$artifact")"
+  fi
+done
+
+if [ "${#sealed[@]}" -gt 0 ]; then
+  # Read first, so a 1Password unlock that times out is reported as one.
+  case "$identity" in
+    op://*) key="$(op read "$identity")" || { echo "1Password did not release the identity; approve the unlock and run again." >&2; exit 1; } ;;
+    *) key="$(cat "$identity")" ;;
+  esac
+  for file in "${sealed[@]}"; do
+    age --decrypt --identity <(printf '%s\n' "$key") "$file" | tar -xzf - -C "$dir"
+  done
+  unset key
+fi
 echo "$dir"
 find "$dir" -type f | sed "s|^$dir/|  |"

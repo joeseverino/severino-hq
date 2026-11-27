@@ -7,8 +7,9 @@ name: Fuzz
 #
 # What the targets have learned is Go's generated corpus in GOCACHE/fuzz,
 # kept between runs in a cache of its own so each run starts where the last
-# ended. An input that fails is written to its package's testdata/fuzz and
-# uploaded, to be committed beside its fix.
+# ended. An input that fails is written to its package's testdata/fuzz, and
+# only those new inputs are uploaded, to be committed beside the fix
+# (`mise run failure-logs RUN_ID` fetches them).
 on:
   schedule:
     - cron: "41 6 * * 3"
@@ -46,8 +47,15 @@ jobs:
           path: ${{ steps.corpus.outputs.path }}
           key: fuzz-corpus-${{ github.run_id }}
       - if: failure()
+        name: Gather the inputs that failed
+        run: |
+          mkdir -p "$RUNNER_TEMP/failed"
+          git ls-files -z --others -- ':(glob)controller/**/testdata/fuzz/**' |
+            xargs -0 --no-run-if-empty cp --parents -t "$RUNNER_TEMP/failed"
+      - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: fuzz-failures
-          path: controller/**/testdata/fuzz/**
+          name: failure-logs-fuzz
+          path: ${{ runner.temp }}/failed
+          if-no-files-found: ignore
           retention-days: 30
