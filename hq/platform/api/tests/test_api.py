@@ -472,12 +472,13 @@ class TransportTests(SentinelMixin, TestCase):
             unknown = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=slgu", **headers)
             repeated = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=a&fields=b", **headers)
             into_scalar = self.client.get(f"/api/v2/resources/projects/{project.slug}/?fields=slug.x", **headers)
+            as_member = self.client.get("/api/v2/resources/projects/?fields[slug]=1", **headers)
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(set(detail.json()["data"]), {"slug", "name"})
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(listed.json()["data"]["items"], [{"slug": project.slug}])
         self.assertEqual(listed.json()["data"]["count"], 1)
-        for refused in (unknown, repeated, into_scalar):
+        for refused in (unknown, repeated, into_scalar, as_member):
             self.assertEqual(refused.status_code, 400)
             self.assertEqual(refused.json()["error"]["code"], "invalid_input")
 

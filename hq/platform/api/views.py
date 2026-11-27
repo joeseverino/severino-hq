@@ -758,20 +758,25 @@ connections.__dict__.update(__hq_query_fields__=connection_query)
 RESOURCE_CODES = answered_by(Door.RESOURCE)
 
 
-def _selection(raw: str | None) -> list[str] | None:
-    """``?fields=a,b`` as the field mask it is (``FIELD_MASK``), or ``None`` without one."""
+def _selection(request: APIRequest) -> list[str] | None:
+    """``?fields=a,b`` as the field mask it is (``FIELD_MASK``), or ``None`` without one; read by its exact
+    name, so ``fields[member]`` meets the list's query model, which refuses it."""
 
-    if raw is None:
-        return None
-    return split_list(raw)
+    asked = request.GET.getlist(RESERVED_QUERY_FIELD)
+    if len(asked) > 1:
+        raise _UnreadableQuery(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.")
+    return split_list(asked[0]) if asked else None
 
 
 @_endpoint(("GET",), title="List a resource", requires=READS_A_LIST, data=ResourceCollection, codes=RESOURCE_CODES)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """One resource's records, narrowed by the query its schema checks."""
 
+    fields = _selection(request)
     filters: dict[str, Any] = {}
     for key, values in request.GET.lists():
+        if key == RESERVED_QUERY_FIELD:
+            continue
         # An object's member is sent as ``field[member]``, the document's deepObject style.
         found = _member(key)
         into, place = (filters.setdefault(found[0], {}), found[1]) if found else (filters, key)
@@ -781,7 +786,6 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
                 code=Code.INVALID_INPUT,
             )
         into[place] = values[0]
-    fields = _selection(filters.pop(RESERVED_QUERY_FIELD, None))
     return _ok(list_application_resource(name, filters, principal=request.principal, strict=False, fields=fields))
 
 
@@ -798,10 +802,7 @@ type ResourceRecordAnswer = Annotated[
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
     """One record of a resource, by its identifier."""
 
-    asked = request.GET.getlist(RESERVED_QUERY_FIELD)
-    if len(asked) > 1:
-        return _fail(f"Query field {RESERVED_QUERY_FIELD!r} may appear only once.", code=Code.INVALID_INPUT)
-    fields = _selection(asked[0] if asked else None)
+    fields = _selection(request)
     return _ok(get_application_resource(name, identifier, principal=request.principal, strict=False, fields=fields))
 
 
