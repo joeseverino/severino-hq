@@ -1,11 +1,12 @@
 """The shapes the containers, upgrades and app updates resources answer in."""
 
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from .answer_fields import AsRead, PageUrl
 from .describe import Describe, listed
 from .json_schemas import Written
 from .record_parts import ComposeProject, MeasurementPart
+from .sequences import StepAnswer
 from .ui import ended
 from .upgrades import HIGH, LOW, MAJOR, MEDIUM, MINOR, PATCH, UNKNOWN_CHANGE, Blocker
 
@@ -231,45 +232,17 @@ class AppUpdateRow(TypedDict):
     ]
 
 
-class ChecksPart(TypedDict):
-    state: Annotated[
-        Literal["success", "pending", "failure", ""],
-        Describe("How the head's checks stand: any failing, any still running, all passed, or none ran."),
-    ]
-    total: Annotated[int, Describe("How many checks ran on the head.")]
-    failing: Annotated[list[str], Describe("The name of each check that failed.")]
-    running: Annotated[int, Describe("How many checks are still running.")]
-    why: Annotated[str, Describe("Why they fail, in the failing tool's own words; empty while none fail.")]
-
-
-class MergePart(TypedDict):
-    words: Annotated[
-        str, Describe("How the approval asked at the head stands (its preview, merge and apply), in the page's words.")
-    ]
-    tone: Annotated[str, Describe("Its status tone: `attention` while it works, `good` once applied.")]
-    run_url: Annotated[str, Describe("The page of the run it stands on, the preview or the apply; empty for none.")]
-    taken: Annotated[
-        bool, Describe("Whether it previews, merges, applies or merged, so no second approval is offered.")
-    ]
-    lines: Annotated[
-        list[str],
-        Describe(
-            "Its detail: what it waits on, how long its run has run, or of a preview or an apply that ended,"
-            " the step it stopped on, what that said and each app the run did not release."
-        ),
-    ]
-
-
 class AppUpdateRecord(AppUpdateRow):
     """One open update of an app whole: its pins, checks, what it fixes and
     brings, and where approving it stands (``app_update_approval.approval_of``)."""
 
     title: PullTitle
     pins: Annotated[list[PinPart], Describe("Each image line it moves.")]
-    checks: Annotated[ChecksPart, Describe("The head's checks.")]
-    merge: Annotated[MergePart | None, Describe("The merge an approval asked at the head; null before one is asked.")]
-    held: Annotated[
-        str, Describe("Why `app_update.approve` would be refused now, as the page says it; empty when it would run.")
+    steps: Annotated[
+        list[StepAnswer],
+        Describe(
+            "Its way to running, step by step in order, each as its own record says it stands, as its page draws them."
+        ),
     ]
     fixes: Annotated[
         list[AdvisoryPart],

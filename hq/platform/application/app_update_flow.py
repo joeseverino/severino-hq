@@ -22,6 +22,7 @@ from .github_estate import check_step, repositories
 from .labels import dotted
 from .moments import when
 from .projection import read_once
+from .routes import reverse
 from .sequences import PERSON, Example, Read, SequenceSpec, Step, StepSpec
 from .tone import Tone
 lazy from .app_update_approval import REFUSED, pull_applied, waits_on
@@ -124,7 +125,7 @@ def _pull_request(state: UpdateState) -> Read | None:
         return Read(Standing(DONE, note=f"In {state.managed.repository}", word="Merged"))
     if (update := state.update) is not None:
         return Read(Standing(DONE, word=f"{update.label} opened", url=update.url))
-    return Read(_answered(state.answer), yours=state.action is not None)
+    return Read(_answered(state.answer), yours=state.offered is not None)
 
 
 def _answered(answer: Answer) -> Standing:
@@ -151,7 +152,11 @@ def _approve(state: UpdateState) -> Read | None:
     asked = _asked(state)
     if (asked.preview or asked.merge) is not None and not _ended_badly(asked):
         return Read(Standing(DONE, word="Approved"))
-    return Read(Standing(IDLE, word="Yours to approve" if state.action else ""), yours=True)
+    if state.adopt:
+        return Read(
+            Standing(IDLE, state.reason, word="Needs a playbook", url=reverse("control_plane:playbooks")), yours=True
+        )
+    return Read(Standing(IDLE, state.said, word="Yours now" if state.offered else ""), yours=True)
 
 
 def _preview(state: UpdateState) -> Read | None:
@@ -196,16 +201,16 @@ def _apply(state: UpdateState) -> Read | None:
         if refused := str(_then(asked.merge).get("refused") or ""):
             return Read(Standing(FAILED, note=refused, word="Not applied"))
         if state.kind == UpdateKind.MERGED:
-            return Read(Standing(IDLE, word="Yours to apply" if state.action else "Waiting"), yours=True)
+            return Read(Standing(IDLE, state.said, word="Yours now" if state.offered else "Waiting"), yours=True)
         return WAITING
     apply = asked.apply
     if apply.state in _ACTIVE:
         return Read(_ran(apply))
     if apply.state != OperationRequest.State.SUCCEEDED:
-        return Read(_ran(apply, ended="Apply failed"))
+        return Read(_ran(apply, ended="Apply failed"), yours=state.offered is not None)
     # Applied only where every machine's pull released every app.
     if not pull_applied(run_row(apply).evidence.stated):
-        return Read(_ran(apply, ended="Incomplete"))
+        return Read(_ran(apply, ended="Incomplete"), yours=state.offered is not None)
     return Read(Standing(DONE, word="Applied", url=run_row(apply).url))
 
 
@@ -241,9 +246,7 @@ def _health(state: UpdateState) -> Read | None:
 
 
 def _about(state: UpdateState) -> str:
-    if state.update is not None:
-        return f"{state.update.repository}{state.update.label}"
-    return f"{state.managed.repository}/{state.managed.app}" if state.managed else ""
+    return f"Update {state.move}" if state.move else "Update"
 
 
 def _subject(address: str) -> UpdateState:

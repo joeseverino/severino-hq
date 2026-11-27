@@ -222,10 +222,10 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
         return {"primary": opens(label, page.url), "fixes": _by_hand(running, plan), "evidence": evidence}
-    if state.action is None:
+    if state.offered is None:
         # What holds it back is what to clear, so it is the one step, said once.
         return {"fixes": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
-    return {"evidence": evidence, "fixes": (state.action.remedy,)}
+    return {"evidence": evidence, "fixes": (state.offered.remedy,)}
 
 
 def _standing(state: UpdateState) -> tuple[Fact, ...]:

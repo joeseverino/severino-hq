@@ -392,8 +392,8 @@ class UpdateAction:
         url, _ = command_reach(self.capability, self.target)
         return Does(self.capability, url=url, method="POST")
 
-    def control(self, back: str) -> PageAction | None:
-        return PageAction.command(self.capability, self.target, primary=True, query={"next": back})
+    def control(self, back: str, refused: str = "") -> PageAction | None:
+        return PageAction.command(self.capability, self.target, primary=True, query={"next": back}, refused=refused)
 
 
 @dataclass(frozen=True, slots=True)
@@ -484,8 +484,9 @@ class UpdateState:
     words: str
     # Where it stands as its fact says it, a word or two over why.
     answer: Answer
+    # The press it stands on, offered while nothing holds it back.
     action: UpdateAction | None = None
-    # Why no press is offered, "" when one is; and what the press does.
+    # Why the press is held back, "" when it is offered; and what the press does.
     reason: str = ""
     said: str = ""
     # Held because no one adopted playbook applies it: the Playbooks page's step.
@@ -494,6 +495,12 @@ class UpdateState:
     standing: MergeStanding | None = None
     update: AppUpdate | None = None
     managed: Managed | None = None
+
+    @property
+    def offered(self) -> UpdateAction | None:
+        """Its press, while nothing holds it back."""
+
+        return None if self.reason else self.action
 
     @property
     def at_work(self) -> bool:
@@ -573,23 +580,24 @@ def update_state(item: Container) -> UpdateState:
     held = app_branch(managed.repository, managed.app)
     standing = open_standing(managed.repository, managed.app)
     # While an Open PR is under way it is held back, as an approval is (``_decided``).
-    offered = {"action": action} if standing is None or not standing.taken else {"reason": standing.words}
+    reason = standing.words if standing is not None and standing.taken else ""
     if held is not None and held.held:
         words = ended(f"Renovate is holding its branch {held.until}")
         said = ended(f"Asks Renovate to open {held.branch}")
         answer = standing.answer if standing else Answer("Held by Renovate", (capfirst(held.until),))
         return UpdateState(
-            UpdateKind.HELD, latest, words, answer, said=said, standing=standing, managed=managed, **offered
+            UpdateKind.HELD, latest, words, answer, action, reason, said, standing=standing, managed=managed
         )
     return UpdateState(
         UpdateKind.UNOPENED,
         latest,
         UNOPENED,
         standing.answer if standing else Answer("Not opened", (UNOPENED,)),
-        said="Asks Renovate to run.",
+        action,
+        reason,
+        "Asks Renovate to run.",
         standing=standing,
         managed=managed,
-        **offered,
     )
 
 
@@ -598,11 +606,8 @@ def _decided(
 ) -> UpdateState:
     """A state whose press runs while ``approval`` holds nothing back."""
 
-    if approval.held:
-        return UpdateState(
-            kind, move, words, answer, reason=approval.held, adopt=approval.adopt, standing=approval.standing, **of
-        )
-    return UpdateState(kind, move, words, answer, action, said=approval.said, standing=approval.standing, **of)
+    held = {"reason": approval.held, "adopt": approval.adopt} if approval.held else {"said": approval.said}
+    return UpdateState(kind, move, words, answer, action, standing=approval.standing, **held, **of)
 
 
 def of_app(repository: str, app: str) -> tuple[Container, ...]:

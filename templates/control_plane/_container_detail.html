@@ -1,13 +1,21 @@
 {% comment %}
 A running container past its four facts (application.containers.Container and
 application.upgrades.Plan, the same the containers and upgrades resources
-serve): what upgrading it would take, led by the open pull request that would
-move it (application.app_updates.AppUpdate, the app_updates resource's), and
-how it is run against the container standard, with what it uses beside its
-limits. Each said once; the band above has its version and standing.
+serve): what upgrading it would take, led by one line of where its update
+stands and the person's next step, with the press beside it, then its steps
+(application.app_update_flow.UPDATE, the app_updates resource's steps) and
+what it changes in a fold; and how it is run against the container standard,
+with what it uses beside its limits. Each said once; the band above has its
+version and standing.
 {% endcomment %}
 {% if plan or state %}
 {% section "Upgrade" id="upgrade" data_fragment=state.follows data_fragment_live=state.follows|live:"estate" %}
+  {% if state.flow.steps %}
+  {% button_row %}<span><strong>{{ state.flow.about }}.</strong> {{ state.flow.said }}{% if update.brings %} {% status update.brings_said.short tone=update.brings_said.tone pill=False icon="shield" %}{% endif %}</span>{% if act %}{% include "partials/_page_action.html" with action=act only %}{% endif %}{% endbutton_row %}
+  {% steps of=state.flow %}
+  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
+  {% endif %}
+  {% section "What it changes" fold=True line=True %}
   {% facts layout="band" %}
     {% if update %}
     {% fact "Pin" icon="deploy" %}
@@ -27,13 +35,10 @@ limits. Each said once; the band above has its version and standing.
     {% endif %}
     {% if plan %}
     {% fact "Data" icon="layers" value=plan.data_said %}
-    {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
+    {% fact "Checked after it by" icon="check-circle" value=plan.verified_said %}
     {% endif %}
   {% endfacts %}
-  {% if state.flow.steps %}{% steps of=state.flow %}{% endif %}
-  {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
-  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
-  {% endif %}
+  {% endsection %}
 {% aside %}{% if plan %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}{% endif %}
 {% endsection %}
 {% endif %}

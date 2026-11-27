@@ -182,19 +182,32 @@
               "pins.after",
               "pins.digest",
               "pins.scanned",
-              "checks",
-              "checks.state",
-              "checks.total",
-              "checks.failing",
-              "checks.running",
-              "checks.why",
-              "merge",
-              "merge.words",
-              "merge.tone",
-              "merge.run_url",
-              "merge.taken",
-              "merge.lines",
-              "held",
+              "steps",
+              "steps.title",
+              "steps.standing",
+              "steps.standing.state",
+              "steps.standing.label",
+              "steps.standing.tone",
+              "steps.standing.live",
+              "steps.standing.note",
+              "steps.standing.seconds",
+              "steps.standing.percent",
+              "steps.standing.url",
+              "steps.by",
+              "steps.told",
+              "steps.parts",
+              "steps.parts.title",
+              "steps.parts.standing",
+              "steps.parts.standing.state",
+              "steps.parts.standing.label",
+              "steps.parts.standing.tone",
+              "steps.parts.standing.live",
+              "steps.parts.standing.note",
+              "steps.parts.standing.seconds",
+              "steps.parts.standing.percent",
+              "steps.parts.standing.url",
+              "steps.parts.by",
+              "steps.parts.told",
               "fixes",
               "fixes.id",
               "fixes.severity",
@@ -5738,10 +5751,6 @@
             },
             "type": "array"
           },
-          "checks": {
-            "$ref": "#/components/schemas/ChecksPart",
-            "description": "The head's checks."
-          },
           "containers": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/containers"
           },
@@ -5755,24 +5764,8 @@
           "head": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/head"
           },
-          "held": {
-            "description": "Why `app_update.approve` would be refused now, as the page says it; empty when it would run.",
-            "type": "string"
-          },
           "key": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/key"
-          },
-          "merge": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MergePart",
-                "title": "Merge part"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The merge an approval asked at the head; null before one is asked."
           },
           "number": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/number"
@@ -5793,6 +5786,13 @@
           "scanned": {
             "$ref": "#/components/schemas/AppUpdateRow/properties/scanned"
           },
+          "steps": {
+            "description": "Its way to running, step by step in order, each as its own record says it stands, as its page draws them.",
+            "items": {
+              "$ref": "#/components/schemas/StepAnswer"
+            },
+            "type": "array"
+          },
           "title": {
             "$ref": "#/components/schemas/PullTitle"
           },
@@ -5812,9 +5812,7 @@
           "scanned",
           "title",
           "pins",
-          "checks",
-          "merge",
-          "held",
+          "steps",
           "fixes",
           "brings"
         ],
@@ -5864,10 +5862,6 @@
             },
             "type": "array"
           },
-          "checks": {
-            "$ref": "#/components/schemas/ChecksPartPartial",
-            "description": "The head's checks."
-          },
           "containers": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/containers"
           },
@@ -5881,23 +5875,8 @@
           "head": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/head"
           },
-          "held": {
-            "$ref": "#/components/schemas/AppUpdateRecord/properties/held"
-          },
           "key": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/key"
-          },
-          "merge": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MergePartPartial",
-                "title": "Merge part"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The merge an approval asked at the head; null before one is asked."
           },
           "number": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/number"
@@ -5917,6 +5896,13 @@
           },
           "scanned": {
             "$ref": "#/components/schemas/AppUpdateRowPartial/properties/scanned"
+          },
+          "steps": {
+            "description": "Its way to running, step by step in order, each as its own record says it stands, as its page draws them.",
+            "items": {
+              "$ref": "#/components/schemas/StepAnswerPartial"
+            },
+            "type": "array"
           },
           "title": {
             "$ref": "#/components/schemas/PullTitle"
@@ -8888,69 +8874,6 @@
           },
           "why": {
             "$ref": "#/components/schemas/CheckPart/properties/why"
-          }
-        },
-        "type": "object"
-      },
-      "ChecksPart": {
-        "additionalProperties": false,
-        "properties": {
-          "failing": {
-            "description": "The name of each check that failed.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "running": {
-            "description": "How many checks are still running.",
-            "type": "integer"
-          },
-          "state": {
-            "description": "How the head's checks stand: any failing, any still running, all passed, or none ran.",
-            "enum": [
-              "success",
-              "pending",
-              "failure",
-              ""
-            ],
-            "type": "string"
-          },
-          "total": {
-            "description": "How many checks ran on the head.",
-            "type": "integer"
-          },
-          "why": {
-            "description": "Why they fail, in the failing tool's own words; empty while none fail.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "state",
-          "total",
-          "failing",
-          "running",
-          "why"
-        ],
-        "type": "object"
-      },
-      "ChecksPartPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "failing": {
-            "$ref": "#/components/schemas/ChecksPart/properties/failing"
-          },
-          "running": {
-            "$ref": "#/components/schemas/ChecksPart/properties/running"
-          },
-          "state": {
-            "$ref": "#/components/schemas/ChecksPart/properties/state"
-          },
-          "total": {
-            "$ref": "#/components/schemas/ChecksPart/properties/total"
-          },
-          "why": {
-            "$ref": "#/components/schemas/ChecksPart/properties/why"
           }
         },
         "type": "object"
@@ -21028,63 +20951,6 @@
         },
         "type": "object"
       },
-      "MergePart": {
-        "additionalProperties": false,
-        "properties": {
-          "lines": {
-            "description": "Its detail: what it waits on, how long its run has run, or of a preview or an apply that ended, the step it stopped on, what that said and each app the run did not release.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "run_url": {
-            "description": "The page of the run it stands on, the preview or the apply; empty for none.",
-            "type": "string"
-          },
-          "taken": {
-            "description": "Whether it previews, merges, applies or merged, so no second approval is offered.",
-            "type": "boolean"
-          },
-          "tone": {
-            "description": "Its status tone: `attention` while it works, `good` once applied.",
-            "type": "string"
-          },
-          "words": {
-            "description": "How the approval asked at the head stands (its preview, merge and apply), in the page's words.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "words",
-          "tone",
-          "run_url",
-          "taken",
-          "lines"
-        ],
-        "type": "object"
-      },
-      "MergePartPartial": {
-        "additionalProperties": false,
-        "properties": {
-          "lines": {
-            "$ref": "#/components/schemas/MergePart/properties/lines"
-          },
-          "run_url": {
-            "$ref": "#/components/schemas/MergePart/properties/run_url"
-          },
-          "taken": {
-            "$ref": "#/components/schemas/MergePart/properties/taken"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/MergePart/properties/tone"
-          },
-          "words": {
-            "$ref": "#/components/schemas/MergePart/properties/words"
-          }
-        },
-        "type": "object"
-      },
       "MethodNotAllowedRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -22482,6 +22348,51 @@
           "ok",
           "data"
         ],
+        "type": "object"
+      },
+      "PartAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "description": "Who moves it on: `person`, or the key of the provider HQ admits.",
+            "type": "string"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswer"
+          },
+          "title": {
+            "description": "What it is, in the words its page shows.",
+            "type": "string"
+          },
+          "told": {
+            "description": "Whether an event told HQ how it stands since its record was last read.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "title",
+          "standing",
+          "by",
+          "told"
+        ],
+        "type": "object"
+      },
+      "PartAnswerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/PartAnswer/properties/by"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/StandingAnswerPartial"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PartAnswer/properties/title"
+          },
+          "told": {
+            "$ref": "#/components/schemas/PartAnswer/properties/told"
+          }
+        },
         "type": "object"
       },
       "PathRecord": {
@@ -29738,6 +29649,37 @@
         ],
         "type": "object"
       },
+      "StandingAnswerPartial": {
+        "additionalProperties": false,
+        "description": "How one piece of asked-for work stands.",
+        "properties": {
+          "label": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/label"
+          },
+          "live": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/live"
+          },
+          "note": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/note"
+          },
+          "percent": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/percent"
+          },
+          "seconds": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/seconds"
+          },
+          "state": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/state"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/tone"
+          },
+          "url": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/url"
+          }
+        },
+        "type": "object"
+      },
       "StandingPart": {
         "additionalProperties": false,
         "description": "Where it stands, as the one line its page and its row say it.",
@@ -29886,6 +29828,63 @@
           }
         ],
         "title": "Step"
+      },
+      "StepAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/PartAnswer/properties/by"
+          },
+          "parts": {
+            "description": "What it is made of, such as each check; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/PartAnswer"
+            },
+            "type": "array"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/PartAnswer/properties/standing"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PartAnswer/properties/title"
+          },
+          "told": {
+            "$ref": "#/components/schemas/PartAnswer/properties/told"
+          }
+        },
+        "required": [
+          "title",
+          "standing",
+          "by",
+          "told",
+          "parts"
+        ],
+        "type": "object"
+      },
+      "StepAnswerPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/PartAnswerPartial/properties/by"
+          },
+          "parts": {
+            "description": "What it is made of, such as each check; empty for none.",
+            "items": {
+              "$ref": "#/components/schemas/PartAnswerPartial"
+            },
+            "type": "array"
+          },
+          "standing": {
+            "$ref": "#/components/schemas/PartAnswerPartial/properties/standing"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PartAnswerPartial/properties/title"
+          },
+          "told": {
+            "$ref": "#/components/schemas/PartAnswerPartial/properties/told"
+          }
+        },
+        "type": "object"
       },
       "StepNotes": {
         "description": "What to know before or after it, a sentence each.",

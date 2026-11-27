@@ -1698,8 +1698,7 @@ has an update, <move>", the move from the pull request's pin, else the default
 branch's, else the registry's latest), its one action, and the reason there is
 none. A pull request open is Approve, through `approval_of`: the standing of
 the newest preview or merge at the head once one is asked, the reason the
-press would be refused now (the record's `held`), or the sentence saying what
-the press does. A pin the default branch's head holds that the container does
+press would be refused now, or the sentence saying what the press does. A pin the default branch's head holds that the container does
 not run (the repository record's `compose_images`) is Apply, which queues the
 playbook at that head on the machines the app runs on (`app_update.apply`, through
 `apply_of`). A branch Renovate holds with no pull request (a branch of the last
@@ -1709,10 +1708,14 @@ dependency run of that one repository, naming the held branch as Renovate's
 `checkedBranches`, and its card follows the run's outcome, which names the
 pull request the run opened. A repository that holds the app's directory but
 not the file the container runs from says so, and a container no repository
-holds keeps the upgrade plan's steps by hand. An action is offered only when
-nothing holds it, so a page never shows a press the capability would refuse:
-a machine the playbook does not run on is refused by Approve and Apply at
-their own boundary (`applied_on`). While a step HQ queued works, or once it
+holds keeps the upgrade plan's steps by hand. While something holds the press
+back, the card draws it unusable with that reason and the finding names the
+reason as its one step: a machine the playbook does not run on is refused by
+Approve and Apply at their own boundary (`applied_on`). The update's way from
+its pull request to its health check is one declared sequence
+(`app_update_flow.UPDATE`, through `sequences.SequenceSpec`), each step read
+from the one record that holds it; the card's steps, the line it leads with
+and the `app_updates` resource's `steps` are that one value. While a step HQ queued works, or once it
 applied and until a reading of the containers since says they still run an
 older pin, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A step that is a playbook's run is said as the run

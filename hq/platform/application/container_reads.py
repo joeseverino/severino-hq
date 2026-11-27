@@ -15,14 +15,12 @@ from .projection import iso, page_of, projection_scope
 from .record_errors import one_of
 from .resources import BoundedQuery
 from .security import Capability
-lazy from .app_update_approval import approval_of
-lazy from .app_updates import MergeStanding, app_updates
+lazy from .app_updates import app_updates, update_state
 lazy from .container_records import (
     AppUpdateRecord,
     AppUpdateRow,
     ContainerRecord,
     ContainerRow,
-    MergePart,
     RepositoryPart,
     UpgradeRecord,
     UpgradeRow,
@@ -247,7 +245,8 @@ def _image(image: Any) -> str:
 
 
 def serialize_app_update(update: Any) -> AppUpdateRecord:
-    approval = approval_of(update)
+    # Each container it moves stands on the one pull request, so the first says the steps of all.
+    flow = update_state(update.containers[0]).flow if update.containers else None
     return row(
         update,
         AppUpdateRecord,
@@ -263,29 +262,10 @@ def serialize_app_update(update: Any) -> AppUpdateRecord:
             }
             for pin in update.pins
         ],
-        checks={
-            **{key: update.checks.get(key, default) for key, default in _CHECKS.items()},
-            "why": update.checks_said.why,
-        },
         fixes=_advisories(update.fixes),
         brings=_advisories(update.brings),
-        merge=_merge(approval.standing) if approval.standing else None,
-        held=approval.held,
+        steps=[step.as_json() for step in flow.steps] if flow else [],
     )
-
-
-def _merge(standing: MergeStanding) -> MergePart:
-    return {
-        "words": standing.word,
-        "tone": standing.tone,
-        "run_url": standing.run_url,
-        "taken": standing.taken,
-        "lines": list(standing.lines),
-    }
-
-
-# What a head's checks say before any ran.
-_CHECKS: dict[str, Any] = {"state": "", "total": 0, "failing": [], "running": 0}
 
 
 def list_app_updates(*, limit: int = 50) -> dict[str, Any]:

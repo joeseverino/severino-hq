@@ -154,10 +154,9 @@ class ApproveUpdateTests(TestCase):
         # An API or MCP reader sees what the page shows.
         from ..container_reads import get_app_update
 
-        record = get_app_update("example:alpha:7:app")
-        self.assertEqual(record["merge"]["words"], self.standing().word)
-        self.assertEqual(record["held"], self.standing().words)
-        self.assertEqual(record["checks"]["state"], "success")
+        steps = {step["title"]: step["standing"] for step in get_app_update("example:alpha:7:app")["steps"]}
+        self.assertEqual((steps["Checks"]["state"], steps["Approve"]["state"]), ("done", "done"))
+        self.assertEqual(steps["Preview"]["url"], run_url(str(preview.pk)))
 
     def test_a_preview_that_fails_merges_nothing_and_the_update_says_where_it_stopped(self):
         from ..app_update_approval import approval_of
@@ -473,9 +472,9 @@ class ApproveUpdateTests(TestCase):
                 self.assertTrue(held["ok"], held)
 
                 page = self.container_page()
-                # Said why, where the press would be, rather than refused once pressed.
-                self.assertIsNone(page.context["container"]["act"])
-                self.assertTrue(page.context["container"]["state"].reason)
+                # Drawn unusable, saying why, rather than refused once pressed.
+                act, state = page.context["container"]["act"], page.context["container"]["state"]
+                self.assertEqual((act.disabled, act.title), (True, state.reason))
                 transaction.set_rollback(True)
 
     def built_after(self, *commits):

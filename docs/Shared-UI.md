@@ -204,6 +204,7 @@ and those that hold across parts in [Design](Design.md).
 | `section` | `head` |  | `above`, `inside` | Where its head stands; left empty, the stylesheet decides. |
 | `section` | `id` |  |  | Its own `id`, for a link to it or a region refreshed in place. |
 | `section` | `lede` |  |  | A line under the heading. |
+| `section` | `line` | `False` |  | A fold drawn as one line, its heading and aside the summary, its body under it, unframed. |
 | `section` | `moment` | `None` |  | A moment the heading names, drawn after its words. |
 | `section` | `more_label` |  |  | The label of the aside's link to the whole of what it shows part of. |
 | `section` | `more_url` |  |  | Where that link leads, drawn only when there is somewhere to go. |
@@ -1650,7 +1651,9 @@ in height. Two of one heading name their own ids, and `id` is the section's own 
 region refreshed in place).
 
 `fold=True` draws it closed with its head as its toggle (`open`, any truthy value such as a form's
-errors, starts it open), its count beside it; never a separate "Show all". What it holds sits on
+errors, starts it open), its count beside it; never a separate "Show all". With `line=True` it is
+a fold inside another part's line (a step's checks): its heading and aside the one summary line,
+its body under it, with no heading element and no frame. What it holds sits on
 a panel like its neighbors: a fold of one table has the table's region, and any other fold is a
 folded section, its body in the section's frame. `css` and `data_*` are the section's, on a
 landmark that never pads itself, whatever `css` names: the frame holds the padding.
@@ -1730,6 +1733,14 @@ done in order are `{% steps numbered=True %}`: wider columns, as many as fit up 
 its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
 `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
 runs it, and it carries no secret.
+
+A workflow HQ declares (`sequences.SequenceSpec`) is drawn whole by `{% steps of=sequence %}`,
+which encloses nothing: one list read down at every width, each step numbered, its title linked to
+the page that holds it, its state's word and its sentence. A step made of parts (a check, an app)
+is one line, its word and how many stand where, folding its parts (`{% section line=True %}`): each
+on a line of its own, its mark and state in its tone, its name linked. A failed part opens the fold
+as it is drawn. A part an event told HQ of since its record was read says who told it, until the
+next read replaces it.
 
 ### switch (host only)
 

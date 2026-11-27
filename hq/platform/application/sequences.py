@@ -10,11 +10,12 @@ it declares its commands, through its integration's ``sequences``."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Final
+from typing import Annotated, Final, TypedDict
 
 lazy from hq.domains.control_plane.provider_adapters import CONNECTIONS, INBOUND, OBSERVATIONS
 
-from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
+from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing, StandingAnswer
+from .describe import Describe
 from .entity_links import EntityLink, declared_link, provider_label
 from .labels import dotted, lower_first
 lazy from .domains import host_specs
@@ -32,6 +33,17 @@ _MARKS = {DONE: "check-circle", FAILED: "x-circle", RUNNING: "clock", QUEUED: "c
 def _admitted(mover: str) -> bool:
     providers = {spec.provider for spec in OBSERVATIONS.values()} | CONNECTIONS.keys() | INBOUND.keys()
     return mover == PERSON or mover in providers
+
+
+class PartAnswer(TypedDict):
+    title: Annotated[str, Describe("What it is, in the words its page shows.")]
+    standing: StandingAnswer
+    by: Annotated[str, Describe("Who moves it on: `person`, or the key of the provider HQ admits.")]
+    told: Annotated[bool, Describe("Whether an event told HQ how it stands since its record was last read.")]
+
+
+class StepAnswer(PartAnswer):
+    parts: Annotated[list[PartAnswer], Describe("What it is made of, such as each check; empty for none.")]
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +97,15 @@ class Step:
 
         return declared_link(self.title, self.standing.url) if self.standing.url else None
 
+    @property
+    def part(self) -> PartAnswer:
+        return {"title": self.title, "standing": self.standing.as_json(), "by": self.by, "told": self.told}
+
+    def as_json(self) -> StepAnswer:
+        """It as the API and MCP answer it, the same the page draws."""
+
+        return {**self.part, "parts": [part.part for part in self.parts]}
+
 
 @dataclass(frozen=True, slots=True)
 class Sequence:
@@ -113,15 +134,18 @@ class Sequence:
 
     @property
     def said(self) -> str:
-        """Where it stands and the person's next step, as one line leads with
-        them: ``Checks running · 1 of 2 passed. Approve: yours, once checks
-        pass``; "" once every step is done, which its last step says."""
+        """Where it stands and the person's next step, as the line a card
+        leads with says them: ``Checks running · 1 of 2 passed. Approve:
+        yours, once checks pass.``; its last step once every step is done."""
 
-        if (at := self.at) is None:
+        at, yours = self.at or (self.steps[-1] if self.steps else None), self.next
+        if at is None:
             return ""
-        lead = f"{at.title} {lower_first(at.line)}"
-        yours = self.next
-        return f"{lead}. {yours.title}: {lower_first(yours.standing.label)}" if yours and yours is not at else lead
+        lines = (
+            f"{at.title} {lower_first(at.line)}" if at is not yours else "",
+            f"{yours.title}: {lower_first(yours.line if yours is at else yours.standing.label)}" if yours else "",
+        )
+        return " ".join(f"{line}." for line in lines if line)
 
 
 @dataclass(frozen=True, slots=True)
