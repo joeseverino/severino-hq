@@ -606,6 +606,10 @@ class ProviderSpec:
     # Headers a proxy of this kind adds to corroborate the forwarded client
     # and scheme, in that order.
     forwarding_headers: tuple[str, str] | tuple[()] = ()
+    # The spec field holding the largest request body a proxy of this kind
+    # lets through, in MiB, 0 for the proxy's own limit. A proxy serving HQ
+    # is held to the largest request HQ takes (``proxy_findings``).
+    body_limit: str = ""
     # The certificate declaration an ingress serves its names with, by
     # resource key, or "" when it names none. A covering certificate applies
     # to a name only where the ingress that serves it names that certificate.

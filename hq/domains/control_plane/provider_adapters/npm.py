@@ -1,10 +1,11 @@
 """Nginx Proxy Manager: the proxy hosts HQ declares. The controller reads and writes them."""
 
+import re
 from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from hq.platform.application.command_fields import NonEmpty, RequiredText
+from hq.platform.application.command_fields import Checked, NonEmpty, Reason, RequiredText
 from hq.platform.application.describe import Describe
 from hq.platform.application.ui import ended
 from hq.platform.core.network import split_host_port
@@ -22,6 +23,18 @@ from ..provider_spec import (
     applies,
 )
 from .contracts import IngressPolicy, ServedCertificate
+
+# Nginx's directive for the largest request body.
+_BODY_LIMIT = re.compile(r"^\s*client_max_body_size\b", re.IGNORECASE | re.MULTILINE)
+
+
+def _no_body_limit(value: str) -> str:
+    # The controller writes the spec's own field as this directive, and nginx
+    # refuses a config that sets it twice.
+    if _BODY_LIMIT.search(value):
+        raise ValueError
+    return value
+
 
 # The corroborating headers NPM adds beside X-Forwarded-For: client, then scheme.
 FORWARDING_HEADERS = ("X-Real-IP", "X-Forwarded-Scheme")
@@ -116,11 +129,24 @@ class NPMProxyHostSpec(ProviderModel):
         title="Access list",
         description="An Nginx Proxy Manager access list id. 0 means none.",
     )
-    advanced_config: str = Field(
+    advanced_config: Annotated[
+        str,
+        Checked(
+            _no_body_limit, Reason("body_limit_has_its_field", "must leave client_max_body_size to Largest request")
+        ),
+    ] = Field(
         default="",
         title="Extra nginx configuration",
         description="Passed through as-is. Usually blank.",
         json_schema_extra={"contentMediaType": "text/x-nginx-conf"},
+    )
+    client_max_body_size: int = Field(
+        default=0,
+        ge=0,
+        # The controller holds it as Go's int, as it does the access list id.
+        le=2**63 - 1,
+        title="Largest request",
+        description="In MB. 0 keeps Nginx Proxy Manager's own limit.",
     )
     hsts_enabled: Annotated[bool, Describe("", api="Whether the proxy sends Strict-Transport-Security.")] = False
     hsts_subdomains: Annotated[bool, Describe("", api="Whether that header covers every subdomain.")] = False
@@ -161,6 +187,7 @@ def _from_record(record: dict[str, Any]) -> dict[str, Any]:
         "block_exploits": bool(record.get("block_exploits")),
         "access_list_id": record.get("access_list_id") or 0,
         "advanced_config": record.get("advanced_config") or "",
+        "client_max_body_size": record.get("client_max_body_size") or 0,
         "hsts_enabled": bool(record.get("hsts_enabled")),
         "hsts_subdomains": bool(record.get("hsts_subdomains")),
         "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
@@ -198,6 +225,7 @@ DEFINITION = ProviderSpec(
         "block_exploits",
         "access_list_id",
         "advanced_config",
+        "client_max_body_size",
         "hsts_enabled",
         "hsts_subdomains",
         "trust_forwarded_proto",
@@ -207,6 +235,7 @@ DEFINITION = ProviderSpec(
     ingress_policy=ingress_policy,
     served_certificate=served_certificate,
     forwarding_headers=FORWARDING_HEADERS,
+    body_limit="client_max_body_size",
     hostnames=lambda spec: tuple(spec["domain_names"]),
     certificate=lambda spec: str(spec.get("certificate_resource", "") or ""),
     origin=lambda spec: f"{spec['forward_host']}:{spec['forward_port']}",
@@ -224,6 +253,7 @@ DEFINITION = ProviderSpec(
         "block_exploits": True,
         "access_list_id": 0,
         "advanced_config": "",
+        "client_max_body_size": 64,
         "hsts_enabled": False,
         "hsts_subdomains": False,
         "trust_forwarded_proto": False,

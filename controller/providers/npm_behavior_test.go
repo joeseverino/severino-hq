@@ -297,3 +297,33 @@ func TestNPMProxyHostRecordIsTyped(t *testing.T) {
 		t.Errorf("a host without a certificate reports {}, got %v", got)
 	}
 }
+
+// A proxy host's body limit reaches NPM as nginx's own directive, ahead of
+// the advanced config, and is read back out of it as the field again, in
+// whichever unit nginx was given it.
+func TestNPMBodyLimitIsNginxsDirective(t *testing.T) {
+	for _, c := range []struct {
+		limit    int
+		advanced string
+	}{{0, ""}, {0, "gzip on;"}, {64, ""}, {257, "gzip on;\nproxy_read_timeout 90s;"}} {
+		spec := NPMProxyHostSpec{ClientMaxBodySize: c.limit, AdvancedConfig: c.advanced}
+		if limit, advanced := npmSplitAdvanced(npmAdvanced(spec)); limit != c.limit || advanced != c.advanced {
+			t.Errorf("%+v read back as %d %q", c, limit, advanced)
+		}
+	}
+	for written, mib := range map[string]int{"16M": 16, "2g": 2048, "512k": 1, "1048577": 2} {
+		if limit, advanced := npmSplitAdvanced("gzip on;\n  client_max_body_size " + written + ";\n"); limit != mib || advanced != "gzip on;\n" {
+			t.Errorf("%s read as %d %q", written, limit, advanced)
+		}
+	}
+	server := newNPMServer(t)
+	spec := sampleProxySpec()
+	spec["client_max_body_size"] = 64
+	for held, write := range map[string]bool{`client_max_body_size 64m;`: false, ``: true, `client_max_body_size 16m;`: true} {
+		server.lists["/api/nginx/proxy-hosts"] = strings.Replace(heldHost("true", "false"), `"advanced_config":""`, `"advanced_config":"`+held+`"`, 1)
+		res, err := npmRegistry(t, npmAt(server.URL)).runAction(t.Context(), runtime.ResourceKindNPMProxyHost, "reconcile", spec, nil, false)
+		if err != nil || res.Changed != write {
+			t.Errorf("held %q: changed %v, %v", held, res.Changed, err)
+		}
+	}
+}

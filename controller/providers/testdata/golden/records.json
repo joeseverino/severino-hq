@@ -938,6 +938,7 @@
       "block_exploits": true,
       "access_list_id": 1,
       "advanced_config": "example",
+      "client_max_body_size": 1,
       "hsts_enabled": true,
       "hsts_subdomains": true,
       "trust_forwarded_proto": true,
