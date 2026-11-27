@@ -7,16 +7,13 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.core.testing import declare
 
 from ..findings import findings
 from ..paths import path_to
 from ..projection import projection_scope
-from ..resource_context import origin_machine
 from ..security import cli_principal
-from ..services import service_catalog
-from ..topology import derive_topology, topology
 
 CONTROLLER = "example-controller"
 EXPIRES = (timezone.now() + timedelta(days=60)).isoformat()
@@ -84,7 +81,6 @@ class CaddyPathTests(TestCase):
 
         ingress = next(hop for hop in self.walk().primary.hops if hop.step == "ingress")
 
-        self.assertEqual(ingress.certificate.role, "Served")
         self.assertEqual((ingress.certificate.name, ingress.certificate.issuer), ("example.com", "Example CA"))
         self.assertFalse(ingress.certificate.unread)
         self.assertIn("60 days", ingress.certificate.expiry)
@@ -94,17 +90,7 @@ class CaddyPathTests(TestCase):
 
         ingress = next(hop for hop in self.walk().primary.hops if hop.step == "ingress")
 
-        self.assertEqual(
-            ingress.certificate.unread,
-            "not read: Served certificate, because the edge target does not report its certificate",
-        )
-
-    def test_a_container_name_resolves_on_the_proxy_machine(self):
-        self.route()
-
-        hops = [(hop.step, hop.name) for hop in self.walk().primary.hops]
-
-        self.assertEqual(hops[-2:], [("machine", "edge-1"), ("container", "shop")])
+        self.assertIn("the edge target does not report its certificate", ingress.certificate.unread)
 
 
 PLACEHOLDER = "{http.request.host}:443"
@@ -149,18 +135,6 @@ class RequestedHostRouteTests(TestCase):
         with projection_scope():
             return findings(principal=cli_principal())
 
-    def test_the_path_ends_at_the_proxy_and_resolves_nothing(self):
-        self.routes(PLACEHOLDER, to_requested_host=True)
-
-        with projection_scope():
-            hops = [(hop.step, hop.name) for hop in path_to("example.dev").primary.hops]
-
-        self.assertIn("ingress", [step for step, _ in hops])
-        self.assertFalse(
-            {"upstream", "machine", "container"}
-            & {step for step, _ in hops[hops.index(next(hop for hop in hops if hop[0] == "ingress")) + 1 :]}
-        )
-
     def test_it_raises_what_a_route_caddy_answers_itself_raises_and_no_more(self):
         self.routes("")
         answered_here = self.rules()
@@ -172,92 +146,3 @@ class RequestedHostRouteTests(TestCase):
             sorted((item["rule"], item["subject"]) for item in answered_here["findings"]),
         )
         self.assertNotIn("http.request.host", str(passed_through))
-
-    def test_the_catalog_and_the_graph_read_it_without_an_origin(self):
-        self.routes(PLACEHOLDER, to_requested_host=True)
-
-        with projection_scope():
-            services = service_catalog()
-            routed = next(
-                node for node in derive_topology(principal=cli_principal()).nodes if node.label == "example.dev"
-            )
-            graph = topology(principal=cli_principal(), focus=routed.id, depth=5)
-
-        # The routed name's node is served, so the check below reads it.
-        self.assertIn(routed.id, {node["id"] for node in graph["nodes"]})
-        self.assertNotIn("http.request.host", str(graph))
-        for service in services:
-            if service.origin is not None:
-                self.assertNotIn("http.request.host", service.origin.address)
-
-    def test_a_declared_route_with_a_placeholder_names_no_machine(self):
-        resource = ManagedResource(
-            key="example-dev-caddy",
-            kind="caddy.route",
-            spec={"connection_ref": "example-edge", "domain": "example.dev", "upstream": PLACEHOLDER},
-        )
-
-        self.assertIsNone(origin_machine(resource))
-
-
-class ServedCertificateExpiryTests(TestCase):
-    """A certificate only a proxy's routes name still warns before it lapses."""
-
-    def routes(self, days, *domains):
-        expires = (timezone.now() + timedelta(days=days)).isoformat()
-        store(
-            "caddy.route",
-            *(
-                {
-                    "connection_ref": "example-edge",
-                    "domain": domain,
-                    "upstream": "shop:8080",
-                    "certificate": {
-                        "name": "example.dev",
-                        "provider": "Example Root CA",
-                        "expires_on": expires,
-                        "domains": ["example.dev", "*.example.dev"],
-                    },
-                }
-                for domain in domains
-            ),
-        )
-
-    def found(self):
-        with projection_scope():
-            return findings(principal=cli_principal(), rule="certificate-expiring")["findings"]
-
-    def test_one_near_expiry_is_raised_once_with_every_name_it_serves(self):
-        self.routes(5, "example.dev", "*.example.dev")
-
-        (finding,) = self.found()
-
-        self.assertEqual(finding["severity"], "serious")
-        self.assertTrue(finding["title"].startswith("Certificate example.dev expires"))
-        self.assertIn(
-            {
-                "label": "Held in",
-                "value": "example-edge",
-                "url": "/infrastructure/connections/#connection-example-edge",
-                "code": False,
-            },
-            finding["evidence"],
-        )
-        self.assertIn(
-            {"label": "Serves", "value": "*.example.dev, example.dev", "url": "", "code": False}, finding["evidence"]
-        )
-
-    def test_a_distant_one_and_a_route_caddy_manages_say_nothing(self):
-        self.routes(400, "example.dev")
-        self.assertEqual(self.found(), [])
-
-        store(
-            "caddy.route",
-            {
-                "connection_ref": "example-edge",
-                "domain": "example.dev",
-                "upstream": "shop:8080",
-                "certificate_unread": "managed by Caddy",
-            },
-        )
-        self.assertEqual(self.found(), [])

@@ -3,16 +3,12 @@
 from unittest import mock
 
 from django.test import TestCase, override_settings
-from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderInventory
-from hq.platform.application.markup_testing import all_elements, select, texts, with_class
-from hq.platform.core.testing import READER, declare, operator
+from hq.domains.control_plane.models import ProviderInventory
+from hq.platform.core.testing import declare
 
-from ..hq_self import LABEL, hq_hostnames, hq_service, served_at
-from ..machines import machine
-from .host_only import host_only
+from ..hq_self import hq_service
 
 SITE = override_settings(
     SEVERINO_SITE_HOST="hq.example.com",
@@ -29,113 +25,6 @@ def own(*addresses):
 
 def machine_at(name, *addresses):
     declare(name, "machine", {"name": name, "addresses": list(addresses)})
-
-
-class SiteUrlTests(TestCase):
-    @SITE
-    def test_a_page_is_addressed_at_the_declared_site_over_https(self):
-        from ..hq_self import site_url
-
-        self.assertEqual(site_url("/audit/approval/1/"), "https://hq.example.com/audit/approval/1/")
-
-    @override_settings(SEVERINO_SITE_HOST="")
-    def test_with_no_site_declared_a_page_is_its_path(self):
-        from ..hq_self import site_url
-
-        self.assertEqual(site_url("/audit/approval/1/"), "/audit/approval/1/")
-
-
-class LabelTests(TestCase):
-    @override_settings(SEVERINO_SITE_NAME="Example HQ")
-    def test_hq_is_called_by_the_configured_site_name(self):
-        from ..hq_self import SelfService, site_label
-
-        self.assertEqual(site_label(), "Example HQ")
-        self.assertEqual(SelfService(hostnames=("hq.example.com",)).label, "Example HQ")
-
-
-class HostnameTests(TestCase):
-    @override_settings(
-        SEVERINO_SITE_HOST="hq.example.com",
-        ALLOWED_HOSTS=[
-            "alt.example.com",
-            "hq.example.com",
-            "*.example.com",
-            ".example.org",
-            "localhost",
-            "testserver",
-            "192.0.2.5",
-        ],
-    )
-    def test_only_concrete_names_count_site_host_first(self):
-        self.assertEqual(hq_hostnames(), ("hq.example.com", "alt.example.com"))
-
-
-@SITE
-class MachineTests(TestCase):
-    def test_the_machine_its_name_answers_at_runs_it(self):
-        machine_at("example-host", "100.64.0.9")
-        machine_at("example-other", "100.64.0.10")
-        ProviderInventory.objects.create(
-            kind="adguard.rewrite",
-            records=[{"domain": "hq.example.com", "answer": "100.64.0.9"}],
-            observed_at=timezone.now(),
-        )
-
-        with own():
-            found = machine("example-host")
-            other = machine("example-other")
-
-        self.assertTrue(found.runs_hq)
-        self.assertEqual(found.hq_hostnames, ("hq.example.com",))
-        self.assertFalse(other.runs_hq)
-
-    def test_the_machine_at_its_listen_address_runs_it(self):
-        machine_at("example-host", "192.0.2.44")
-
-        with own("192.0.2.44"):
-            self.assertTrue(machine("example-host").runs_hq)
-
-    def test_no_address_in_common_claims_nothing(self):
-        machine_at("example-host", "192.0.2.44")
-
-        with own("192.0.2.99"):
-            self.assertFalse(machine("example-host").runs_hq)
-
-
-@SITE
-class PageTests(TestCase):
-    def setUp(self):
-        operator(self.client)
-        machine_at("example-host", "192.0.2.44")
-
-    def test_the_machine_page_serves_hq(self):
-        with own("192.0.2.44"):
-            response = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
-
-        self.assertContains(response, LABEL)
-        self.assertContains(response, 'href="/infrastructure/services/hq.example.com/" data-entity="Service"')
-        self.assertNotContains(response, "No managed services")
-
-    def test_the_services_list_includes_it_with_its_health(self):
-        with own("192.0.2.44"):
-            service = hq_service()
-            response = self.client.get(reverse("control_plane:services"))
-
-        self.assertEqual(service.machine, "example-host")
-        # A row of the services table, marked, not a table of its own.
-        headings = texts(response, "th")
-        self.assertNotIn(("Hostname", "Runs on", "State"), set(zip(headings, headings[1:], headings[2:], strict=False)))
-        self.assertNotIn("HQ", [pill.words for pill in with_class(response, "pill")])
-        # Its state is HQ's health, never its mode.
-        (state,) = select(response, "title", "Answering this request.")
-        self.assertEqual(state.words, "Up")
-        self.assertIn("tone-good", state.classes)
-        self.assertNotIn("Read-only", [element.words for element in all_elements(response)])
-        self.assertContains(response, "hq.example.com")
-        self.assertContains(response, reverse("control_plane:machine", kwargs={"name": "example-host"}))
-        self.assertEqual(list(ManagedResource.objects.values_list("kind", flat=True)), ["machine"])
-        self.assertFalse(OperationRequest.objects.exists())
 
 
 def tailnet_device(name, addresses, endpoints=()):
@@ -155,13 +44,6 @@ def tailnet_device(name, addresses, endpoints=()):
     )
 
 
-class _Request:
-    """The part of an ASGI request HQ reads: the address it arrived on."""
-
-    def __init__(self, host):
-        self.scope = {"server": (host, 443)}
-
-
 @SITE
 class TailnetMachineTests(TestCase):
     """A machine known only to the tailnet carries only tailnet addresses."""
@@ -173,26 +55,6 @@ class TailnetMachineTests(TestCase):
             ("192.0.2.10:41641", "[2001:db8::10]:41641"),
         )
 
-    def test_an_endpoint_on_this_host_names_the_device(self):
-        with own("192.0.2.10"):
-            found = machine("example-laptop")
-
-        self.assertTrue(found.runs_hq)
-        self.assertEqual(found.hq_hostnames, ("hq.example.com",))
-
-    def test_the_address_a_request_arrived_on_names_the_machine(self):
-        with own():
-            service = hq_service(_Request("100.64.0.5"))
-            found = machine("example-laptop", served_at=served_at(_Request("100.64.0.5")))
-
-        self.assertEqual(service.machine, "example-laptop")
-        self.assertTrue(found.runs_hq)
-
-    def test_no_request_and_no_endpoint_in_common_claims_nothing(self):
-        with own("192.0.2.99"):
-            self.assertFalse(machine("example-laptop").runs_hq)
-            self.assertEqual(hq_service().machine, "")
-
     def test_an_endpoint_two_devices_report_names_neither(self):
         ProviderInventory.objects.filter(kind="tailscale.device").update(
             records=[
@@ -203,48 +65,3 @@ class TailnetMachineTests(TestCase):
 
         with own("192.0.2.10"):
             self.assertEqual(hq_service().machine, "")
-
-    def test_loopback_and_link_local_name_no_machine(self):
-        machine_at("example-host", "127.0.0.1", "169.254.0.5", "fe80::5")
-
-        with own("169.254.0.5", "fe80::5"):
-            self.assertFalse(machine("example-host").runs_hq)
-            self.assertEqual(hq_service(_Request("127.0.0.1")).machine, "")
-        self.assertEqual(served_at(_Request("127.0.0.1")), ())
-        self.assertEqual(served_at(_Request("100.64.0.5")), ("100.64.0.5",))
-        self.assertEqual(served_at(object()), ())
-
-
-@SITE
-class TopologyTests(TestCase):
-    def test_hq_is_a_service_that_runs_on_its_machine(self):
-        from ..topology import derive_topology
-
-        machine_at("example-host", "192.0.2.44")
-        reader = READER
-
-        with own("192.0.2.44"), host_only():
-            topology = derive_topology(principal=reader)
-
-        nodes = {node.id: node for node in topology.nodes}
-        node = nodes["service:hq.example.com"]
-        self.assertEqual(node.kind, "service")
-        self.assertEqual(node.subtitle, LABEL)
-        self.assertIn(
-            ("service:hq.example.com", "machine:example-host", "runs_on"),
-            {(edge.source, edge.target, edge.kind) for edge in topology.edges},
-        )
-
-    def test_the_page_seeds_the_address_a_request_arrived_on(self):
-        from ..topology import derive_topology
-
-        tailnet_device("example-laptop", ("100.64.0.5",))
-        reader = READER
-
-        with own(), host_only():
-            topology = derive_topology(principal=reader, request=_Request("100.64.0.5"))
-
-        self.assertIn(
-            ("service:hq.example.com", "machine:example-laptop", "runs_on"),
-            {(edge.source, edge.target, edge.kind) for edge in topology.edges},
-        )

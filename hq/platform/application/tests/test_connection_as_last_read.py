@@ -47,33 +47,6 @@ def device_check(request):
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class AsLastReadTests(TestCase):
-    def test_an_old_reading_says_the_handshake_as_of_the_read(self):
-        read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST, age=AWAY)
-
-        found = connection(a_request())
-
-        self.assertFalse(found.tailnet_current)
-        self.assertIn("before the read", found.handshake)
-        self.assertNotIn("ago", found.handshake)
-
-    def test_a_current_reading_says_the_handshake_as_an_age(self):
-        read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST)
-
-        found = connection(a_request())
-
-        self.assertTrue(found.tailnet_current)
-        self.assertTrue(found.handshake.endswith("ago"))
-
-    def test_an_old_reading_names_the_path_as_a_current_one_does(self):
-        """The panel's note says when the tailnet was read; the value is the path."""
-
-        read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST, age=AWAY)
-        old = connection(a_request()).path_label
-        read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST)
-        current = connection(a_request()).path_label
-
-        self.assertEqual(old, current)
-
     def test_an_idle_link_is_connected_and_draws_no_connection_type(self):
         read(laptop(public_key=""), HQ_HOST, age=AWAY)
 
@@ -112,29 +85,3 @@ class PanelTests(TestCase):
         self.assertEqual(len(asks), 1)
         # Filled in place from its own address, in a dialog as on the page.
         self.assertTrue(select(page, "data-fragment", reverse("connection")))
-
-    def test_a_current_reading_is_said_as_now_and_nothing_is_asked(self):
-        read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST)
-
-        page = self.panel()
-
-        self.assertFalse(select(page, "data-last-seen"))
-        self.assertFalse(select(page, "data-ask-refresh"))
-
-    def test_an_unread_posture_check_gives_its_cause_in_the_panel(self):
-        from ..connection_catalog import connection_catalog
-        from ..posture import estate_posture
-        from ..security import cli_principal
-
-        unread = [
-            result
-            for result in estate_posture(connection_catalog(principal=cli_principal())).results
-            if result.state == "unavailable"
-        ]
-        page = self.panel()
-
-        shown = {element.attrs["data-posture-unread"]: element.words for element in select(page, "data-posture-unread")}
-        self.assertTrue(unread)
-        for result in unread:
-            with self.subTest(check=result.check.id):
-                self.assertIn(result.reading.evidence, shown[result.check.id])

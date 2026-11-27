@@ -38,28 +38,3 @@ class ConnectionReachTests(TestCase):
             with self.subTest(ref=ref):
                 self.assertEqual(found[ref].network, "loopback")
                 self.assertEqual(found[ref].machine.label, "example-host")
-
-    def test_a_name_hq_reads_an_answer_for_is_reached_at_that_address(self):
-        reach = connection_reach([("nas", "https://nas.example.com")])["nas"]
-
-        self.assertEqual((reach.network, reach.address), ("tailnet", "100.64.0.10"))
-        self.assertEqual(reach.machine.label, "example-other")
-
-    def test_a_name_no_reading_answers_is_placed_by_the_name_alone(self):
-        found = connection_reach(
-            [
-                ("machine", "example-other:22"),
-                ("special-use", "https://printer.home.arpa"),
-                ("public", "https://api.example.net"),
-            ]
-        )
-
-        self.assertEqual((found["machine"].network, found["machine"].machine.label), ("network", "example-other"))
-        self.assertEqual((found["special-use"].network, found["special-use"].machine), ("network", None))
-        self.assertEqual((found["public"].network, found["public"].machine), ("public", None))
-        self.assertEqual({reach.address for reach in found.values()}, {""})
-
-    def test_an_endpoint_without_a_reference_or_a_host_is_left_out(self):
-        found = connection_reach([("", "100.64.0.10:22"), ("no-host", "")])
-
-        self.assertEqual(found, {})

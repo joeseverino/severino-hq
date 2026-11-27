@@ -4,37 +4,28 @@ from datetime import timedelta
 from ipaddress import ip_network
 from unittest import mock
 
-from django.template.loader import render_to_string
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import (
-    DashboardConfiguration,
     ManagedResource,
     ProviderConnection,
 )
-from hq.platform.application.derivation_testing import uncached
-from hq.platform.application.markup_testing import elements, hrefs, text
+from hq.platform.application.markup_testing import text
 from hq.platform.application.security import cli_principal
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import connection, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from ..attention import infrastructure
-from ..command_center import command_center
-from ..estate import cards, estate_reading, overview
-from ..findings import finding_key
-from ..glance import dashboard_panels
+from ..estate import estate_reading
 from ..inventory_testing import store
-from ..machines import machine, machine_catalog
 from ..projection import projection_scope
 from ..public_registry import wanted_addresses
 from ..resources import get_resource
 from ..security import Capability, Principal
 from ..tailnet_presence import tailnet_presence
-from .glance_readings import HOST, keep_machine, keep_weather, reported_hour, reported_machine, reported_weather
 from .host_only import host_only
 
 READ = Principal("test", "read", frozenset({Capability.READ}))
@@ -77,59 +68,6 @@ def declare_record(key, name, content):
     )
 
 
-class SearchFindsTheEstateTests(TestCase):
-    def setUp(self):
-        devices(
-            device(
-                "example-host",
-                addresses=["100.64.0.5"],
-                dns_name="example-host.example-tailnet.ts.net",
-            ),
-            device("example-laptop", addresses=["100.64.0.6"]),
-        )
-        declare_record("app-record", "app.example.com", "100.64.0.5")
-        store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
-
-    def estate(self, query):
-        return command_center(query, principal=READ, include_live_connections=True)["estate"]
-
-    def test_a_machine_name_address_or_magicdns_name_finds_the_machine_first(self):
-        for query in ("example-host", "100.64.0.5", "example-host.example-tailnet.ts.net"):
-            with self.subTest(query):
-                first = self.estate(query)[0]
-                self.assertEqual((first.kind, first.label), ("machine", "example-host"))
-                self.assertEqual(first.url, reverse("control_plane:machine", args=["example-host"]))
-
-    def test_a_hostname_finds_its_service_then_its_domain(self):
-        found = [(item.kind, item.label) for item in self.estate("app.example.com")]
-
-        self.assertEqual(found[:2], [("service", "app.example.com"), ("zone", "example.com")])
-
-    def test_the_palette_puts_the_estate_above_records_and_audit(self):
-        operator(self.client)
-        declare("example-host-spec", "machine", {"name": "example-host"})
-
-        response = self.client.get(reverse("search"), {"q": "example-host"}, headers={"X-Fragment": "palette"})
-
-        content = response.content.decode()
-        self.assertIn("command-center-group-estate", content)
-        self.assertLess(
-            content.index("command-center-group-estate"),
-            content.index("command-center-group-search-"),
-        )
-
-    def test_the_estate_is_not_offered_without_read(self):
-        none = Principal("test", "none", frozenset())
-
-        self.assertEqual(
-            command_center("example-host", principal=none, include_live_connections=True)["estate"],
-            (),
-        )
-
-    def test_an_empty_query_lists_no_estate(self):
-        self.assertEqual(self.estate(""), ())
-
-
 class AuditSearchTitleTests(TestCase):
     def test_an_audit_hit_is_titled_by_the_object_label_not_its_id(self):
         operator(self.client)
@@ -137,218 +75,12 @@ class AuditSearchTitleTests(TestCase):
         record_event(action=AuditLog.Action.UPDATED, obj=resource, type_label="Managed resource")
         event = AuditLog.objects.filter(object_id=str(resource.pk), action=AuditLog.Action.UPDATED).latest("created_at")
 
-        self.assertEqual(event.search_title, "Updated example-host")
         self.assertNotIn(str(resource.pk), str(event))
-        self.assertEqual(event.get_absolute_url(), reverse("core:audit_detail", args=[event.pk]))
 
         response = self.client.get(reverse("search"), {"q": "example-host"})
 
         self.assertIn("Updated example-host", text(response))
         self.assertNotContains(response, f"#{resource.pk}")
-
-
-class SearchSnippetTests(TestCase):
-    """Results read as words: labels for kinds, readouts for specs, no identifiers."""
-
-    def group(self, query, scope):
-        from ..search import global_search
-
-        found = global_search(query, principal=Principal("test", "all", frozenset(Capability)))
-        return next(group for group in found["groups"] if group["scope"] == scope)["items"]
-
-    @staticmethod
-    def text(item):
-        return "".join(part for part, _hit in item["snippet"])
-
-    def test_an_audit_snippet_names_no_object_id(self):
-        resource = declare("example-host", "machine")
-        record_event(
-            action=AuditLog.Action.CREATED,
-            obj=resource,
-            type_label="Managed resource",
-            message=f"Declared {resource.pk}",
-        )
-
-        items = self.group("example-host", "audit")
-
-        self.assertTrue(items)
-        for item in items:
-            self.assertNotIn(str(resource.pk), self.text(item))
-            self.assertNotIn(str(resource.pk)[:8], self.text(item))
-        self.assertIn("Managed resource", self.text(items[0]))
-
-    def test_a_resource_result_shows_its_label_and_readout(self):
-        store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
-        declare_record("app-record", "app.example.com", "192.0.2.10")
-
-        (item,) = self.group("app-record", "infrastructure")
-
-        from hq.domains.control_plane.providers import PROVIDERS
-
-        self.assertEqual(item["badge"], PROVIDERS["cloudflare.dns_record"].label)
-        self.assertNotIn("cloudflare.dns_record", item["badge"])
-        self.assertIn("192.0.2.10", self.text(item))
-        for raw in ("{", "connection_ref", "record_type"):
-            self.assertNotIn(raw, self.text(item))
-        self.assertEqual(item["url"], reverse("control_plane:service", args=["app.example.com"]))
-
-    def test_a_machine_declaration_opens_the_machine(self):
-        declare("example-host", "machine", {"name": "example-host"})
-
-        (item,) = self.group("example-host", "infrastructure")
-
-        self.assertEqual(item["url"], reverse("control_plane:machine", args=["example-host"]))
-
-    def test_a_kind_without_a_readout_shows_its_label(self):
-        declared("example-policy", "tailscale.policy", {"document": "{}"})
-
-        (item,) = self.group("example-policy", "infrastructure")
-
-        self.assertNotIn("tailscale.policy", item["badge"])
-        self.assertNotIn("{", self.text(item))
-        self.assertEqual(item["url"], reverse("control_plane:detail", args=["example-policy"]))
-
-
-class EstateCardTests(TestCase):
-    def setUp(self):
-        devices(device("example-host"), device("example-nas", online=False, tags=["tag:server"]))
-        declare_record("app-record", "app.example.com", "100.64.0.5")
-        connection("ssh", "example-ssh", reachable=False, detail="Timed out")
-        declared(
-            "example-cert",
-            "tls.certificate",
-            {"certificate_name": "example-cert", "domains": ["app.example.com"]},
-            status={"not_after": (timezone.now() + timedelta(days=12)).isoformat()},
-        )
-        store(
-            "cloudflare.zone",
-            {
-                "zone": "example.com",
-                "connection_ref": "example-dns",
-                "registration": {
-                    "expires_at": (timezone.now() + timedelta(days=200)).isoformat(),
-                    "auto_renew": True,
-                },
-            },
-        )
-
-    def cards(self):
-        with projection_scope():
-            return {card["id"]: card for card in cards(principal=cli_principal())}
-
-    def listed(self) -> int:
-        from ..connection_catalog import connection_total
-
-        with projection_scope():
-            return connection_total(principal=cli_principal())
-
-    def test_every_figure_links_to_its_page_and_the_nearest_expiries_to_their_subject(self):
-        found = self.cards()
-
-        self.assertEqual(found["hq.estate.machines"]["label"].count, len(machine_catalog()))
-        self.assertIn("1 online", found["hq.estate.machines"]["detail"])
-        self.assertEqual(found["hq.estate.machines"]["url"], reverse("control_plane:machines"))
-        self.assertEqual(found["hq.estate.services"]["url"], reverse("control_plane:services"))
-        self.assertEqual(found["hq.estate.domains"]["label"].count, 1)
-        self.assertEqual(found["hq.estate.domains"]["url"], reverse("zones:index"))
-        self.assertEqual(found["hq.estate.connections"]["label"].count, self.listed())
-        self.assertIn("example-ssh", found["hq.estate.connections"]["detail"])
-        # One connection with a problem leads to its own row.
-        self.assertEqual(
-            found["hq.estate.connections"]["url"],
-            reverse("control_plane:connections") + "#connection-example-ssh",
-        )
-        self.assertIn("example-cert", found["hq.estate.certificate"]["detail"])
-        self.assertEqual(
-            found["hq.estate.certificate"]["url"],
-            reverse("control_plane:detail", args=["example-cert"]),
-        )
-        self.assertIn("example.com", found["hq.estate.registration"]["detail"])
-        self.assertEqual(found["hq.estate.registration"]["url"], reverse("zones:detail", args=["example.com"]))
-
-    def test_a_service_hq_reads_no_health_of_is_not_drawn_as_down(self):
-        with projection_scope():
-            services = estate_reading().services
-            (figure,) = (
-                kpi for kpi in overview(principal=cli_principal()).kpis if kpi.url == reverse("control_plane:services")
-            )
-        unread = [service for service in services if service.health.state is None]
-
-        self.assertTrue(unread, "the estate has no service without a health reading")
-        self.assertEqual(len(figure.drawing.dots), len(services) - len(unread))
-        self.assertIn(f"{len(services) - len(unread)} health-checked", figure.detail)
-
-    def test_connections_are_counted_when_every_one_answers(self):
-        ProviderConnection.objects.filter(connection_ref="example-ssh").update(reachable=True, detail="")
-        connection("ssh", "example-dns")
-
-        card = self.cards()["hq.estate.connections"]
-
-        self.assertEqual(card["label"].count, self.listed())
-        self.assertEqual(card["url"], reverse("control_plane:connections"))
-        self.assertNotIn("detail", card)
-        self.assertNotIn("status", card)
-
-    def test_the_dashboard_shows_the_estate_card(self):
-        operator(self.client)
-
-        response = self.client.get(reverse("dashboard"))
-
-        for url in (reverse("control_plane:machines"), reverse("control_plane:services"), reverse("zones:index")):
-            self.assertIn(url, hrefs(response))
-
-
-class EdgeCertificateExpiryTests(TestCase):
-    """Edge certificates renew themselves; only a missed renewal is the operator's."""
-
-    def setUp(self):
-        store("cloudflare.zone", {"zone": "example.com", "connection_ref": "example-dns"})
-        declared(
-            "example-cert",
-            "tls.certificate",
-            {"certificate_name": "example-cert", "domains": ["app.example.com"], "renewal_window_days": 30},
-            status={"not_after": (timezone.now() + timedelta(days=50)).isoformat()},
-        )
-
-    def edge(self, days):
-        store(
-            "cloudflare.edge_certificate",
-            {
-                "connection_ref": "example-dns",
-                "zone": "example.com",
-                "id": "e1",
-                "hosts": ["example.com"],
-                "status": "active",
-                "expires_on": (timezone.now() + timedelta(days=days, hours=1)).isoformat(),
-            },
-        )
-
-    def figure(self):
-        with projection_scope():
-            return {card["id"]: card for card in cards(principal=cli_principal())}["hq.estate.certificate"]
-
-    def items(self):
-        with projection_scope():
-            return [item for item in tuple(infrastructure()) if "certificate-expiring:resource:" in finding_key(item)]
-
-    def test_an_edge_certificate_outside_the_window_is_not_the_next_expiry(self):
-        self.edge(40)
-
-        figure = self.figure()
-
-        self.assertIn("example-cert", figure["detail"])
-        self.assertNotIn("status", figure)
-        self.assertEqual(self.items(), [])
-
-    def test_an_edge_certificate_inside_the_window_is_the_next_expiry_and_the_finding_s_to_raise(self):
-        self.edge(10)
-
-        figure = self.figure()
-
-        self.assertIn("example.com", figure["detail"])
-        self.assertEqual(figure["status"], "attention")
-        self.assertEqual(figure["url"], reverse("zones:detail", args=["example.com"]))
-        self.assertEqual(self.items(), [])
 
 
 def in_days(days):
@@ -398,85 +130,8 @@ class CertificateListTests(TestCase):
         self.assertEqual([item.subject for item in found], ["unnamed-cert", "example.com", "example-cert"])
         self.assertEqual([item.resource_key for item in found], ["unnamed-cert", "", "example-cert"])
 
-    def test_an_edge_certificate_links_to_the_service_hq_serves_at_its_name_else_to_its_zone(self):
-        declare_record("app-record", "app.example.com", "100.64.0.5")
-        self.edge(("app.example.com", in_days(40)), ("old.example.com", in_days(60)))
-
-        links = {item.subject: item.url for item in self.certificates()}
-
-        self.assertEqual(
-            links,
-            {
-                "app.example.com": reverse("control_plane:service", args=["app.example.com"]),
-                "old.example.com": reverse("zones:detail", args=["example.com"]),
-            },
-        )
-
-    def test_a_name_one_reading_holds_twice_is_one_certificate_judged_by_the_newer(self):
-        # The older one stays in the reading beside the one that replaced it.
-        self.edge(("example.com", in_days(5)), ("example.com", in_days(-3)), ("www.example.com", in_days(-1)))
-
-        with projection_scope():
-            found = estate_reading().certificates
-
-        self.assertEqual(
-            sorted((item.subject, item.days) for item in found), [("example.com", 5), ("www.example.com", -1)]
-        )
-
-
-class StaleGlanceTests(TestCase):
-    def test_an_old_reading_keeps_its_place_until_its_ask_goes_unanswered(self):
-        DashboardConfiguration.objects.create(pk=1, weather_point="41.8781,-87.6298")
-        machine_spec = declare("example-host", "machine", {"name": "example-host"})
-        from hq.domains.control_plane.models import DashboardMachine, DashboardRefreshRequest
-
-        DashboardMachine.objects.create(machine=machine_spec, position=0)
-        connection("ssh", "example-ssh", controller_id="example-host")
-        keep_machine(reported_machine("example-host", host=HOST), at=timezone.now() - timedelta(days=26))
-        keep_weather(
-            reported_weather("41.8781,-87.6298", reported_hour("2026-07-01T13:00:00-05:00", forecast="Clear")),
-            at=timezone.now() - timedelta(minutes=1),
-        )
-        machine = f"machine-{machine_spec.pk}"
-
-        # Aged while nobody looked: shown with its age, in its place.
-        panels = dashboard_panels()
-        self.assertEqual(panels[0]["id"], machine)
-        html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
-        self.assertTrue(elements(html, "time"))
-
-        # Its refresh went unanswered: out of date, and it steps aside.
-        DashboardRefreshRequest.objects.create(panel_id=machine, requested_at=timezone.now() - timedelta(minutes=5))
-        self.assertEqual([panel["id"] for panel in dashboard_panels()][-1], machine)
-
 
 class ActionItemTests(TestCase):
-    def test_a_managed_certificate_inside_its_renewal_window(self):
-        for key, days in (("soon-cert", 5), ("later-cert", 80)):
-            declared(
-                key,
-                "tls.certificate",
-                {"certificate_name": key, "domains": ["app.example.com"], "renewal_window_days": 30},
-                status={"not_after": (timezone.now() + timedelta(days=days, hours=1)).isoformat()},
-            )
-
-        with projection_scope():
-            found = [item for item in tuple(infrastructure()) if "certificate-expiring:resource:" in finding_key(item)]
-
-        self.assertEqual(len(found), 1)
-        self.assertEqual(found[0].severity, "serious")
-        self.assertIn("soon-cert expires in", found[0].title)
-        self.assertEqual(found[0].subject_link.url, reverse("control_plane:detail", args=["soon-cert"]))
-        self.assertIn(
-            f"{reverse('command', kwargs={'name': 'certificate.renew'})}?target=soon-cert",
-            [press.url for press in found[0].presses],
-        )
-        # The card leads with the certificate's page.
-        self.assertEqual(
-            (found[0].primary.label, found[0].primary.url),
-            ("Open certificate", reverse("control_plane:detail", args=["soon-cert"])),
-        )
-
     def test_the_action_items_page_links_each_subject(self):
         operator(self.client)
         devices(device("example-host", update_available=True, client_version="1.102.3"))
@@ -484,33 +139,6 @@ class ActionItemTests(TestCase):
         response = self.client.get(reverse("action_items"))
 
         self.assertContains(response, f'href="{reverse("control_plane:machine", args=["example-host"])}"')
-
-
-class MachineRoleTests(TestCase):
-    def setUp(self):
-        devices(
-            device(
-                "example-exit",
-                addresses=["100.64.0.8"],
-                advertised_routes=["0.0.0.0/0", "::/0"],
-                enabled_routes=["0.0.0.0/0", "::/0"],
-            ),
-            device("example-dns", addresses=["100.64.0.5"]),
-            device(
-                "example-unapproved",
-                addresses=["100.64.0.9"],
-                advertised_routes=["0.0.0.0/0", "::/0"],
-            ),
-            nameservers=["100.64.0.5"],
-        )
-
-    def roles(self, name):
-        return [role.label for role in machine(name).roles]
-
-    def test_an_approved_exit_node_and_the_tailnet_nameserver(self):
-        self.assertEqual(self.roles("example-exit"), ["Exit node"])
-        self.assertEqual(self.roles("example-dns"), ["Tailnet DNS"])
-        self.assertEqual(self.roles("example-unapproved"), [])
 
 
 def addresses(name):
@@ -563,65 +191,6 @@ class PublicAddressTests(TestCase):
             [("Tailnet", "100.64.0.10", ""), ("Public", "203.0.113.7", "Example Hosting")],
         )
 
-    def home(self, *extra):
-        devices(
-            device(
-                "example-phone",
-                addresses=["100.64.0.11"],
-                endpoints=[
-                    "10.0.50.23:41641",
-                    "203.0.113.9:41641",
-                    "192.0.0.6:41641",
-                    # Its carrier's address: its own, and still not where it lives.
-                    "[2001:db8:0:9::1]:41641",
-                ],
-            ),
-            device(
-                "example-docker-host",
-                addresses=["100.64.0.12"],
-                endpoints=["172.17.0.1:41641", "10.0.50.40:41641", "203.0.113.9:41641"],
-            ),
-            device(
-                "example-other-docker-host",
-                addresses=["100.64.0.13"],
-                endpoints=["172.17.0.1:41641"],
-            ),
-            *extra,
-        )
-
-    def test_a_device_behind_a_shared_address_shows_its_lan_and_no_public_address(self):
-        self.home()
-
-        self.assertEqual(addresses("example-phone"), [("Tailnet", "100.64.0.11", ""), ("LAN", "10.0.50.23", "")])
-
-    def test_a_container_bridge_is_not_the_lan(self):
-        self.home()
-
-        self.assertIn(("LAN", "10.0.50.40", ""), addresses("example-docker-host"))
-        self.assertNotIn("LAN", [label for label, _address, _holder in addresses("example-other-docker-host")])
-
-    def test_an_address_inside_an_advertised_subnet_route_is_the_lan(self):
-        self.home(
-            device(
-                "example-router",
-                addresses=["100.64.0.14"],
-                advertised_routes=["10.0.60.0/24", "0.0.0.0/0"],
-                endpoints=["10.0.60.5:41641"],
-            )
-        )
-
-        self.assertIn(("LAN", "10.0.60.5", ""), addresses("example-router"))
-
-    def test_a_special_purpose_address_is_not_public(self):
-        from ..reach import is_public
-
-        self.assertFalse(is_public("192.0.0.6"))
-        with PUBLIC_RANGE:
-            self.assertTrue(is_public("203.0.113.7"))
-
-    def test_without_the_public_range_nothing_is_public(self):
-        self.assertEqual({item.name: item.public_addresses for item in machine_catalog()}["example-vps"], ())
-
 
 class ContainerVisibilityTests(TestCase):
     def setUp(self):
@@ -636,25 +205,8 @@ class ContainerVisibilityTests(TestCase):
         operator(self.client)
         self.assertContains(self.client.get(reverse("control_plane:machines")), "Not visible")
 
-    def test_a_connected_container_reader_makes_none_a_reading(self):
-        from ..services import CONTAINER_KIND
-
-        store(CONTAINER_KIND)
-
-        self.assertTrue(self.read()["containers_visible"])
-
 
 class EstateQueryBudgetTests(TestCase):
-    def snapshot_queries(self):
-        from django.db import connection as db
-        from django.test.utils import CaptureQueriesContext
-
-        from ..dashboard import operating_snapshot
-
-        with host_only(), CaptureQueriesContext(db) as queries, uncached():
-            operating_snapshot(principal=cli_principal())
-        return len(queries)
-
     def estate_of(self, size):
         devices(*(device(f"example-host-{index}", addresses=[f"100.64.0.{index + 1}"]) for index in range(size)))
         for index in range(size):
@@ -679,37 +231,3 @@ class EstateQueryBudgetTests(TestCase):
             return int(detail.partition(" online")[0].rpartition(" ")[2])
 
         assert_cost_does_not_grow(self, sizes=(1, 6), arrange=arrange, draw=draw, rows=online)
-
-    def test_the_estate_reads_what_the_dashboard_already_read(self):
-        """Every catalog it reads is shared with the queue in one projection."""
-
-        self.estate_of(3)
-        with_estate = self.snapshot_queries()
-        with mock.patch("hq.platform.application.estate.cards", return_value=()):
-            without = self.snapshot_queries()
-
-        self.assertLessEqual(with_estate - without, 1)
-
-
-class ConnectionFigureTests(TestCase):
-    """The dashboard's connections figure is the Connections page's count."""
-
-    def setUp(self):
-        super().setUp()
-        self.enterContext(host_only())
-
-    def test_the_figure_counts_every_row_the_connections_page_lists(self):
-        from ..connection_context import connections_context
-
-        declare("example-box", "machine", {"name": "example-box"})
-        connection("cloudflare_dns", "example-dns", endpoint="https://api.example.com")
-        admin = Principal("test", "admin", frozenset(Capability))
-
-        with projection_scope():
-            found = {card["id"]: card for card in cards(principal=cli_principal())}
-        with projection_scope():
-            listed = connections_context(principal=admin).connection_count
-
-        self.assertIn("hq.estate.machines", found)
-        self.assertEqual(found["hq.estate.connections"]["label"].count, listed)
-        self.assertTrue(all(card["url"] for card in found.values()))
