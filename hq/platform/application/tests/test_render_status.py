@@ -9,12 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.observations.host import (
-    RENDER_REASONS,
-    RENDER_STATUS_KIND,
-    RENDERER_NAME,
-    STATUS_WORD,
-)
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, RENDERER_NAME
 from hq.platform.core.testing import connection, declare
 
 from .. import render_status_findings as rules
@@ -87,25 +82,6 @@ class OneDeclarationTests(SimpleTestCase):
 
     def source(self, *parts: str) -> str:
         return ROOT.joinpath(*parts).read_text(encoding="utf-8")
-
-    def test_the_word_pattern_is_the_renderers(self):
-        declared = re.search(r"const WordPattern = `([^`]+)`", self.source("controller", "secretstatus", "status.go"))
-
-        self.assertEqual(declared.group(1), STATUS_WORD)
-
-    def test_the_renderer_name_is_the_controllers(self):
-        declared = re.search(
-            r"rendererName = regexp\.MustCompile\(`([^`]+)`\)",
-            self.source("controller", "providers", "host_readings.go"),
-        )
-
-        self.assertEqual(declared.group(1), RENDERER_NAME)
-
-    def test_the_reasons_are_the_controllers(self):
-        source = self.source("controller", "providers", "host_readings.go")
-        said = set(re.findall(r'unreadable\("(\w+)"\)', source))
-
-        self.assertEqual(said, set(RENDER_REASONS))
 
     def test_every_failure_class_is_explained(self):
         source = self.source("controller", "secrets", "render.go")

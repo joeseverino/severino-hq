@@ -3060,6 +3060,9 @@ type StatedText = string
 // StatedValue A value in a stated record, at any depth.
 type StatedValue = any
 
+// StatusWord Every string a secret renderer's status document carries besides its times.
+type StatusWord = string
+
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {
 	Reason  string `json:"reason"`

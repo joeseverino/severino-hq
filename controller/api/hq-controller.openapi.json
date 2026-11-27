@@ -6828,6 +6828,11 @@
         "type": "string",
         "description": "A setting's name, as a vault item's projection states it."
       },
+      "StatusWord": {
+        "pattern": "^[A-Za-z0-9_.+-]{1,64}$",
+        "type": "string",
+        "description": "Every string a secret renderer's status document carries besides its times."
+      },
       "SweptKind": {
         "type": "string",
         "description": "A kind the controller reads in a sweep: exactly the kinds it registers a reader for.",
