@@ -85,6 +85,22 @@ def _registry() -> dict[str, ProviderSpec]:
 PROVIDERS = _registry()
 
 
+def observed(kind: str) -> bool:
+    """Whether anything reads ``kind``: it is a reading, or a declaration a
+    sweep reads back (``ProviderSpec.sweeps``). A kind nothing declares is not."""
+
+    spec = PROVIDERS.get(kind)
+    return kind in OBSERVATIONS or (spec is not None and spec.sweeps)
+
+
+def unswept(kind: str) -> bool:
+    """Whether HQ declares ``kind`` and nothing sweeps it, so it can never be
+    behind a sweep. A kind HQ does not declare is read by whatever brings it."""
+
+    spec = PROVIDERS.get(kind)
+    return spec is not None and not spec.sweeps
+
+
 def resource_home(resource: Any) -> str:
     """The URL of the page a resource lives on."""
     provider = PROVIDERS.get(resource.kind)

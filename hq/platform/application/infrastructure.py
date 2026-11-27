@@ -24,6 +24,7 @@ from hq.domains.control_plane.providers import (
     resolve_provider_spec,
     shown_spec,
     spec_withheld,
+    unswept,
     validate_spec,
 )
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
@@ -365,7 +366,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
         return _health(ResourceState.HEALTHY, "Working", ready.get("reason", ""), ready.get("message", ""))
     # Nothing converges this kind, or nothing reads it back past the apply
     # that reported no state, so "not read yet" would never change.
-    if not converges or ((provider := PROVIDERS.get(resource.kind)) is not None and provider.unobserved_reason):
+    if not converges or unswept(resource.kind):
         return _health(ResourceState.DECLARED, "Not checked")
     return _health(ResourceState.UNKNOWN, NOT_READ_LABEL, message="HQ has not read it yet.")
 

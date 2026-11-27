@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import date
 
 from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, ENVIRONMENT_KIND
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, unswept
 
 from .cadence import CONTROLLER_REFRESH, sweep_interval
 from .credential_findings import UNREPORTED
@@ -20,7 +20,6 @@ from .finding_model import (
     Said,
     cannot_run_commands,
     fact_values,
-    is_observable,
     journal_step,
     machine_step,
     per_connection,
@@ -260,7 +259,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
     # declares, since that is the only thing left to compare against. Out of
     # date is ``freshness``'s word, so a page and this claim cannot disagree.
     for kind_key, newest in sorted(estate.latest_by_kind.items()):
-        if not freshness(kind_key, newest, estate.now).stale or not is_observable(kind_key):
+        if not freshness(kind_key, newest, estate.now).stale or unswept(kind_key):
             continue
         silent = since(newest, now=estate.now)
         # Staleness is a statement about declarations, and a kind HQ declares
@@ -288,7 +287,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
     # above cannot see it. It is claimed once about the kind rather than once
     # per record, which would bury the queue in copies of one claim.
     for kind_key in sorted(estate.declared_kinds - set(estate.latest_by_kind)):
-        if not is_observable(kind_key):
+        if unswept(kind_key):
             continue
         found.append(
             Finding(
@@ -561,7 +560,7 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
         if node.kind == "resource"
         and node.managed
         and not node.observed_at
-        and is_observable(node.kind_key)
+        and not unswept(node.kind_key)
         and node.id in estate.governed
         # The kind has been read, so the sweep can see it and missed this
         # one. Without that, the gap is the kind's, and saying it per record

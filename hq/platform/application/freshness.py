@@ -194,7 +194,7 @@ def cadence(kind: str = "") -> ReadCadence:
         return max((cadence(item) for item in read), key=lambda found: (not found.on_open, found.stale_after))
     if spec is None and kind and (declared := _extension_cadence(kind)) is not None:
         return declared
-    if (provider := PROVIDERS.get(kind)) is not None and provider.unobserved_reason:
+    if (provider := PROVIDERS.get(kind)) is not None and not provider.sweeps:
         # No sweep reads it, so what the controller applied is its reading.
         if (every := provider.rechecked_every) is None:
             return on_open(slowest_sweep_interval())

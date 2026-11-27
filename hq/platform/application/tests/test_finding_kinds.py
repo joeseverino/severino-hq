@@ -11,31 +11,6 @@ from ..report_testing import bridged
 from .host_only import host_only
 
 
-class StalenessIsMeasuredOnlyWhereASweepGoesTests(TestCase):
-    """`kind-never-swept` compares against the sweep interval, so it means
-    something only for a kind a sweep visits.
-
-    A certificate is observed when an operation issues or installs it, which is
-    nothing like every sixty seconds. Measured on that cadence it is
-    permanently overdue and no sweep or reconcile settles it. Expiry, which is
-    the risk a certificate actually carries, is reported where it belongs.
-    """
-
-    def test_only_a_kind_a_collector_sweeps_is_judged_on_sweep_cadence(self):
-        from hq.domains.control_plane.providers import PROVIDERS
-
-        from ..finding_model import is_observable
-
-        for kind in ("tls.certificate", "machine", "tls.delivery_target"):
-            with self.subTest(kind=kind):
-                self.assertTrue(PROVIDERS[kind].unobserved_reason, f"{kind} has no collector and should say so")
-                self.assertFalse(is_observable(kind))
-        # The exemption must not quietly turn staleness reporting off.
-        for kind in ("adguard.rewrite", "tailscale.device", "npm.proxy_host"):
-            with self.subTest(kind=kind):
-                self.assertTrue(is_observable(kind))
-
-
 class UnrecognizedContainerTests(TestCase):
     """A container no compose project declares is reported, never adopted.
 

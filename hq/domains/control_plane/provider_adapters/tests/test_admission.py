@@ -87,3 +87,16 @@ class InboundAdmissionTests(SimpleTestCase):
                     self.assertTrue(
                         all(kind in OBSERVATIONS or kind in PROVIDERS or reader_of(kind) for kind in kinds), kinds
                     )
+
+
+class ObservedTests(SimpleTestCase):
+    def test_a_kind_is_swept_or_says_why_not_and_never_both(self):
+        from dataclasses import replace
+
+        swept, unswept = PROVIDERS["adguard.rewrite"], PROVIDERS["machine"]
+        for case in (
+            {"spec": swept, "unobserved_reason": "Nothing reads it."},
+            {"spec": unswept, "unobserved_reason": ""},
+        ):
+            with self.subTest(case["spec"].kind), self.assertRaisesRegex(ValueError, "exactly one"):
+                replace(case["spec"], unobserved_reason=case["unobserved_reason"])

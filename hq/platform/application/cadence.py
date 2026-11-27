@@ -427,7 +427,7 @@ def swept(kind: str) -> bool:
     if reading is not None:
         return reading.read_by == "controller"
     declared = PROVIDERS.get(kind)
-    return declared is not None and not declared.unobserved_reason
+    return declared is not None and declared.sweeps
 
 
 def own_clock(kind: str) -> timedelta | None:

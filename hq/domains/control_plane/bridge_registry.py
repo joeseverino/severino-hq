@@ -15,6 +15,7 @@ from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
+lazy from hq.platform.application.cadence import swept
 lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
 from . import connection_shapes, provider_spec
@@ -84,12 +85,9 @@ def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank:
 
 
 def swept_kinds() -> list[str]:
-    """Every kind a controller reads in a sweep: a reading it takes, and a
-    resource kind that does not say why nothing reads it."""
+    """Every kind a controller reads in a sweep (``cadence.swept``)."""
 
-    read = {kind for kind, spec in OBSERVATIONS.items() if spec.read_by == "controller"}
-    resources = {kind for kind, spec in PROVIDERS.items() if not spec.unobserved_reason}
-    return sorted(read | resources)
+    return sorted(kind for kind in {*OBSERVATIONS, *PROVIDERS} if swept(kind))
 
 
 def _enumerations() -> dict[str, dict[str, Any]]:

@@ -18,7 +18,7 @@ def unattributed_kinds(observations, providers) -> list[str]:
         )
     ]
     for spec in providers:
-        if spec.unobserved_reason or not spec.sweeps:
+        if not spec.sweeps:
             continue
         if not set(spec.connection_providers) & PER_CONNECTION_PROVIDERS:
             continue

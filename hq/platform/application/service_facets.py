@@ -108,7 +108,7 @@ class ServiceFacet:
         kinds: list[str] = []
         providers: list[str] = []
         for kind, provider in PROVIDERS.items():
-            if provider.facet == self.id and not provider.unobserved_reason:
+            if provider.facet == self.id and provider.sweeps:
                 kinds.append(kind)
                 providers.extend(provider.connection_providers)
         for kind, spec in OBSERVATIONS.items():

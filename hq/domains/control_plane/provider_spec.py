@@ -506,15 +506,9 @@ class ProviderSpec:
     # changed. A difference in one is a problem said in those words. It is
     # never "changed outside HQ", so nothing offers to keep or restore a side.
     reported_fields: tuple[str, ...] = ()
-    # Why nothing sweeps this kind, or "" when something does.
-    #
-    # The collector registry is a dict in the controller and this is the list
-    # of kinds; nothing joined them, so a kind could be declared here and swept
-    # by nothing at all, with no symptom but a staleness claim no sweep clears.
-    #
-    # A sentence rather than a boolean: "nothing can reach it" and "no
-    # collector has been written yet" are different states, and the second is
-    # work rather than a fact about the world.
+    # Why nothing sweeps this kind, said exactly where ``_from_record`` is
+    # unset (``sweeps``): a sentence rather than a boolean, since "nothing can
+    # reach it" and "no collector has been written yet" are different states.
     unobserved_reason: str = ""
     # For a kind no sweep reads, how often the controller's reconcile reads
     # again what it applied, where something outside HQ moves it (a
@@ -716,6 +710,11 @@ class ProviderSpec:
             raise ValueError(
                 f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
+        if self.sweeps == bool(self.unobserved_reason):
+            raise ValueError(
+                f"{self.kind!r} is read back from a sweep (_from_record) or says why nothing sweeps it "
+                "(unobserved_reason), exactly one."
+            )
         if self.facet and self.hostnames is None:
             raise ValueError(f"{self.kind!r} supplies {self.facet!r} but says no way to read its spec's hostnames.")
         # The form prints each effect under the field it names, and a name no
@@ -731,7 +730,8 @@ class ProviderSpec:
 
     @property
     def sweeps(self) -> bool:
-        """Whether a swept record of this kind reads back as a spec."""
+        """Whether a sweep reads this kind: its swept records read back as a
+        spec. The one answer to whether a declared kind is observed."""
 
         return self._from_record is not None
 
