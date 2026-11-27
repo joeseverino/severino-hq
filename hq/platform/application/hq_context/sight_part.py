@@ -12,7 +12,7 @@ lazy from hq.domains.control_plane.providers import Read, provider_reads
 
 from ..labels import dotted
 from ..projection import iso, read_once
-from ..tables import Cell, DataTable, Group, TableColumn
+from ..tables import Cell, DataTable, Group, Row, TableColumn
 from ..tone import Tone
 from ..ui import counted
 from .band import Tile
@@ -110,24 +110,43 @@ class HqSight:
             "Readings by connection",
             _SEES_COLUMNS,
             groups=tuple(
-                Group(provider, DataTable.of("", _SEES_COLUMNS, rows).rows, count=len(rows))
+                Group(provider, tuple(row for standing in rows for row in _rows(standing)), count=len(rows))
                 for provider, rows in self.groups
             ),
         )
 
 
+def _rows(standing: Standing) -> tuple[Row, ...]:
+    """A reading's row, and folded under it each reason its refused parts
+    were not read for."""
+
+    cells = tuple(column.cell(standing) for column in _SEES_COLUMNS if column.cell)
+    reasons = standing.sight.part_reasons
+    if not reasons:
+        return (Row(cells),)
+    fold = f"reading-{standing.sight.kind.replace('.', '-')}"
+    return (
+        Row(cells, folds=fold),
+        *(Row((Cell(reason, muted=True),), folded=fold, across=True) for reason in reasons),
+    )
+
+
 def _reading(row: Standing) -> Cell:
-    """A reading kind, with why it is not read beneath: each refused part's
-    reason, else its remedy, else the error that stopped it."""
+    """A reading kind, with why it is not read beneath: how many of its parts
+    were refused, whose reasons its row folds, else its remedy, else the
+    error that stopped it."""
 
     seen = row.sight
     if seen.part_reasons:
-        said = seen.part_reasons
+        unread = {part.part.label for part in seen.parts}
+        said: tuple[str, ...] = (f"{counted(len(unread), 'part')} not read",)
     elif seen.remedy:
         said = (seen.remedy,)
     else:
         said = (seen.error,) if seen.error and not row.read else ()
-    return Cell(seen.label, title=seen.kind, lines=tuple(Cell(line, muted=True) for line in said))
+    return Cell(
+        seen.label, title=seen.kind, fold=bool(seen.part_reasons), lines=tuple(Cell(line, muted=True) for line in said)
+    )
 
 
 def _age(row: Standing) -> Cell:

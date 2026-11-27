@@ -481,6 +481,31 @@ class PartReasonTests(SimpleTestCase):
             ),
         )
 
+    def test_the_readings_table_folds_the_reasons_under_a_row_that_counts_the_parts(self):
+        from hq.domains.control_plane.observations import ReadingPart
+        from hq.domains.control_plane.reading_parts import RefusedPart
+
+        from ..credential_sight import PARTIAL, Sight, Standing
+        from ..hq_context.sight_part import HqSight
+
+        scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
+        reasons = {repository: f"GitHub 403 for /repos/example/{repository}/rules" for repository in ("app", "site")}
+        parts = tuple(
+            RefusedPart(kind="example", part=part, refusal="", reason=reason, scope=f"example/{repository}")
+            for repository, reason in reasons.items()
+            for part in (scanning, rules)
+        )
+        sight = Sight(kind="example", label="Repository", source="reading", state=PARTIAL, parts=parts)
+
+        head, *folded = HqSight(groups=(("Example", (Standing.of(sight),)),)).table.groups[0].rows
+
+        said = [line.text for cell in head.cells for line in cell.lines]
+        self.assertIn("2 parts not read", said)
+        self.assertFalse(any(reason in line for line in said for reason in reasons.values()))
+        self.assertTrue(head.folds and head.cells[0].fold)
+        self.assertEqual({row.folded for row in folded}, {head.folds})
+        self.assertEqual([row.cells[0].text for row in folded], list(sight.part_reasons))
+
     def test_a_bare_status_is_said_as_what_it_means_to_the_connection_that_read(self):
         from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
         from hq.domains.control_plane.observations import ReadingPart
