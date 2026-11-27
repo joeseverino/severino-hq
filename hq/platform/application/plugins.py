@@ -175,6 +175,9 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
+    # Workflows that cross outside systems: each a ``SequenceSpec`` whose
+    # steps every surface draws and reads (``application.sequences``).
+    sequences: Callable[[], Iterable[Any]] | None = None
     # How old a reading of each of the extension's kinds may get, by kind:
     # ``hq_sdk.reads.freshness`` and the Connections page judge it by this.
     # Each kind's is asked only as that kind is judged, so it may follow a
@@ -799,6 +802,10 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
 
 def plugin_outbound_work() -> tuple[Any, ...]:
     return _provided("outbound")
+
+
+def plugin_sequences() -> tuple[Any, ...]:
+    return _provided("sequences")
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:

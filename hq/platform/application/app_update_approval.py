@@ -100,9 +100,7 @@ def applier() -> OperationManifest:
         if UPDATE in manifest.fixes and REVISION in manifest.input_type.model_fields
     ]
     if not found:
-        raise PolicyError(
-            f"No adopted playbook applies an app update. On {PLAYBOOKS}, adopt the one that does."
-        )
+        raise PolicyError(f"No adopted playbook applies an app update. On {PLAYBOOKS}, adopt the one that does.")
     if len(found) > 1:
         raise PolicyError(
             f"{counted(len(found), 'adopted playbook applies', 'adopted playbooks apply')} an app update. Adopt only one."

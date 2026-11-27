@@ -43,7 +43,7 @@ from .image_findings import SERIOUS
 from .inbound_events import told
 from .moments import duration, moment, when
 from .projection import read_once
-from .sequences import By, Step
+from .sequences import Step
 from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
@@ -193,7 +193,7 @@ def check_step(check: PullCheck) -> Step:
             else f"since {when(run.started_at)}"
         )
     standing = asks.Standing(state, took, word=capfirst(word), url=web_url(run.url))
-    return Step(run.name, standing, by=By.GITHUB, told=check.told)
+    return Step(run.name, standing, by=PROVIDER, told=check.told)
 
 
 # What GitHub's log marks a step's end with when the tool said nothing of

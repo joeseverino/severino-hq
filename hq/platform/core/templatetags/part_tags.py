@@ -84,7 +84,9 @@ def _section() -> Part:
         region refreshed in place).
 
         `fold=True` draws it closed with its head as its toggle (`open`, any truthy value such as a form's
-        errors, starts it open), its count beside it; never a separate "Show all". What it holds sits on
+        errors, starts it open), its count beside it; never a separate "Show all". With `line=True` it is
+        a fold inside another part's line (a step's checks): its heading and aside the one summary line,
+        its body under it, with no heading element and no frame. What it holds sits on
         a panel like its neighbors: a fold of one table has the table's region, and any other fold is a
         folded section, its body in the section's frame. `css` and `data_*` are the section's, on a
         landmark that never pads itself, whatever `css` names: the frame holds the padding.
@@ -111,7 +113,7 @@ def _section() -> Part:
         `{{ part }}`. The part is the head, the frame and the spacing between, so a page states the
         content and never the spacing, the frame or the count's look.
         """,
-        classes=("section-aside", "section-body", "section-head", "section-lead", "section-lede"),
+        classes=("section-aside", "section-body", "section-head", "section-lead", "section-lede", "section-line"),
         pieces=("partials/_section_head.html",),
         partial=SECTION_PARTIAL,
         about="A titled part of a page in its frame, its head on the page and its body in the frame.",

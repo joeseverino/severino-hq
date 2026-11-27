@@ -118,13 +118,15 @@ slotted(
         runs it, and it carries no secret.
 
         A workflow HQ declares (`sequences.SequenceSpec`) is drawn whole by `{% steps of=sequence %}`,
-        which encloses nothing: each step numbered, its title linked to the page that holds it, its state's
-        word, its sentence, then each of its parts (a check, an app) on a line of its own with its state
-        in its tone. A step or part an event told HQ of since its record was read says who told it, until
-        the next read replaces it.
+        which encloses nothing: one list read down at every width, each step numbered, its title linked to
+        the page that holds it, its state's word and its sentence. A step made of parts (a check, an app)
+        is one line, its word and how many stand where, folding its parts (`{% section line=True %}`): each
+        on a line of its own, its mark and state in its tone, its name linked. A failed part opens the fold
+        as it is drawn. A part an event told HQ of since its record was read says who told it, until the
+        next read replaces it.
         """,
         example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
-        classes=("is-numbered", "step-list"),
+        classes=("is-numbered", "is-sequence", "step-list"),
         partial="partials/_steps.html",
         pieces=("partials/_operator_step.html",),
         about="A list of short steps or checks, each a `{% step %}`, in as many columns as fit.",

@@ -11,16 +11,18 @@ from dataclasses import dataclass
 from django.utils.text import capfirst
 
 from hq.domains.control_plane.models import OperationRequest
+from hq.domains.control_plane.observations.github import PROVIDER as GITHUB
+from hq.domains.control_plane.observations.host import PROVIDER as HOST
 
 from .app_updates import Managed, UpdateKind, UpdateState, of_app, update_state
-from .asks import DONE, FAILED, IDLE, RUNNING, Standing
+from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
 from .card_items import Answer
 from .containers import containers
 from .github_estate import check_step, repositories
 from .labels import dotted
 from .moments import when
 from .projection import read_once
-from .sequences import By, Example, Read, SequenceSpec, Step, StepSpec
+from .sequences import PERSON, Example, Read, SequenceSpec, Step, StepSpec
 from .tone import Tone
 lazy from .app_update_approval import REFUSED, pull_applied, waits_on
 lazy from .automation_manifest import REVISION_INPUT as REVISION
@@ -32,7 +34,8 @@ lazy from .work_runs import run_row, standing_of
 _STATES = {Tone.GOOD: DONE, Tone.ATTENTION: RUNNING, Tone.SERIOUS: FAILED}
 # The checks as a whole, by the summary state the read gives them.
 _CHECKS = {"success": ("Passed", DONE), "pending": ("Running", RUNNING), "failure": ("Failing", FAILED)}
-WAITING = Standing(IDLE, word="Waiting")
+# A step waiting on the steps before it, said in the words its declaration gives.
+WAITING = Read(Standing(IDLE))
 # The kinds of update HQ moves through its steps; the rest a person moves by hand.
 _MOVED = (UpdateKind.OPEN, UpdateKind.MERGED, UpdateKind.HELD, UpdateKind.UNOPENED)
 _ACTIVE = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
@@ -114,13 +117,13 @@ def _ended_badly(asked: _Asked) -> bool:
     return asked.merge.state == OperationRequest.State.FAILED
 
 
-def _pull_request(state: UpdateState) -> Standing | Read | None:
+def _pull_request(state: UpdateState) -> Read | None:
     if state.kind not in _MOVED:
         return None
     if state.kind == UpdateKind.MERGED:
-        return Standing(DONE, note=f"In {state.managed.repository}", word="Merged")
+        return Read(Standing(DONE, note=f"In {state.managed.repository}", word="Merged"))
     if (update := state.update) is not None:
-        return Standing(DONE, note=update.title, word=f"{update.label} open", url=update.url)
+        return Read(Standing(DONE, word=f"{update.label} opened", url=update.url))
     return Read(_answered(state.answer), yours=state.action is not None)
 
 
@@ -131,81 +134,82 @@ def _answered(answer: Answer) -> Standing:
     return Standing(_STATES.get(answer.tone, IDLE), note=reasons, word=answer.short)
 
 
-def _checks(state: UpdateState) -> Standing | Read | None:
+def _checks(state: UpdateState) -> Read | None:
     if state.kind == UpdateKind.MERGED or state.kind not in _MOVED:
         return None
     if (update := state.update) is None:
         return WAITING
-    said = update.checks_said
     word, at = _CHECKS.get(str(update.checks.get("state") or ""), ("None reported", IDLE))
     parts = tuple(map(check_step, update.check_runs))
-    standing = Standing(at, note=said.why or ("" if parts else said.badge), word=word)
-    return Read(standing, parts)
+    passed = f"{sum(part.done for part in parts)} of {len(parts)} passed" if parts else ""
+    return Read(Standing(at, note=passed or update.checks_said.why, word=word), parts)
 
 
-def _approve(state: UpdateState) -> Standing | Read | None:
+def _approve(state: UpdateState) -> Read | None:
     if state.kind == UpdateKind.MERGED or state.kind not in _MOVED:
         return None
     asked = _asked(state)
     if (asked.preview or asked.merge) is not None and not _ended_badly(asked):
-        return Standing(DONE, word="Approved")
-    return Read(Standing(IDLE, word="Yours to approve" if state.action else "Waiting"), yours=True)
+        return Read(Standing(DONE, word="Approved"))
+    return Read(Standing(IDLE, word="Yours to approve" if state.action else ""), yours=True)
 
 
-def _preview(state: UpdateState) -> Standing | None:
+def _preview(state: UpdateState) -> Read | None:
     if state.kind == UpdateKind.MERGED or state.kind not in _MOVED:
         return None
     preview = _asked(state).preview
     if preview is None:
         return WAITING
     if preview.state == OperationRequest.State.SUCCEEDED:
-        return Standing(DONE, word="Previewed", url=run_row(preview).url)
-    return _ran(preview, ended="" if preview.state in _ACTIVE else "Preview failed")
+        return Read(Standing(DONE, word="Previewed", url=run_row(preview).url))
+    return Read(_ran(preview, ended="" if preview.state in _ACTIVE else "Preview failed"))
 
 
-def _merge(state: UpdateState) -> Standing | None:
+def _merge(state: UpdateState) -> Read | None:
     if state.kind == UpdateKind.MERGED or state.kind not in _MOVED:
         return None
     asked = _asked(state)
     if asked.merge is None:
         refused = str(_then(asked.preview).get("refused") or "")
-        return Standing(FAILED, note=refused, word="Not merged") if refused else WAITING
+        return Read(Standing(FAILED, note=refused, word="Not merged")) if refused else WAITING
     merge = asked.merge
     if merge.state in _ACTIVE:
         standing = _ran(merge)
-        return Standing(standing.state, dotted(standing.note, waits_on(merge)), standing.since, word=standing.label)
+        return Read(
+            Standing(standing.state, dotted(standing.note, waits_on(merge)), standing.since, word=standing.label)
+        )
     if merge.state == OperationRequest.State.SUCCEEDED:
-        return Standing(DONE, word="Merged", url=state.update.url if state.update else "")
+        return Read(Standing(DONE, word="Merged", url=state.update.url if state.update else ""))
     result = merge.result or {}
     word, why = REFUSED.get(str((result.get("status") or {}).get("refused") or "")) or (
         "Merge failed",
         str(result.get("message") or ""),
     )
-    return Standing(FAILED, note=why or "GitHub gave no reason", word=word)
+    return Read(Standing(FAILED, note=why or "GitHub gave no reason", word=word))
 
 
-def _apply(state: UpdateState) -> Standing | Read | None:
+def _apply(state: UpdateState) -> Read | None:
     if state.kind not in _MOVED:
         return None
     asked = _asked(state)
     if asked.apply is None:
         if refused := str(_then(asked.merge).get("refused") or ""):
-            return Standing(FAILED, note=refused, word="Not applied")
+            return Read(Standing(FAILED, note=refused, word="Not applied"))
         if state.kind == UpdateKind.MERGED:
             return Read(Standing(IDLE, word="Yours to apply" if state.action else "Waiting"), yours=True)
         return WAITING
     apply = asked.apply
     if apply.state in _ACTIVE:
-        return _ran(apply)
+        return Read(_ran(apply))
     if apply.state != OperationRequest.State.SUCCEEDED:
-        return _ran(apply, ended="Apply failed")
+        return Read(_ran(apply, ended="Apply failed"))
     # Applied only where every machine's pull released every app.
     if not pull_applied(run_row(apply).evidence.stated):
-        return _ran(apply, ended="Incomplete")
-    return Standing(DONE, word="Applied", url=run_row(apply).url)
+        return Read(_ran(apply, ended="Incomplete"))
+    return Read(Standing(DONE, word="Applied", url=run_row(apply).url))
 
 
-def _health(state: UpdateState) -> Standing | Read | None:
+def _health(state: UpdateState) -> Read | None:
     """What each container it moves says of its own health once its apply
     ended well, as HQ last read it; waiting until a read after it ended."""
 
@@ -218,15 +222,15 @@ def _health(state: UpdateState) -> Standing | Read | None:
     items = state.update.containers if state.update else of_app(state.managed.repository, state.managed.app)
     read = [item for item in items if item.running.observed_at and item.running.observed_at > since]
     if not read or len(read) < len(items):
-        return Standing(IDLE, note="Once HQ reads it after the apply", word="Waiting")
+        return Read(Standing(IDLE, word="Once HQ reads it after the apply"))
     checks = [(item, item.running.check) for item in read if item.running.check is not None]
     if not checks:
-        return Standing(DONE, word="None declared")
+        return Read(Standing(DONE, word="None declared"))
     parts = tuple(
         Step(
             item.running.name,
             Standing(DONE if check.tone == Tone.GOOD else FAILED, when(item.running.observed_at), word=check.value),
-            by=By.HOST,
+            by=HOST,
         )
         for item, check in checks
     )
@@ -251,30 +255,36 @@ def _subject(address: str) -> UpdateState:
 # The example estate's containers, by the step each seed leaves its update at.
 _UPDATED, _MERGED, _HELD = "docker-host-01:home-automation", "docker-host-01:immich", "docker-host-01:jellyfin"
 
+PULL_REQUEST = StepSpec("Pull request", _pull_request, GITHUB)
+CHECKS = StepSpec("Checks", _checks, GITHUB)
+APPROVE = StepSpec("Approve", _approve, PERSON, waiting="Yours, once checks pass")
+PREVIEW = StepSpec("Preview", _preview, HOST, waiting="After you approve")
+MERGE = StepSpec("Merge", _merge, GITHUB, waiting="After the preview")
+APPLY = StepSpec("Apply", _apply, HOST, waiting="After it merges")
+HEALTH = StepSpec("Health check", _health, HOST, waiting="After it applies")
+
 UPDATE = SequenceSpec(
     "app_update",
-    (
-        StepSpec("Pull request", _pull_request, By.RENOVATE),
-        StepSpec("Checks", _checks, By.GITHUB),
-        StepSpec("Approve", _approve, By.YOU),
-        StepSpec("Preview", _preview, By.HOST),
-        StepSpec("Merge", _merge, By.GITHUB),
-        StepSpec("Apply", _apply, By.HOST),
-        StepSpec("Health check", _health, By.HOST),
-    ),
+    (PULL_REQUEST, CHECKS, APPROVE, PREVIEW, MERGE, APPLY, HEALTH),
     about=_about,
     subject=_subject,
     examples={
-        "held": Example("app-updates", _HELD, "Pull request", IDLE),
-        "opening": Example("app-update-ticking", _HELD, "Pull request", RUNNING),
-        "not-opened": Example("app-update-not-ticked", _HELD, "Pull request", FAILED),
-        "checks-running": Example("app-update-checks-running", _UPDATED, "Checks", RUNNING),
-        "to-approve": Example("app-updates", _UPDATED, "Approve", IDLE),
-        "previewing": Example("update-queued", _UPDATED, "Preview", "queued"),
-        "preview-failed": Example("update-preview-failed", _UPDATED, "Preview", FAILED),
-        "applying": Example("update-held", _UPDATED, "Apply", RUNNING),
-        "not-applied": Example("update-not-applied", _UPDATED, "Apply", FAILED),
-        "applied": Example("update-applied", _UPDATED, "", ""),
-        "merged": Example("app-updates", _MERGED, "Apply", IDLE),
+        "held": Example("app-updates", _HELD, PULL_REQUEST, IDLE),
+        "opening": Example("app-update-ticking", _HELD, PULL_REQUEST, RUNNING),
+        "not-opened": Example("app-update-not-ticked", _HELD, PULL_REQUEST, FAILED),
+        "checks-running": Example("app-update-checks-running", _UPDATED, CHECKS, RUNNING),
+        "to-approve": Example("app-updates", _UPDATED, APPROVE, IDLE),
+        "previewing": Example("update-queued", _UPDATED, PREVIEW, QUEUED),
+        "preview-failed": Example("update-preview-failed", _UPDATED, PREVIEW, FAILED),
+        "applying": Example("update-held", _UPDATED, APPLY, RUNNING),
+        "not-applied": Example("update-not-applied", _UPDATED, APPLY, FAILED),
+        "applied": Example("update-applied", _UPDATED),
+        "merged": Example("app-updates", _MERGED, APPLY, IDLE),
     },
 )
+
+
+def sequences() -> tuple[SequenceSpec, ...]:
+    """The workflows the containers domain declares."""
+
+    return (UPDATE,)

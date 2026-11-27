@@ -26,7 +26,7 @@ class SequenceExampleTests(TestCase):
                             at = sequence.at
                             self.assertEqual(
                                 (at.title, at.standing.state) if at else ("", ""),
-                                (example.at, example.state),
+                                (example.at.title if example.at else "", example.state),
                                 f"{name}: {[(step.title, step.standing.label) for step in sequence.steps]}",
                             )
                     transaction.set_rollback(True)

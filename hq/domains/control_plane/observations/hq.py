@@ -8,6 +8,8 @@ header value, body or user agent.
 
 from .contract import ObservationRecord, ObservationSpec, Stamp
 
+# HQ itself, as the source of what it reads of its own work.
+PROVIDER = "hq"
 ARRIVAL_KIND = "hq.request_path"
 
 
@@ -31,7 +33,7 @@ class ArrivalRecord(ObservationRecord):
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         ARRIVAL_KIND,
-        "hq",
+        PROVIDER,
         "Requests reaching HQ",
         ArrivalRecord,
         title=lambda record: str(record.get("device") or record.get("address") or ""),

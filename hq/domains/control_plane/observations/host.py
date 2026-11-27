@@ -64,6 +64,8 @@ class HostPerimeterRecord(ObservationRecord):
 # times: one short word each, as the renderer restricts them when it writes
 # (``WordPattern`` in controller/secretstatus). A string that is not one is
 # stored as ``UNREADABLE_WORD``, never as what it said.
+# The machine HQ runs its work on, as the source of what it tells HQ of itself.
+PROVIDER = "host"
 STATUS_WORD = r"^[A-Za-z0-9_.+-]{1,64}$"
 UNREADABLE_WORD = "unreadable"
 # A renderer's name is a fixed word, never a path.
@@ -393,7 +395,7 @@ EDGE_REBOOT_KIND = "host.edge_reboot"
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         FIREWALL_KIND,
-        "host",
+        PROVIDER,
         "Host firewall",
         HostFirewallRecord,
         title=lambda record: str(record.get("interface", "")),
@@ -410,7 +412,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         RENDER_STATUS_KIND,
-        "host",
+        PROVIDER,
         "Credentials refresh",
         HostRenderStatusRecord,
         title=lambda record: str(record.get("renderer", "")),
@@ -418,7 +420,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         UNIT_KIND,
-        "host",
+        PROVIDER,
         "HQ units",
         HostUnitRecord,
         title=lambda record: str(record.get("title") or record.get("unit", "")),
@@ -426,7 +428,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         TAILNET_LOCK_KIND,
-        "host",
+        PROVIDER,
         "Tailnet lock",
         HostTailnetLockRecord,
         title=lambda record: "On" if record.get("enabled") else "Off",
@@ -436,7 +438,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         FILESYSTEM_KIND,
-        "host",
+        PROVIDER,
         "Disk space",
         HostFilesystemRecord,
         title=lambda record: str(record.get("mount", "")),
@@ -447,7 +449,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         REBOOT_KIND,
-        "host",
+        PROVIDER,
         "Pending restart",
         HostRebootRecord,
         title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
@@ -487,7 +489,7 @@ JOB_ENDS = {
     **dict.fromkeys(("failed", "timeout", "canceled"), (UNIT_KIND, AUTOMATION_HELD)),
 }
 INBOUND = {
-    "host": InboundSpec(
+    PROVIDER: InboundSpec(
         {
             UNIT_FAILED: (UNIT_KIND,),
             **{f"{UNIT_JOB}.{result}": kinds for result, kinds in JOB_ENDS.items()},

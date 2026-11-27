@@ -1,37 +1,37 @@
 """A workflow that crosses outside systems, declared once as the steps it
 goes through in order (``SequenceSpec``): each step read from the one record
-that holds its state, and moved by the one party its declaration names, the
-person among them. A declaration turns its subject into a ``Sequence``, the
+that holds its state, and moved on by the person or by a provider HQ admits,
+named by its key. A declaration turns its subject into a ``Sequence``, the
 one value the card, the queue, a finding, the API and MCP read, and the
 ``steps`` part draws. Each step stands as asked-for work does
 (``asks.Standing``), so a step done, under way, failed or waiting reads and
-colors the same wherever one is drawn."""
+colors the same wherever one is drawn. A domain declares its workflows as
+it declares its commands, through its integration's ``sequences``."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
-from enum import StrEnum
+from dataclasses import dataclass, field, replace
+from typing import Final
 
-from .asks import DONE, FAILED, Standing
-from .entity_links import EntityLink, declared_link
-from .labels import dotted
-lazy from .app_update_flow import UPDATE
+lazy from hq.domains.control_plane.provider_adapters import CONNECTIONS, INBOUND, OBSERVATIONS
 
+from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
+from .entity_links import EntityLink, declared_link, provider_label
+from .labels import dotted, lower_first
+lazy from .domains import host_specs
+lazy from .plugins import plugin_sequences
 
-class By(StrEnum):
-    """Who moves a step on: the person, whose press it is, or the system that takes it."""
-
-    YOU = "you"
-    HQ = "hq"
-    HOST = "host"
-    GITHUB = "github"
-    RENOVATE = "renovate"
-
-    @property
-    def label(self) -> str:
-        return _BY[self]
+# The mover of a step that is the person's to take; every other mover is a
+# provider, by the key HQ admits it under.
+PERSON: Final = "person"
+# The states a step stands at while it is not done.
+_OPEN = (IDLE, QUEUED, RUNNING, FAILED)
+# The mark a part is drawn with, by how it stands.
+_MARKS = {DONE: "check-circle", FAILED: "x-circle", RUNNING: "clock", QUEUED: "clock", IDLE: "circle"}
 
 
-_BY = {By.YOU: "you", By.HQ: "HQ", By.HOST: "its host", By.GITHUB: "GitHub", By.RENOVATE: "Renovate"}
+def _admitted(mover: str) -> bool:
+    providers = {spec.provider for spec in OBSERVATIONS.values()} | CONNECTIONS.keys() | INBOUND.keys()
+    return mover == PERSON or mover in providers
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,7 +44,7 @@ class Step:
     title: str
     standing: Standing
     parts: tuple[Step, ...] = ()
-    by: By = By.HQ
+    by: str = PERSON
     told: bool = False
 
     @property
@@ -58,10 +58,26 @@ class Step:
         return self.standing.live or any(part.live for part in self.parts)
 
     @property
-    def detail(self) -> str:
-        """Its sentence, then ``told by GitHub`` while an event says more than the last read."""
+    def mark(self) -> str:
+        return _MARKS[self.standing.state]
 
-        return dotted(self.standing.note, f"told by {self.by.label}" if self.told else "")
+    @property
+    def opens(self) -> bool:
+        """Whether a part of it failed, so its parts are drawn open: what the person must see first."""
+
+        return any(part.standing.state == FAILED for part in self.parts)
+
+    @property
+    def line(self) -> str:
+        """Its word and its detail as one line, where it folds its parts under it."""
+
+        return dotted(self.standing.label, self.detail)
+
+    @property
+    def detail(self) -> str:
+        """Its sentence, then who told HQ of it while an event says more than the last read."""
+
+        return dotted(self.standing.note, f"told by {provider_label(self.by)}" if self.told else "")
 
     @property
     def link(self) -> EntityLink | None:
@@ -89,16 +105,28 @@ class Sequence:
     def next(self) -> Step | None:
         """The one step that is the person's to take: the first not done they move."""
 
-        return next((step for step in self.steps if not step.done and step.by == By.YOU), None)
+        return next((step for step in self.steps if not step.done and step.by == PERSON), None)
 
     @property
     def live(self) -> bool:
         return any(step.live for step in self.steps)
 
+    @property
+    def said(self) -> str:
+        """Where it stands and the person's next step, as one line leads with
+        them: ``Checks running · 1 of 2 passed. Approve: yours, once checks
+        pass``; "" once every step is done, which its last step says."""
+
+        if (at := self.at) is None:
+            return ""
+        lead = f"{at.title} {lower_first(at.line)}"
+        yours = self.next
+        return f"{lead}. {yours.title}: {lower_first(yours.standing.label)}" if yours and yours is not at else lead
+
 
 @dataclass(frozen=True, slots=True)
 class Read:
-    """What a step's reader says beyond its standing: its parts, whether an
+    """What a step's reader says of it: how it stands, its parts, whether an
     event told it, and whether the subject makes the step the person's."""
 
     standing: Standing
@@ -115,28 +143,38 @@ class StepSpec[Subject]:
 
     title: str
     # None where the subject's way does not pass through the step.
-    reads: Callable[[Subject], Standing | Read | None]
-    by: By
+    reads: Callable[[Subject], Read | None]
+    by: str
+    # What it says while it waits on the steps before it, read idle with no word.
+    waiting: str = "Waiting"
+
+    def __post_init__(self) -> None:
+        if not _admitted(self.by):
+            raise ValueError(f"The step {self.title!r} is moved by {self.by!r}, which is no admitted provider.")
 
     def of(self, subject: Subject) -> Step | None:
-        read = self.reads(subject)
-        if read is None:
+        if (read := self.reads(subject)) is None:
             return None
-        if isinstance(read, Standing):
-            return Step(self.title, read, by=self.by)
-        return Step(self.title, read.standing, read.parts, By.YOU if read.yours else self.by, read.told)
+        standing = read.standing
+        if standing.state == IDLE and not standing.word:
+            standing = replace(standing, word=self.waiting)
+        return Step(self.title, standing, read.parts, PERSON if read.yours else self.by, read.told)
 
 
 @dataclass(frozen=True, slots=True)
 class Example:
     """A subject a seed leaves at one step: the seed by its name
-    (``hq.platform.core.seeds``), the subject's key, and the step it stands
-    at, by its title, in the state it stands in there; both "" once every step is done."""
+    (``hq.platform.core.seeds``), the subject's key, and the step it stands at
+    with the state it stands in there; no step once every step is done."""
 
     seed: str
     key: str
-    at: str
-    state: str
+    at: StepSpec | None = None
+    state: str = ""
+
+    def __post_init__(self) -> None:
+        if (self.at is None) != (self.state == "") or (self.at is not None and self.state not in _OPEN):
+            raise ValueError(f"An example stands at a step in one of {_OPEN}, or at none once all are done.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,12 +189,16 @@ class SequenceSpec[Subject]:
     subject: Callable[[str], Subject]
     examples: Mapping[str, Example] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        if strays := [name for name, each in self.examples.items() if each.at and each.at not in self.steps]:
+            raise ValueError(f"The examples {strays} of {self.name} stand at a step it does not declare.")
+
     def of(self, subject: Subject) -> Sequence:
         steps = (step.of(subject) for step in self.steps)
         return Sequence(self.about(subject), tuple(step for step in steps if step is not None))
 
 
 def declared() -> tuple[SequenceSpec, ...]:
-    """Every workflow HQ declares."""
+    """Every workflow the host's domains and the installed extensions declare."""
 
-    return (UPDATE,)
+    return (*host_specs("sequences"), *plugin_sequences())

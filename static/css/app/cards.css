@@ -153,6 +153,8 @@
 /* Steps that hold a table's region or a command take the frame's whole
    width, one step to a row, so a table keeps its columns and a command its line. */
 .step-list.is-numbered:has(.table-scroll, .command) { grid-template-columns: minmax(0, 1fr); }
+/* A workflow's steps read down in order at every width, one to a row. */
+.step-list.is-sequence { grid-template-columns: minmax(0, 1fr); }
 .step-list.is-numbered:has(.table-scroll, .command, > li:only-child) > li > div { flex: 1; min-inline-size: 0; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }

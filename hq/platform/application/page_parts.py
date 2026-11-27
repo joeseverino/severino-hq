@@ -68,6 +68,9 @@ class SectionPart:
     id: str = field(default="", doc="Its own `id`, for a link to it or a region refreshed in place.")
     fold: bool = field(default=False, doc="Drawn closed, its heading the toggle.")
     open: bool = field(default=False, doc="A folded section drawn open.")
+    line: bool = field(
+        default=False, doc="A fold drawn as one line, its heading and aside the summary, its body under it, unframed."
+    )
     level: int = TOP_LEVEL
     css: str = field(default="", doc="The classes of where it stands.")
     template: str = field(default="", doc="The template that draws the body, with `context`.")
@@ -97,6 +100,8 @@ class SectionPart:
             raise ValueError("A section's link to the rest says where it goes: give it its label.")
         if self.more_url and self.fold:
             raise ValueError("A folded section's head is its toggle, which holds no link; put it in the body.")
+        if self.line and not self.fold:
+            raise ValueError("A section drawn as one line is a fold, its line the toggle.")
         if self.figure and self.fold:
             raise ValueError("A figure is drawn open, with its caption as its head; it does not fold.")
         if self.when and self.moment is None:
@@ -164,8 +169,8 @@ class SectionPart:
                 filter(
                     None,
                     (
-                        "section",
-                        "section-fold" if self.fold else "",
+                        "section-line" if self.line else "section",
+                        "section-fold" if self.fold and not self.line else "",
                         f"section-edge tone-{self.edge}" if self.edge else "",
                         self.css,
                     ),
