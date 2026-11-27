@@ -49,8 +49,7 @@ from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
-lazy from .credential_mint import connection_sights, held_scopes
-lazy from .credential_sight import credential_sight
+lazy from .credential_sight import credential_sight, sight_by_connection
 lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
@@ -390,7 +389,7 @@ def _controller_instances(
     instances = []
     readings = connection_readings()
     name_controller = len({item.controller_id for item in readings}) > 1
-    sights, _ = connection_sights()
+    sights, _ = sight_by_connection()
     for reading in readings:
         targets, dependencies = _depends(reading)
         sight = sights.get(reading.connection_ref)
@@ -431,7 +430,7 @@ def _controller_instances(
                 # credential this is comes from the provider's own model,
                 # declared once beside the providers.
                 credential_model=connection_credential(reading.provider),
-                granted_scopes=held_scopes(sight) if sight else (),
+                granted_scopes=sight.granted if sight else (),
                 refused_scopes=sight.missing if sight else (),
             )
         )

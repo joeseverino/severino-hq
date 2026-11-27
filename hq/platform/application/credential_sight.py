@@ -20,6 +20,7 @@ from hq.domains.control_plane.reading_parts import RefusedPart, refused_parts
 
 from .projection import read_once
 from .tone import Tone, TonedChoices
+lazy from .connections import connection_rows
 lazy from .facts import records_through, stored_snapshots
 lazy from .freshness import STALE, Freshness, freshness
 lazy from .ui import counted
@@ -198,6 +199,13 @@ class ProviderSight:
         """Each permission a refused reading or part declares, once, sorted."""
 
         return tuple(sorted({name for sight in self.refused_permission for name in sight.missing}))
+
+    @property
+    def granted(self) -> tuple[str, ...]:
+        """Each permission a read through it proves its credential holds, sorted."""
+
+        read = (sight for sight in self.sights if sight.state in (READABLE, PARTIAL))
+        return tuple(sorted({name for sight in read for name in sight.permissions if name not in sight.missing}))
 
     @property
     def more_scope(self) -> tuple[str, ...]:
@@ -463,27 +471,26 @@ def read_through(provider: str, label: str) -> ProviderSight | None:
     return read_once(f"credential_sight.through:{provider}", load)
 
 
-def sight_by_connection(
-    connections: dict[str, str],
-) -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
-    """What each connection sees, by ref, and the providers with no connection.
+def sight_by_connection() -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
+    """What each reported connection sees, by ref, and the providers with no
+    connection, once per projection. With nothing connected at all no
+    controller has reported, so no provider is said to be missing one."""
 
-    ``connections`` maps each connection ref to its provider. With nothing
-    connected at all no controller has reported, so no provider is said to be
-    missing one.
-    """
+    def load() -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
+        connections = {row.connection_ref: row.provider for row in connection_rows()}
+        inventory = _inventory()
+        by_ref = {
+            connection_ref: found
+            for connection_ref, provider in connections.items()
+            for found in credential_sight(connection_ref, inventory=inventory)
+            if found.provider == provider
+        }
+        connected = set(connections.values())
+        return (
+            by_ref,
+            tuple(found for found in credential_sight(inventory=inventory) if found.provider not in connected)
+            if connected
+            else (),
+        )
 
-    inventory = _inventory()
-    by_ref = {
-        connection_ref: found
-        for connection_ref, provider in connections.items()
-        for found in credential_sight(connection_ref, inventory=inventory)
-        if found.provider == provider
-    }
-    connected = set(connections.values())
-    return (
-        by_ref,
-        tuple(found for found in credential_sight(inventory=inventory) if found.provider not in connected)
-        if connected
-        else (),
-    )
+    return read_once("credential_sight.by_connection", load)

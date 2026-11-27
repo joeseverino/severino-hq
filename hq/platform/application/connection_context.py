@@ -34,8 +34,8 @@ from .connection_lifecycle import Lifecycle
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import ConnectionSecurityPosture, connection_security_posture
 from .connection_setup import ProviderSetup, guide_url, setups
-from .credential_mint import CredentialFix, connection_sights, credential_fixes
-from .credential_sight import ProviderSight, Sight, Standing, fed_kinds, read_through
+from .credential_mint import CredentialFix, credential_fixes
+from .credential_sight import ProviderSight, Sight, Standing, fed_kinds, read_through, sight_by_connection
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
 from .entity_links import EntityLink, entity_link
 from .facts import records_for_connection
@@ -417,7 +417,7 @@ def _rows(
     principal: Principal,
     pending: dict[str, datetime],
 ) -> tuple[tuple[ConnectionRow, ...], tuple[ProviderSight, ...]]:
-    sights, unconnected = connection_sights()
+    sights, unconnected = sight_by_connection()
     fixes = credential_fixes()
     events = last_activity(connection.instance.connection_ref for group in groups for connection in group.connections)
     reach = connection_reach(
