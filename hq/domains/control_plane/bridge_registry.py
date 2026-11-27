@@ -15,6 +15,7 @@ from pydantic.json_schema import JsonSchemaMode
 
 from hq.platform.application.json_schemas import json_schema
 from hq.platform.application.ui import ended
+lazy from hq.domains.jobs.models import ANSWERED_STATES
 lazy from hq.platform.application.cadence import swept
 lazy from hq.platform.application.inbound_events import CHANNEL_EVERY
 
@@ -132,6 +133,11 @@ def _enumerations() -> dict[str, dict[str, Any]]:
             "Who was told an event happened: the listener on the Worker's socket, or HQ's own host jobs.",
             InboundSource.values,
             "InboundSource",
+        ),
+        "JobState": _enumeration(
+            "How a job stands when HQ answers for it.",
+            (state.value for state in ANSWERED_STATES),
+            "JobState",
         ),
         "ReadingPartName": _enumeration(
             "A part a reading is read in, as HQ's registry declares them; empty for "

@@ -2560,22 +2560,6 @@
           }
         }
       },
-      "JobState": {
-        "type": "string",
-        "description": "How a job stands when HQ answers for it.",
-        "enum": [
-          "succeeded",
-          "failed",
-          "lost",
-          "running"
-        ],
-        "x-enum-varnames": [
-          "JobStateSucceeded",
-          "JobStateFailed",
-          "JobStateLost",
-          "JobStateRunning"
-        ]
-      },
       "SourceCatalog": {
         "type": "object",
         "description": "The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.",
