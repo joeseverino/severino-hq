@@ -776,8 +776,7 @@ slotted(
         kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
         joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
         `breakable` draws that dot as this tag does; markup built in Python joins with
-        `dotted_html(...)`. *Gate:* `test_template_separators`, which follows every branch and include
-        before each held mark, over the host's templates and an extension's.
+        `dotted_html(...)`.
         """,
         about="The middle dot between two parts of one line, written straight after the first.",
         function=dot,

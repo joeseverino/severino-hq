@@ -485,7 +485,7 @@ PARTS = (
         connection includes this part. On a live HQ it renders nothing; on a saved copy
         (`SEVERINO_RENDERED_COPY`, set only in code by whatever renders the copy, as the demo does) it
         marks the line as an example connection, not the reader's. *Gate:*
-        `hq/platform/core/tests/test_example_connection.py`, and `demo/check.py` on the built demo.
+        `demo/check.py` on the built demo.
         """,
         example=connection.EXAMPLE_CONNECTION,
         states=connection.EXAMPLE_CONNECTION_STATES,
@@ -521,8 +521,7 @@ PARTS = (
         needs beside it. A form a script or test finds names its `data-` attributes as `hooks`. A form
         answered in another region's place gives that region's id as `in_place`. *Catalog:*
         `form/write-gap`. *Gate:* the `form` shape of `hand_drawn.SHAPES`, which holds every form that
-        writes to the form part, and `test_form_page.py`, which holds every routed create and edit view to
-        the frame and the card to it alone.
+        writes to the form part.
 
         A form that asks one question is one visible field of a line (words, a number, a date, one
         choice) closed by its verb alone. It draws its button on the field's line where the field keeps

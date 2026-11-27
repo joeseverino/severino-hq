@@ -39,7 +39,6 @@ ignores:
   - "hq/platform/core/tests/test_*_tag.py"
   - "hq/platform/core/tests/test_*_tags.py"
   - "hq/platform/core/tests/test_template_*.py"
-  - "hq/platform/core/tests/test_row_controls.py"
   - "hq/platform/core/tests/test_print_gate.py"
   - "hq/platform/application/tests/test_architecture_*.py"
   - "hq/platform/application/tests/test_shared_markup.py"

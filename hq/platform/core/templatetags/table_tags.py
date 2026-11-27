@@ -222,7 +222,7 @@ ROW_ACTIONS = Part(
     row's value, so a column holding one never leaves, and in a cell it fills its cell and gives way
     with its column. The reader's way to set a row aside (`Row(put_away=)`, the queue's Dismiss) is the
     last of its buttons, drawn quiet; alone on a row's line its words start at the name's edge.
-    *Gates:* the survey's `row actions beside squeezed words`, and `test_row_controls.py`.
+    *Gate:* the survey's `row actions beside squeezed words`.
 
     A row's own arrangement (a favorite's star, the pair that moves it) is no part of the cell that
     names the row: `Row(mark=)` and `Row(order=)` draw it first in the row's controls column, the star last of
