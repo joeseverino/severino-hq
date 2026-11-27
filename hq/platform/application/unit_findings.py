@@ -258,10 +258,13 @@ def stopped_reporting(
     severity: Tone,
     primary: ActionLink,
     part: str = "",
-    fixes: tuple[Fix, ...] = (),
 ) -> Finding:
     """The one finding for a worker on HQ's machine, run by ``unit``, that
-    stopped reporting: when it was last seen, beneath its unit's own failure."""
+    stopped reporting: when it was last seen, beneath its unit's own failure,
+    and the unit's start. A worker that reported before is installed, so
+    starting its unit is what brings it back."""
+
+    start = ByHand("Start the worker again", f"sudo systemctl start {shlex.quote(unit)}", Why.NOT_GRANTED)
 
     return Finding(
         rule=rule,
@@ -272,7 +275,7 @@ def stopped_reporting(
         severity=severity,
         explanation=explanation,
         evidence=(("Last seen", when(seen_at, now=estate.now)),),
-        fixes=fixes,
+        fixes=on_unit("infrastructure.resource.start", unit, (start,), intent="Start the worker"),
         primary=primary,
         follows=unit_causes(estate, unit),
         look_into=LookInto(machine=unit_machine(estate, unit), service_unit=unit),

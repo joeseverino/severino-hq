@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from hq.domains.control_plane.models import InboundSource
 from hq.platform.core.models import UpstreamReading
+from hq.platform.core.testing import declare
 
 from ... import readings
 from ...inbound_events import channel
@@ -17,11 +18,15 @@ def heard(
     ago: timedelta | None = None,
     *,
     units: tuple[dict, ...] = (),
+    declared: bool = False,
     raises: tuple[Raised | str, ...] = (),
 ) -> Example:
-    """``source`` last reported ``ago``, or never, on a machine whose ``units`` were read."""
+    """``source`` last reported ``ago``, or never, on a machine whose ``units``
+    were read, HQ declaring its reader's unit where ``declared``."""
 
     def given() -> None:
+        if declared:
+            declare("example-reader", UNITS, {"unit": READERS[source]})
         if ago is not None:
             key = readings.heartbeat(channel(source))
             readings.record(key, {})
@@ -81,6 +86,13 @@ EXAMPLES = (
                 timedelta(hours=1),
                 units=(failed(READERS[InboundSource.WORKER]),),
                 raises=(SILENT,),
+            ),
+            # HQ declares its reader's unit: the unit's start, pressed.
+            heard(
+                InboundSource.HOST,
+                timedelta(hours=1),
+                declared=True,
+                raises=(Raised(title=SILENT, presses=("infrastructure.resource.start",)),),
             ),
         ),
         # Never set up; heard lately.

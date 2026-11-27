@@ -122,7 +122,7 @@ RULES: tuple[FindingRule, ...] = (
         _silent,
         gathered=True,
         operator_action="Check that the event listener on HQ's machine is running and reaches the Worker.",
-        no_help_reason="HQ cannot start the event listener.",
+        no_help_reason="HQ cannot tell why the listener does not reach the Worker.",
         bars={Tone.ATTENTION: "a channel that reports events stopped reporting"},
     ),
     FindingRule(

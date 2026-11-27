@@ -12,7 +12,7 @@ from .finding_model import Finding, FindingEstate, FindingRule, matter_key, open
 from .finding_steps import ByHand, Do, Why
 from .security import Principal
 from .tone import Tone
-from .unit_findings import HQ_HOST, WORKER_READ, on_unit, stopped_reporting, unit_causes
+from .unit_findings import HQ_HOST, WORKER_READ, stopped_reporting, unit_causes
 lazy from .automation_runs import READ_PROFILE
 lazy from .automation_workers import ProfileWorker, profile_workers
 lazy from .problems import About, problems_by_part
@@ -91,13 +91,6 @@ def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
         explanation=explanation,
         severity=Tone.SERIOUS,
         primary=playbooks,
-        # A worker that ran before is installed: HQ starts its unit.
-        fixes=on_unit(
-            "infrastructure.resource.start",
-            AUTOMATION_UNIT,
-            (ByHand("Start the worker again", f"sudo systemctl start {AUTOMATION_UNIT}", Why.NOT_GRANTED),),
-            intent="Start the worker",
-        ),
     )
 
 
