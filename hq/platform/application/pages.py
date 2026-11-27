@@ -30,6 +30,7 @@ from .url_query import with_query
 lazy from .action_links import command_url
 lazy from .capabilities import command_spec
 lazy from .contracts import Effect
+lazy from .domains import domain_navigation
 lazy from .outbound_work import refusal as outbound_refusal
 lazy from .page_reads import remedy
 lazy from .record_errors import RecordNotFound
@@ -608,6 +609,35 @@ def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
     if not declared:
         raise ImproperlyConfigured(f"{owner.__qualname__!r} must define required_capability.")
     return tuple(dict.fromkeys((str(Capability.READ), str(declared))))
+
+
+# The pages the site header opens from every page: its search field, Needs
+# you, and the user menu's connection.
+HEADER_PAGES = frozenset({"search", "action_items", "connection"})
+
+
+def unreached_pages() -> tuple[str, ...]:
+    """Each page a reader could not find: one HQ frames, opened at an address
+    that names no record, which neither the navigation nor the header lists
+    and no ``page_trail`` places below another page.
+
+    A page whose address names a record is reached from that record's link.
+    A view learns its route only as the URL configuration mounts it, so this
+    is asked of the composed routes, extensions' included, as HQ starts.
+    """
+
+    listed = {item.route for item in domain_navigation()} | HEADER_PAGES
+    return tuple(
+        found.name or found.path
+        for found in routed()
+        if isinstance(view := found.view, type)
+        and issubclass(view, PageMixin)
+        and "get" in view.http_method_names
+        and hasattr(view, "get")
+        and not any(part.pattern.regex.groups for part in (*found.mounts, found.pattern))
+        and found.name not in listed
+        and not view.page_trail
+    )
 
 
 def authorizes_itself(view: Callable[..., Any]) -> bool:

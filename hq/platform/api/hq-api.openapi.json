@@ -44377,6 +44377,13 @@
       "summary": "Connections"
     },
     {
+      "description": "What providers and HQ's host told HQ happened, and the readings each made due.",
+      "kind": "nav",
+      "name": "hq.events",
+      "parent": "hq.infrastructure",
+      "summary": "Events"
+    },
+    {
       "description": "The private network the machines share: its policy, grants and members.",
       "kind": "nav",
       "name": "hq.tailnet",
@@ -44395,12 +44402,6 @@
       "kind": "nav",
       "name": "hq.estate",
       "summary": "Estate"
-    },
-    {
-      "description": "What providers and HQ's host told HQ happened, and the readings each made due.",
-      "kind": "nav",
-      "name": "hq.events",
-      "summary": "Events"
     },
     {
       "description": "One query across every domain, answered with what the reader may read.",

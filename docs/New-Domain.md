@@ -6,7 +6,9 @@ file names it. The descriptor carries:
 
 - `apps` and `mounts`: `hq/config/settings.py` installs the apps and `hq/config/urls.py`
   mounts each urlconf at its prefix.
-- `navigation`: the bar.
+- `navigation`: the bar. A page at an address that names no record is in it, or
+  names the page it opens from in its view's `page_trail`; HQ refuses to start
+  with a page neither reaches (`hq.E120`).
 - `integration`: providers for its resources (`<app>/specs.py`), other commands,
   attention items, dashboard cards, connections and calendars.
 - `records`, for a plain record domain: one model created, updated and deleted

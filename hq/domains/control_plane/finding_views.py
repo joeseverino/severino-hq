@@ -4,6 +4,7 @@ from collections import Counter
 from functools import cached_property
 from typing import override
 
+from django.urls import reverse_lazy
 from django.views.generic import TemplateView
 
 from hq.platform.application.dashboard import finding_rows, waiting
@@ -83,14 +84,12 @@ class ChecksView(PageMixin, TemplateView):
 
     template_name = "control_plane/checks.html"
     page_title = "Checks"
+    # Below the findings it explains, whose own action opens it.
+    page_trail = (("Findings", reverse_lazy("control_plane:findings")),)
 
     @override
     def get_page_lede(self):
         return tones()
-
-    @override
-    def get_page_actions(self):
-        return (PageAction("Findings", reverse("control_plane:findings")),)
 
     @override
     def get_context_data(self, **kwargs):

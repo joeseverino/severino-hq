@@ -137,6 +137,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="id",
             pass_principal=True,
             record_type=HeldRequestRecord,
+            # Every held request is decided in the audit log's approval queue.
+            web_route="core:audit_list",
         ),
     )
 

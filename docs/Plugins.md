@@ -82,11 +82,13 @@ A manifest must pass these checks:
 - No capability appears twice in one list, and each MCP read capability is also
   an operator capability.
 
-Two checks need the running host, so they run at startup. An extension's
+Three checks need the running host, so they run at startup. An extension's
 capabilities are its own: naming one of the host's fails there. The installed
 set is checked whole. Two extensions may not share an id, a distribution, a
 Django app or a URL prefix, and one prefix may not nest inside another. A
-navigation group says what it is for once, in the host or one manifest.
+navigation group says what it is for once, in the host or one manifest. Every
+page is reached: one whose address names no record is a navigation item or
+names the page it opens from in its `page_trail` (`hq.E120`).
 
 Every extension view needs a session wherever it is mounted. A native or machine
 client uses the versioned [API](API.md), derived from the same command and query

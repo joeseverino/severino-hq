@@ -230,8 +230,12 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # The published work, and the section this group exists for. Its
         # queues and card are declared here rather than on the sibling below
         # because they count the whole registry, both halves, and a queue
-        # declared twice would report its backlog twice.
-        navigation=(NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),),
+        # declared twice would report its backlog twice. The whole registry
+        # leads its halves: its card, its queues and every item's trail open it.
+        navigation=(
+            NavigationItem("Content", "content:list", "content", 110, "Web"),
+            NavigationItem("Writeups", "content:writeups", "content", 110, "Web"),
+        ),
         integration=PluginIntegration(
             resources=_provider("hq.domains.content.specs:resources"),
             dashboard=_provider("hq.platform.application.sections:content"),
@@ -547,10 +551,9 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.connections",
         label="Connections",
         description="The credentials HQ reads each system through, and what each can see.",
-        # Last in the group, and deliberately so. It answers "what can HQ reach
-        # at all": the question underneath every other page here, and the one
-        # asked least often, because the answer only changes when a credential
-        # does.
+        # It answers "what can HQ reach at all": the question underneath every
+        # other page here, and the one asked least often, because the answer
+        # only changes when a credential does.
         navigation=(
             NavigationItem(
                 "Connections",
@@ -570,9 +573,17 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         id="hq.events",
         label="Events",
         description="What providers and HQ's host told HQ happened, and the readings each made due.",
-        # No place in the menu: the controller's page leads to it, beside the
-        # listener's standing.
+        # Beside the connections and the controller: an event is a provider
+        # saying what to read again through them.
+        navigation=(NavigationItem("Events", "control_plane:events", "control_plane", 133, "Infrastructure"),),
         integration=PluginIntegration(resources=_provider("hq.platform.application.inbound_reads:resources")),
+    ),
+    DomainDescriptor(
+        id="hq.controller",
+        label="Controller",
+        description="The controller on the server: whether it arrives, what it last read, and the changes waiting "
+        "for it.",
+        navigation=(NavigationItem("Controller", "control_plane:controller", "control_plane", 133, "Infrastructure"),),
     ),
     DomainDescriptor(
         id="hq.jobs",
