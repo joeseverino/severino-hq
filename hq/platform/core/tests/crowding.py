@@ -48,7 +48,7 @@ from hq.platform.application.security import Capability, Principal
 from hq.platform.application.services import CONTAINER_KIND
 from hq.platform.application.tests.glance_readings import keep_machine, keep_weather, kept_weather
 from hq.platform.application.tests.writers import keyed, runbook
-from hq.platform.core import seeds
+from hq.platform.core import example_estate, seeds
 from hq.platform.core.example_estate.records import SERVER_ASSET
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import channel_heard, declare
@@ -141,6 +141,7 @@ def crowd(owner):
     _unbroken_words(owner)
     _starred()
     _operations()
+    example_estate.infra.refreshes_asked()
     _unmanaged()
     _tailnet_policy()
     _held()

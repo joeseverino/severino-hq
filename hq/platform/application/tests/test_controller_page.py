@@ -41,7 +41,7 @@ class ControllerPageTests(TestCase):
 
         self.assertFalse(page.standing.known)
         self.assertIsNone(page.swept_at)
-        self.assertEqual(page.queue, ())
+        self.assertEqual(page.waiting_said, "")
         self.assertEqual((page.overdue_tone, page.queue_tone), ("",) * 2)
 
     def test_late_sweeps_are_serious(self):
@@ -141,9 +141,10 @@ class ControllerPageTests(TestCase):
 
         page = controller_page()
 
-        self.assertEqual([(work.resource, work.state) for work in page.queue], [("example-dns", "Waiting")])
+        self.assertEqual([(work.record.identity, work.state) for work in page.queue], [("example-dns", "Waiting")])
         self.assertEqual(page.queue_tone, "attention")
-        self.assertEqual([read.subject for read in page.asked], ["adguard.rewrite"])
+        self.assertEqual([read.record.kind for read in page.asked], ["adguard.rewrite"])
+        self.assertEqual(page.waiting_said, "1 change and 1 refresh")
 
     def test_the_page_shows_a_controller_that_has_gone_quiet(self):
         controller_arrived(ago=timedelta(hours=26))

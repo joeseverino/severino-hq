@@ -33,10 +33,8 @@ Nothing here asks it anything.
     {% elif controller.overdue %}<small>{{ controller.oldest.sight.label|breakable:"·" }}{% include "partials/_reading_age.html" with at=controller.oldest.sight.tried_at only %}. Everything is read every {{ controller.sweep_every }}.</small>
     {% elif controller.sweep_due or controller.next_sweep_at %}<small>Everything is read every {{ controller.sweep_every }}.</small>{% endif %}
   {% endfact %}
-  {% fact "Pending changes" icon="layers" tone=controller.queue_tone %}
-    {% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}
-  {% detail %}
-    {% if controller.asked %}<small>{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endif %}
+  {% fact "Pending" icon="layers" tone=controller.queue_tone %}
+    {{ controller.waiting_said|default:"Nothing" }}
   {% endfact %}
 {% endfacts %}{% endcard %}
 {% comment %}
@@ -55,8 +53,8 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% endif %}
 {% endwith %}
 
-{% if controller.queue %}
-{% section "Pending changes" count=controller.queue|length %}
+{% if controller.waiting %}
+{% section "Pending" count=controller.waiting|length %}
   {% data_table pending %}
 {% endsection %}
 {% endif %}
