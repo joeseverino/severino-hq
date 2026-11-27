@@ -1092,11 +1092,6 @@ extension needs and this contract lacks belongs in HQ first; copying host CSS
 or markup into an extension is a contract failure. The rules the classes follow are
 each part's, in [Shared UI](Shared-UI.md#each-parts-rules), and those across parts are in [Design](Design.md).
 
-What the host writes for a value is pinned by example in
-`hq/platform/application/tests/test_sdk_text.py`: `span`, `when`, `when_day`,
-`counted`, `measured`, `money`, `signed_number` and `ended`, so a change
-of wording is reviewed in that test's diff.
-
 An extension's test asserts what it composed from them
 (`f"Due in {span(days)}"`), or reads a page through `hq_sdk.testing.plain`,
 which reads the host's no-break spaces as spaces. It never writes the host's

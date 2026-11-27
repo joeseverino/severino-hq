@@ -41,9 +41,7 @@ ignores:
   - "hq/platform/core/tests/test_template_*.py"
   - "hq/platform/core/tests/test_print_gate.py"
   - "hq/platform/application/tests/test_architecture_*.py"
-  - "hq/platform/application/tests/test_shared_markup.py"
   - "hq/platform/application/tests/test_view_primitives.py"
-  - "hq/platform/application/tests/test_markup.py"
   - "hq/platform/application/plugin_testing.py"
 utils:
   markup-literal:
