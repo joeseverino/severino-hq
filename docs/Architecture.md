@@ -337,9 +337,10 @@ Four rules keep a page from waiting on a writer:
 
 - A capability's transaction takes the write lock at its first write, never
   as it opens (`database.serialized`), so what it reads and derives first
-  holds no other writer back. Where another writer committed between its first
-  read and that write, what it decided may be stale: it never commits, and
-  runs again holding the lock from the start (`hq/platform/core/sqlite`). A
+  holds no other writer back. It reads one snapshot, so what it decides
+  without writing is consistent too. Where another writer committed after that
+  snapshot, what it decided may be stale: it never commits, and runs again
+  holding the lock from the start (`hq/platform/core/sqlite`). A
   writer that gives up names the work that last took the lock, in the error
   the server error log keeps.
 - A request stores an answer it derived only if the write lock is free

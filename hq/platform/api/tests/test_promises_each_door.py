@@ -6,6 +6,7 @@ import json
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from decimal import Decimal
 from itertools import combinations_with_replacement
 
@@ -20,6 +21,8 @@ from hq.platform.application.controller import claim_next_operation
 from hq.platform.application.security import web_principal
 from hq.platform.application.tests.procedures import APP, DB, RESTART, RESTART_RUN, Supply, manifest, run_payload
 from hq.platform.application.tests.test_page_projections import page_lists, populate, served_lists
+from hq.platform.core import database
+from hq.platform.core.models import IdempotencyRecord
 from hq.platform.core.testing import operator, run_ended
 
 from .doors import MCP, OPERATOR, SDK, Api, Caller, at_the_door, each_door
@@ -38,6 +41,8 @@ TASK = {"host": APP, "task": "Restart the service", "outcome": "changed", "messa
 # a supplied playbook's call is not in the committed document.
 FOLLOWS = ("describe_resources", "list_resource", "get_resource", "describe_capabilities")
 UNDOCUMENTED = (Api(documented=False), MCP, SDK)
+# The table a write looks its retry key up in.
+KEYS = IdempotencyRecord._meta.db_table
 
 
 class AnUpdateKeepsTests(TestCase):
@@ -189,25 +194,45 @@ class RetryKeyRaceTests(TransactionTestCase):
         at_the_door(self)
 
     def test_two_writes_at_once_by_any_two_doors_with_one_key_act_once(self):
-        pairs = combinations_with_replacement(each_door(self, WRITER), 2)
-        for count, pair in enumerate(pairs):
-            slug, key = f"once-{count}", f"example-race-{count}"
-            together = threading.Barrier(2, timeout=30)
+        """The narrowest overlap: one write has looked its key up and found
+        nothing when the other runs and commits whole."""
 
-            def write(door, slug=slug, key=key, together=together):
+        pairs = combinations_with_replacement(each_door(self, WRITER), 2)
+        for count, (late_door, early_door) in enumerate(pairs):
+            slug, key = f"once-{count}", f"example-race-{count}"
+            looked, done = threading.Event(), threading.Event()
+
+            def looking_up(execute, sql, params, many, context, looked=looked, done=done):
+                ran = execute(sql, params, many, context)
+                if KEYS in sql and not looked.is_set():
+                    looked.set()
+                    # Holding the lock from the start, the other write could
+                    # not run until this one ends: no overlap to wait for.
+                    if not database.holds_write_lock():
+                        done.wait(30)
+                return ran
+
+            def write(door, *, late, slug=slug, key=key, looked=looked, done=done, looking_up=looking_up):
                 try:
-                    together.wait()
-                    return door.capability("project.create", PROJECT | {"slug": slug, "idempotency_key": key})
+                    if not late:
+                        looked.wait(30)
+                    with connection.execute_wrapper(looking_up) if late else nullcontext():
+                        return door.capability("project.create", PROJECT | {"slug": slug, "idempotency_key": key})
                 finally:
+                    if not late:
+                        done.set()
                     connection.close()
 
-            with self.subTest(doors=[door.name for door in pair]), ThreadPoolExecutor(max_workers=2) as pool:
-                answers = list(pool.map(write, pair))
-
-                for answer in answers:
+            with (
+                self.subTest(doors=[late_door.name, early_door.name]),
+                ThreadPoolExecutor(max_workers=2) as pool,
+            ):
+                written = [pool.submit(write, late_door, late=True), pool.submit(write, early_door, late=False)]
+                for answer in (each.result() for each in written):
                     self.assertTrue(answer["ok"], answer)
                     self.assertEqual(answer["project"]["slug"], slug)
                 self.assertEqual(Project.objects.filter(slug=slug).count(), 1)
+                self.assertTrue(looked.is_set())
 
 
 def _named(text, among):

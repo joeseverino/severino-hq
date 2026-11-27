@@ -46,9 +46,11 @@ def serialized[T](work: Callable[[], T], using: str = DEFAULT_DB_ALIAS) -> T:
     """Run ``work`` in one transaction that holds the write lock only from its first write.
 
     For work that reads and derives before it writes, as a capability does: it
-    holds no other writer back while it reads. Where another writer committed
-    between its first read and its first write (``sqlite.Stale``), what it
-    decided may be stale, so it runs again holding the lock from the start.
+    holds no other writer back while it reads, and reads one snapshot, so what
+    it decides without writing is consistent too. Where another writer
+    committed after its snapshot, or holds the lock, at its first write
+    (``sqlite.Stale``), what it decided may be stale, so it runs again holding
+    the lock from the start.
     Inside a transaction already open it is part of that one.
     """
 
@@ -104,8 +106,8 @@ def without_waiting(using: str = DEFAULT_DB_ALIAS) -> Iterator[None]:
 class Turns:
     """When a connection writing back to back lets another writer have a turn.
 
-    Writing is a run of statements that take the lock (a ``BEGIN``, or a write
-    outside a transaction) with no gap as long as ``LETS_GO`` between any two
+    Writing is a run of statements that take the lock (a ``BEGIN`` that is not
+    deferred, or a write while the connection holds no lock) with no gap as long as ``LETS_GO`` between any two
     statements. Once a run has lasted ``HOLDS``, the next statement that takes
     the lock waits ``LETS_GO`` first, and a new run starts.
     """
@@ -144,9 +146,9 @@ def gives_way(using: str = DEFAULT_DB_ALIAS, *, sleep: Callable[[float], None] =
     turns = Turns()
 
     def taking_turns(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: Any) -> Any:
-        head = sql.lstrip()[:7].upper()
-        takes_lock = head.startswith("BEGIN") or (
-            not connection.in_atomic_block and head.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
+        head = sql.lstrip()[:14].upper()
+        takes_lock = (head.startswith("BEGIN") and head != "BEGIN DEFERRED") or (
+            not holds_write_lock(using) and head.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
         )
         pause = turns.before(takes_lock=takes_lock)
         if pause:

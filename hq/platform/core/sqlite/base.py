@@ -3,13 +3,14 @@
 SQLite has one write lock for the whole file, and Django takes it with
 ``BEGIN IMMEDIATE`` as ``atomic`` opens, so what a transaction reads and
 derives before it writes holds every other writer back. A transaction begun
-``optimistically`` takes the lock at its first statement that writes, reading
-until then in autocommit. Taking the lock, it reads ``PRAGMA data_version``,
-which moves only when another connection commits: unmoved since its first
-read, everything it read is what the lock now holds, as if it had held the
-lock from the start. Moved, what it decided may be stale, so it is ``Stale``
-and can never commit; ``database.serialized`` runs it again holding the lock
-from the start.
+``optimistically`` is ``BEGIN DEFERRED`` instead: WAL gives it one snapshot
+from its first read, and its first statement that writes asks for the lock.
+SQLite grants it only while that snapshot is the newest, so everything it read
+is what the lock now holds, as if it had held the lock from the start, and a
+transaction that never writes decided on one consistent state. Inside a read
+transaction SQLite never waits for the lock (sqlite.org/rescode.html#busy):
+refused, what it decided may be stale, so it is ``Stale`` and can never
+commit; ``database.serialized`` runs it again holding the lock from the start.
 
 The connection that takes the lock notes who it is beside the database file,
 so a writer that gives up names what last took it in its error, which the
@@ -35,10 +36,14 @@ UNLOCKED = ("SELECT", "PRAGMA", "EXPLAIN", "VALUES", "BEGIN")
 # Statements that mark or end a transaction's part, which change no row.
 MARKS = ("SAVEPOINT", "RELEASE", "ROLLBACK")
 LOCKED = "database is locked"
+# SQLite's answers to a read transaction's first write: another connection
+# holds the lock (SQLITE_BUSY), or committed after this one's snapshot
+# (SQLITE_BUSY_SNAPSHOT).
+BUSY, BUSY_SNAPSHOT = 5, 517
 
 
 class Stale(DatabaseError):
-    """Another connection committed between what this transaction read and its taking the lock."""
+    """Another connection committed, or was writing, while this transaction read before its first write."""
 
 
 class DatabaseSchemaEditor(schema.DatabaseSchemaEditor):
@@ -55,19 +60,17 @@ class DatabaseSchemaEditor(schema.DatabaseSchemaEditor):
 
 
 class Cursor(base.SQLiteCursorWrapper):
-    """Takes its connection's write lock before the first statement that writes."""
+    """Runs each statement through its connection, which knows what it locks."""
 
     wrapper: DatabaseWrapper
 
     @override
     def execute(self, query, params=None):
-        self.wrapper.before(query)
-        return self.wrapper.naming_holder(super().execute, query, params)
+        return self.wrapper.running(super().execute, query, params)
 
     @override
     def executemany(self, query, param_list):
-        self.wrapper.before(query)
-        return self.wrapper.naming_holder(super().executemany, query, param_list)
+        return self.wrapper.running(super().executemany, query, param_list)
 
 
 class DatabaseWrapper(base.DatabaseWrapper):
@@ -76,12 +79,8 @@ class DatabaseWrapper(base.DatabaseWrapper):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.next_optimistic = False
-        # Inside an optimistic transaction that has not written yet, the
-        # savepoints its nested blocks opened, made once it takes the lock;
-        # else None.
-        self.unbegun: list[str] | None = None
-        # The ``data_version`` its first read saw, or None before one.
-        self.seen: int | None = None
+        # Inside a transaction begun optimistically that has not written yet.
+        self.reading = False
         self.stale = False
         # How many statements that change rows this connection has run, so a
         # projection knows when what it read may have changed under it.
@@ -110,81 +109,46 @@ class DatabaseWrapper(base.DatabaseWrapper):
             _note_holder(self.settings_dict["NAME"])
             return
         self.next_optimistic = False
-        self.unbegun = []
+        # Through ``cursor()``, so every execute wrapper sees the ``BEGIN``
+        # (``database.gives_way``).
+        self.cursor().execute("BEGIN DEFERRED")
+        self.reading = True
 
     @property
     def holds_write_lock(self) -> bool:
         """Whether this connection holds the write lock until it commits."""
 
-        return self.in_atomic_block and self.unbegun is None
+        return self.in_atomic_block and not self.reading
 
-    def before(self, query: str) -> None:
-        if self.stale:
-            raise Stale("This transaction read what another has since changed.")
+    def running(self, execute, query, *args):
         head = query.lstrip()[:9].upper()
-        if not head.startswith(UNLOCKED + MARKS):
-            self.writes += 1
-        if self.unbegun is None:
-            return
-        if head.startswith(UNLOCKED):
-            if self.seen is None and not query.lstrip().upper().startswith("PRAGMA DATA_VERSION"):
-                self.seen = self._data_version()
-            return
-        self.take_write_lock()
-
-    def _data_version(self) -> int:
-        # The raw connection's own cursor: no wrapper counts it as a statement.
-        (version,) = self.connection.execute("PRAGMA data_version").fetchone()
-        return int(version)
-
-    def take_write_lock(self) -> None:
-        """Begin the transaction the ``atomic`` block opened, which waits for the lock."""
-
-        if self.unbegun is None:
-            return
-        # Through ``cursor()``, so every execute wrapper sees the ``BEGIN``
-        # (``database.gives_way``). Unbegun until it holds, so a ``BEGIN``
-        # that gave up is asked again by the next write.
-        self.cursor().execute(f"BEGIN {self.transaction_mode or ''}".strip())
-        savepoints, self.unbegun = self.unbegun, None
-        _note_holder(self.settings_dict["NAME"])
-        if self.seen is not None and self._data_version() != self.seen:
-            self.stale = True
+        # Marks still run, so the blocks it is inside end as they began.
+        if self.stale and not head.startswith(MARKS):
             raise Stale("This transaction read what another has since changed.")
-        for sid in savepoints:
-            super()._savepoint(sid)
-
-    # A savepoint opened before the first write marks nothing to roll back
-    # to, so it waits with the transaction, and one released or rolled back
-    # before then is forgotten.
-    @override
-    def _savepoint(self, sid):
-        if self.unbegun is None:
-            super()._savepoint(sid)
-        else:
-            self.unbegun.append(sid)
-
-    @override
-    def _savepoint_commit(self, sid):
-        if self.unbegun is None and not self.stale:
-            super()._savepoint_commit(sid)
-        elif self.unbegun is not None:
-            del self.unbegun[self.unbegun.index(sid) :]
-
-    @override
-    def _savepoint_rollback(self, sid):
-        if self.unbegun is None and not self.stale:
-            super()._savepoint_rollback(sid)
-        elif self.unbegun is not None:
-            del self.unbegun[self.unbegun.index(sid) :]
-
-    def naming_holder(self, execute, *args):
+        changes = not head.startswith(UNLOCKED + MARKS)
+        if changes:
+            self.writes += 1
+        upgrades = changes and self.reading
         try:
-            return execute(*args)
+            ran = execute(query, *args)
         except base.Database.OperationalError as exc:
+            if upgrades and (exc.sqlite_errorcode == BUSY_SNAPSHOT or (exc.sqlite_errorcode == BUSY and self._waits())):
+                self.stale = True
+                raise Stale("This transaction read what another has since changed.") from exc
             if str(exc) != LOCKED:
                 raise
             raise base.Database.OperationalError(f"{LOCKED}: {_holder(self.settings_dict['NAME'])}") from exc
+        if upgrades:
+            self.reading = False
+            _note_holder(self.settings_dict["NAME"])
+        return ran
+
+    def _waits(self) -> bool:
+        """Whether a write here would wait for the lock (``database.without_waiting`` says not)."""
+
+        # The raw connection's own cursor: no wrapper counts it as a statement.
+        (waits,) = self.connection.execute("PRAGMA busy_timeout").fetchone()
+        return int(waits) > 0
 
     @override
     def _commit(self):
@@ -206,7 +170,7 @@ class DatabaseWrapper(base.DatabaseWrapper):
         return super()._close()
 
     def _ended(self) -> None:
-        self.unbegun, self.seen, self.stale = None, None, False
+        self.reading, self.stale = False, False
 
 
 def _note_path(database: str) -> Path:

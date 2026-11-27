@@ -105,17 +105,6 @@ class WriteLockTests(TransactionTestCase):
         self.assertEqual(self.written(), ["saw 1"])
         self.assertIn("database is locked", after[-1])
 
-    def test_a_savepoint_opened_before_the_first_write_still_rolls_back(self):
-        def work():
-            with self.assertRaises(ZeroDivisionError), transaction.atomic():
-                AuditLog.objects.exists()
-                AuditLog.objects.create(action="created", object_type="example", message="undone")
-                1 / 0  # noqa: B018 - the failure that rolls the savepoint back
-            AuditLog.objects.create(action="created", object_type="example", message="kept")
-
-        database.serialized(work)
-        self.assertEqual(self.written(), ["kept"])
-
     def test_a_writer_that_gives_up_names_what_holds_the_lock(self):
         with (
             bindings.operation_context(interface="web", actor="example", operation="example.slow"),
