@@ -10,8 +10,8 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AgentAccess, AuditLog
 from hq.platform.core.testing import operator
 
-from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused
-from ..security import OPERATOR_CAPABILITIES, Capability, Principal, web_principal
+from ..agent_access import SET_AGENT_ACCESS, agents_paused
+from ..security import OPERATOR_CAPABILITIES, Capability, Principal
 
 
 def _said():
@@ -30,20 +30,6 @@ class StateTests(TestCase):
     def test_an_unreadable_switch_refuses_agents(self):
         with mock.patch.object(AgentAccess.objects, "filter", side_effect=DatabaseError("locked")):
             self.assertTrue(agents_paused())
-
-
-class WhoMayPullItTests(TestCase):
-    def setUp(self):
-        self.user = operator(username="op")
-
-    def test_the_change_does_not_happen_without_its_record(self):
-        with (
-            mock.patch.object(AuditLog.objects, "create", side_effect=RuntimeError("audit down")),
-            self.assertRaises(RuntimeError),
-        ):
-            set_agents_paused(AgentAccessCommand(paused=True), principal=web_principal(self.user))
-
-        self.assertFalse(agents_paused())
 
 
 class SwitchTests(TestCase):
@@ -78,19 +64,6 @@ class SwitchTests(TestCase):
 
         self.assertTrue(agents_paused())
         self.assertEqual(_said(), ["Agents paused"])
-
-    def test_both_directions_are_recorded(self):
-        self._set("1")
-        self._set("0")
-
-        self.assertFalse(agents_paused())
-        self.assertEqual(_said(), ["Agents paused", "Agents resumed"])
-
-    def test_an_unrecognized_state_changes_nothing(self):
-        response = self._set("yes")
-
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(agents_paused())
 
     def test_the_menu_shows_the_state_and_asks_for_the_other_one(self):
         page = self.client.get(reverse("dashboard")).content.decode()

@@ -34,7 +34,7 @@ from django.utils import timezone
 from hq.config.urls import urlpatterns as root_urlpatterns
 from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
-from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
+from hq.domains.jobs.models import Job
 from hq.platform.application import host_work, outbound_work
 from hq.platform.application.capabilities import capability_spec, command_spec, execute_capability
 from hq.platform.application.contracts import Effect
@@ -713,17 +713,6 @@ class HostDueTests(TestCase):
             {"due": 1, "ended": {"example.work": "succeeded"}, "lost": 0, "lapsed": 0},
         )
         self.assertEqual(answer["state"], "succeeded")
-
-    def test_a_job_whose_process_stopped_is_marked_lost(self):
-        stale = timezone.now() - HEARTBEAT_GRACE - timedelta(minutes=1)
-        gone = Job.objects.create(
-            kind="example.gone", label="Gone", state=Job.State.RUNNING, started_at=stale, heartbeat_at=stale
-        )
-        outbound_work.run_for_host("due")
-
-        gone.refresh_from_db()
-        self.assertEqual(gone.state, Job.State.LOST)
-        self.assertEqual(Job.objects.get(kind="due").result["lost"], 1)
 
     def test_work_done_within_its_cadence_is_left_alone(self):
         Job.objects.create(

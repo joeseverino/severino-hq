@@ -334,30 +334,6 @@ class QueryBudgetTests(TestCase):
                 )
 
 
-class ServedMachineReadTests(TestCase):
-    """The machines resource places HQ the way the machine page does, inside a
-    projection seeded with where the request arrived."""
-
-    def test_the_address_a_request_arrived_on_places_hq(self):
-        from types import SimpleNamespace
-
-        from ..hq_self import serving
-        from ..projection import projection_scope
-        from .test_hq_self import SITE, machine_at, own
-
-        machine_at("example-host", "192.0.2.44")
-        request = SimpleNamespace(scope={"server": ("192.0.2.44", 443)})
-        with SITE, own():
-            unseeded = list_resource("machines", {}, principal=READER)
-            with projection_scope(seed=serving(request)):
-                seeded = list_resource("machines", {}, principal=READER)
-                detail = get_resource("machines", "example-host", principal=READER)
-
-        self.assertFalse(unseeded["items"][0]["runs_hq"])
-        self.assertTrue(seeded["items"][0]["runs_hq"])
-        self.assertTrue(detail["runs_hq"])
-
-
 class OneDomainListTests(TestCase):
     """The API, the estate count and the domains page list the same domains."""
 

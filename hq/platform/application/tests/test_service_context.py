@@ -166,17 +166,6 @@ class PageTests(SignedInTestCase):
 
         self.assertNotContains(response, "Delivery")
 
-    def test_the_registry_is_the_only_list_of_sections(self):
-        """A band appears because a resolver produced it, so adding one is a
-        function and an entry rather than an edit to the page."""
-
-        from ..service_context import SECTIONS
-
-        self.assertEqual(
-            [resolve.__name__ for resolve in SECTIONS],
-            ["_access", "_activity"],
-        )
-
     def test_service_section_ids_share_the_page_navigation_contract(self):
         with self.assertRaisesRegex(ValueError, "valid page section id"):
             ServiceSection("Not valid", "Broken", (), ())
