@@ -18,12 +18,11 @@ from .attribution import unattributed_kinds
 from .connection_kinds import CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .observations.contract import Reader, ReadingPart
-from .provider_adapters import CONNECTIONS, DECLARATIONS
+from .provider_adapters import DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
     ControllerCapabilityRegistry,
     ControllerProviderCapability,
-    Observes,
     ProviderResolutionContext,
     ProviderSpec,
     adapter,
@@ -70,9 +69,7 @@ def operator_label(kind: str) -> str:
     spec = PROVIDERS.get(kind)
     if spec is None:
         return ""
-    return next(
-        (CONNECTION_LABELS[name] for name in spec.connection_providers if name in CONNECTION_LABELS), spec.label
-    )
+    return CONNECTION_LABELS[spec.connection_providers[0]] if spec.connection_providers else spec.label
 
 
 def _registry() -> dict[str, ProviderSpec]:
@@ -186,10 +183,9 @@ class Read:
     source: Literal["reading", "resource", "part"]
     by: Reader = "controller"
     permissions: tuple[str, ...] = ()
-    # The kept value this is, read when ``answered`` says a stored value of it
-    # came through this provider; ``kind`` is then the cadence its age is judged by.
+    # The kept value this is, whose ``through`` says whether a stored value
+    # came through this provider; ``kind`` is then the cadence it is judged by.
     kept: Any = None
-    answered: Callable[[Any], bool] | None = None
 
 
 @cache
@@ -215,22 +211,14 @@ def provider_reads() -> Mapping[str, tuple[Read, ...]]:
             needs = tuple(dict.fromkeys(name for part in parts for name in part.requires))
             found.setdefault(provider, []).append(Read(kind, label, "part", permissions=needs))
     for kept in KEPT:
-        for provider, answered in kept.through.items():
-            found.setdefault(provider, []).append(
-                Read(kept.cadence, kept.label, "reading", "hq", kept=kept, answered=answered)
-            )
+        for provider in kept.through:
+            found.setdefault(provider, []).append(Read(kept.cadence, kept.label, "reading", "hq", kept=kept))
     return frozendict({provider: tuple(reads) for provider, reads in found.items()})
 
 
 # Kinds a controller reports as readings rather than as resources; see
 # control_plane.observations.
 OBSERVATION_KINDS = frozenset(OBSERVATIONS)
-
-
-def observer_abilities() -> tuple[tuple[str, Observes], ...]:
-    """What each connection is carried for beside the kinds it reconciles, by provider."""
-
-    return tuple((provider, observes) for provider, kind in CONNECTIONS.items() for observes in kind.observes)
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):

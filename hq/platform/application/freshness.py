@@ -210,10 +210,11 @@ def cadence(kind: str = "") -> ReadCadence:
 def _read_through() -> dict[str, tuple[str, ...]]:
     """The kinds of reading HQ takes itself, by the connection they come through."""
 
-    found = {
-        provider: tuple(read.kind for read in reads if read.by == "hq") for provider, reads in provider_reads().items()
+    return {
+        provider: kinds
+        for provider, reads in provider_reads().items()
+        if (kinds := tuple(read.kind for read in reads if read.by == "hq"))
     }
-    return {provider: kinds for provider, kinds in found.items() if kinds}
 
 
 def stale_after(kind: str = "") -> timedelta:

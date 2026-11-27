@@ -13,10 +13,10 @@ from typing import Annotated, NotRequired, TypedDict
 
 from pydantic import Field, create_model
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS, connection_credential
+from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, CONNECTION_LABELS, connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
+from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home
 lazy from hq.domains.control_plane.names import normalized_hostname
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion, WebRoute
@@ -331,17 +331,18 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
     # Readers, which derive from no kind. Appended rather than merged into the
     # loop above because they are a different claim: a kind says what a
     # credential may change, an observer says what it may look at.
-    for provider, observer in observer_abilities():
-        abilities.append(
-            ConnectionAbility(
-                name=observer.name,
-                label=observer.label,
-                summary=observer.summary,
-                effect=Effect.READ,
-                subject_resource=observer.subject_resource,
+    for provider, carried in CONNECTION_KINDS.items():
+        for observer in carried.observes:
+            abilities.append(
+                ConnectionAbility(
+                    name=observer.name,
+                    label=observer.label,
+                    summary=observer.summary,
+                    effect=Effect.READ,
+                    subject_resource=observer.subject_resource,
+                )
             )
-        )
-        by_provider.setdefault(provider, []).append(observer.name)
+            by_provider.setdefault(provider, []).append(observer.name)
 
     # Every reading a provider feeds is something its credential lets HQ see.
     for kind, reading in sorted(OBSERVATIONS.items()):
