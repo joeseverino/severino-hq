@@ -2,8 +2,9 @@
 
 Each form's file field declares the largest file it takes (``forms.FileField``)
 and each command's file its own (``command_fields.Upload``), which the form
-drawn from that command takes, so what HQ takes is whatever is composed,
-extensions' forms included, and the proxy in front of HQ is held to it
+drawn from that command takes and a call of it sends as base64, so what HQ
+takes is whatever is composed, extensions' forms included. The API and MCP
+hold each call's body to it, and the proxy in front of HQ to the largest
 (``proxy_findings``).
 """
 
@@ -16,7 +17,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.urls import URLResolver, get_resolver, get_urlconf
 
-from .command_fields import upload_of
+from .command_fields import Upload, upload_of
 from .forms import FileField
 from .integrations import held_graph
 from .routes import routed
@@ -43,19 +44,46 @@ def _posted(form: type[forms.BaseForm]) -> int:
     return total
 
 
+def _uploads(command: type) -> tuple[Upload, ...]:
+    hints = get_type_hints(command, include_extras=True)
+    return tuple(upload for hint in hints.values() if (upload := upload_of(hint)))
+
+
 def _drawn(command: type) -> int:
     """The most bytes of files one post of ``command``'s form sends."""
 
-    hints = get_type_hints(command, include_extras=True)
-    return sum(upload.max_bytes for hint in hints.values() if (upload := upload_of(hint)))
+    return sum(upload.max_bytes for upload in _uploads(command))
+
+
+# Read once per command, since its declaration is fixed when HQ starts.
+@cache
+def _encoded(command: type) -> int:
+    """The most bytes of files one call of ``command`` sends as JSON, each base64-encoded."""
+
+    return sum(upload.max_encoded for upload in _uploads(command))
+
+
+def call_body(name: str) -> int:
+    """The most bytes the JSON body of one call of capability ``name`` may carry:
+    its files as base64, with the framing around them, or the largest body
+    Django reads (``DATA_UPLOAD_MAX_MEMORY_SIZE``) where that is larger."""
+
+    spec = held_graph().capabilities.get(name)
+    files = _encoded(spec.command_type) if spec else 0
+    return max(files + FRAMING, settings.DATA_UPLOAD_MAX_MEMORY_SIZE)
+
+
+def largest_call() -> int:
+    """The most bytes the JSON body of a call of any capability may carry."""
+
+    return max(map(call_body, held_graph().capabilities), default=settings.DATA_UPLOAD_MAX_MEMORY_SIZE)
 
 
 def largest_request() -> int:
     """The most bytes one request HQ takes may carry: its largest form post,
-    with the framing around its files, or the largest other body Django reads
-    (``DATA_UPLOAD_MAX_MEMORY_SIZE``), which bounds a command sent as JSON."""
+    with the framing around its files, or its largest call."""
 
-    return max(_largest_post(get_resolver(get_urlconf())) + FRAMING, settings.DATA_UPLOAD_MAX_MEMORY_SIZE)
+    return max(_largest_post(get_resolver(get_urlconf())) + FRAMING, largest_call())
 
 
 # Read once per URL configuration in force, the one ``routed`` walks, since

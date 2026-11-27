@@ -26,7 +26,7 @@ from mcp.shared.exceptions import MCPError
 from pydantic import TypeAdapter
 from starlette.applications import Starlette
 
-from hq.platform.application import agent_admission
+from hq.platform.application import agent_admission, uploads
 from hq.platform.application.agent_limits import Limited, Slot
 from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.refusal_codes import LATER_CODES, Code
@@ -416,6 +416,8 @@ class ToolServer:
             # Keeping the SDK's localhost-only defaults would reject the
             # explicit allowlist with 421 before tool dispatch.
             transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+            # One body carries one call, of any tool, so it is held to the largest a call carries.
+            max_request_body_size=uploads.largest_call(),
         )
         return Served(application, self.server.session_manager)
 

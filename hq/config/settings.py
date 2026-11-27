@@ -870,8 +870,8 @@ MEDIA_URL = "/_internal-media/"  # not actually exposed; receipts use protected 
 
 EXPORTS_ROOT = Path(env_str("SEVERINO_EXPORTS_ROOT", str(BASE_DIR / "var" / "exports")))
 
-# Upload guardrails.
-DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+# Upload guardrails. A body other than a file is held to Django's own limit,
+# and a call's to its capability's (``uploads.call_body``).
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 FILE_UPLOAD_PERMISSIONS = 0o640
 

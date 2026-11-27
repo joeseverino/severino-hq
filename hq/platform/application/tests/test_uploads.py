@@ -34,7 +34,8 @@ class ProxyInFrontOfHQTests(TestCase):
         self.assertTrue(answer["ok"], answer)
 
         limit = ManagedResource.objects.get(key="example-proxy").spec["client_max_body_size"]
-        # A receipt fits, with room for the form around it.
+        # A receipt fits, with room for the form around it, and so does one sent as base64 in a call.
         self.assertGreater(limit, math.ceil(MAX_RECEIPT_BYTES / 1024**2))
+        self.assertGreaterEqual(limit * 1024**2, 4 * math.ceil(MAX_RECEIPT_BYTES / 3))
         with projection_scope():
             self.assertEqual(estate_findings(principal=EVERYTHING, rule="proxy-refuses-uploads"), ())

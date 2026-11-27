@@ -1,7 +1,5 @@
 """Canonical receipt-file policy shared by forms and application services."""
 
-import math
-
 from django.core.files.uploadedfile import UploadedFile
 
 from hq.platform.application.forms import larger_than
@@ -34,9 +32,6 @@ INLINE_SAFE_CONTENT_TYPES = {
 PICTURE_CONTENT_TYPES = frozenset(kind for kind in INLINE_SAFE_CONTENT_TYPES if kind.startswith("image/"))
 
 MAX_RECEIPT_BYTES = 15 * 1024 * 1024
-# The longest base64 text a file within the limit encodes to, so a longer one
-# is refused before anything is decoded.
-MAX_RECEIPT_BASE64_CHARS = 4 * math.ceil(MAX_RECEIPT_BYTES / 3)
 
 # What a stored file type is called on a page.
 FILE_TYPE_LABELS = {

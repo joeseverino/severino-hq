@@ -16,11 +16,10 @@ from django.urls import reverse
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts import validation
 from hq.domains.receipts.models import Receipt
-from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS
 from hq.platform.application.capabilities import Ran, execute_capability
 from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD
+from hq.platform.application.receipts import RECEIPT_FILE, REPLACE, UPDATE, UPLOAD
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.core.models import AuditLog, IdempotencyRecord
 from hq.platform.core.testing import operator
@@ -101,7 +100,7 @@ class UploadCapabilityTests(_PrivateMedia):
 
     def test_base64_longer_than_the_limit_encodes_to_is_refused_before_it_is_decoded(self):
         with mock.patch.object(base64, "b64decode", wraps=base64.b64decode) as decode:
-            result = self.upload(a_file(content="A" * (MAX_RECEIPT_BASE64_CHARS + 4)))
+            result = self.upload(a_file(content="A" * (RECEIPT_FILE.max_encoded + 4)))
 
         self.assertEqual(result["error"]["code"], "invalid_input")
         decode.assert_not_called()

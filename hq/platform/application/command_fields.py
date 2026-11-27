@@ -5,6 +5,7 @@ adapter reads. They are plain values rather than pydantic's ``Field``, so a
 module that declares a command loads no validation library at startup.
 """
 
+import math
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -200,6 +201,12 @@ class Upload:
 
     max_bytes: int
     accepts: tuple[str, ...] = ()
+
+    @property
+    def max_encoded(self) -> int:
+        """The longest base64 text a file within ``max_bytes`` encodes to, as a call sends it."""
+
+        return 4 * math.ceil(self.max_bytes / 3)
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
         accepts = {ACCEPTS: sorted(self.accepts)} if self.accepts else {}

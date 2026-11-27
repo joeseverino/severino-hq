@@ -14,7 +14,6 @@ from typing import Annotated, Any, Concatenate, TypedDict, Union, cast, get_args
 
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
-from django.core.exceptions import RequestDataTooBig
 from django.http import HttpRequest, HttpResponse
 from django.urls import URLPattern, reverse
 from django.views.decorators.csrf import csrf_exempt
@@ -26,7 +25,7 @@ from pydantic import (
     ValidationError as PydanticValidationError,
 )
 
-from hq.platform.application import agent_admission
+from hq.platform.application import agent_admission, uploads
 from hq.platform.application.access import (
     ANYONE,
     READS_A_LIST,
@@ -786,21 +785,30 @@ class EnvelopeError(Exception):
         self.code = code
 
 
-def _body_json(request: HttpRequest) -> dict[str, Any]:
-    """The request body as a JSON object, or an EnvelopeError saying why not."""
+def _body_json(request: HttpRequest, limit: int) -> dict[str, Any]:
+    """The request body as a JSON object of at most ``limit`` bytes, or an
+    EnvelopeError saying why not.
+
+    Read here rather than through ``request.body``, which holds every body to
+    the one ``DATA_UPLOAD_MAX_MEMORY_SIZE``, since a call's limit is its
+    capability's own (``uploads.call_body``).
+    """
 
     if request.content_type != "application/json":
         raise EnvelopeError(
             "Content-Type must be application/json.",
             code=Code.UNSUPPORTED_MEDIA_TYPE,
         )
-    try:
-        body = request.body
-    except RequestDataTooBig:
+    declared = request.META.get("CONTENT_LENGTH") or ""
+    # Refused on its stated length before a byte is read, and on what it sends
+    # past the limit when it states none or too little.
+    too_large = declared.isdigit() and int(declared) > limit
+    body = b"" if too_large else request.read(limit + 1)
+    if too_large or len(body) > limit:
         raise EnvelopeError(
             "Request body exceeds this deployment's safety limit.",
             code=Code.REQUEST_TOO_LARGE,
-        ) from None
+        )
     if not body:
         return {}
     try:
@@ -876,7 +884,7 @@ def execute(request: APIRequest, name: str) -> HttpResponse:
     """Run one HQ capability. A retry with the same idempotency key returns the first answer."""
 
     try:
-        body = _body_json(request)
+        body = _body_json(request, uploads.call_body(name))
     except EnvelopeError as exc:
         return _fail(exc.message, code=exc.code)
     envelope = read_body(name, body)
