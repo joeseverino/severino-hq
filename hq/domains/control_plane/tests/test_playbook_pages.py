@@ -434,7 +434,7 @@ class PlaybooksPageTests(TestCase):
         self.worker_gone(seen=timedelta(hours=3))
 
         html = self.page()
-        self.assertIn("hq-host automation", self.setup_commands(html))
+        self.assertIn("systemctl start severino-hq-automation.service", self.setup_commands(html))
         self.assertIn("3 hours ago", text(html).replace("\N{NO-BREAK SPACE}", " "))
 
     def test_a_worker_seen_lately_draws_no_setup(self):

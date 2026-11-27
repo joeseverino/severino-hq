@@ -41,7 +41,7 @@ connected is in one place.
             {% step %}
               <strong>Then</strong>
               <p>HQ's host reads the vault every hour; the connection then appears above. To read the vault now:</p>
-              {% command text="sudo systemctl start severino-hq-secrets.service" %}
+              {% if read_vault %}{% include "partials/_page_action.html" with action=read_vault only %}{% else %}{% command text="sudo systemctl start severino-hq-secrets.service" %}{% endif %}
             {% endstep %}
           {% endsteps %}
         {% endsection %}

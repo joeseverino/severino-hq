@@ -444,7 +444,14 @@ class ADeletedContainerIsForgottenTests(TestCase):
 
 
 def a_unit(name, **fields):
-    return {"unit": name, "load": "loaded", "active": "active", "sub": "running", "read_at": "2026-01-01T00:00:00Z", **fields}
+    return {
+        "unit": name,
+        "load": "loaded",
+        "active": "active",
+        "sub": "running",
+        "read_at": "2026-01-01T00:00:00Z",
+        **fields,
+    }
 
 
 class HQsOwnUnitsAreTheInstalledSetTests(TestCase):

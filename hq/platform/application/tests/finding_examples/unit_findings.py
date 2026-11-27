@@ -1,3 +1,5 @@
+from hq.platform.core.testing import declare
+
 from ...tone import Tone
 from . import NOW, Example, Examples, Raised, ago, stored
 from .render_status_findings import KIND as RENDERED, read
@@ -226,6 +228,21 @@ EXAMPLES = (
                 {**timer("severino-hq-example-idle.path"), "sub": "waiting", "active": "inactive"},
                 timer(),
                 raises=("5 background jobs are not set up on example-controller",),
+            ),
+            # A unit HQ declares is turned on by its verbs, pressed.
+            Example(
+                readings={
+                    KIND: (
+                        timer("severino-hq-example-off.timer", file_state="disabled", active="inactive", sub="dead"),
+                    )
+                },
+                given=lambda: declare("example-off-timer", KIND, {"unit": "severino-hq-example-off.timer"}),
+                raises=(
+                    Raised(
+                        title="severino-hq-example-off.timer is not set up on example-controller",
+                        presses=("infrastructure.resource.enable", "infrastructure.resource.start"),
+                    ),
+                ),
             ),
             # A socket not listening and a mount not mounted are not started.
             raising(

@@ -23,7 +23,7 @@ from .finding_model import (
     per_connection,
     reconcile_remedy,
 )
-from .finding_steps import ByHand, Does, Why
+from .finding_steps import ByHand, Does, Fix, Why
 from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
@@ -34,6 +34,7 @@ from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import inventory_records
 lazy from .moments import moment
+lazy from .unit_findings import on_unit
 
 
 def _many(kind_key: str) -> str:
@@ -684,12 +685,17 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
     return tuple(found)
 
 
-def _refresh_steps(machine: str) -> tuple[ByHand, ...]:
+def _refresh_steps(machine: str) -> tuple[Fix, ...]:
     """How the owner runs the refresh job again on its machine and reads what it wrote."""
 
     unit = SECRETS_UNIT
     return (
-        *ByHand.on(machine, "Run the refresh job now", f"systemctl start {unit}", Why.NOT_GRANTED),
+        *on_unit(
+            "infrastructure.resource.start",
+            unit,
+            ByHand.on(machine, "Run the refresh job now", f"systemctl start {unit}", Why.NOT_GRANTED),
+            intent="Run the refresh job now",
+        ),
         *ByHand.journal(machine, "Read the refresh job's log", unit),
         *_controller_steps(machine),
     )

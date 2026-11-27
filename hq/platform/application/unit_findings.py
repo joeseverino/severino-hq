@@ -24,7 +24,7 @@ from .finding_model import (
     cannot_run_commands,
     matter_key,
 )
-from .finding_steps import ByHand, Why
+from .finding_steps import ByHand, Does, Fix, Why
 from .moments import duration, moment, when
 from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
@@ -32,6 +32,7 @@ from .security import Capability
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import agreed, counted, ended
+lazy from .infrastructure import enabled_resources
 
 # ``LoadState`` when systemd holds the unit's configuration, and
 # ``UnitFileState`` when the file is there and nothing starts it at boot.
@@ -250,7 +251,7 @@ def stopped_reporting(
     severity: Tone,
     primary: ActionLink,
     part: str = "",
-    fixes: tuple[ByHand, ...] = (),
+    fixes: tuple[Fix, ...] = (),
 ) -> Finding:
     """The one finding for a worker on HQ's machine, run by ``unit``, that
     stopped reporting: when it was last seen and how to read why, beneath its
@@ -335,11 +336,15 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     for unit in failed
                     for step in (
                         *ByHand.journal(node.label, f"See why {unit.named} failed", unit.unit),
-                        *ByHand.on(
-                            node.label,
-                            f"Start {unit.named} again",
-                            f"systemctl restart {shlex.quote(unit.unit)}",
-                            Why.NOT_GRANTED,
+                        *on_unit(
+                            "infrastructure.resource.restart",
+                            unit.unit,
+                            ByHand.on(
+                                node.label,
+                                f"Start {unit.named} again",
+                                f"systemctl restart {shlex.quote(unit.unit)}",
+                                Why.NOT_GRANTED,
+                            ),
                         ),
                     )
                 ),
@@ -374,41 +379,73 @@ class Setup:
     sentence: str
     label: str
     command: Callable[[UnitState], str]
+    # The verbs HQ asks of the unit that do what the command does, in order;
+    # none where only a person can.
+    verbs: tuple[str, ...]
 
 
 # Installing the release installs, enables and starts every unit it ships
 # (``hq-host install``); a unit it installed that is off or idle needs only
-# turning on or starting.
+# turning on or starting, each a verb HQ asks of its own units.
 SETUP = {
     "Not installed": Setup(
-        "Installing HQ's release sets {it} up.", "Install HQ's release", lambda _unit: f"{HQ_HOST} install"
+        "Installing HQ's release sets {it} up.", "Install HQ's release", lambda _unit: f"{HQ_HOST} install", ()
     ),
     "Switched off": Setup(
         "Turning {it} on sets {it} up.",
         "Turn on {unit}",
         lambda unit: f"systemctl enable --now {shlex.quote(unit.unit)}",
+        ("infrastructure.resource.enable", "infrastructure.resource.start"),
     ),
     "Not started": Setup(
-        "Starting {it} sets {it} up.", "Start {unit}", lambda unit: f"systemctl start {shlex.quote(unit.unit)}"
+        "Starting {it} sets {it} up.",
+        "Start {unit}",
+        lambda unit: f"systemctl start {shlex.quote(unit.unit)}",
+        ("infrastructure.resource.start",),
     ),
 }
 
 
-def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[ByHand, ...]]:
+def unit_key(unit: str) -> str:
+    """The key of the declaration of HQ's own ``unit``, or "" for one HQ does not declare."""
+
+    return next((r.key for r in enabled_resources() if r.kind == UNIT_KIND and r.spec.get("unit") == unit), "")
+
+
+def on_unit(capability: str, unit: str, by_hand: tuple[ByHand, ...], *, intent: str = "") -> tuple[Fix, ...]:
+    """``capability`` on the declaration of HQ's own ``unit``, shown as
+    ``by_hand`` to a reader who may not press it; ``by_hand`` alone for a unit
+    HQ does not declare. ``intent`` tells its press apart from another unit's
+    on the same item."""
+
+    if not (key := unit_key(unit)):
+        return by_hand
+    return (Does(capability, key, by_hand=by_hand[0] if by_hand else None, intent=intent),)
+
+
+def _set_up(node: TopologyNode, absent: tuple[UnitState, ...]) -> tuple[str, tuple[Fix, ...]]:
     """What sets ``absent`` up on ``node``: a sentence per state and each
-    distinct command once, both from ``SETUP``."""
+    distinct step once, both from ``SETUP``. A verb HQ asks of the unit is a
+    press, its command shown by hand beside the first."""
 
     states = {unit.absent: [each for each in absent if each.absent == unit.absent] for unit in absent}
     sentence = " ".join(
         SETUP[state].sentence.format(it=agreed(len(units), "it", "them")) for state, units in states.items()
     )
-    steps: dict[str, ByHand] = {}
+    steps: dict[str, tuple[Fix, ...]] = {}
     for unit in absent:
         setup = SETUP[unit.absent]
         command = setup.command(unit)
-        if command not in steps:
-            steps[command] = ByHand.on(node.label, setup.label.format(unit=unit.named), command, Why.NOT_GRANTED)[0]
-    return sentence, tuple(steps.values())
+        if command in steps:
+            continue
+        by_hand = ByHand.on(node.label, setup.label.format(unit=unit.named), command, Why.NOT_GRANTED)
+        verbs = setup.verbs or ("",)
+        steps[command] = tuple(
+            fix
+            for index, verb in enumerate(verbs)
+            for fix in (on_unit(verb, unit.unit, by_hand if index == 0 else ()) if verb else by_hand)
+        )
+    return sentence, tuple(fix for fixes in steps.values() for fix in fixes)
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -567,11 +604,15 @@ _restarting = OnEachMachine(
     ),
     fixes=lambda node, unit: (
         *ByHand.journal(node.label, f"See why {unit.named} keeps stopping", unit.unit),
-        *ByHand.on(
-            node.label,
-            "Once it is fixed, clear its restart count",
-            f"systemctl reset-failed {shlex.quote(unit.unit)}",
-            Why.NOT_GRANTED,
+        *on_unit(
+            "infrastructure.resource.reset_failed",
+            unit.unit,
+            ByHand.on(
+                node.label,
+                "Once it is fixed, clear its restart count",
+                f"systemctl reset-failed {shlex.quote(unit.unit)}",
+                Why.NOT_GRANTED,
+            ),
         ),
     ),
 )

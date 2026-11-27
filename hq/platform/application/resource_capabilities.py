@@ -23,10 +23,10 @@ from hq.domains.control_plane.providers import (
 )
 
 from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
+from .finding_steps import ByHand, Why
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
 lazy from .facts import inventory_records
-lazy from .finding_steps import ByHand, Why
 lazy from .machines import connections_inside, container_context
 lazy from .pages import PageAction
 

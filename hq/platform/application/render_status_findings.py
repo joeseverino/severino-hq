@@ -26,7 +26,7 @@ from .finding_model import (
     FindingRule,
     cannot_run_commands,
 )
-from .finding_steps import ByHand, Do, Why
+from .finding_steps import ByHand, Do, Fix, Why
 from .freshness import missed
 from .moments import duration, moment, since_when, when
 from .projection import iso
@@ -34,6 +34,7 @@ from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import ended
+lazy from .unit_findings import on_unit
 
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
@@ -189,15 +190,20 @@ def _run_again(
     renderings: tuple[Rendering, ...],
     label: str,
     notes: tuple[str, ...] = (),
-) -> tuple[ByHand, ...]:
+) -> tuple[Fix, ...]:
     """Start each refresh job whose unit HQ knows, on the machine."""
 
     return tuple(
         step
         for rendering in renderings
         if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in ByHand.on(
-            node.label, label + _job(rendering, renderings), f"systemctl start {unit}", Why.NOT_GRANTED, notes
+        for step in on_unit(
+            "infrastructure.resource.start",
+            unit,
+            ByHand.on(
+                node.label, label + _job(rendering, renderings), f"systemctl start {unit}", Why.NOT_GRANTED, notes
+            ),
+            intent="Run the refresh job now",
         )
     )
 
