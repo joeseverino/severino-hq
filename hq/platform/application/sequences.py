@@ -143,9 +143,9 @@ class Sequence:
             return ""
         lines = (
             f"{at.title} {lower_first(at.line)}" if at is not yours else "",
-            f"{yours.title}: {lower_first(yours.line if yours is at else yours.standing.label)}" if yours else "",
+            f"{yours.title}: {lower_first(yours.standing.label)}" if yours else "",
         )
-        return " ".join(f"{line}." for line in lines if line)
+        return " ".join(f"{line.rstrip('.')}." for line in lines if line)
 
 
 @dataclass(frozen=True, slots=True)

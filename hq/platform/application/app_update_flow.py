@@ -125,7 +125,10 @@ def _pull_request(state: UpdateState) -> Read | None:
         return Read(Standing(DONE, note=f"In {state.managed.repository}", word="Merged"))
     if (update := state.update) is not None:
         return Read(Standing(DONE, word=f"{update.label} opened", url=update.url))
-    return Read(_answered(state.answer), yours=state.offered is not None)
+    standing = _answered(state.answer)
+    if state.offered is None:
+        return Read(standing)
+    return Read(Standing(standing.state, dotted(standing.note, state.said), word=standing.word), yours=True)
 
 
 def _answered(answer: Answer) -> Standing:
@@ -156,7 +159,9 @@ def _approve(state: UpdateState) -> Read | None:
         return Read(
             Standing(IDLE, state.reason, word="Needs a playbook", url=reverse("control_plane:playbooks")), yours=True
         )
-    return Read(Standing(IDLE, state.said, word="Yours now" if state.offered else ""), yours=True)
+    if state.kind == UpdateKind.OPEN and state.offered:
+        return Read(Standing(IDLE, state.said, word="Yours now"), yours=True)
+    return Read(Standing(IDLE), yours=True)
 
 
 def _preview(state: UpdateState) -> Read | None:
@@ -166,8 +171,8 @@ def _preview(state: UpdateState) -> Read | None:
     if preview is None:
         return WAITING
     if preview.state == OperationRequest.State.SUCCEEDED:
-        return Read(Standing(DONE, word="Previewed", url=run_row(preview).url))
-    return Read(_ran(preview, ended="" if preview.state in _ACTIVE else "Preview failed"))
+        return Read(Standing(DONE, word="Passed", url=run_row(preview).url))
+    return Read(_ran(preview, ended="" if preview.state in _ACTIVE else "Failed"))
 
 
 def _merge(state: UpdateState) -> Read | None:
@@ -176,7 +181,7 @@ def _merge(state: UpdateState) -> Read | None:
     asked = _asked(state)
     if asked.merge is None:
         refused = str(_then(asked.preview).get("refused") or "")
-        return Read(Standing(FAILED, note=refused, word="Not merged")) if refused else WAITING
+        return Read(Standing(FAILED, note=refused, word="Refused")) if refused else WAITING
     merge = asked.merge
     if merge.state in _ACTIVE:
         standing = _ran(merge)
@@ -184,10 +189,10 @@ def _merge(state: UpdateState) -> Read | None:
             Standing(standing.state, dotted(standing.note, waits_on(merge)), standing.since, word=standing.label)
         )
     if merge.state == OperationRequest.State.SUCCEEDED:
-        return Read(Standing(DONE, word="Merged", url=state.update.url if state.update else ""))
+        return Read(Standing(DONE, word="Done", url=state.update.url if state.update else ""))
     result = merge.result or {}
     word, why = REFUSED.get(str((result.get("status") or {}).get("refused") or "")) or (
-        "Merge failed",
+        "Failed",
         str(result.get("message") or ""),
     )
     return Read(Standing(FAILED, note=why or "GitHub gave no reason", word=word))
@@ -199,7 +204,7 @@ def _apply(state: UpdateState) -> Read | None:
     asked = _asked(state)
     if asked.apply is None:
         if refused := str(_then(asked.merge).get("refused") or ""):
-            return Read(Standing(FAILED, note=refused, word="Not applied"))
+            return Read(Standing(FAILED, note=refused, word="Refused"))
         if state.kind == UpdateKind.MERGED:
             return Read(Standing(IDLE, state.said, word="Yours now" if state.offered else "Waiting"), yours=True)
         return WAITING
@@ -207,11 +212,11 @@ def _apply(state: UpdateState) -> Read | None:
     if apply.state in _ACTIVE:
         return Read(_ran(apply))
     if apply.state != OperationRequest.State.SUCCEEDED:
-        return Read(_ran(apply, ended="Apply failed"), yours=state.offered is not None)
+        return Read(_ran(apply, ended="Failed"), yours=state.offered is not None)
     # Applied only where every machine's pull released every app.
     if not pull_applied(run_row(apply).evidence.stated):
         return Read(_ran(apply, ended="Incomplete"), yours=state.offered is not None)
-    return Read(Standing(DONE, word="Applied", url=run_row(apply).url))
+    return Read(Standing(DONE, word="Done", url=run_row(apply).url))
 
 
 def _health(state: UpdateState) -> Read | None:

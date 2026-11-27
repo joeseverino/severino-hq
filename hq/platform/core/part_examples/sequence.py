@@ -75,9 +75,9 @@ def _ended() -> dict[str, Sequence]:
         _opened(),
         Step("Checks", Standing(DONE, "2 of 2 passed", word="Passed"), passed, by=GITHUB),
         Step("Approve", Standing(DONE, word="Approved"), by=PERSON),
-        Step("Preview", Standing(DONE, since=since, word="Previewed", url="/example/runs/1/"), by=HOST),
-        Step("Merge", Standing(DONE, word="Merged", url=_PULL), by=GITHUB),
-        Step("Apply", Standing(DONE, since=since, word="Applied", url="/example/runs/2/"), by=HOST),
+        Step("Preview", Standing(DONE, since=since, word="Passed", url="/example/runs/1/"), by=HOST),
+        Step("Merge", Standing(DONE, word="Done", url=_PULL), by=GITHUB),
+        Step("Apply", Standing(DONE, since=since, word="Done", url="/example/runs/2/"), by=HOST),
         Step("Health check", Standing(FAILED, word="Unhealthy"), apps, by=HOST),
     )
     return {"sequence": Sequence("example/apps#58", steps)}
@@ -92,7 +92,7 @@ def _failed() -> dict[str, Sequence]:
         _opened(),
         Step("Checks", Standing(DONE, "1 of 1 passed", word="Passed"), checks, by=GITHUB),
         Step("Approve", Standing(IDLE, word="Yours to approve"), by=PERSON),
-        Step("Preview", Standing(FAILED, stopped, word="Preview failed", url="/example/runs/1/"), by=HOST),
+        Step("Preview", Standing(FAILED, stopped, word="Failed", url="/example/runs/1/"), by=HOST),
         *_waiting(_AFTER[1], *_LATER),
     )
     return {"sequence": Sequence("example/apps#58", steps)}

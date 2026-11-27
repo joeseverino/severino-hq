@@ -357,7 +357,7 @@
     margin-block-end: calc(-1 * var(--section-end));
   }
 }
-.section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
+.section-body > * + :is(.section, .section-line), .section-body > :is(.section, .section-line) + * { margin-block-start: var(--stack-gap); }
 /* A reading a section holds (raw JSON, a provider's readout) has paths of any
    length: wrapped, so only its height scrolls and never the page sideways. */
 .section-body > pre { max-block-size: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
