@@ -331,7 +331,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
     # Readers, which derive from no kind. Appended rather than merged into the
     # loop above because they are a different claim: a kind says what a
     # credential may change, an observer says what it may look at.
-    for observer in observer_abilities():
+    for provider, observer in observer_abilities():
         abilities.append(
             ConnectionAbility(
                 name=observer.name,
@@ -341,7 +341,7 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
                 subject_resource=observer.subject_resource,
             )
         )
-        by_provider.setdefault(observer.provider, []).append(observer.name)
+        by_provider.setdefault(provider, []).append(observer.name)
 
     # Every reading a provider feeds is something its credential lets HQ see.
     for kind, reading in sorted(OBSERVATIONS.items()):

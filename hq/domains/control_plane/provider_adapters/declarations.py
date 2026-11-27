@@ -536,5 +536,6 @@ CONNECTIONS = {
         create="An SSH key made in 1Password, its public half in the machine's authorized_keys.",
         create_url="https://developer.1password.com/docs/ssh/manage-keys/",
         gives="Caddy routes and certificates on your machines, and which of their ports answer.",
+        logs_in=True,
     ),
 }

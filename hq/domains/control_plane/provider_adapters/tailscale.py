@@ -21,6 +21,7 @@ from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
     InboundSpec,
+    Minter,
     ProviderModel,
     ProviderSpec,
     SharedValue,
@@ -381,6 +382,14 @@ CONNECTIONS = {
         create="An OAuth client in the Tailscale admin console, under Settings, Trust credentials.",
         create_url="https://tailscale.com/kb/1215/oauth-clients",
         gives="Your tailnet's devices, who may reach what, and its DNS.",
+        minter=Minter(
+            task="mint:tailscale",
+            stores=(("--store", "CLIENT_SECRET"), ("--store-id", "CLIENT_ID")),
+            bootstrap=(
+                ("TAILSCALE_BOOTSTRAP_CLIENT_ID", "CLIENT_ID"),
+                ("TAILSCALE_BOOTSTRAP_CLIENT_SECRET", "CLIENT_SECRET"),
+            ),
+        ),
     )
 }
 

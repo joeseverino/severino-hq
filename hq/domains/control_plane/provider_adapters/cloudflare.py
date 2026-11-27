@@ -21,7 +21,9 @@ from ..observations.contract import ReadingPart
 from ..permissions import Cloudflare
 from ..provider_spec import (
     ConnectionKind,
+    Minter,
     NameContext,
+    Observes,
     ProviderModel,
     ProviderSpec,
     SharedValue,
@@ -731,6 +733,23 @@ CONNECTIONS = {
         # cloudflare.contact_inbox declaration.
         writes=(Cloudflare.D1_EDIT,),
         gives="Your site's visits and contact-form messages, its tunnels, Access apps and Pages projects.",
+        minter=Minter(
+            task="mint:cloudflare",
+            stores=(("--store", "API_TOKEN"),),
+            bootstrap=(("CLOUDFLARE_BOOTSTRAP_TOKEN", "API_TOKEN"),),
+            account_flag="--account",
+        ),
+        observes=(
+            Observes(
+                name="analytics.read",
+                label="Site analytics",
+                summary=(
+                    "Reads site traffic (pages, referrers, countries, devices, "
+                    "browsers, operating systems) and Core Web Vitals."
+                ),
+                subject_resource="analytics",
+            ),
+        ),
     ),
     "cloudflare_dns": ConnectionKind(
         "Cloudflare DNS",

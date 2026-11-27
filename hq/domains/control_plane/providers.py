@@ -15,14 +15,15 @@ lazy from hq.platform.application.readings import KEPT
 lazy from hq.platform.application.references import Kind
 
 from .attribution import unattributed_kinds
-from .connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
+from .connection_kinds import CONNECTION_LABELS
 from .observations import OBSERVATIONS
 from .observations.contract import Reader, ReadingPart
-from .provider_adapters import DECLARATIONS
+from .provider_adapters import CONNECTIONS, DECLARATIONS
 from .provider_spec import (
     SERVICE_FACETS,
     ControllerCapabilityRegistry,
     ControllerProviderCapability,
+    Observes,
     ProviderResolutionContext,
     ProviderSpec,
     adapter,
@@ -226,53 +227,10 @@ def provider_reads() -> Mapping[str, tuple[Read, ...]]:
 OBSERVATION_KINDS = frozenset(OBSERVATIONS)
 
 
-@dataclass(frozen=True, slots=True)
-class ObserverAbility:
-    """What a connection is carried for when it reconciles nothing.
+def observer_abilities() -> tuple[tuple[str, Observes], ...]:
+    """What each connection is carried for beside the kinds it reconciles, by provider."""
 
-    Every other ability derives from a resource kind, the record of why a
-    credential is held. A connection that only reads has none, and without this
-    shows on the connections page as a credential nobody can account for. The
-    effect is always a read: changing state needs a kind, which reconcile keys on.
-    """
-
-    provider: str
-    name: str
-    label: str
-    summary: str
-    subject_resource: str
-
-
-_OBSERVER_ABILITIES: tuple[ObserverAbility, ...] = (
-    ObserverAbility(
-        provider="cloudflare_api",
-        name="analytics.read",
-        label="Site analytics",
-        summary=(
-            "Reads site traffic (pages, referrers, countries, devices, "
-            "browsers, operating systems) and Core Web Vitals."
-        ),
-        subject_resource="analytics",
-    ),
-)
-
-
-def observer_abilities() -> tuple[ObserverAbility, ...]:
-    return _OBSERVER_ABILITIES
-
-
-# A provider a resource can be reconciled through, or an observer can read
-# through, without a credential model would be reported as "proof undeclared"
-# forever. Refused here, beside the declarations, rather than found on the page.
-_unmodeled = sorted(
-    (
-        {provider for spec in PROVIDERS.values() for provider in spec.connection_providers}
-        | {ability.provider for ability in _OBSERVER_ABILITIES}
-    )
-    - set(CONNECTION_CREDENTIALS)
-)
-if _unmodeled:
-    raise ValueError(f"Connections without a credential model: {', '.join(_unmodeled)}.")
+    return tuple((provider, observes) for provider, kind in CONNECTIONS.items() for observes in kind.observes)
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):

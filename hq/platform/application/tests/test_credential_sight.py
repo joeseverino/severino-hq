@@ -275,10 +275,8 @@ class PerConnectionSightTests(TestCase):
         )
 
     def test_a_per_connection_kind_that_names_no_connection_is_refused(self):
-        from hq.domains.control_plane.attribution import (
-            PER_CONNECTION_PROVIDERS,
-            unattributed_kinds,
-        )
+        from hq.domains.control_plane.attribution import unattributed_kinds
+        from hq.domains.control_plane.connection_kinds import LOGS_IN
 
         class Unnamed(ObservationRecord):
             record: str
@@ -286,7 +284,7 @@ class PerConnectionSightTests(TestCase):
         class Named(ObservationRecord):
             connection_ref: str
 
-        (provider,) = sorted(PER_CONNECTION_PROVIDERS)
+        (provider,) = sorted(LOGS_IN)
         observations = registry(
             (
                 ObservationSpec("example.unnamed", provider, "Unnamed", Unnamed),

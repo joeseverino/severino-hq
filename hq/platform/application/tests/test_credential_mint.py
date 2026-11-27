@@ -10,7 +10,8 @@ from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
+from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
+from hq.domains.control_plane.credential_reads import observer_permissions
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.permissions import Tailscale
@@ -18,6 +19,7 @@ from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFU
 from hq.platform.core.testing import connection, operator
 from tests.mise_tasks import body, mise_tasks
 
+from ..connection_setup import setups
 from ..credential_mint import (
     credential_fixes,
     parse_expiry,
@@ -138,7 +140,9 @@ class MinterTaskTests(SimpleTestCase):
     def test_every_minter_matches_its_task(self):
         tasks = mise_tasks()
         source = (Path(settings.BASE_DIR) / "tools" / "credentials.py").read_text()
-        for provider, minter in MINTERS.items():
+        minters = {provider: kind.minter for provider, kind in CONNECTION_KINDS.items() if kind.minter}
+        self.assertTrue(minters)
+        for provider, minter in minters.items():
             with self.subTest(provider=provider):
                 flags = set(re.findall(r'^#USAGE flag "(--[a-z-]+)', body(tasks[minter.task]), flags=re.MULTILINE))
                 for flag, variable in minter.stores:
@@ -191,7 +195,9 @@ class MintCommandTests(TestCase):
 
         self.assertEqual(fix.command, COMMAND)
         self.assertEqual(fix.gaps, ())
-        self.assertEqual(fix.permissions, observer_permissions("cloudflare_api"))
+        # A replacement is issued with what setup asks for, writes included.
+        (setup,) = [setup for setup in setups() if setup.provider == "cloudflare_api"]
+        self.assertEqual(fix.permissions, setup.permissions)
         # Every word is a flag, the script, the account, or a reference.
         words = shlex.split(fix.command)
         for word in words:

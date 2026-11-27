@@ -12,7 +12,7 @@ from django.utils.text import capfirst
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
 from hq.platform.core.oidc import sso_only
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.providers import registry_label
 
@@ -258,7 +258,11 @@ SCOPE = Check(
     # Changes to the connections standard's kept connection (``connection_security``).
     breaks=({"evidence": ["coarse"]}, {"evidence": ["verified", "missing"]}),
     # A login whose service offers nothing narrower is met, though not cleanly.
-    keeps=({"kind": "acme", "evidence": ["coarse"]}, {"kind": "npm", "evidence": ["coarse"]}),
+    keeps=tuple(
+        {"kind": provider, "evidence": ["coarse"]}
+        for provider, held in CONNECTION_CREDENTIALS.items()
+        if held == "coarse"
+    ),
 )
 
 # ``why`` is what each stops, read after "Stops" in its sentence.

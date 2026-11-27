@@ -136,6 +136,46 @@ ENVELOPE_SETTINGS = frozenset({"CONNECTION_REF", "MANAGES", "PROVIDER"})
 
 
 @dataclass(frozen=True, slots=True)
+class Minter:
+    """How an observer credential for one provider is minted and stored.
+
+    ``task`` is the mise task that mints it. ``stores`` pairs each ``--store``
+    flag with the projection variable whose field it fills, the secret first.
+    ``bootstrap`` pairs each environment variable the task reads with the
+    projection variable whose field on the bootstrap item holds it, so a
+    bootstrap item is shaped like the connection.
+    """
+
+    task: str
+    stores: tuple[tuple[str, str], ...]
+    bootstrap: tuple[tuple[str, str], ...]
+    # The flag naming the account, when the credential is minted for one.
+    account_flag: str = ""
+
+    @property
+    def invocation(self) -> tuple[str, str, str]:
+        """The words that run the task, from the checkout."""
+
+        return ("mise", "run", self.task)
+
+
+@dataclass(frozen=True, slots=True)
+class Observes:
+    """What a connection is carried for when it reconciles nothing.
+
+    Every other ability derives from a resource kind, the record of why a
+    credential is held. A connection that only reads has none, and without this
+    shows on the connections page as a credential nobody can account for. The
+    effect is always a read: changing state needs a kind, which reconcile keys on.
+    """
+
+    name: str
+    label: str
+    summary: str
+    subject_resource: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConnectionKind:
     """One connection provider: its name on the page, and how its credential is held."""
 
@@ -159,6 +199,15 @@ class ConnectionKind:
     # What connecting it gives the owner, in one line of his own words: the
     # Connections page offers it by this, never by the names of its kinds.
     gives: str = ""
+    # Whether its connection logs in to one machine. HQ holds one per machine,
+    # so every record read through it names its connection; and the machine
+    # counts logins, so only the sweep's own clock reads through it, carrying
+    # a recent probe between.
+    logs_in: bool = False
+    # How a replacement credential is minted, where a task mints one.
+    minter: Minter | None = None
+    # What it is carried for beside the kinds it reconciles.
+    observes: tuple[Observes, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

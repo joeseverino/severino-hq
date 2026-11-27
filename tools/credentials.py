@@ -24,7 +24,7 @@ import jwt
 
 from hq.platform.application.http_read import UNREACHABLE
 from hq.platform.core.tests.task import Usage
-lazy from hq.domains.control_plane.credential_reads import observer_permissions
+lazy from hq.domains.control_plane.credential_reads import credential_permissions
 lazy from hq.platform.application.entity_links import https_url
 
 # The secrets the wiring sets, as HQ's posture check names them.
@@ -256,10 +256,10 @@ def mint(provider: Provider, session: Session, onepassword: OnePassword) -> None
 
 def listed(usage: Usage, flag: str, provider: str, what: str) -> tuple[str, ...]:
     """The entries of the list file ``flag`` names, one per line, comments and
-    blank lines skipped; else what ``provider``'s observer credential needs."""
+    blank lines skipped; else what ``provider``'s credential is issued with."""
 
     if not usage.text(flag):
-        return tuple(name.api for name in observer_permissions(provider))
+        return tuple(name.api for name in credential_permissions(provider))
     path = Path(usage.text(flag))
     try:
         lines = path.read_text(encoding="utf-8").splitlines()

@@ -21,6 +21,7 @@ from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
+lazy from hq.domains.control_plane.connection_kinds import LOGS_IN
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
@@ -62,8 +63,8 @@ def askable(kind: str) -> bool:
         return False
     reading = OBSERVATIONS.get(kind)
     if reading is not None:
-        return reading.provider != "ssh"
-    return "ssh" not in PROVIDERS[kind].connection_providers
+        return reading.provider not in LOGS_IN
+    return not LOGS_IN.intersection(PROVIDERS[kind].connection_providers)
 
 
 def _machine_reads(name: str) -> Reads | None:

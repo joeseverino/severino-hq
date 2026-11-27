@@ -703,16 +703,6 @@ class GrantEvidenceTests(TestCase):
         self.assertEqual(by_ref["a-cloudflare_dns"]["lifecycle"], "reachable")
         self.assertTrue(all(a["evidence"] == "unverified" for a in _abilities(by_ref["a-cloudflare_dns"])))
 
-    def test_every_connection_provider_declares_a_credential_model(self):
-        from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS
-        from hq.domains.control_plane.providers import PROVIDERS, observer_abilities
-
-        named = {p for spec in PROVIDERS.values() for p in spec.connection_providers}
-        named |= {ability.provider for ability in observer_abilities()}
-        self.assertTrue(named)
-        self.assertEqual(sorted(named - set(CONNECTION_CREDENTIALS)), [])
-        self.assertLessEqual(set(CONNECTION_CREDENTIALS.values()), {"scoped", "coarse", "none"})
-
     def test_keyless_gateways_prove_themselves_without_a_credential(self):
         lookup = Principal("lookup", "test", frozenset({Capability.READ, Capability.LOOK_UP_PUBLIC_RECORDS}))
         registries = [item for item in _standing(lookup) if item["family"] == "hq.public_registries"]

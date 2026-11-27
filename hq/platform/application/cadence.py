@@ -39,6 +39,7 @@ from hq.domains.control_plane.models import (
     attempted_at,
 )
 lazy from hq.domains.control_plane.bridge_contract import declared_names
+lazy from hq.domains.control_plane.connection_kinds import LOGS_IN
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
@@ -395,7 +396,8 @@ def ssh_probe_interval() -> timedelta:
 
 
 def carried_connections(controller_id: str, *, failing: bool = False) -> list[str]:
-    """SSH connections this controller should report without probing again.
+    """Connections that log in to a machine (``ConnectionKind.logs_in``)
+    this controller should report without probing again.
 
     Only ones whose last probe succeeded within ``ssh_probe_interval``, so a
     recovery shows as soon as it happens. ``failing`` carries the failing ones
@@ -407,7 +409,7 @@ def carried_connections(controller_id: str, *, failing: bool = False) -> list[st
     fresh_since = timezone.now() - ssh_probe_interval()
     probes = ProviderConnection.objects.filter(
         controller_id=controller_id,
-        provider="ssh",
+        provider__in=LOGS_IN,
         probed=True,
         observed_at__gte=fresh_since,
     )

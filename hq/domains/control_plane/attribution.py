@@ -1,18 +1,17 @@
 """Which connection a reading belongs to."""
 
-# Providers HQ holds many connections of, each reaching a different machine. A
-# record read through one names that connection, so no two connections can
-# share a reading. Refused here when a kind of one does not.
-PER_CONNECTION_PROVIDERS = frozenset({"ssh"})
+from .connection_kinds import LOGS_IN
 
 
 def unattributed_kinds(observations, providers) -> list[str]:
-    """Kinds of a per-connection provider whose records do not name their connection."""
+    """Kinds read through a connection that logs in to one machine whose
+    records do not name their connection: HQ holds one per machine, so no two
+    may share a reading."""
 
     found = [
         kind
         for kind, spec in observations.items()
-        if spec.provider in PER_CONNECTION_PROVIDERS
+        if spec.provider in LOGS_IN
         and not (
             "connection_ref" in spec.record.model_fields and spec.record.model_fields["connection_ref"].is_required()
         )
@@ -20,7 +19,7 @@ def unattributed_kinds(observations, providers) -> list[str]:
     for spec in providers:
         if not spec.sweeps:
             continue
-        if not set(spec.connection_providers) & PER_CONNECTION_PROVIDERS:
+        if not set(spec.connection_providers) & LOGS_IN:
             continue
         sample = dict(spec.sample_record or {})
         if not sample.get("connection_ref") or "connection_ref" not in (spec.record_spec(sample) or {}):
