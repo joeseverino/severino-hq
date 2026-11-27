@@ -115,7 +115,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
 
 def _no_parent(node: TopologyNode, kind: str, missing: str) -> Finding:
     name = node_name(node)
-    what = (PROVIDERS[kind].label or "record").lower()
+    what = PROVIDERS[kind].label.lower()
     return Finding(
         rule=RULE,
         subject=node.id,

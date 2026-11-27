@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from hq.platform.application.labels import human_label
 from hq.platform.application.record_errors import Sentence
 lazy from hq.platform.application.default_hold import needs_approval
 lazy from hq.platform.application.entity_links import page_url
@@ -48,14 +49,14 @@ def service_facets() -> tuple[tuple[str, str], ...]:
 
 
 def registry_label(kind: str) -> str:
-    """What a registered resource or reading kind is called. Never the identifier."""
+    """What a resource or reading kind is called: its declared label, else,
+    for a stored kind nothing declares any more, its identifier in words."""
 
-    provider = PROVIDERS.get(kind)
-    if provider is not None and provider.label:
-        return provider.label
+    if kind in PROVIDERS:
+        return PROVIDERS[kind].label
     if kind in OBSERVATIONS:
         return OBSERVATIONS[kind].label
-    return "Unknown type"
+    return human_label(kind)
 
 
 def operator_label(kind: str) -> str:
@@ -307,7 +308,7 @@ def describe_providers() -> dict[str, Any]:
         "providers": [
             {
                 "kind": provider.kind,
-                "label": provider.label or provider.kind,
+                "label": provider.label,
                 "summary": provider.summary,
                 "destructive": provider.destructive,
                 "public_effect": provider.public_effect,

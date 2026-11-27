@@ -430,10 +430,9 @@ class ProviderSpec:
     resolver: Callable[[dict[str, Any], ProviderResolutionContext], dict[str, Any]] | None = None
     destructive: bool = False
     public_effect: bool = False
-    # Declared after the positional fields, and always passed by keyword: the
-    # existing entries pass resolved_type and resolver positionally, so a new
-    # field inserted above them silently rebinds both.
-    label: str = ""
+    # Keyword-only, so it binds no positional argument and every kind names
+    # itself: nothing words a kind from its identifier.
+    label: str = field(kw_only=True)
     # Many of them, where adding a letter to ``label`` does not say it.
     label_plural: str = ""
 
