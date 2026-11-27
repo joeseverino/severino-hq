@@ -10,6 +10,7 @@ from django.utils.text import Truncator
 from django.views import View
 from django.views.generic import TemplateView
 
+from hq.platform.application import fragments
 from hq.platform.application.capabilities import capability_words, command_spec
 from hq.platform.application.certificates import UPLOAD as CERTIFICATE_UPLOAD
 from hq.platform.application.command_forms import command_form_class
@@ -62,6 +63,7 @@ from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.work_runs import run_rows
 from hq.platform.core.templatetags.action_tags import POST_FORM_ID
 from hq.platform.core.web_refusals import refusal_response, refused
+lazy from hq.platform.application.derivations import every_revision
 lazy from hq.platform.application.page_relations import for_container
 lazy from hq.platform.application.projection import iso
 
@@ -342,10 +344,27 @@ def _change_cells(change: dict) -> tuple[Cell, ...]:
     )
 
 
+# The part of a container's page its Upgrade card is drawn from alone.
+UPGRADE = "upgrade"
+
+
 class InfrastructureDetailView(RecordPageMixin, TemplateView):
     template_name = "control_plane/resource_detail.html"
     resource = INFRASTRUCTURE
     context_object_name = "resource"
+
+    @override
+    def get(self, request, *args, **kwargs):
+        if fragments.requested(request) != UPGRADE:
+            return super().get(request, *args, **kwargs)
+
+        def drawn():
+            self.read(request, kwargs)
+            return self.get_context_data(**kwargs)
+
+        # A container's Upgrade card alone while its update moves, or 304
+        # while nothing it reads was written.
+        return fragments.render(request, self.template_name, drawn, revision=every_revision())
 
     @cached_property
     def row(self) -> ManagedResource:

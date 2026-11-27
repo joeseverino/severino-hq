@@ -124,3 +124,16 @@ class OpenUpdateTests(TestCase):
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
         self.assertEqual(forced_reads(), asked)
+
+    def test_a_pulse_of_its_card_draws_the_card_alone_or_nothing_while_nothing_it_reads_was_written(self):
+        from hq.platform.core.testing import declare, operator
+
+        operator(self.client)
+        declare("example-box-app", "portainer.container", {"host": "example-box", "name": "app"})
+        address = reverse("control_plane:detail", args=["example-box-app"])
+
+        part = self.client.get(address, headers={"X-Fragment": "upgrade"})
+
+        self.assertEqual([tag_of(part, 'id="upgrade"') != "", 'id="supply-chain"' in part.text], [True, False])
+        unchanged = self.client.get(address, headers={"X-Fragment": "upgrade", "If-None-Match": part["ETag"]})
+        self.assertEqual(unchanged.status_code, 304)
