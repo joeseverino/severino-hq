@@ -2,7 +2,7 @@
 what each forces, and which a sweep answered.
 
 ``cadence.ask`` stores a request; the sweep's verdict (``cadence.sweep_due``)
-reads them here and, handed to a controller, marks each taken. Only a pass
+reads them here, and a controller's pass marks each it takes (``take``). Only a pass
 that took a request answers it, by storing what it forces after taking it: a
 pass that read before an ask and stored after it never answers that ask. A
 burst of asks coalesces on the pass itself, since the controller runs one
@@ -138,14 +138,16 @@ def forced_reads(asked: Iterable[ReadRequest] | None = None) -> tuple[ForcedRead
     return tuple(read for read in reads if not _answered(read, stored, probed))
 
 
-def take(forced: tuple[ForcedRead, ...], at: datetime) -> None:
-    """Mark ``forced`` taken by the pass handed them at ``at``. Each is matched
-    on the ask it was read as, so an ask made since stays for the next pass."""
+def take(forced: tuple[ForcedRead, ...]) -> tuple[ForcedRead, ...]:
+    """Mark ``forced`` taken now by the pass handed them, and hand them back. Each
+    is matched on the ask it was read as, so an ask made since stays for the next pass."""
 
+    at = timezone.now()
     for read in forced:
         ReadRequest.objects.filter(
             connection_ref=read.connection_ref, kind=read.kind, subject=read.subject, requested_at=read.requested_at
         ).update(taken_at=at)
+    return forced
 
 
 def askers(kinds: Iterable[str]) -> dict[str, str]:

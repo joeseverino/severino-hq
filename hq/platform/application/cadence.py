@@ -57,7 +57,7 @@ from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
 from .moments import duration
 from .projection import read_once
-from .read_requests import ForcedRead, connection_providers, forced_kinds, forced_reads, take
+from .read_requests import ForcedRead, connection_providers, forced_kinds, forced_reads
 from .record_errors import Sentence, worded
 from .refusal_codes import Code
 from .security import Capability, Principal
@@ -502,20 +502,17 @@ def every_sweep(kind: str) -> bool:
     return swept(kind) and own_clock(kind) is None
 
 
-def sweep_due(controller_id: str = "", *, taken: bool = False) -> dict[str, object]:
+def sweep_due(controller_id: str = "", forced: tuple[ForcedRead, ...] | None = None) -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
     The oldest sweep decides, unless a pending ``ReadRequest`` makes it due
     whatever the cadence says. The reason rides along because a controller
     that stopped sweeping and one told not to look are the same from outside,
-    and only one of them is a fault. ``taken`` is a controller's pass taking
-    the verdict, which marks each pending request it carries taken
-    (``read_requests.take``); a look at the verdict takes nothing.
+    and only one of them is a fault. ``forced`` is what a controller's pass
+    took (``read_requests.take``), else every pending request.
     """
 
-    forced = forced_reads()
-    if taken and forced:
-        take(forced, timezone.now())
+    forced = forced_reads() if forced is None else forced
     interval = sweep_interval()
     oldest = _oldest_sweep()
     verdict: dict[str, object] = {

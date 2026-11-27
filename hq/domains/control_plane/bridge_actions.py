@@ -35,6 +35,7 @@ from hq.platform.application.inbound import apply_events
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
 from hq.platform.application.outbound_work import run_for_host
+from hq.platform.application.read_requests import forced_reads, take
 from hq.platform.application.record_errors import CertificateError
 from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.sealing import Sealed, sealer
@@ -203,7 +204,7 @@ def _analytics_plan(parameters: Parameters, payload: Any) -> Any:
 
 def _sweep_due(parameters: Parameters, payload: Any) -> Any:
     del payload
-    return sweep_due(parameters["controller-id"], taken=True)
+    return sweep_due(parameters["controller-id"], take(forced_reads()))
 
 
 def _glance_plan(parameters: Parameters, payload: Any) -> Any:

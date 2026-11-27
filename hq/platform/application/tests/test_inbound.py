@@ -210,7 +210,7 @@ class ApplyEventsTests(TestCase):
 
         from ..cadence import sweep_due
         from ..derivation_testing import frozen
-        from ..read_requests import forced_reads
+        from ..read_requests import forced_reads, take
 
         start = timezone.now()
 
@@ -226,7 +226,7 @@ class ApplyEventsTests(TestCase):
         with at(0):
             self.apply(worker(PUSH))
         with at(1):
-            sweep_due("example-controller", taken=True)
+            sweep_due("example-controller", take(forced_reads()))
         with at(2):
             self.apply(worker({**PUSH, "event": "pull_request.opened", "delivery_id": "after"}))
         # The pass that read before the second ask stores after it.
