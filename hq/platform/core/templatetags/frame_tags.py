@@ -7,7 +7,7 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.tone import tone_of
-from hq.platform.core.part_examples import tags
+from hq.platform.core.part_examples import sequence, tags
 from hq.platform.core.template_parts import Option, Part, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.icon_tags import drawn
@@ -116,14 +116,24 @@ slotted(
         its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
         `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
         runs it, and it carries no secret.
+
+        A workflow HQ declares (`sequences.SequenceSpec`) is drawn whole by `{% steps of=sequence %}`,
+        which encloses nothing: each step numbered, its title linked to the page that holds it, its state's
+        word, its sentence, then each of its parts (a check, an app) on a line of its own with its state
+        in its tone. A step or part an event told HQ of since its record was read says who told it, until
+        the next read replaces it.
         """,
         example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
         classes=("is-numbered", "step-list"),
         partial="partials/_steps.html",
         pieces=("partials/_operator_step.html",),
         about="A list of short steps or checks, each a `{% step %}`, in as many columns as fit.",
-        options={"numbered": Option(about="Steps done in order: one column, each its number in place of its icon.")},
-        states=tags.STEPS_STATES,
+        options={
+            "numbered": Option(about="Steps done in order: one column, each its number in place of its icon."),
+            "of": Option(about="A `sequences.Sequence`, drawn whole, each step numbered with its parts."),
+        },
+        bare_with="of",
+        states={**tags.STEPS_STATES, **sequence.STATES},
     ),
 )
 slotted(

@@ -107,6 +107,7 @@ def approval(owner, ended: str) -> None:
     if ended == PREVIEW_FAILED:
         record(playbook, "run", "failed", asked=previewed, result={"message": "A task failed.", "events": events})
         return
+    record(playbook, "run", "succeeded", asked=previewed, result={})
     pull = ManagedResource.objects.create(
         key=f"example-pull-request-{APPS}-{update['number']}",
         kind=delivery.PULL_REQUEST_KIND,

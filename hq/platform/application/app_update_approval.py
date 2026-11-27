@@ -101,7 +101,7 @@ def applier() -> OperationManifest:
     ]
     if not found:
         raise PolicyError(
-            f"No adopted playbook applies an app update. On {PLAYBOOKS}, Refresh and adopt the one that does."
+            f"No adopted playbook applies an app update. On {PLAYBOOKS}, adopt the one that does."
         )
     if len(found) > 1:
         raise PolicyError(
@@ -618,7 +618,7 @@ def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] 
         if done is not None and any(item.running.observed_at > done for item in items):
             return None
         # Applied only where every machine's pull released every app.
-        if _pull_applied(run.evidence.stated):
+        if pull_applied(run.evidence.stated):
             return MergeStanding("Applied", Tone.GOOD, taken=True, operation=apply, run=run)
         return _failed("Incomplete", "apply", apply, run)
     return _failed("Apply failed", "apply", apply, run)
@@ -787,7 +787,7 @@ RECEIPT_KIND = StatedKind(
 )
 
 
-def _pull_applied(stated: tuple[dict[str, Any], ...]) -> bool:
+def pull_applied(stated: tuple[dict[str, Any], ...]) -> bool:
     """Whether a run's readings say every machine's pull applied the revision it asked."""
 
     receipts = [_read(PullReceipt, record) for each in stated if each["kind"] == RECEIPT for record in each["records"]]

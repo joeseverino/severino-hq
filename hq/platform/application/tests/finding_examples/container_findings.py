@@ -136,7 +136,7 @@ def update(
 
 
 # What holds an update back where no adopted playbook applies it, as the approval refuses it.
-NO_PLAYBOOK = "No adopted playbook applies an app update. On Playbooks, Refresh and adopt the one that does."
+NO_PLAYBOOK = "No adopted playbook applies an app update. On Playbooks, adopt the one that does."
 
 
 def held_by(why: str) -> Raised:

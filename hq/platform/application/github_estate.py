@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.observations.contract import ReadingPart
 from hq.domains.control_plane.observations.github import (
     CODE_SCANNING,
@@ -34,17 +36,19 @@ from hq.platform.application.labels import dotted
 from .action_links import read_link
 from .card_items import Badge, ListRow, RowTitle
 from .derivations import whole
-from .entity_links import EntityLink, declared_link, web_url
+from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
 from .inbound_events import told
 from .moments import duration, moment, when
 from .projection import read_once
+from .sequences import By, Step
 from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
 from .workflow_contracts import ActionLink
+lazy from . import asks
 lazy from .app_updates import app_updates
 lazy from .facts import record_read_at, snapshots_of
 lazy from .images import GHCR, ImageRef
@@ -167,18 +171,20 @@ class PullCheck(NamedTuple):
     told: bool = False
 
 
-def check_said(check: PullCheck) -> EntityLink | str:
-    """One check of a pull request's head as every page says it, ``lint
-    passed 58 s`` or ``test running since 2 minutes ago``, marked told where
-    an event said it since the read, linked to its run on GitHub where one is
-    named."""
+def check_step(check: PullCheck) -> Step:
+    """One check of a pull request's head as a step every page draws: its
+    name, ``Passed`` in ``58 s`` or ``Running`` since 2 minutes ago, told
+    where an event said it since the read, linked to its run on GitHub where
+    one is named."""
 
     run = check.run
-    word = (
-        _CONCLUDED.get(run.conclusion, run.conclusion)
-        if run.status == "completed"
-        else _STATUS.get(run.status, run.status)
-    )
+    if run.status == "completed":
+        # One that ended neither passed nor failed (skipped, neutral) stands idle.
+        state = asks.DONE if run.conclusion == "success" else asks.FAILED if run.conclusion in FAILED else asks.IDLE
+        word = _CONCLUDED.get(run.conclusion, run.conclusion)
+    else:
+        state = asks.RUNNING if run.status == "in_progress" else asks.QUEUED
+        word = _STATUS.get(run.status, run.status)
     took = ""
     if run.started_at is not None:
         took = (
@@ -186,9 +192,8 @@ def check_said(check: PullCheck) -> EntityLink | str:
             if run.completed_at is not None
             else f"since {when(run.started_at)}"
         )
-    said = dotted(" ".join(part for part in (run.name, word, took) if part), "told by GitHub" if check.told else "")
-    url = web_url(run.url)
-    return declared_link(said, url, kind="dependency") if url else said
+    standing = asks.Standing(state, took, word=capfirst(word), url=web_url(run.url))
+    return Step(run.name, standing, by=By.GITHUB, told=check.told)
 
 
 # What GitHub's log marks a step's end with when the tool said nothing of

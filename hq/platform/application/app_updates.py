@@ -39,7 +39,7 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
-lazy from .app_update_flow import update_flow
+lazy from .app_update_flow import UPDATE
 lazy from .app_update_open import OPEN, open_standing, open_target
 lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
@@ -49,7 +49,7 @@ lazy from .finding_steps import Does
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
 lazy from .resource_operations import OperationAsked, operation_asked
-lazy from .sequences import Step
+lazy from .sequences import Sequence
 lazy from .work_runs import standing_of as run_standing
 
 if TYPE_CHECKING:
@@ -509,16 +509,15 @@ class UpdateState:
 
     @property
     def follows(self) -> bool:
-        """Whether its card asks again: a step of it is under way, or a check of its pull request is."""
+        """Whether its card asks again: a step of its way, or a part of one, is under way."""
 
-        live = self.standing is not None and self.standing.live
-        return live or any(check.run.status != "completed" for check in (self.update.check_runs if self.update else ()))
+        return self.flow.live
 
     @property
-    def flow(self) -> tuple[Step, ...]:
-        """Its way to running, step by step (``app_update_flow``)."""
+    def flow(self) -> Sequence:
+        """Its way to running, step by step (``app_update_flow.UPDATE``)."""
 
-        return update_flow(self)
+        return UPDATE.of(self)
 
     @property
     def beside(self) -> MergeStanding | None:

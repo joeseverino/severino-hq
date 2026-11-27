@@ -187,6 +187,8 @@
 .step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .step-list a { font-weight: 600; }
 .step-list .muted { display: block; margin-top: var(--space-1); }
+/* A step's parts (a declared workflow's checks, its apps) each run on one line: its name, its state, its detail. */
+.step-list .stack-list .muted { display: inline; margin-top: 0; }
 
 /* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
    so its title starts at the edge every other card's heading starts at. The

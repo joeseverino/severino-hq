@@ -2,8 +2,11 @@
 One step or check of a {% steps %} list (partials/_steps.html), drawn by {% step %}:
 {% step icon="card" %}<strong>Public client</strong> {% muted %}Register one.{% endmuted %}{% endstep %}.
 Its icon, then what it says; a step of a numbered list draws its number
-instead. Its options are its Part's (frame_tags).
+instead. Given `step`, a sequences.Step of a declared workflow: its title,
+its state's word and sentence, then each part with its state in its tone,
+and who told HQ of it where an event did since the last read. Its options
+are its Part's (frame_tags).
 {% endcomment %}<li{% if done %} class="is-done"{% elif tone %} class="tone-{{ tone }}"{% endif %}{% if title %} title="{{ title }}"{% endif %}>
   {% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}
-  <div>{{ content|safe }}</div>
+  <div>{% if step %}<strong>{% if step.link %}{% entity step.link %}{% else %}{{ step.title }}{% endif %}</strong> {{ step.standing.label }}{% if step.detail %}{% muted %}{{ step.detail }}{% endmuted %}{% endif %}{% if step.parts %}{% list %}{% for part in step.parts %}<li>{% if part.link %}{% entity part.link %}{% else %}{{ part.title }}{% endif %} {% status part.standing.label tone=part.standing.tone pill=False %}{% if part.detail %} {% muted %}{{ part.detail }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}{% else %}{{ content|safe }}{% endif %}</div>
 </li>
