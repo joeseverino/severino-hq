@@ -54,13 +54,25 @@ class HqSight:
         return sum(row.read for row in self.rows)
 
     @property
+    def sees(self) -> str:
+        """How many readings the table lists, as HQ's page and the Controller's count them."""
+
+        return counted(len(self.rows), "reading")
+
+    @property
     def stale(self) -> int:
         return sum(row.stale for row in self.rows)
 
     @property
     def never(self) -> int:
-        """Listed kinds no sweep has read yet. One read when a person opens it
-        is owed nothing until someone does."""
+        """Listed kinds no sweep has read yet, each a "Never read" row of the table."""
+
+        return sum(row.sight.state == NEVER_SWEPT for row in self.rows)
+
+    @property
+    def owed(self) -> int:
+        """Of those never read, the ones owed a reading: one read when a person
+        opens it is owed nothing until someone does."""
 
         return sum(
             row.sight.state == NEVER_SWEPT and not ((spec := OBSERVATIONS.get(row.sight.kind)) and spec.on_open)
@@ -88,7 +100,7 @@ class HqSight:
 
     @property
     def tone(self) -> Tone:
-        return Tone.ATTENTION if self.stale or self.failing or self.never else Tone.GOOD
+        return Tone.ATTENTION if self.stale or self.failing or self.owed else Tone.GOOD
 
     @property
     def table(self) -> DataTable:
@@ -194,9 +206,7 @@ def _sight() -> HqSight:
 
 
 def sight_tile(seen: HqSight) -> Tile:
-    return Tile(
-        "Sees", counted(seen.read, "reading"), seen.said, reverse("control_plane:connections"), seen.tone, "eye"
-    )
+    return Tile("Sees", seen.sees, seen.said, reverse("control_plane:connections"), seen.tone, "eye")
 
 
 def sight_json(seen: HqSight) -> dict[str, Any]:

@@ -292,10 +292,12 @@ class ProjectionTests(TestCase):
         self.assertEqual(seen.groups[-1][0], KEYLESS)
         self.assertLessEqual(set(seen.unconnected), set(CONNECTION_LABELS.values()))
         self.assertGreaterEqual(seen.never, 1)
-        # Reverse DNS is listed unread, but owed nothing until an address is looked up.
+        # Every row the table says is never read is counted, and reverse DNS,
+        # owed nothing until an address is looked up, is among them.
         unread = {row.sight.kind for row in seen.rows if row.sight.state == NEVER_SWEPT}
         self.assertIn("dns.reverse", unread)
-        self.assertLess(seen.never, len(unread))
+        self.assertEqual(seen.never, len(unread))
+        self.assertLess(seen.owed, len(unread))
         (tile,) = (tile for tile in self.context().tiles if tile.label == "Sees")
         self.assertIn(f"{seen.never} never read", tile.detail)
 
