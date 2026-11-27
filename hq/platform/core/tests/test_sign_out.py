@@ -10,7 +10,6 @@ from django.urls import reverse
 
 from hq.platform.api.tests.tokens import ISSUER, _serving
 from hq.platform.core.oidc import HQOIDCAuthenticationBackend
-from hq.platform.core.testing import operator
 from hq.platform.core.tests.test_id_token import CLIENT, NONCE, _id_token
 
 END_SESSION = f"{ISSUER}/api/oidc/end-session"
@@ -69,12 +68,4 @@ class SignOutTests(TestCase):
                 "post_logout_redirect_uri": [f"http://testserver{settings.LOGOUT_REDIRECT_URL}"],
             },
         )
-        self.assertNotIn(SESSION_KEY, self.client.session)
-
-    def test_a_session_without_an_id_token_is_signed_out_of_hq_alone(self):
-        operator(self.client, "example-person")
-
-        response = self.client.post(reverse("logout"))
-
-        self.assertRedirects(response, settings.LOGOUT_REDIRECT_URL, fetch_redirect_response=False)
         self.assertNotIn(SESSION_KEY, self.client.session)

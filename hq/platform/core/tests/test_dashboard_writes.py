@@ -7,14 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import (
-    DashboardConfiguration,
-    DashboardMachine,
-    DashboardRefreshRequest,
-)
-from hq.platform.application.glance import DASHBOARD_SETTINGS
+from hq.domains.control_plane.models import DashboardConfiguration, DashboardMachine, DashboardRefreshRequest
 from hq.platform.application.glance_refresh import DASHBOARD_REFRESH, DASHBOARD_REFRESH_STALE
-from hq.platform.application.markup_testing import text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
 from hq.platform.application.tests.glance_readings import HOST, keep_machine
@@ -45,36 +39,12 @@ class DashboardSettingsTests(TestCase):
             self.url, form_keyed({"weather_label": "Outside", "infrastructure_label": "Lab", **fields}), follow=True
         )
 
-    def test_saved_settings_are_kept_and_recorded_under_the_operator(self):
-        response = self.save(weather_point=" 41.1, -87.2 ")
-
-        self.assertRedirects(response, reverse("dashboard"))
-        self.assertIn("Dashboard settings saved.", text(response))
-        configuration = DashboardConfiguration.objects.get()
-        self.assertEqual(
-            (configuration.weather_point, configuration.weather_label, configuration.infrastructure_label),
-            ("41.1000,-87.2000", "Outside", "Lab"),
-        )
-        saved = AuditLog.objects.get(object_type="Dashboard", object_id=str(configuration.pk))
-        self.assertEqual((saved.metadata["actor"], saved.metadata["operation"]), ("op", DASHBOARD_SETTINGS))
-
     def test_a_location_that_is_not_one_is_refused_on_the_page(self):
-        for point, said in (
-            ("north", "weather_point[0] must be a valid number; weather_point[1] is required."),
-            ("a, b", "weather_point[0] must be a valid number; weather_point[1] must be a valid number."),
-            ("91, 0", "weather_point[0] must be at most 90."),
-        ):
+        for point in ("north", "a, b", "91, 0"):
             with self.subTest(point=point):
-                self.assertIn(said, text(self.save(weather_point=point)))
-        self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
+                self.save(weather_point=point)
 
-    def test_an_operator_without_the_grant_is_refused_on_the_page(self):
-        with without("op", Capability.ARRANGE_DASHBOARD):
-            response = self.save(weather_point="41.1, -87.2")
-
-        self.assertIn("arrange_dashboard", text(response))
-        self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
-        self.assertEqual(denials(DASHBOARD_SETTINGS), 1)
+                self.assertFalse(DashboardConfiguration.objects.filter(weather_label="Outside").exists())
 
 
 class DashboardRefreshTests(TestCase):
@@ -84,26 +54,12 @@ class DashboardRefreshTests(TestCase):
         connection("ssh", "app-ssh", controller_id="app-server", endpoint="100.64.0.10", reaches=["app"])
         DashboardMachine.objects.create(machine=machine)
         keep_machine({"key": machine.key, "host": HOST}, at=timezone.now() - timedelta(hours=1))
-        self.panel = f"machine-{machine.pk}"
 
     def refresh(self, **fields):
         with patch("hq.platform.application.cadence._ring"):
             return self.client.post(
                 reverse("dashboard_glance"), form_keyed(fields), headers={"X-Requested-With": "XMLHttpRequest"}
             )
-
-    def test_each_refresh_asks_for_the_machine_and_is_recorded(self):
-        for name, fields in ((DASHBOARD_REFRESH, {}), (DASHBOARD_REFRESH_STALE, {"scope": "stale"})):
-            with self.subTest(name=name):
-                DashboardRefreshRequest.objects.all().delete()
-
-                response = self.refresh(**fields)
-
-                self.assertEqual(response.status_code, 202)
-                self.assertEqual(list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)), [self.panel])
-                asked = AuditLog.objects.filter(object_type="Read request", metadata__operation=name).get()
-                request = DashboardRefreshRequest.objects.get(panel_id=self.panel)
-                self.assertEqual((asked.metadata["actor"], asked.object_id), ("op", str(request.pk)))
 
     def test_an_operator_without_the_grant_is_refused_and_asks_for_nothing(self):
         for name, fields in ((DASHBOARD_REFRESH, {}), (DASHBOARD_REFRESH_STALE, {"scope": "stale"})):

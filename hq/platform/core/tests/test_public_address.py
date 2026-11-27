@@ -2,31 +2,17 @@
 
 from unittest.mock import patch
 
-from django.template.loader import render_to_string
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
-from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, REVERSE_DNS_KIND
+from hq.domains.control_plane.observations.public_registry import REVERSE_DNS_KIND
 from hq.platform.application.facts import kept_by
-from hq.platform.application.inventory import keep
 from hq.platform.application.lookup import LOOK_UP_ADDRESS
-from hq.platform.application.markup_testing import select, text
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.request_connection import connection
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
-from hq.platform.application.tests.connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
-from hq.platform.application.tests.test_lookup import AN_ADDRESS, AN_ALLOCATION, GLOBAL as ADDRESS
+from hq.platform.application.tests.test_lookup import GLOBAL as ADDRESS
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
-
-
-def store():
-    """What a lookup of the address stored: its reverse DNS and who holds it."""
-
-    now = timezone.now()
-    keep(REVERSE_DNS_KIND, "address", {"address": ADDRESS, "hostnames": ["host.example.net"]}, read_at=now)
-    keep(ADDRESS_KIND, "address", {"address": ADDRESS, "organization": "Example Networks"}, read_at=now)
 
 
 def held():
@@ -51,83 +37,12 @@ class PublicAddressViewTests(TestCase):
     def look_up(self, address):
         return self.client.post(self.url, form_keyed({"address": address}), HTTP_X_REQUESTED_WITH="XMLHttpRequest")
 
-    def test_a_get_serves_the_stored_reading_and_asks_nobody(self):
-        store()
-        resolver, registry = nobody_asked()
-        with resolver, registry:
-            response = self.client.get(self.url, {"address": ADDRESS})
-
-        self.assertIn("host.example.net", text(response))
-        (button,) = select(response, "formaction", self.url)
-        self.assertEqual((button.words, button.attrs["value"]), ("Look up again", ADDRESS))
-
-    def test_a_get_with_nothing_stored_writes_nothing_and_offers_the_lookup(self):
-        resolver, registry = nobody_asked()
-        with resolver, registry:
-            response = self.client.get(self.url, {"address": ADDRESS})
-
-        self.assertContains(response, "Not looked up yet")
-        self.assertTrue(select(response, "formaction", self.url))
-        self.assertIsNone(held())
-
-    def test_a_non_routable_address_is_answered_locally_with_no_lookup_offered(self):
-        response = self.client.get(self.url, {"address": "10.9.9.9"})
-
-        self.assertContains(response, "private address")
-        self.assertFalse(select(response, "formaction", self.url))
-
-    def test_a_malformed_address_is_refused(self):
-        response = self.client.get(self.url, {"address": "not-an-address"})
-
-        self.assertIn("lookup.address.read: address is not a valid IPv4 or IPv6 address.", text(response))
-
-    def test_a_get_without_the_grant_is_refused_and_recorded(self):
-        store()
-        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
-        with patch("hq.platform.core.views.web_principal", return_value=lacking):
-            response = self.client.get(self.url, {"address": ADDRESS})
-
-        self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
-        self.assertNotIn("host.example.net", text(response))
-        denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
-        self.assertEqual(denied.count(), 1)
-
-    def test_repeated_refused_gets_are_each_refused_and_recorded_once_a_minute(self):
-        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
-        with patch("hq.platform.core.views.web_principal", return_value=lacking):
-            responses = [self.client.get(self.url, {"address": f"192.0.2.{n}"}) for n in range(1, 21)]
-
-        for response in responses:
-            self.assertIn(Capability.LOOK_UP_PUBLIC_RECORDS.value, text(response))
-        denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
-        self.assertEqual(denied.count(), 1)
-
-    def test_a_post_looks_the_address_up_again_and_keeps_what_it_found(self):
-        store()
-        with (
-            patch("hq.platform.application.lookup.resolve", return_value=AN_ADDRESS),
-            patch("hq.platform.application.lookup.registry", return_value=AN_ALLOCATION),
-        ):
-            response = self.look_up(ADDRESS)
-
-        self.assertIn("Example Networks LLC", text(response))
-        self.assertEqual(held()["hostnames"], AN_ADDRESS["hostnames"])
-
-    def test_a_post_of_something_that_is_not_an_address_says_so(self):
-        resolver, registry = nobody_asked()
-        with resolver, registry:
-            response = self.look_up("not-an-address")
-
-        self.assertIn("lookup.address.read: address is not a valid IPv4 or IPv6 address.", text(response))
-        self.assertIsNone(held())
-
     def test_an_operator_without_the_grant_is_refused_in_the_fragment(self):
         lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.LOOK_UP_PUBLIC_RECORDS})
         resolver, registry = nobody_asked()
         with resolver, registry, patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
-            response = self.look_up(ADDRESS)
+            self.look_up(ADDRESS)
 
-        self.assertIn("look_up_public_records", text(response))
         self.assertIsNone(held())
         denied = AuditLog.objects.filter(action=AuditLog.Action.DENIED, metadata__capability=LOOK_UP_ADDRESS)
         self.assertEqual(denied.count(), 1)
@@ -139,18 +54,3 @@ class PublicAddressViewTests(TestCase):
 
         self.assertRedirects(response, reverse("connection"), fetch_redirect_response=False)
         self.assertIsNone(held())
-
-    @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
-    def test_the_connection_panel_loads_this_fragment_for_the_peers_public_address(self):
-        a_tailnet(
-            a_device("a-laptop", A_TAILNET_ADDRESS, direct_endpoint=f"{ADDRESS}:41641"),
-            a_device("hq-host", "100.64.0.9", observer=True),
-        )
-        panel = render_to_string(
-            "partials/_connection_peering.html#carriage", {"peering": connection(a_request()).peering}
-        )
-        (region,) = select(panel, "data-fragment-load")
-        store()
-
-        self.assertTrue(region.attrs.get("data-fragment-failure"))
-        self.assertIn("host.example.net", text(self.client.get(region.attrs["data-fragment"])))

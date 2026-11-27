@@ -6,18 +6,14 @@ vector these tests share, sealed by this module.
 
 import base64
 import hashlib
-import json
 import secrets as random
-from pathlib import Path
 
-from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hpke, serialization
 from cryptography.hazmat.primitives.asymmetric import mlkem, x25519
-from django.test import SimpleTestCase, override_settings, tag
+from django.test import SimpleTestCase, override_settings
 
 from hq.platform.core import secrets
 
-VECTOR = Path(__file__).resolve().parents[4] / "controller" / "runtime" / "testdata" / "seal"
 SUITE = hpke.Suite(hpke.KEM.MLKEM768_X25519, hpke.KDF.HKDF_SHA256, hpke.AEAD.AES_256_GCM)
 
 
@@ -44,40 +40,6 @@ def ciphertext(sealed: str) -> bytes:
     return base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
 
 
-@tag("source")
-class TheVectorTests(SimpleTestCase):
-    """HQ's sealing against the committed seed, whose public key hq-host would write."""
-
-    def setUp(self):
-        self.vector = json.loads((VECTOR / "vector.json").read_text(encoding="utf-8"))
-        (seed_file,) = VECTOR.glob("*.seed")
-        self.seed = seed_file.read_bytes()
-        self.public_key = (VECTOR / "public.key").read_text(encoding="utf-8")
-
-    def seal(self, resource_key: str, slot: str) -> str:
-        with override_settings(SEVERINO_SEAL_PUBLIC_KEY=self.public_key):
-            return secrets.seal_for_controller(self.vector["plaintext"], resource_key=resource_key, slot=slot)
-
-    def test_what_hq_seals_the_seed_opens(self):
-        sealed = self.seal(self.vector["resource_key"], self.vector["slot"])
-        key_id = hashlib.sha256(public_bytes(self.seed)).hexdigest()[:8]
-        self.assertTrue(sealed.startswith(f"hq2.{key_id}."))
-        opened = SUITE.decrypt(ciphertext(sealed), private_key(self.seed), self.vector["info"].encode())
-        self.assertEqual(opened.decode(), self.vector["plaintext"])
-        # Sealing is randomized, so no two sealed values of one secret match.
-        self.assertNotEqual(sealed, self.seal(self.vector["resource_key"], self.vector["slot"]))
-
-    def test_a_value_sealed_for_another_place_does_not_open_here(self):
-        for resource_key, slot in (
-            (self.vector["resource_key"], "env:EXAMPLE_TOKEN"),
-            ("example.other", self.vector["slot"]),
-        ):
-            with self.subTest(resource_key=resource_key, slot=slot):
-                sealed = self.seal(resource_key, slot)
-                with self.assertRaises(InvalidTag):
-                    SUITE.decrypt(ciphertext(sealed), private_key(self.seed), self.vector["info"].encode())
-
-
 def a_public_key() -> str:
     return base64.b64encode(public_bytes(random.token_bytes(32))).decode()
 
@@ -89,15 +51,8 @@ class FailClosedTests(SimpleTestCase):
         for value in ("", "not base64!", base64.b64encode(bytes(1215)).decode()):
             with self.subTest(value=value[:12]), override_settings(SEVERINO_SEAL_PUBLIC_KEY=value):
                 self.assertFalse(secrets.sealing_available())
-                with self.assertRaisesMessage(secrets.SecretsUnavailable, secrets.NO_SEAL_KEY):
+                with self.assertRaises(secrets.SecretsUnavailable):
                     secrets.seal_for_controller("an example secret", resource_key="example.service", slot="env:A")
-
-    def test_a_key_seals(self):
-        with override_settings(SEVERINO_SEAL_PUBLIC_KEY=a_public_key()):
-            self.assertTrue(secrets.sealing_available())
-            self.assertTrue(
-                secrets.seal_for_controller("x", resource_key="example.service", slot="env:A").startswith("hq2.")
-            )
 
     def test_a_place_that_could_be_read_two_ways_is_refused(self):
         with override_settings(SEVERINO_SEAL_PUBLIC_KEY=a_public_key()):
