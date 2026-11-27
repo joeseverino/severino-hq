@@ -24,14 +24,14 @@ from .adoption import ADOPT_SERVICE, AdoptServiceCommand, adopt_service
 from .cadence import CONTROLLER_REFRESH
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec, typed_keys
+from .integration_specs import CapabilitySpec, ListFilter, ListRead, ResourceSpec, typed_keys
 from .labels import adding
 from .managed_records import ManagedResourceListed, ManagedResourceRecord, ManagedResourceRow
 from .policy_fixes import request_empty_groups_removal
 from .records import EDIT, KEPT
 from .resource_capabilities import MACHINE_DETAILS
 from .resource_refusals import INFRASTRUCTURE
-from .resources import BoundedQuery, one_of, several_of
+from .resources import BoundedQuery, one_of
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
@@ -344,15 +344,6 @@ class ResourceSearchDefinition(SearchDefinition):
 InfrastructureResourceQuery = create_model(
     "InfrastructureResourceQuery",
     __base__=BoundedQuery,
-    kinds=(
-        str | None,
-        Field(
-            default=None,
-            max_length=2000,
-            pattern=several_of(PROVIDERS),
-            description="Several types to keep, comma-separated, each one the single type filter offers.",
-        ),
-    ),
     kind=(
         one_of(PROVIDERS) | None,
         Field(default=None, description="Only the records of this type."),
@@ -382,6 +373,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                 InfrastructureResourceQuery,
                 ManagedResourceListed,
                 fields=FIELDS,
+                filters=(
+                    ListFilter("kinds", "Type", [(kind, each.label) for kind, each in PROVIDERS.items()], "kind"),
+                ),
             ),
             detail_handler=resource_context.get_managed_resource,
             identifier="key",

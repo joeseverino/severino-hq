@@ -42135,19 +42135,6 @@
         "operationId": "listInfrastructureV2",
         "parameters": [
           {
-            "description": "Several types to keep, comma-separated, each one the single type filter offers.",
-            "explode": true,
-            "in": "query",
-            "name": "kinds",
-            "required": false,
-            "schema": {
-              "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit))*$",
-              "type": "string"
-            },
-            "style": "form"
-          },
-          {
             "description": "Only the records of this type.",
             "explode": true,
             "in": "query",
@@ -42177,6 +42164,20 @@
                 "automation.source",
                 "host.unit"
               ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose type is one of these, comma-separated; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "kinds",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit))*$",
+              "title": "Type",
               "type": "string"
             },
             "style": "form"

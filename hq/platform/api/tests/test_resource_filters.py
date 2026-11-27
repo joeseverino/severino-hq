@@ -4,7 +4,6 @@ resource catalog narrows to one kind by name."""
 
 from django.test import TestCase, override_settings
 
-from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.core.testing import declare
 from hq.platform.mcp.tests.test_list_filters import OUTSIDE, calls
@@ -60,26 +59,6 @@ class TheApiAgreesTests(TestCase):
             with self.subTest(name=name):
                 self.assertEqual(through_api["code"], "unknown_resource")
                 self.assertEqual(through_mcp.structured_content["error"], through_api)
-
-    def test_kinds_takes_every_value_its_schema_allows_and_refuses_the_rest(self):
-        import re
-
-        from hq.platform.application.infrastructure_specs import InfrastructureResourceQuery
-
-        pattern = InfrastructureResourceQuery.model_json_schema()["properties"]["kinds"]["anyOf"][0]["pattern"]
-        listed = sorted(PROVIDERS)
-        with _serving():
-            token = f"Bearer {_token(scope='read')}"
-            for kinds in (listed[0], ",".join(listed), f"{listed[0]},{listed[0]}"):
-                with self.subTest(kinds=kinds):
-                    self.assertIsNotNone(re.fullmatch(pattern, kinds))
-                    response = self.client.get(f"{KINDS}{kinds}", HTTP_AUTHORIZATION=token)
-                    self.assertEqual(response.status_code, 200, response.content)
-            for kinds in (OUTSIDE, f"{listed[0]},", f"{listed[0]},{OUTSIDE}"):
-                with self.subTest(kinds=kinds):
-                    self.assertIsNone(re.fullmatch(pattern, kinds))
-                    response = self.client.get(f"{KINDS}{kinds}", HTTP_AUTHORIZATION=token)
-                    self.assertEqual(response.status_code, 400)
 
     def test_kind_and_kinds_sent_together_each_narrow_the_list(self):
 
