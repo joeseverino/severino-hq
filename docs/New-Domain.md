@@ -14,8 +14,7 @@ file names it. The descriptor carries:
 - `records`, for a plain record domain: one model created, updated and deleted
   by command ([Records](#records)).
 
-`expenses` is the worked example; `hq/platform/application/tests/fixture_domain` is the
-smallest one.
+`expenses` is the worked example.
 
 ### Records
 
@@ -48,9 +47,8 @@ never on the form or the service.
 What a new host domain has to do before the gate passes, and what holds for
 every change. Each rule is a test class, and the class docstring is the rule:
 
-- `hq/platform/application/tests/test_domain_declaration.py` and
-  `test_domains.py` there: the declaration alone, and no second roster of
-  sections;
+- `hq/platform/application/tests/test_domains.py`: the declaration alone,
+  and no second roster of sections;
 - `test_architecture.py`, `test_architecture_pages.py`,
   `test_architecture_primitives.py` and `test_architecture_styles.py` there:
   delivery, pages, the shared primitives and the stylesheet;

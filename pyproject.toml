@@ -230,7 +230,6 @@ allowed_importers = [
   "hq.platform.application.capabilities",
   "hq.platform.application.integrations",
   "hq.platform.application.integration_testing",
-  "hq.platform.application.tests.test_domain_declaration",
   "hq.platform.application.tests.test_integrations",
 ]
 broken_contract_guidance = "Read one command with capability_spec or command_spec, every command with capability_registry, and resources, connections or search from integrations.held_graph()."
