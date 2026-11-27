@@ -47,12 +47,12 @@ class ToolsRefreshTests(SignedInTestCase):
 
 
 def _sent(response, form):
-    """What ``form`` sends: each named input inside it, by name."""
+    """What ``form`` sends: each named input and button inside it, by name."""
 
     return {
         element.attrs["name"]: element.attrs.get("value", "")
         for element in select(response, "name")
-        if element.tag == "input" and form in element.ancestors
+        if element.tag in {"input", "button"} and form in element.ancestors
     }
 
 

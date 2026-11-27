@@ -46,6 +46,9 @@ PAGE_DIALOG_ID = re.compile(r"[a-z][a-z0-9-]*\Z")
 # One step of a trail, (label, url); the url may be lazy, since a trail is
 # declared on a class before the URLconf loads.
 type Crumb = tuple[str, str | Promise]
+# What a control for a command acts on, and what is added to its address.
+type Target = str | int | Mapping[str, str]
+type Query = Mapping[str, str | tuple[str, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +74,8 @@ class PageDialog:
 class PageAction:
     """One control in a page's head or a row's end.
 
-    A control for a command is built by ``command`` alone, from the
-    declarations, so a hand-built one cannot post, look destructive or say
+    A control for a command is built by ``command``, ``post`` or ``dialog``
+    alone, from the declarations, so a hand-built one cannot post, look destructive or say
     words of its own.
     """
 
@@ -83,17 +86,14 @@ class PageAction:
     title: str = ""
     # Shown but not usable, with ``title`` saying why.
     disabled: bool = False
-    # The rest are a command's, set only by ``command``.
+    # The rest are a command's, set only by its constructors.
     method: str = dataclasses.field(default="get", init=False)
     danger: bool = dataclasses.field(default=False, init=False)
-    # What its button sends, as ``field``: one of the command's modes
-    # ("read"), for a view that reads its own field ("status").
-    value: str = dataclasses.field(default="", init=False)
-    field: str = dataclasses.field(default="action", init=False)
-    # What else it sends, by name: what it acts on, when that is any string
-    # and so travels in the body, or the ``next`` it returns to. Such an
-    # action is a form of its own, so it never stands inside another.
-    fields: Mapping[str, str] = dataclasses.field(default_factory=dict, init=False, hash=False)
+    # What its press posts, by name: one of the command's modes ("action":
+    # "read"), a field its view reads ("status"), what it acts on when that
+    # is any string, or the ``next`` it returns to. A press that sends more
+    # than one is a form of its own, so it never stands inside another.
+    sends: Mapping[str, str] = dataclasses.field(default_factory=dict, init=False, hash=False)
     # The press on the command's own confirmation, loud where it destroys.
     confirms: bool = dataclasses.field(default=False, init=False)
 
@@ -101,56 +101,101 @@ class PageAction:
     def command(
         cls,
         name: str,
-        target: str | int | Mapping[str, str] = "",
+        target: Target = "",
         *,
         variant: str = "",
         primary: bool = False,
-        query: Mapping[str, str | tuple[str, ...]] | None = None,
+        query: Query | None = None,
         refused: str = "",
-        field: str = "action",
-        value: str = "",
-        fields: Mapping[str, str] | None = None,
-        modal: PageDialog | str = "",
-        confirms: bool = False,
     ) -> PageAction | None:
         """The control that runs the command ``name`` on ``target``, or None when the page's person may not run it.
 
-        Its words (``variant`` a declared mode), danger, address and method are
-        the command's. ``value`` or ``fields`` make the press post, ``query``
-        is added to the address, ``modal`` opens a dialog, and ``confirms`` is
-        the press on its view's confirmation. It is drawn unusable, saying why,
-        while the command would be refused for ``target``.
+        It opens the page the command's view draws, or posts to a view that
+        draws none. Its words (``variant`` a declared mode), danger and address
+        are the command's, and ``query`` is added to the address. It is drawn
+        unusable, saying why, while the command would be refused for ``target``.
         """
 
+        return cls._offered(name, target, variant, query, refused, primary=primary)
+
+    @classmethod
+    def post(
+        cls,
+        name: str,
+        target: Target = "",
+        *,
+        sends: Mapping[str, str] | None = None,
+        confirms: bool = False,
+        variant: str = "",
+        primary: bool = False,
+        query: Query | None = None,
+        refused: str = "",
+    ) -> PageAction | None:
+        """The press that posts ``sends`` to the command ``name`` on
+        ``target``, built as ``command`` builds its control; ``confirms`` makes
+        it the press on its view's confirmation."""
+
+        return cls._offered(
+            name,
+            target,
+            variant,
+            query,
+            refused,
+            primary=primary,
+            posts=True,
+            sends=dict(sends or {}),
+            confirms=confirms,
+        )
+
+    @classmethod
+    def dialog(
+        cls,
+        name: str,
+        modal: PageDialog | str,
+        target: Target = "",
+        *,
+        variant: str = "",
+        primary: bool = False,
+        query: Query | None = None,
+        refused: str = "",
+    ) -> PageAction | None:
+        """The control that opens the command ``name``'s form in ``modal`` on
+        the page, built as ``command`` builds its control. Without a script it
+        opens the page the command's view draws, or the command's own page
+        where its view draws none."""
+
+        return cls._offered(name, target, variant, query, refused, primary=primary, posts=False, modal=modal)
+
+    @classmethod
+    def _offered(
+        cls,
+        name: str,
+        target: Target,
+        variant: str,
+        query: Query | None,
+        refused: str,
+        *,
+        posts: bool | None = None,
+        **built: Any,
+    ) -> PageAction | None:
         if not runs_here(name):
             return None
         spec = command_spec(name)
         subject = "" if isinstance(target, Mapping) else str(target)
-        sends = dict(fields or {})
         url, answers_get = command_reach(name, target, variant)
-        # A press that sends something posts it; one that sends nothing opens
-        # the page its view draws, or posts to a view that draws none.
-        posts = confirms or bool(value or sends) or not answers_get
+        if posts is False and not answers_get:
+            url = command_url(name, subject)
         if query:
             url = with_query(url, query)
-        if field in sends:
-            raise ValueError(f"A POST action's button sends {field!r}; its fields cannot send it too.")
-        if modal and posts:
-            raise ValueError(f"{name} posts from its button, so it has no form for a dialog to open.")
         reason = refused or outbound_refusal(name, subject)
         return cls._built(
             label=spec.words(variant),
             url=url,
-            primary=primary,
             title=reason,
             disabled=bool(reason),
-            method="post" if posts else "get",
+            method="post" if (not answers_get if posts is None else posts) else "get",
             danger=spec.effect is Effect.DESTRUCTIVE,
-            field=field,
-            value=value,
-            fields=sends,
-            modal=modal,
-            confirms=confirms,
+            **built,
         )
 
     @classmethod
@@ -194,7 +239,7 @@ class PageAction:
             raise ImproperlyConfigured(f"{self.url} runs {name!r}: build its control with PageAction.command.")
 
     @property
-    def dialog(self) -> PageDialog | None:
+    def brought_dialog(self) -> PageDialog | None:
         """The dialog this action brings to the page, if it brings one."""
 
         return self.modal if isinstance(self.modal, PageDialog) else None
@@ -289,16 +334,16 @@ class RowOrder:
 
         ways = (("↑", "up", self.up), ("↓", "down", self.down))
         return tuple(
-            _pressed(glyph, self.url, title=f"Move {self.name} {way}", field="direction", value=way)
+            _pressed(glyph, self.url, title=f"Move {self.name} {way}", sends={"direction": way})
             for glyph, way, there in ways
             if there
         )
 
 
-def _pressed(label: str, url: str, *, title: str, field: str = "action", value: str = "") -> PageAction:
+def _pressed(label: str, url: str, *, title: str, sends: Mapping[str, str] | None = None) -> PageAction:
     """A row's own press on the address its command reached (``_reached_by``)."""
 
-    return PageAction._built(label=label, url=url, title=title, method="post", field=field, value=value)
+    return PageAction._built(label=label, url=url, title=title, method="post", sends=dict(sends or {}))
 
 
 @dataclass(frozen=True, slots=True)
@@ -362,7 +407,7 @@ class Page:
     def dialogs(self) -> tuple[PageDialog, ...]:
         """Every dialog the head's actions open, each drawn once."""
 
-        found = (action.dialog for action in self.actions if isinstance(action, PageAction))
+        found = (action.brought_dialog for action in self.actions if isinstance(action, PageAction))
         return tuple(dict.fromkeys(dialog for dialog in found if dialog is not None))
 
 

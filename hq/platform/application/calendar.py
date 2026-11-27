@@ -174,7 +174,7 @@ class SourceView:
     def choice(self) -> PageAction | None:
         """The press that shows it, or hides it while shown, for a reader who may choose."""
 
-        return PageAction.command(CHOOSE_SOURCE, self.id, field="shown", value="0" if self.shown else "1")
+        return PageAction.post(CHOOSE_SOURCE, self.id, sends={"shown": "0" if self.shown else "1"})
 
 
 @dataclass(frozen=True, slots=True)

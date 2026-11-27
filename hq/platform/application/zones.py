@@ -274,7 +274,7 @@ class Zone:
 
         if not self.adopt_token:
             return None
-        return PageAction.command(ADOPT_ZONE, self.zone, field="token", value=self.adopt_token, primary=True)
+        return PageAction.post(ADOPT_ZONE, self.zone, sends={"token": self.adopt_token}, primary=True)
 
     @property
     def adoptable(self) -> tuple[ZoneRecord, ...]:

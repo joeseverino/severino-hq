@@ -95,7 +95,7 @@ def _page_actions(submission: dict) -> tuple[PageAction, ...]:
 def _offered(submission: dict, marks: list[str]) -> tuple[PageAction, ...]:
     pk = submission["id"]
     offered = (
-        *(PageAction.command(REVIEW, pk, variant=mark, field="status", value=mark) for mark in marks),
+        *(PageAction.post(REVIEW, pk, sends={"status": mark}, variant=mark) for mark in marks),
         PageAction.command(DELETE, pk),
     )
     return tuple(action for action in offered if action is not None)
@@ -302,7 +302,7 @@ def contact_delete(request, pk: int):
         {
             "submission": submission,
             "confirm": {
-                "action": PageAction.command(DELETE, pk, confirms=True),
+                "action": PageAction.post(DELETE, pk, confirms=True),
                 "cancel_url": page_url(Kind.MESSAGE, str(pk)),
                 "gap": change_gap(),
             },

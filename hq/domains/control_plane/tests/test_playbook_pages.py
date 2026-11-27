@@ -49,10 +49,10 @@ def _decisions(html: str) -> dict[str, dict[str, str]]:
 
     offered: dict[str, dict[str, str]] = {}
     for sent in select(html, "name", "playbook"):
-        (form,) = [element for element in sent.ancestors if element.tag == "form"]
+        # The button that sends it, through the page's shared form.
         rows = [element for element in sent.ancestors if "data-change" in element.attrs]
         found = offered.setdefault(sent.attrs["value"], {"change": rows[0].attrs["data-change"] if rows else ""})
-        found[form.words] = urlsplit(form.attrs["action"]).path
+        found[sent.words] = urlsplit(sent.attrs["formaction"]).path
     return offered
 
 

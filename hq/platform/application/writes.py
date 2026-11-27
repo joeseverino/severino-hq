@@ -189,7 +189,7 @@ def _confirmed(view: Any, context: dict[str, Any]) -> dict[str, Any]:
     # Django leaves get_absolute_url for a model to define or not.
     back = getattr(view.object, "get_absolute_url", None)
     context["confirm"] = {
-        "action": PageAction.command(view.deletes, dict(view.kwargs), confirms=True),
+        "action": PageAction.post(view.deletes, dict(view.kwargs), confirms=True),
         "cancel_url": back() if back else view.success_url,
     }
     return context

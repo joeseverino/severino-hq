@@ -761,7 +761,7 @@ def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:
 def _cancel_button(operation_id: str) -> PageAction | None:
     """The press that posts the run's id to its cancel command's own form."""
 
-    return pages.PageAction.command(CANCEL, field="operation_id", value=operation_id)
+    return pages.PageAction.post(CANCEL, sends={"operation_id": operation_id})
 
 
 def cancel_action(operation_id: str, playbook: str, state: str, effect: str, principal: Principal) -> PageAction | None:

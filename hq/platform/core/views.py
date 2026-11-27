@@ -241,7 +241,7 @@ def _set(
     """A row's control that sets one ``field`` of the record ``target``
     names, which travels in the body since its identifier may be any string."""
 
-    return PageAction.command(command, variant=state, field=field, value=value, fields=target, primary=primary)
+    return PageAction.post(command, sends={field: value, **target}, variant=state, primary=primary)
 
 
 def _offered(*actions: PageAction | None) -> tuple[PageAction, ...]:
@@ -252,8 +252,8 @@ def access_action(paused: bool) -> PageAction | None:
     """The one control that pauses every agent, or resumes them while paused."""
 
     if paused:
-        return PageAction.command(SET_AGENT_ACCESS, variant="off", field="paused", value="0", primary=True)
-    return PageAction.command(SET_AGENT_ACCESS, variant="on", field="paused", value="1")
+        return PageAction.post(SET_AGENT_ACCESS, sends={"paused": "0"}, variant="off", primary=True)
+    return PageAction.post(SET_AGENT_ACCESS, sends={"paused": "1"}, variant="on")
 
 
 def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
@@ -737,7 +737,7 @@ def lookup_action(address: str, reading: Any) -> dict[str, PageAction | None]:
     """The fragment's press that looks ``address`` up, or again beside its ``reading``."""
 
     mode = AGAIN if reading else FIRST
-    return {"lookup": PageAction.command(LOOK_UP_ADDRESS, variant=mode, field="address", value=address)}
+    return {"lookup": PageAction.post(LOOK_UP_ADDRESS, sends={"address": address}, variant=mode)}
 
 
 class PublicAddressView(View):

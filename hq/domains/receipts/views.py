@@ -220,8 +220,8 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
                         Cell(amount=expense.total_cost),
                     ),
                     actions=(
-                        PageAction.command(
-                            UPDATE, receipt.pk, variant="link", primary=True, field="expense_id", value=str(expense.pk)
+                        PageAction.post(
+                            UPDATE, receipt.pk, sends={"expense_id": str(expense.pk)}, variant="link", primary=True
                         ),
                     ),
                 )

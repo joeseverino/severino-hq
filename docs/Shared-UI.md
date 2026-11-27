@@ -305,7 +305,7 @@ a glyph or no words is named aloud by its `heard`, else its title. A `<button>` 
 is only ever an offer's: a `PageAction` from `PageAction.command`, which is None for a reader who
 may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has no way to draw a
 press its reader would be refused. `_page_action.html` draws one; a confirmation's is
-`PageAction.command(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
+`PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
 with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
 (`partials/_calendar_sources.html`).
 
