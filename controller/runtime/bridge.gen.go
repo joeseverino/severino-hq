@@ -3386,6 +3386,12 @@ type Verification struct {
 	TimeoutSeconds  int `json:"timeout_seconds"`
 }
 
+// Waiting The profiles asked about that have queued work, in the order asked.
+type Waiting struct {
+	OK       bool     `json:"ok"`
+	Profiles []string `json:"profiles"`
+}
+
 // WorkerAnswersDataset The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.
 type WorkerAnswersDataset string
 
@@ -3507,6 +3513,12 @@ type StepsParams struct {
 type SweepDueParams struct {
 	// ControllerID The reporting controller.
 	ControllerID string `form:"controller-id" json:"controller-id"`
+}
+
+// WaitingParams defines parameters for Waiting.
+type WaitingParams struct {
+	// Profile A privilege profile the host runs a playbook worker for.
+	Profile []string `form:"profile,omitempty" json:"profile,omitempty"`
 }
 
 // AnalyticsJSONRequestBody defines body for Analytics for application/json ContentType.
@@ -3846,6 +3858,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
 	SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Waiting Name which of the host's worker profiles have queued work their claim would take.
+	//
+	// Corresponds with POST /waiting (the `Waiting` operationId).
+	Waiting(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // AnalyticsWithBody Record site analytics.
@@ -4279,6 +4296,21 @@ func (c *Client) Steps(ctx context.Context, params *StepsParams, body StepsJSONR
 // Corresponds with POST /sweep-due (the `SweepDue` operationId).
 func (c *Client) SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSweepDueRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Waiting Name which of the host's worker profiles have queued work their claim would take.
+//
+// Corresponds with POST /waiting (the `Waiting` operationId).
+func (c *Client) Waiting(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWaitingRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5301,6 +5333,60 @@ func NewSweepDueRequest(server string, params *SweepDueParams) (*http.Request, e
 	return req, nil
 }
 
+// NewWaitingRequest constructs an http.Request for the Waiting method
+func NewWaitingRequest(server string, params *WaitingParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/waiting"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Profile != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "profile", params.Profile, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -5533,6 +5619,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
 	SweepDueWithResponse(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*SweepDueResponse, error)
+
+	// WaitingWithResponse Name which of the host's worker profiles have queued work their claim would take.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /waiting (the `Waiting` operationId).
+	WaitingWithResponse(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*WaitingResponse, error)
 }
 
 type AnalyticsResponse struct {
@@ -6399,6 +6492,54 @@ func (r SweepDueResponse) ContentType() string {
 	return ""
 }
 
+type WaitingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Waiting
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WaitingResponse) GetJSON200() *Waiting {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r WaitingResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r WaitingResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WaitingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WaitingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WaitingResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // AnalyticsWithBodyWithResponse Record site analytics.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6748,6 +6889,19 @@ func (c *ClientWithResponses) SweepDueWithResponse(ctx context.Context, params *
 		return nil, err
 	}
 	return ParseSweepDueResponse(rsp)
+}
+
+// WaitingWithResponse Name which of the host's worker profiles have queued work their claim would take.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /waiting (the `Waiting` operationId).
+func (c *ClientWithResponses) WaitingWithResponse(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*WaitingResponse, error) {
+	rsp, err := c.Waiting(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWaitingResponse(rsp)
 }
 
 // ParseAnalyticsResponse parses an HTTP response from a AnalyticsWithResponse call
@@ -7327,6 +7481,39 @@ func ParseSweepDueResponse(rsp *http.Response) (*SweepDueResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SweepVerdict
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWaitingResponse parses an HTTP response from a WaitingWithResponse call
+func ParseWaitingResponse(rsp *http.Response) (*WaitingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WaitingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Waiting
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

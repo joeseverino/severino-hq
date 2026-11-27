@@ -167,6 +167,15 @@ func (b *SocketBridge) Peek(ctx context.Context, capabilities []string) (Pending
 	return pending, err
 }
 
+// Waiting answers which of profiles have queued work their worker would claim.
+func (b *SocketBridge) Waiting(ctx context.Context, profiles []string) ([]string, error) {
+	var waiting Waiting
+	err := b.call(ctx, nil, &waiting, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {
+		return b.client.Waiting(ctx, &WaitingParams{Profile: profiles})
+	})
+	return waiting.Profiles, err
+}
+
 func (b *SocketBridge) Claim(ctx context.Context, controllerID string, capabilities []string) (Pending, error) {
 	var pending Pending
 	err := b.call(ctx, nil, &pending, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {

@@ -20,7 +20,7 @@ from . import bridge_client
 
 # The one name the controller and the worker both claim under: the host's.
 HOST = "example-host"
-QUEUE = {"claim", "renew", "report"}
+WORKER = {"claim", "renew", "report", "waiting"}
 AUTOMATION = ("automation.operation", "automation.source")
 
 
@@ -62,8 +62,8 @@ class LaneTestCase(TestCase):
 
 
 class WorkerSocketTests(LaneTestCase):
-    def test_it_serves_no_action_but_the_claim_renewal_and_report(self):
-        for action in sorted(set(operations()) - QUEUE):
+    def test_it_serves_no_action_but_the_workers_own(self):
+        for action in sorted(set(operations()) - WORKER):
             with self.subTest(action=action):
                 answer = bridge_client.request(f"/{action}", query={"controller-id": HOST}, app=bridge_client.worker())
                 self.assertEqual(answer.status, 404, answer.body)

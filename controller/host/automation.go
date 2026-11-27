@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/connections"
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // Where the worker's container finds what it is given, each the mount's
@@ -152,6 +154,10 @@ func (a *Automation) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if profiles = a.waiting(ctx, profiles); len(profiles) == 0 {
+		fmt.Fprintln(a.Stdout, "HQ holds no queued run or scan, so no worker starts.")
+		return nil
+	}
 	token, err := a.grantToken()
 	if err != nil {
 		return err
@@ -207,6 +213,25 @@ func (a *Automation) work(ctx context.Context, image, run, token string, profile
 		}
 	}
 	return errors.Join(failed...)
+}
+
+// waiting is the profiles HQ holds a queued run or scan for, asked of the
+// running web container on the worker's bridge, so a pass with nothing to do
+// starts no container. Every profile starts when HQ cannot say, so a missed
+// answer never strands queued work.
+func (a *Automation) waiting(ctx context.Context, profiles []string) []string {
+	ask, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	out, err := a.Command(ask, "docker", append([]string{"exec", hostcore.Container, "hq-controller", "waiting"}, profiles...)...).Output()
+	var answer runtime.Waiting
+	if err == nil {
+		err = json.Unmarshal(out, &answer)
+	}
+	if err != nil || !answer.OK {
+		fmt.Fprintf(a.Stderr, "HQ did not say which workers have queued work, so each starts: %v %s\n", err, bytes.TrimSpace(out))
+		return profiles
+	}
+	return slices.DeleteFunc(profiles, func(profile string) bool { return !slices.Contains(answer.Profiles, profile) })
 }
 
 // lendByProfile moves each lent identity into the ssh directory of its

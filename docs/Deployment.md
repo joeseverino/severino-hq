@@ -414,7 +414,7 @@ compare it.
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
-| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a scan queued), at each setup on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a scan queued), at each setup on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again. It first asks `hq-controller waiting` in the web container which profiles HQ holds a queued run or scan for, and starts only those profiles' containers, none when nothing is queued, or every one when HQ cannot say |
 | `var-lib-severino\x2dhq-automation.mount` | the worker's journal over itself, `noexec`, `nosuid`, `nodev`, when the worker's unit starts (`RequiresMountsFor`) |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
@@ -559,7 +559,8 @@ The controller reaches HQ over a Unix socket the web container serves
 (`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume), and the
 automation worker over one of its own
 (`/run/hq-automation-bridge/bridge.sock`, in the `severino_automation_bridge`
-volume), which serves its claim, renewal and report alone. The listener and
+volume), which serves its claim, renewal and report alone, and the host's
+ask of which profiles have queued work (`hq-controller waiting`). The listener and
 `hq-controller events` reach it over a third
 (`/run/hq-events-bridge/bridge.sock`, in the `severino_events_bridge`
 volume), which serves the `events` action alone. Each socket

@@ -1,7 +1,7 @@
 """What the controller may ask of HQ, one function per bridge action.
 
 Every action is declared once, in ``ACTIONS``: its name and the function that
-runs it. ``WORKER_ACTIONS`` are the three HQ's playbook worker's own socket
+runs it. ``WORKER_ACTIONS`` are the four HQ's playbook worker's own socket
 serves, held to its lane as the controller's are to theirs, and
 ``EVENTS_ACTIONS`` the one the event readers' socket serves. The contract (``bridge_contract``) states each action's parameters
 and whether it carries a payload; the bridge application parses a request
@@ -128,6 +128,13 @@ def _renew(lane: Lane) -> Run:
         )
 
     return run
+
+
+def _waiting(parameters: Parameters, payload: Any) -> Any:
+    # Every profile asked, so each profile's worker starts and claims as it
+    # does without the ask.
+    del payload
+    return {"ok": True, "profiles": list(parameters["profile"])}
 
 
 def _peek(parameters: Parameters, payload: Any) -> Any:
@@ -283,8 +290,12 @@ ACTIONS: tuple[Action, ...] = (
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),
 )
-# HQ's playbook worker's socket: its claim, renewal and report, and nothing else.
-WORKER_ACTIONS: tuple[Action, ...] = _queue(WORKER_LANE)
+# HQ's playbook worker's socket: its claim, renewal and report, and the host's
+# ask of which profiles' workers to start, and nothing else.
+WORKER_ACTIONS: tuple[Action, ...] = (
+    *_queue(WORKER_LANE),
+    Action("waiting", "The automation host asked which workers have work", _waiting),
+)
 # The socket the listener and the Docker watcher tell HQ of events on, and
 # nothing else: what either can ask is that HQ read again.
 EVENTS_ACTIONS: tuple[Action, ...] = (Action("events", "The listener said what happened outside", _events),)

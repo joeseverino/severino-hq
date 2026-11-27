@@ -88,6 +88,49 @@
         }
       }
     },
+    "/waiting": {
+      "post": {
+        "operationId": "waiting",
+        "summary": "Name which of the host's worker profiles have queued work their claim would take.",
+        "x-bridge-action": "waiting",
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "A privilege profile the host runs a playbook worker for.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Waiting"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/peek": {
       "post": {
         "operationId": "peek",
@@ -2897,6 +2940,26 @@
               "maxLength": 512
             },
             "description": "Each value of the fact, by its field."
+          }
+        }
+      },
+      "Waiting": {
+        "type": "object",
+        "description": "The profiles asked about that have queued work, in the order asked.",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "profiles"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
