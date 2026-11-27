@@ -136,18 +136,17 @@ def empty_value():
 
 
 def dot():
-    """The middle dot between two parts of one line of text, written straight
-    after the first part. A no-break space holds it to that part and the line
-    may break only after it, so no line starts with a dot or holds one alone;
-    a reader hears the two parts. A run of whole parts that is a list of its
-    own is ``{% list kind="dots" %}``; Python joins text as ``labels.dotted`` does."""
+    """The middle dot between two parts of one line of text, after the first
+    part. A no-break space holds it to that part and the line may break only
+    after it, so no line starts with a dot or holds one alone; a reader hears
+    the two parts. A run of whole parts that is a list of its own is
+    ``{% list kind="dots" %}``; Python joins text as ``labels.dotted`` does."""
     return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
 def arrow():
-    """The arrow that ends a link onward, written straight after its last
-    word, held to it by a no-break space and never read: the link's words
-    say where it goes."""
+    """The arrow that ends a link onward, after its last word, held to it by
+    a no-break space and never read: the link's words say where it goes."""
     return mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
 
 
@@ -771,27 +770,29 @@ slotted(
         name="dot",
         rules="""
         A dot between two parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
-        written straight after its part. A no-break space joins the mark to that part and a reader never
-        hears it, so no line starts with a mark or holds one alone. A run of whole parts is `{% list
-        kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
-        joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
-        `breakable` draws that dot as this tag does; markup built in Python joins with
-        `dotted_html(...)`.
+        written after its part. A no-break space joins the mark to that part, the loader takes out any
+        space written before the tag (`held_values`), and a reader never hears it, so no line starts with
+        a mark or holds one alone. A run of whole parts is `{% list kind="dots" %}`; any other mark is
+        the text of an `aria-hidden` element. Text built in Python joins its parts with `dotted(...)`
+        (`hq_sdk.ui`), which holds each dot to the part before it, and `breakable` draws that dot as this
+        tag does; markup built in Python joins with `dotted_html(...)`.
         """,
-        about="The middle dot between two parts of one line, written straight after the first.",
+        about="The middle dot between two parts of one line, written after the first.",
         function=dot,
         public=True,
         example=tags.DOT,
+        states=tags.DOT_STATES,
     ),
 )
 slotted(
     library=register,
     part=Part(
         name="arrow",
-        about="The arrow that ends a link onward, written straight after its last word.",
+        about="The arrow that ends a link onward, written after its last word.",
         function=arrow,
         public=True,
         example='<a href="/example/">All of them{% arrow %}</a>',
+        states=tags.ARROW_STATES,
     ),
 )
 slotted(

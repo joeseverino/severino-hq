@@ -47,13 +47,13 @@ and those that hold across parts in [Design](Design.md).
 
 | Tag | Later parts | What it is | Written |
 | --- | --- | --- | --- |
-| `{% arrow %}` | nothing | The arrow that ends a link onward, written straight after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
+| `{% arrow %}` | nothing | The arrow that ends a link onward, written after its last word. | `<a href="/example/">All of them{% arrow %}</a>` |
 | `{% button %}` | nothing | Every control that looks like a button: a link, a post through the page's one shared form, its form's own, or one a script acts on. | `{% button restart.label offer=restart look="primary" %}` |
 | `{% button_row %}` | nothing | A row of buttons that stands on its own: a form's closing row, a card's decisions, a page's way on. | `{% button_row %}{% button "Save" submit=True look="primary" %}{% endbutton_row %}` |
 | `{% card %}` | nothing | The frame a page's content is grouped in; a titled part of a page is a `{% section %}`. | `{% card label="Hosts" %}<p>Body</p>{% endcard %}` |
 | `{% cell_line %}` | `detail` | A fact in a table cell as a line of its own, and the words said quietly on the line under it: given `text=` it encloses nothing, its words a link to `url=`; a line of markup is its block, its second line after `{% detail %}`. A second line that is a status, code or a link is a `{% list %}` item. | `{% cell_line %}{% entity "machine"\|entity_of:"example-host-01" %}{% detail %}Docker host{% endcell_line %}` |
 | `{% data_table %}` | nothing | A table drawn whole from its declaration: its columns' headings and a row of cells for each record. | `{% data_table table %}` |
-| `{% dot %}` | nothing | The middle dot between two parts of one line, written straight after the first. | `{{ count }}{% dot %}{{ age }}` |
+| `{% dot %}` | nothing | The middle dot between two parts of one line, written after the first. | `{{ count }}{% dot %}{{ age }}` |
 | `{% empty_value %}` | nothing | The mark for a value that is not there, where there is no value to test; `\|or_empty` tests one. | `{% empty_value %}` |
 | `{% entity %}` | nothing | One thing named, as the link builder answered for it: a link to its page, or its name. | `{% entity "machine"\|entity_of:name %}` |
 | `{% fact %}` | `detail`, `heading`, `panel`, `foot` | One fact of a `{% facts %}`: its label, its value and the detail under it. Given `value=` it encloses nothing; a value in markup is its block, its detail after `{% detail %}`, and a panel its value opens in place after `{% heading %}`, `{% panel %}` and `{% foot %}`. | `{% facts %}{% fact "Version" icon="layers" %}<code>1.4.2</code>{% detail %}Tag only{% endfact %}{% endfacts %}` |
@@ -693,12 +693,12 @@ through the form's own loop, so no page writes its markup.
 ### dot
 
 A dot between two parts of a line is `{% dot %}` and a link's onward arrow `{% arrow %}`, each
-written straight after its part. A no-break space joins the mark to that part and a reader never
-hears it, so no line starts with a mark or holds one alone. A run of whole parts is `{% list
-kind="dots" %}`; any other mark is the text of an `aria-hidden` element. Text built in Python
-joins its parts with `dotted(...)` (`hq_sdk.ui`), which holds each dot to the part before it, and
-`breakable` draws that dot as this tag does; markup built in Python joins with
-`dotted_html(...)`.
+written after its part. A no-break space joins the mark to that part, the loader takes out any
+space written before the tag (`held_values`), and a reader never hears it, so no line starts with
+a mark or holds one alone. A run of whole parts is `{% list kind="dots" %}`; any other mark is
+the text of an `aria-hidden` element. Text built in Python joins its parts with `dotted(...)`
+(`hq_sdk.ui`), which holds each dot to the part before it, and `breakable` draws that dot as this
+tag does; markup built in Python joins with `dotted_html(...)`.
 
 ### fact
 

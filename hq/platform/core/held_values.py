@@ -8,8 +8,9 @@ are, so it is safe on any value. The engine reads a template as HTML as it
 compiles it from a file (template_engine's loaders), or from a string that
 draws a part as a page does (``template``), and ends each value printed where text belongs in
 ``|breakable``, with the mark the template writes straight after it
-(``{{ host }}.``) taken into the hold, so the mark never starts a line alone.
-A value printed in a tag (an attribute), a comment, or an element whose text
+(``{{ host }}.``) taken into the hold, so the mark never starts a line alone;
+a space written before ``{% dot %}`` or ``{% arrow %}`` is taken out for the
+same reason. A value printed in a tag (an attribute), a comment, or an element whose text
 stays plain (``PLAIN_TEXT``) is left as Django prints it. Django has no hook
 in a value's output (``VariableNode.render`` calls
 ``render_value_in_context`` itself), so the hold is written into the source.
@@ -44,6 +45,8 @@ PLAIN_TEXT = {"title", "option", "textarea", "script", "style", "svg", "time"}
 _TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)")
 # The marks a sentence puts straight after a value.
 _MARK = re.compile(r"[.,;:!?)\]]+")
+# The tags that draw a mark held to the part before it.
+_HELD_MARKS = frozenset(("dot", "arrow"))
 # The name of a value's last filter, which says whether it is drawn as a box.
 _LAST_FILTER = re.compile(r"\|(\w+)\b[^|]*$")
 _EXTENDS = re.compile(r"""extends\s+["']([^"']+)["']""")
@@ -219,12 +222,27 @@ def _read(source: str, inherited: Callable[[], frozenset[str]]) -> tuple[str, fr
                     plain.add(rest.strip())
             elif word == "endblock" and blocks:
                 blocks.pop()
+            elif word in _HELD_MARKS and not commented:
+                _absorb_space(out, tokens, index)
         elif token.token_type is TokenType.TEXT and not commented:
             markup.read(text)
         elif token.token_type is TokenType.VAR and not commented and markup.in_text and not plain.intersection(blocks):
             text = _hold(token.contents, tokens, index, source)
         out.append(text)
     return "".join(out), frozenset(plain)
+
+
+def _absorb_space(out: list[str], tokens, index: int) -> None:
+    """The space written before a held mark, taken out, through the ends of
+    the branches it closes: the mark brings its own no-break space, and one
+    before it is a place a line may break, which would open the next line
+    with the mark."""
+
+    at = index - 1
+    while at >= 0 and tokens[at].token_type is TokenType.BLOCK and tokens[at].contents.startswith("end"):
+        at -= 1
+    if at >= 0 and tokens[at].token_type is TokenType.TEXT:
+        out[at] = out[at].rstrip()
 
 
 def _hold(contents: str, tokens, index: int, source: str) -> str:
