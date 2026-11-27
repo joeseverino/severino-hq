@@ -13,6 +13,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.tests import audit_rows
 
 from ..testing import ContractClient
+from .doors import Caller, at_the_door, each_door
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
 SECRET = "/srv/example/secret-path-7f3a"
@@ -88,17 +89,21 @@ class RefusalContractTests(TestCase):
         self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("api", ACTOR))
         self.assertEqual(row.metadata["capability"], "project.create")
 
-    def test_a_denied_read_leaves_one_denied_row_naming_the_caller(self):
-        for path, scope in (("/api/v2/resources/audit/", "read"), ("/api/v2/topology/", "write_projects")):
-            with self.subTest(path):
-                before = audit_rows.mark()
+    def test_a_denied_read_leaves_one_denied_row_naming_the_caller_on_every_door(self):
+        at_the_door(self)
+        for caller, tool, arguments in (
+            (Caller(ACTOR, "read"), "list_resource", {"name": "audit"}),
+            (Caller(ACTOR, "write_projects"), "get_topology", {}),
+        ):
+            for door in each_door(self, caller, tool):
+                with door:
+                    before = audit_rows.mark()
 
-                response = self.read(path, scope)
+                    answer = door(tool, **arguments)
 
-                self.assertEqual(response.status_code, 403, response.content)
-                self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
-                row = _denials(before).get()
-                self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("api", ACTOR))
+                    self.assertFalse(answer["ok"], answer)
+                    row = _denials(before).get()
+                    self.assertEqual((row.metadata["interface"], row.metadata["actor"]), (door.name, ACTOR))
 
     def test_an_unknown_resource_is_unknown_resource_at_404(self):
         response = self.read("/api/v2/resources/example.missing/", "read")

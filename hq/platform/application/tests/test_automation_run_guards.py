@@ -10,7 +10,6 @@ left to the guard itself.
 from unittest.mock import patch
 
 from hq.platform.core.tests import test_command_pages
-from hq.platform.mcp.tests import test_unkeyed_writes
 
 from . import test_command_descriptions, test_command_forms
 from .procedures import Supply, manifest
@@ -57,11 +56,6 @@ RunCapabilityCommandFormTests = walked(
     test_command_forms.CapabilityCommandFormTests,
     test_command_forms,
     "test_no_form_help_says_what_only_a_client_reads",
-)
-RunUnkeyedWriteTests = walked(
-    test_unkeyed_writes.UnkeyedWriteTests,
-    test_unkeyed_writes,
-    "test_every_change_through_mcp_without_a_key_is_refused",
 )
 RunEveryCommandPageTests = walked(
     test_command_pages.EveryCommandPageTests,

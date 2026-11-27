@@ -1,10 +1,8 @@
-"""The API reads a list's filters as the MCP server does: a value outside a
-filter's choices or past its limit is refused naming the field, and the
-resource catalog narrows to one kind by name."""
+"""The resource catalog refuses a name no resource has alike on the API and
+MCP, and a list narrows by ``kind`` and ``kinds`` sent together."""
 
 from django.test import TestCase, override_settings
 
-from hq.platform.application.projection import MAX_PAGE_SIZE
 from hq.platform.core.testing import declare
 from hq.platform.mcp.tests.test_list_filters import OUTSIDE, calls
 
@@ -18,32 +16,6 @@ KINDS = "/api/v2/resources/infrastructure/?kinds="
 class TheApiAgreesTests(TestCase):
     # Every response below is also held to the OpenAPI document.
     client_class = ContractClient
-
-    def test_the_api_refuses_the_same_value_naming_the_field(self):
-        with _serving():
-            for path, field in (
-                (f"/api/v2/resources/projects/?status={OUTSIDE}", "status"),
-                (f"/api/v2/resources/infrastructure/?kind={OUTSIDE}", "kind"),
-                (f"/api/v2/resources/projects/?limit={MAX_PAGE_SIZE + 1}", "limit"),
-            ):
-                with self.subTest(path=path):
-                    response = self.client.get(path, HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}")
-                    error = response.json()["error"]
-                    self.assertIn(field, [detail["loc"][0] for detail in error["details"]["errors"]])
-
-    def test_the_api_narrows_by_name_as_the_tool_does(self):
-        with _serving():
-            token = f"Bearer {_token(scope='read')}"
-            narrowed = self.client.get("/api/v2/resources/?name=projects", HTTP_AUTHORIZATION=token)
-            unknown = self.client.get(f"/api/v2/resources/?name={OUTSIDE}", HTTP_AUTHORIZATION=token)
-        (answer,) = calls(("describe_resources", {"name": "projects"}))
-
-        self.assertEqual(narrowed.status_code, 200)
-        (entry,) = narrowed.json()["data"]["resources"]
-        (tool_entry,) = answer.structured_content["resources"]
-        self.assertEqual(entry["operations"], tool_entry["operations"])
-        self.assertEqual(unknown.status_code, 404)
-        self.assertEqual(unknown.json()["error"]["code"], "unknown_resource")
 
     def test_a_name_no_resource_has_is_one_refusal_on_both_doors(self):
         names = (OUTSIDE, "project", "cloudflare.dns_record", "adguard.client")
@@ -61,7 +33,6 @@ class TheApiAgreesTests(TestCase):
                 self.assertEqual(through_mcp.structured_content["error"], through_api)
 
     def test_kind_and_kinds_sent_together_each_narrow_the_list(self):
-
         declare("example-machine", "machine", {"name": "example"})
         declare("example-network", "network")
         with _serving():

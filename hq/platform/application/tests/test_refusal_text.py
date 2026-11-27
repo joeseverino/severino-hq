@@ -1,25 +1,18 @@
-"""A use case's refusal reaches the caller with its own text, whichever adapter carried it."""
+"""A use case's refusal reaches the caller with its own text, whichever door carried it."""
 
-import json
-from io import StringIO
-from unittest import mock
-
-from django.core.management import call_command
-from django.core.management.base import CommandError
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
+from hq.platform.api.tests.doors import OPERATOR, Caller, at_the_door, each_door
 from hq.platform.application.tests.consent import consented
 from hq.platform.core.testing import declare, managing_everything
-from hq.platform.mcp import services
-from hq.platform.mcp.identity import set_principal
 
-from ..capabilities import execute_capability
 from ..record_errors import PolicyError
 from ..resource_operations import OperationCommand, request_reconcile
-from ..security import cli_principal, mcp_principal
+from ..security import cli_principal
 
 RECONCILE = "infrastructure.resource.reconcile"
+MANAGER = Caller("example-agent", "read manage_infrastructure")
 
 
 def switched_off() -> ManagedResource:
@@ -41,28 +34,18 @@ def refusal_of(resource: ManagedResource) -> str:
 
 class PolicyRefusalTextTests(TestCase):
     def setUp(self):
+        at_the_door(self)
         self.resource = switched_off()
         self.reason = refusal_of(self.resource)
 
-    def assertRefused(self, result):
-        self.assertFalse(result["ok"], result)
-        self.assertEqual(result["error"], {"code": PolicyError.code, "message": self.reason})
-        self.assertFalse(OperationRequest.objects.exists())
+    def test_every_door_answers_with_the_reason(self):
+        for caller in (MANAGER, OPERATOR):
+            for door in each_door(self, caller):
+                with door:
+                    result = door.capability(
+                        RECONCILE, {"idempotency_key": "example-reconcile"}, target=self.resource.key
+                    )
 
-    def test_the_chokepoint_answers_with_the_reason(self):
-        self.assertRefused(execute_capability(RECONCILE, {}, principal=cli_principal(), target=self.resource.key))
-
-    def test_the_operator_command_line_answers_with_the_reason(self):
-        request = {"tool": "execute_capability", "arguments": {"name": RECONCILE, "payload": {}, "target": "app-dns"}}
-        output = StringIO()
-        with mock.patch("sys.stdin", StringIO(json.dumps(request))), self.assertRaises(CommandError):
-            call_command("hq_call", stdout=output)
-
-        self.assertRefused(json.loads(output.getvalue()))
-
-    def test_an_agent_is_answered_with_the_reason(self):
-        self.enterContext(set_principal(mcp_principal()))
-
-        self.assertRefused(
-            services.execute_capability(RECONCILE, {"idempotency_key": "example-reconcile"}, target=self.resource.key)
-        )
+                    self.assertFalse(result["ok"], result)
+                    self.assertEqual(result["error"], {"code": PolicyError.code, "message": self.reason})
+                    self.assertFalse(OperationRequest.objects.exists())

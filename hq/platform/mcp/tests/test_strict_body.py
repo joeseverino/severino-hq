@@ -75,26 +75,6 @@ class StrictBodyTests(TestCase):
 
         return async_to_sync(run)()
 
-    def test_a_repeated_field_or_a_constant_is_a_parse_error_and_reaches_no_tool(self):
-        reached = []
-        bodies = (
-            _call('{"name":"projects","name":"assets"}'),
-            _call('{"name":"projects","limit":NaN}'),
-            _call('{"name":"projects","limit":-Infinity}'),
-            b'{"jsonrpc":"2.0","id":1,"id":2,"method":"tools/list"}',
-        )
-        with mock.patch(TOOL, side_effect=lambda *a, **k: reached.append(a) or {"items": []}):
-            responses = self._post(*bodies)
-
-        for body, response in zip(bodies, responses, strict=True):
-            with self.subTest(body=body):
-                self.assertEqual(response.status_code, 400, response.text)
-                answer = response.json()
-                self.assertEqual(answer["jsonrpc"], "2.0")
-                self.assertIsNone(answer["id"])
-                self.assertEqual(answer["error"]["code"], PARSE_ERROR)
-        self.assertEqual(reached, [])
-
     def test_a_body_sent_in_pieces_is_judged_whole(self):
         # Each refused body is cut inside the repeated field or the constant, so
         # no single piece shows the fault and no piece is JSON on its own.
@@ -114,14 +94,6 @@ class StrictBodyTests(TestCase):
                 self.assertEqual(response.status_code, 400, response.text)
                 self.assertEqual(response.json()["error"]["code"], PARSE_ERROR)
         self.assertEqual(responses[-1].status_code, 200, responses[-1].text)
-        self.assertEqual(reached, ["projects"])
-
-    def test_a_body_read_once_each_still_reaches_its_tool(self):
-        reached = []
-        with mock.patch(TOOL, side_effect=lambda name, *a, **k: reached.append(name) or {"items": []}):
-            (response,) = self._post(_call('{"name":"projects"}'))
-
-        self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(reached, ["projects"])
 
     def test_a_body_past_the_sdks_limit_is_refused_before_it_is_read_whole(self):

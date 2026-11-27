@@ -66,6 +66,11 @@ class RecordRefusalTests(TestCase):
         self.assertEqual(error["code"], "not_found")
         self.assertNotIn(SENT, error["message"])
         self.assertFalse(Asset.objects.exists())
+        # A field a record's own rule finds naming nothing is named beside its refusal.
+        paid = {"date": "2026-03-01", "vendor": "A", "item": "B", "paid_from": f"project:{SENT}"}
+        error = self.refused("expense.create", paid)
+        self.assertEqual((error["code"], error["details"]), ("not_found", {"paid_from": ["not_found"]}))
+        self.assertNotIn(SENT, error["message"])
 
     def test_a_stale_write_is_a_conflict_and_changes_nothing(self):
         Project.objects.create(name="Changed elsewhere", slug=SENT)
