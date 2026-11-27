@@ -2045,11 +2045,15 @@ type GitHubMergeStatus struct {
 }
 
 // GitHubOpenPullRequestCheckRun One check as its last run stands: a workflow run's job, another app's
-// check, or a commit status, in GitHub's words, lower-cased.
+// check, or a commit status, in GitHub's words, lower-cased, with when it
+// started and finished and its page where GitHub says them.
 type GitHubOpenPullRequestCheckRun struct {
-	Conclusion string `json:"conclusion,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Status     string `json:"status,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Conclusion  string `json:"conclusion,omitempty"`
+	Name        string `json:"name,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	Status      string `json:"status,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubOpenPullRequestChecks A commit's checks, each standing as its last run did, and why each
@@ -2330,11 +2334,15 @@ type GitHubWebhookRecord struct {
 }
 
 // GitHubWorkflowRunCheckRun One check as its last run stands: a workflow run's job, another app's
-// check, or a commit status, in GitHub's words, lower-cased.
+// check, or a commit status, in GitHub's words, lower-cased, with when it
+// started and finished and its page where GitHub says them.
 type GitHubWorkflowRunCheckRun struct {
-	Conclusion string `json:"conclusion,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Status     string `json:"status,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Conclusion  string `json:"conclusion,omitempty"`
+	Name        string `json:"name,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	Status      string `json:"status,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubWorkflowRunRecord A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.

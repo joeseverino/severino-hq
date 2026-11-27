@@ -170,6 +170,10 @@ type GitHubCheckRun struct {
 	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
+	// When it started and finished, and its page, where GitHub says them.
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubWorkflowRunRecord is a github.workflow_run record: one workflow's

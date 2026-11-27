@@ -190,11 +190,15 @@ class Checks(ObservationRecord):
 
 class CheckRun(ObservationRecord):
     """One check as its last run stands: a workflow run's job, another app's
-    check, or a commit status, in GitHub's words, lower-cased."""
+    check, or a commit status, in GitHub's words, lower-cased, with when it
+    started and finished and its page where GitHub says them."""
 
     name: str = ""
     status: str = ""
     conclusion: str = ""
+    started_at: Stamp = None
+    completed_at: Stamp = None
+    url: str = ""
 
 
 class PullRequestRecord(ObservationRecord):

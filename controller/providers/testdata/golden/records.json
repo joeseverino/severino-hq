@@ -421,7 +421,10 @@
         {
           "name": "example",
           "status": "example",
-          "conclusion": "example"
+          "conclusion": "example",
+          "started_at": "example",
+          "completed_at": "example",
+          "url": "example"
         }
       ],
       "carried": true
@@ -740,7 +743,10 @@
         {
           "name": "example",
           "status": "example",
-          "conclusion": "example"
+          "conclusion": "example",
+          "started_at": "example",
+          "completed_at": "example",
+          "url": "example"
         }
       ],
       "carried": true

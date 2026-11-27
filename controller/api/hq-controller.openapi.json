@@ -4097,7 +4097,7 @@
         "type": "object"
       },
       "GitHubOpenPullRequestCheckRun": {
-        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased, with when it\nstarted and finished and its page where GitHub says them.",
         "properties": {
           "name": {
             "default": "",
@@ -4108,6 +4108,24 @@
             "type": "string"
           },
           "conclusion": {
+            "default": "",
+            "type": "string"
+          },
+          "started_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
             "default": "",
             "type": "string"
           }
@@ -5054,7 +5072,7 @@
         "type": "object"
       },
       "GitHubWorkflowRunCheckRun": {
-        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased, with when it\nstarted and finished and its page where GitHub says them.",
         "properties": {
           "name": {
             "default": "",
@@ -5065,6 +5083,24 @@
             "type": "string"
           },
           "conclusion": {
+            "default": "",
+            "type": "string"
+          },
+          "started_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "completed_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
             "default": "",
             "type": "string"
           }

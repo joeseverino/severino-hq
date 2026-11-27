@@ -35,8 +35,8 @@ const githubPullStatesQuery = `query($owner: String!, $name: String!, $pulls: In
         number mergeStateStatus reviewDecision
         statusCheckRollup { contexts(first: 100) { nodes {
           __typename
-          ... on CheckRun { name status conclusion startedAt checkSuite { workflowRun { event } } }
-          ... on StatusContext { context state }
+          ... on CheckRun { name status conclusion startedAt completedAt url checkSuite { workflowRun { event } } }
+          ... on StatusContext { context state createdAt targetUrl }
         } } }
       }
     }
@@ -55,18 +55,22 @@ type githubPullState struct {
 }
 
 type githubRollupContext struct {
-	Typename   string `json:"__typename"`
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
-	StartedAt  string `json:"startedAt"`
-	CheckSuite struct {
+	Typename    string `json:"__typename"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	Conclusion  string `json:"conclusion"`
+	StartedAt   string `json:"startedAt"`
+	CompletedAt string `json:"completedAt"`
+	URL         string `json:"url"`
+	CheckSuite  struct {
 		WorkflowRun *struct {
 			Event string `json:"event"`
 		} `json:"workflowRun"`
 	} `json:"checkSuite"`
-	Context string `json:"context"`
-	State   string `json:"state"`
+	Context   string `json:"context"`
+	State     string `json:"state"`
+	CreatedAt string `json:"createdAt"`
+	TargetURL string `json:"targetUrl"`
 }
 
 // pullStates fills each pull request's merge state, review decision and
@@ -137,9 +141,13 @@ func rollupChecks(contexts []githubRollupContext) []GitHubCheckRun {
 			if run := context.CheckSuite.WorkflowRun; run != nil && run.Event == "dynamic" {
 				continue
 			}
-			check = GitHubCheckRun{Name: context.Name, Status: strings.ToLower(context.Status), Conclusion: strings.ToLower(context.Conclusion)}
+			check = GitHubCheckRun{
+				Name: context.Name, Status: strings.ToLower(context.Status), Conclusion: strings.ToLower(context.Conclusion),
+				StartedAt: context.StartedAt, CompletedAt: context.CompletedAt, URL: context.URL,
+			}
 		case "StatusContext":
-			check = GitHubCheckRun{Name: context.Context, Status: "pending"}
+			// A commit status has one moment, when it was set, and no end of its own.
+			check = GitHubCheckRun{Name: context.Context, Status: "pending", StartedAt: context.CreatedAt, URL: context.TargetURL}
 			switch context.State {
 			case "SUCCESS":
 				check.Status, check.Conclusion = "completed", "success"
