@@ -383,11 +383,10 @@ def automation_standing(profile: str) -> WorkerStanding:
     now = present()
     # The read profile's worker always runs once automation is set up; another
     # runs once a connection lends its profile a login.
-    named, unheard = (
-        (PLAYBOOK_WORKER_NAMED, WorkerState.NOT_CONFIGURED)
-        if profile == READ_PROFILE
-        else (f"{PLAYBOOK_WORKER_NAMED} for the {profile} profile", WorkerState.UNHEARD)
-    )
+    # A profile's name is the operator's, so a refusal says "its profile".
+    read = profile == READ_PROFILE
+    named = PLAYBOOK_WORKER_NAMED if read else f"{PLAYBOOK_WORKER_NAMED} for its privilege profile"
+    unheard = WorkerState.NOT_CONFIGURED if read else WorkerState.UNHEARD
     claimed, leased = _automation_claims().get(profile, (None, None))
     seen = [moment for moment in (readings.heard(_automation(profile)), claimed) if moment is not None]
     if not seen:
