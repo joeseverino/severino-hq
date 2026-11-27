@@ -485,8 +485,7 @@ is refused the audit log (`read_audit_log`) and the calendar
   `NEEDS_A_PERSON` capabilities in `security.py`) is that person's, found by
   the token's subject as `person_of` finds a device's, and its every act names
   its client. It is still an agent, so it is held where a hold applies and
-  never approves or governs agents (`test_delegated_tokens.py`,
-  `test_person_bound_agent.py`).
+  never approves or governs agents (`test_delegated_tokens.py`).
 - A machine's own token has no person, so it is refused those three whatever
   Pocket ID granted it, and the catalog lists no command needing one to it.
   `arrange_dashboard`, the dashboard's shared settings (its weather point,
