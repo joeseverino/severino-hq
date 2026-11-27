@@ -268,9 +268,6 @@ class EventFact:
     # One body as the provider sends it, which the Worker's test and HQ's
     # walk to this fact.
     example: Mapping[str, Any]
-    # Whether it also asks the readings its event names; one that only draws
-    # asks nothing.
-    settles: bool = False
 
     def __post_init__(self) -> None:
         if not self.values or not set(self.values) <= set(self.shape.model_fields):
@@ -371,11 +368,10 @@ class InboundSpec:
 
     def reads(self, event: str) -> tuple[str, ...]:
         """The readings ``event`` makes due; none for one HQ does not take,
-        or one whose fact only draws."""
+        or one with a fact, which only draws."""
 
         entry = self.declared(event)
-        fact = self.facts.get(entry)
-        return () if not entry or (fact and not fact.settles) else self.events[entry]
+        return () if not entry or entry in self.facts else self.events[entry]
 
 
 class ProviderModel(Closed):

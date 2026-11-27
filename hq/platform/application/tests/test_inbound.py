@@ -262,7 +262,7 @@ class ApplyEventsTests(TestCase):
                         **said,
                     }
                     self.assertEqual(self.apply(worker(arrived))["applied"], 1)
-                    self.assertEqual(ReadRequest.objects.exists(), fact.settles, "a fact that draws asks nothing")
+                    self.assertFalse(ReadRequest.objects.exists(), "a fact that draws asks nothing")
                     replayed = {**arrived, "delivery_id": f"replayed-{walked}", "said_at": "2000-01-01T00:00:00Z"}
                     self.apply(worker(replayed))
 
