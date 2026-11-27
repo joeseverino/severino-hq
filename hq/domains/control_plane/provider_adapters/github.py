@@ -285,7 +285,6 @@ INBOUND = {
         dict.fromkeys(
             (
                 "push",
-                "workflow_run",
                 "check_suite",
                 "pull_request",
                 "deployment_status",
@@ -293,7 +292,7 @@ INBOUND = {
                 "merge_group",
                 *readings.UNPROBED_EVENTS,
             ),
-            (readings.REPOSITORY_KIND, readings.WEBHOOK_KIND),
+            (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
         ),
         path="/github",
         # "sha256=<hex>" over the body alone (docs.github.com, validating
@@ -307,7 +306,7 @@ INBOUND = {
         # "Payloads are capped at 25 MB" (docs.github.com, webhook events and payloads).
         max_body_bytes=25 * 1024 * 1024,
         # The delivery log is not: a delivery that failed never arrives.
-        complete=(readings.REPOSITORY_KIND,),
+        complete=readings.REPOSITORY_KINDS,
         requires=(
             GitHub.CONTENTS_READ,
             GitHub.ACTIONS_READ,

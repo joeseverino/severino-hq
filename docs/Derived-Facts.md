@@ -811,11 +811,7 @@ this one answer.
 
 The controller reads `github.repository` through HQ's GitHub App: one
 installation token per repository, read-only permissions only, minted for each
-read. A record is a repository's head and its checks, open pull requests
-(for each Renovate opened, its author, the repository its head lives in,
-its head's checks, the files it changes with the app directory each lies in,
-how many GitHub says it changes, and, while its checks fail, what the update
-run's artifact problem comment says it could not update),
+read. A record is a repository's head and its checks,
 workflows waiting on an approval, and deployments with the steps each ran
 before deploying whose names begin "Verify". A repository a project opts in
 to updates also holds each app's Compose files under `compose/<app>/` on its
@@ -831,6 +827,22 @@ alert counts by severity, admission artifacts, who has access (collaborators,
 deploy keys, the default workflow token, Actions settings), and the names of
 its Actions variables. Each part is refused on its own where the repository's
 plan offers none, and says so.
+
+The same pass reads two more kinds, each record naming its repository, so an
+agent reads them through the `readings` resource like any other.
+`github.workflow_run` is a workflow's newest run on a branch: every workflow
+on the default branch, and the newest of each on the ten other branches that
+ran most recently, with its head commit, status, conclusion, link and each
+job's conclusion. `github.open_pull_request` is an open pull request: its head
+and base, its author, the repository its head lives in, its head's checks,
+and the files it changes with the app directory each lies in, how many GitHub
+says it changes, and, while its checks fail, what the update run's artifact
+problem comment says it could not update. Its `pull_states` part, one GraphQL
+query a repository, adds GitHub's mergeable state, its review state and each
+check's conclusion; a token without Checks, Commit statuses or Actions read refuses
+that part alone. The three kinds are asked for, read and carried together
+(`ObservationSpec.read_with`), so a repository and its runs and pull requests
+always come from one read.
 
 Each failing job of a workflow run, on the default branch or an update's pull
 request, says why it failed: the step it failed at, the error GitHub's log of

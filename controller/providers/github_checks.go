@@ -89,11 +89,11 @@ func (g *githubRepository) branchChecks(ctx context.Context, head string, newest
 		}
 		jobs := []string{}
 		if run.CheckSuiteID != 0 {
-			found, err := json200(g.api.ChecksListForSuiteWithResponse(ctx, g.owner, g.repo, strconv.Itoa(run.CheckSuiteID), &githubapi.ChecksListForSuiteParams{PerPage: new(githubListPage)}))
+			found, err := g.suiteChecks(ctx, run.CheckSuiteID)
 			if err != nil {
 				return checks, err
 			}
-			if jobs, err = said(found.CheckRuns); err != nil {
+			if jobs, err = said(found); err != nil {
 				return checks, err
 			}
 		}
@@ -179,13 +179,63 @@ func (g *githubRepository) checks(ctx context.Context, sha string, githubs, work
 	return checks, nil
 }
 
-// checkRuns is every check run on a commit, none for no commit.
+// checkRuns is every check run on a commit, none for no commit, read once
+// in a repository's read.
 func (g *githubRepository) checkRuns(ctx context.Context, sha string) ([]githubapi.CheckRun, error) {
 	if sha == "" {
 		return nil, nil
 	}
+	if found, read := g.checksAt[sha]; read {
+		return found, nil
+	}
 	found, err := json200(g.api.ChecksListForRefWithResponse(ctx, g.owner, g.repo, sha, &githubapi.ChecksListForRefParams{PerPage: new(githubListPage)}))
-	return found.CheckRuns, err
+	if err != nil {
+		return nil, err
+	}
+	if g.checksAt == nil {
+		g.checksAt = map[string][]githubapi.CheckRun{}
+	}
+	g.checksAt[sha] = found.CheckRuns
+	return found.CheckRuns, nil
+}
+
+// suiteChecks is every check run of one check suite, a workflow run's jobs,
+// read once in a repository's read.
+func (g *githubRepository) suiteChecks(ctx context.Context, suite int) ([]githubapi.CheckRun, error) {
+	if found, read := g.suitesAt[suite]; read {
+		return found, nil
+	}
+	found, err := json200(g.api.ChecksListForSuiteWithResponse(ctx, g.owner, g.repo, strconv.Itoa(suite), &githubapi.ChecksListForSuiteParams{PerPage: new(githubListPage)}))
+	if err != nil {
+		return nil, err
+	}
+	if g.suitesAt == nil {
+		g.suitesAt = map[int][]githubapi.CheckRun{}
+	}
+	g.suitesAt[suite] = found.CheckRuns
+	return found.CheckRuns, nil
+}
+
+// jobsOf is a workflow run's jobs: the check runs of its suite, from its
+// commit's where those were read, else from the suite's own.
+func (g *githubRepository) jobsOf(ctx context.Context, run githubapi.WorkflowRun) ([]GitHubCheckRun, error) {
+	jobs := []GitHubCheckRun{}
+	if run.CheckSuiteID == 0 {
+		return jobs, nil
+	}
+	checks, read := g.checksAt[run.HeadSha]
+	if !read {
+		var err error
+		if checks, err = g.suiteChecks(ctx, run.CheckSuiteID); err != nil {
+			return nil, err
+		}
+	}
+	for _, check := range latestChecks(checks, nil) {
+		if check.CheckSuite.ID == run.CheckSuiteID {
+			jobs = append(jobs, GitHubCheckRun{Name: check.Name, Status: string(check.Status), Conclusion: string(check.Conclusion)})
+		}
+	}
+	return jobs, nil
 }
 
 // latestChecks is the last run of each check by name, in the order each name
@@ -245,7 +295,7 @@ func summarizeChecks(runs []githubapi.CheckRun, githubs map[int]bool) GitHubChec
 // not update, and the images it moves where compose holds the repository's
 // Compose files, and answers the check names the newest pull request runs:
 // what a pull request is checked by, for the rules to require.
-func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubPull, githubs, workflows map[int]bool, compose []string) ([]string, error) {
+func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubOpenPullRequestRecord, githubs, workflows map[int]bool, compose []string) ([]string, error) {
 	for i := range pulls {
 		if pulls[i].Head == "" || !strings.HasPrefix(pulls[i].Branch, githubUpdateBranch) {
 			continue

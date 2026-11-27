@@ -3918,6 +3918,249 @@
         },
         "type": "object"
       },
+      "GitHubOpenPullRequestCheckRun": {
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "properties": {
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestChecks": {
+        "description": "A commit's checks, each standing as its last run did, and why each\nfailing job of a workflow run failed, by the job's name.",
+        "properties": {
+          "state": {
+            "default": "",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "type": "integer"
+          },
+          "failing": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "running": {
+            "default": 0,
+            "type": "integer"
+          },
+          "names": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failures": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestJobFailure"
+            },
+            "default": {},
+            "maxProperties": 4,
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestJobFailure": {
+        "description": "Why one failing check failed: for a workflow's job, the step it failed\nat, the error GitHub's log of that step marks, and the step's last lines\nof output before it; for any other check, no step, its output's title as\nthe error and its summary as the log. Each is the check's own words,\nbounded (``github_failures.go``, ``github_checks.go``).",
+        "properties": {
+          "step": {
+            "default": "",
+            "type": "string"
+          },
+          "error": {
+            "default": "",
+            "type": "string"
+          },
+          "log": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestPullFile": {
+        "description": "One file a pull request changes.",
+        "properties": {
+          "path": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "additions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "deletions": {
+            "default": 0,
+            "type": "integer"
+          },
+          "app": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubOpenPullRequestRecord": {
+        "description": "One open pull request. ``check_runs`` is every check on its head, and ``mergeable_state`` and ``review_state`` GitHub's own words for whether it can merge and where its review stands (``github_pulls.go``). For one Renovate opened (its branch under ``renovate/``), ``checks`` is the head's with why each failing job failed, ``files`` each file it changes, one page of them, and ``changed_files`` how many GitHub says it changes; they are None and 0 for any other. ``apps`` is ``{app, read, images: [{service, before, after}]}`` per app whose directory it changes, each service whose image differs at its head, in a repository opted in to updates, and None otherwise (``github_compose.go``).",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "number": {
+            "default": 0,
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "author": {
+            "default": "",
+            "type": "string"
+          },
+          "draft": {
+            "default": false,
+            "type": "boolean"
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "head": {
+            "default": "",
+            "type": "string"
+          },
+          "base": {
+            "default": "",
+            "type": "string"
+          },
+          "branch": {
+            "default": "",
+            "type": "string"
+          },
+          "base_branch": {
+            "default": "",
+            "type": "string"
+          },
+          "labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head_repository": {
+            "default": "",
+            "type": "string"
+          },
+          "mergeable_state": {
+            "default": "",
+            "type": "string"
+          },
+          "review_state": {
+            "default": "",
+            "type": "string"
+          },
+          "check_runs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestCheckRun"
+            },
+            "type": "array"
+          },
+          "checks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubOpenPullRequestChecks"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/GitHubOpenPullRequestPullFile"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "changed_files": {
+            "default": 0,
+            "type": "integer"
+          },
+          "apps": {
+            "items": {
+              "type": "object"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null
+          },
+          "artifact_problem": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "repository"
+        ],
+        "type": "object"
+      },
       "GitHubProfileRecord": {
         "properties": {
           "login": {
@@ -4136,137 +4379,6 @@
         },
         "type": "object"
       },
-      "GitHubRepositoryPullFile": {
-        "description": "One file a pull request changes.",
-        "properties": {
-          "path": {
-            "default": "",
-            "type": "string"
-          },
-          "status": {
-            "default": "",
-            "type": "string"
-          },
-          "additions": {
-            "default": 0,
-            "type": "integer"
-          },
-          "deletions": {
-            "default": 0,
-            "type": "integer"
-          },
-          "app": {
-            "default": "",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "GitHubRepositoryPullRequest": {
-        "description": "One open pull request. For one Renovate opened (its branch under\n``renovate/``), ``checks`` is the head's, ``files`` each file it changes, one page of them, and\n``changed_files`` how many GitHub says it changes; they are None and 0\nfor any other. ``apps`` is\n``{app, read, images: [{service, before, after}]}`` per app whose\ndirectory it changes, each service whose image differs at its head, in a\nrepository opted in to updates, and None otherwise (``github_compose.go``).",
-        "properties": {
-          "number": {
-            "default": 0,
-            "type": "integer"
-          },
-          "title": {
-            "default": "",
-            "type": "string"
-          },
-          "url": {
-            "default": "",
-            "type": "string"
-          },
-          "author": {
-            "default": "",
-            "type": "string"
-          },
-          "draft": {
-            "default": false,
-            "type": "boolean"
-          },
-          "created_at": {
-            "default": null,
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "updated_at": {
-            "default": null,
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "head": {
-            "default": "",
-            "type": "string"
-          },
-          "base": {
-            "default": "",
-            "type": "string"
-          },
-          "branch": {
-            "default": "",
-            "type": "string"
-          },
-          "labels": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "head_repository": {
-            "default": "",
-            "type": "string"
-          },
-          "checks": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/GitHubRepositoryChecks"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
-          },
-          "files": {
-            "items": {
-              "$ref": "#/components/schemas/GitHubRepositoryPullFile"
-            },
-            "type": [
-              "array",
-              "null"
-            ],
-            "default": null
-          },
-          "changed_files": {
-            "default": 0,
-            "type": "integer"
-          },
-          "apps": {
-            "items": {
-              "type": "object"
-            },
-            "type": [
-              "array",
-              "null"
-            ],
-            "default": null
-          },
-          "artifact_problem": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
       "GitHubRepositoryRecord": {
         "properties": {
           "connection_ref": {
@@ -4313,31 +4425,10 @@
               "failures": {}
             }
           },
-          "failing_runs": {
-            "default": [],
-            "items": {
-              "type": "object"
-            },
-            "type": "array"
-          },
-          "pull_requests": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/GitHubRepositoryPullRequest"
-            },
-            "type": "array"
-          },
           "pull_request_checks": {
             "default": [],
             "items": {
               "type": "string"
-            },
-            "type": "array"
-          },
-          "runs": {
-            "default": [],
-            "items": {
-              "type": "object"
             },
             "type": "array"
           },
@@ -4781,6 +4872,90 @@
           "connection_ref",
           "app",
           "owner"
+        ],
+        "type": "object"
+      },
+      "GitHubWorkflowRunCheckRun": {
+        "description": "One check as its last run stands: a workflow run's job, another app's\ncheck, or a commit status, in GitHub's words, lower-cased.",
+        "properties": {
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GitHubWorkflowRunRecord": {
+        "description": "A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "default": 0,
+            "type": "integer"
+          },
+          "event": {
+            "default": "",
+            "type": "string"
+          },
+          "sha": {
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "",
+            "type": "string"
+          },
+          "conclusion": {
+            "default": "",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "type": "string"
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubWorkflowRunCheckRun"
+            },
+            "type": "array"
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "repository"
         ],
         "type": "object"
       },
@@ -6617,6 +6792,7 @@
           "page_rules",
           "posture",
           "proxy_hosts",
+          "pull_states",
           "querylog",
           "redirection_hosts",
           "registration",
@@ -6655,6 +6831,7 @@
           "PartPageRules",
           "PartPosture",
           "PartProxyHosts",
+          "PartPullStates",
           "PartQueryLog",
           "PartRedirectionHosts",
           "PartRegistration",
@@ -6745,10 +6922,12 @@
           "github.dashboard_box",
           "github.delivery",
           "github.dependency_run",
+          "github.open_pull_request",
           "github.profile",
           "github.pull_request",
           "github.repository",
           "github.webhook",
+          "github.workflow_run",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6813,10 +6992,12 @@
           "ResourceKindGitHubDashboardBox",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
+          "ResourceKindGitHubOpenPullRequest",
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubPullRequest",
           "ResourceKindGitHubRepository",
           "ResourceKindGitHubWebhook",
+          "ResourceKindGitHubWorkflowRun",
           "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
@@ -6911,9 +7092,11 @@
           "github.allowance",
           "github.delivery",
           "github.dependency_run",
+          "github.open_pull_request",
           "github.profile",
           "github.repository",
           "github.webhook",
+          "github.workflow_run",
           "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
@@ -6961,9 +7144,11 @@
           "SweptGitHubAllowance",
           "SweptGitHubDelivery",
           "SweptGitHubDependencyRun",
+          "SweptGitHubOpenPullRequest",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
           "SweptGitHubWebhook",
+          "SweptGitHubWorkflowRun",
           "SweptHostEdgeReboot",
           "SweptHostFilesystem",
           "SweptHostFirewall",

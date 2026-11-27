@@ -40,6 +40,8 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindCloudflareEdgeCertificate:    {CloudflareEdgeCertificateRecord{}},
 	runtime.ResourceKindCloudflareRedirect:           {CloudflareRedirectRecord{}},
 	runtime.ResourceKindGitHubRepository:             {GitHubRepositoryRecord{}, githubCarried{}},
+	runtime.ResourceKindGitHubWorkflowRun:            {GitHubWorkflowRunRecord{}, githubCarried{}},
+	runtime.ResourceKindGitHubOpenPullRequest:        {GitHubOpenPullRequestRecord{}, githubCarried{}},
 	runtime.ResourceKindGitHubAllowance:              {runtime.GitHubAllowanceRecord{}},
 	runtime.ResourceKindGitHubWebhook:                {runtime.GitHubWebhookRecord{}},
 	runtime.ResourceKindGitHubDelivery:               {GitHubDeliveryRecord{}},

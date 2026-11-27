@@ -170,6 +170,7 @@ Permissions, and no others:
 - `Checks: Read-only`
 - `Code scanning alerts: Read-only (API: security_events)`
 - `Commit statuses: Read & write (API: statuses)`
+- `Commit statuses: Read-only (API: statuses)`
 - `Contents: Read & write`
 - `Contents: Read-only`
 - `Dependabot alerts: Read-only (API: vulnerability_alerts)`

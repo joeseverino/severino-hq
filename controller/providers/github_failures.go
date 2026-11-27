@@ -147,7 +147,7 @@ const githubArtifactProblem = "Artifact update problem"
 // artifactProblem is what the newest artifact problem the updater left on
 // an update's pull request says, its fenced lines cut as a log's are, or
 // none where the updater left none or is not known.
-func (g *githubRepository) artifactProblem(ctx context.Context, pull GitHubPull) ([]string, error) {
+func (g *githubRepository) artifactProblem(ctx context.Context, pull GitHubOpenPullRequestRecord) ([]string, error) {
 	updater, err := g.updater()
 	if err != nil || updater == "" || pull.Author != updater {
 		return nil, nil

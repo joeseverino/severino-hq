@@ -308,6 +308,88 @@
       "finished_at": "example"
     }
   ],
+  "github.open_pull_request": [
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "number": 1,
+      "title": "example",
+      "url": "example",
+      "author": "example",
+      "draft": true,
+      "created_at": "example",
+      "updated_at": "example",
+      "head": "example",
+      "base": "example",
+      "branch": "example",
+      "base_branch": "example",
+      "labels": [
+        "example"
+      ],
+      "head_repository": "example",
+      "checks": {
+        "state": "example",
+        "total": 1,
+        "failing": [
+          "example"
+        ],
+        "running": 1,
+        "names": [
+          "example"
+        ],
+        "failures": {
+          "example": {
+            "step": "example",
+            "error": "example",
+            "log": [
+              "example"
+            ]
+          }
+        }
+      },
+      "files": [
+        {
+          "path": "example",
+          "status": "example",
+          "additions": 1,
+          "deletions": 1,
+          "app": "example"
+        }
+      ],
+      "changed_files": 1,
+      "apps": [
+        {
+          "app": "example",
+          "read": true,
+          "images": [
+            {
+              "service": "example",
+              "before": "example",
+              "after": "example"
+            }
+          ]
+        }
+      ],
+      "artifact_problem": [
+        "example"
+      ],
+      "mergeable_state": "example",
+      "review_state": "example",
+      "check_runs": [
+        {
+          "name": "example",
+          "status": "example",
+          "conclusion": "example"
+        }
+      ],
+      "carried": true
+    },
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "carried": true
+    }
+  ],
   "github.profile": [
     {
       "login": "example",
@@ -388,98 +470,8 @@
           }
         }
       },
-      "failing_runs": [
-        {
-          "id": 1,
-          "name": "example",
-          "status": "example",
-          "conclusion": "example",
-          "event": "example",
-          "branch": "example",
-          "sha": "example",
-          "url": "example",
-          "created_at": "example"
-        }
-      ],
-      "pull_requests": [
-        {
-          "number": 1,
-          "title": "example",
-          "url": "example",
-          "author": "example",
-          "draft": true,
-          "created_at": "example",
-          "updated_at": "example",
-          "head": "example",
-          "base": "example",
-          "branch": "example",
-          "labels": [
-            "example"
-          ],
-          "head_repository": "example",
-          "checks": {
-            "state": "example",
-            "total": 1,
-            "failing": [
-              "example"
-            ],
-            "running": 1,
-            "names": [
-              "example"
-            ],
-            "failures": {
-              "example": {
-                "step": "example",
-                "error": "example",
-                "log": [
-                  "example"
-                ]
-              }
-            }
-          },
-          "files": [
-            {
-              "path": "example",
-              "status": "example",
-              "additions": 1,
-              "deletions": 1,
-              "app": "example"
-            }
-          ],
-          "changed_files": 1,
-          "apps": [
-            {
-              "app": "example",
-              "read": true,
-              "images": [
-                {
-                  "service": "example",
-                  "before": "example",
-                  "after": "example"
-                }
-              ]
-            }
-          ],
-          "artifact_problem": [
-            "example"
-          ]
-        }
-      ],
       "pull_request_checks": [
         "example"
-      ],
-      "runs": [
-        {
-          "id": 1,
-          "name": "example",
-          "status": "example",
-          "conclusion": "example",
-          "event": "example",
-          "branch": "example",
-          "sha": "example",
-          "url": "example",
-          "created_at": "example"
-        }
       ],
       "waiting": [
         {
@@ -687,6 +679,34 @@
       },
       "organization": true,
       "owner": "example"
+    }
+  ],
+  "github.workflow_run": [
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "id": 1,
+      "name": "example",
+      "status": "example",
+      "conclusion": "example",
+      "event": "example",
+      "branch": "example",
+      "sha": "example",
+      "url": "example",
+      "created_at": "example",
+      "jobs": [
+        {
+          "name": "example",
+          "status": "example",
+          "conclusion": "example"
+        }
+      ],
+      "carried": true
+    },
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "carried": true
     }
   ],
   "host.edge_reboot": [

@@ -52,7 +52,7 @@ type githubConnection struct {
 
 func (r *Registry) admitGitHub() {
 	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe)
-	r.reader(runtime.ResourceKindGitHubRepository, r.githubRepositories)
+	r.githubPassReaders()
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
 	r.reader(runtime.ResourceKindGitHubWebhook, r.githubWebhook)
 	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)

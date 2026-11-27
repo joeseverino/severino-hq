@@ -8,7 +8,12 @@ from django.utils import timezone
 from hq.domains.content.content_sync import sync_content_index
 from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
-from hq.domains.control_plane.observations.github import DEPENDENCY_RUN_KIND
+from hq.domains.control_plane.observations.github import (
+    DEPENDENCY_RUN_KIND,
+    PULL_REQUEST_KIND,
+    REPOSITORY_KIND,
+    WORKFLOW_RUN_KIND,
+)
 from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
 from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
@@ -214,7 +219,7 @@ def repositories():
                 "running": 0,
                 "failures": {"License": denied, "Scan": failure},
             }
-            record["runs"], record["failing_runs"] = [scan], [scan]
+            record["runs"] = [scan]
         if name == APPS:
             record["pull_requests"] = [_app_update(name)]
             # Renovate's Dashboard lists the updates it has not opened yet.
@@ -224,7 +229,7 @@ def repositories():
             record["updater"] = UPDATER
         return record
 
-    store("github.repository", *(repository(name) for name in REPOSITORIES))
+    _store_repositories([repository(name) for name in REPOSITORIES])
     # This morning's update run of the opted-in repositories, finished cleanly.
     started = timedelta(hours=5)
     store(
@@ -345,6 +350,20 @@ def _watched():
 
 # The login the example estate's update run opens its pull requests as.
 UPDATER = "example-hq[bot]"
+
+
+def _store_repositories(records: list[dict]) -> None:
+    """Each repository's record, and its ``pull_requests`` and ``runs`` as the
+    readings taken in its pass, each naming the repository."""
+
+    pulls, runs = [], []
+    for record in records:
+        named = {"connection_ref": record["connection_ref"], "repository": record["repository"]}
+        pulls += [{**named, **pull} for pull in record.pop("pull_requests", ())]
+        runs += [{**named, **run} for run in record.pop("runs", ())]
+    store(REPOSITORY_KIND, *records)
+    store(PULL_REQUEST_KIND, *pulls)
+    store(WORKFLOW_RUN_KIND, *runs)
 
 
 def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
@@ -764,10 +783,16 @@ def update_states(newer: dict[str, str]) -> None:
     """The apps repository as Renovate and its merges leave it beside the
     open update, the newer releases ``newer`` names out."""
 
-    held = ProviderInventory.objects.get(kind="github.repository").records
+    held = ProviderInventory.objects.get(kind=REPOSITORY_KIND).records
     store(
-        "github.repository",
+        REPOSITORY_KIND,
         *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
+    )
+    named = {"connection_ref": GITHUB, "repository": f"example/{APPS}"}
+    store(
+        PULL_REQUEST_KIND,
+        *ProviderInventory.objects.get(kind=PULL_REQUEST_KIND).records,
+        named | resolver_update(newer),
     )
 
 
@@ -789,7 +814,6 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
     kept = [path for path in record["compose"] if path.split("/")[1] not in (UNMATCHED_APP, UNHELD_APP)]
     return {
         **record,
-        "pull_requests": [*record["pull_requests"], resolver_update(newer)],
         "compose": [*kept, f"compose/{UNMATCHED_APP}/docker-compose.yml"],
         "compose_images": [
             _built(),

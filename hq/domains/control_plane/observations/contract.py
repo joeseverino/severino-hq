@@ -186,6 +186,10 @@ class ObservationSpec:
     # of the kind and the new ones: a rate across two sweeps. It returns the
     # new records with its fields set.
     from_last: Callable[[Iterable[Mapping[str, Any]], list[dict[str, Any]]], list[dict[str, Any]]] | None = None
+    # The kind whose read takes this one in the same pass, its records carried
+    # when that kind's are: a sweep asks for and carries both or neither
+    # (``read_together``). Blank for a kind read on its own.
+    read_with: str = ""
 
     def __post_init__(self) -> None:
         if self.every is not None and self.read_by == "request":
@@ -314,4 +318,16 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
     for spec in specs:
         if found.setdefault(spec.kind, spec) is not spec:
             raise ValueError(f"Duplicate observation kind {spec.kind!r}.")
+    for spec in found.values():
+        root = found.get(spec.read_with) if spec.read_with else spec
+        if root is None or root.read_with or root.provider != spec.provider:
+            raise ValueError(f"{spec.kind!r} is read with a kind of its provider that is read on its own.")
     return frozendict(found)
+
+
+def read_together(kinds: Iterable[str]) -> set[str]:
+    """``kinds`` and every kind read in the same pass as one of them."""
+
+    asked = set(kinds)
+    roots = {(OBSERVATIONS[kind].read_with or kind) if kind in OBSERVATIONS else kind for kind in asked}
+    return asked | {kind for kind, spec in OBSERVATIONS.items() if (spec.read_with or kind) in roots}

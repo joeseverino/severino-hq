@@ -35,7 +35,7 @@ DIED = {
 
 # What a GitHub delivery makes due: the repositories it is about, and the
 # webhook's delivery log, which now holds a delivery that arrived.
-PUSHED = ["github.repository", "github.webhook"]
+PUSHED = ["github.open_pull_request", "github.repository", "github.webhook", "github.workflow_run"]
 
 
 def worker(*events: dict) -> dict:

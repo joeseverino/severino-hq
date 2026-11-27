@@ -6,6 +6,7 @@ from ...tone import Tone
 from . import NOW, Ago, Example, Examples, Raised, ago
 
 KIND = "github.repository"
+RUN_KIND = "github.workflow_run"
 ALPHA = {
     "connection_ref": "github",
     "repository": "example/alpha",
@@ -15,10 +16,13 @@ ALPHA = {
 }
 
 
-def alpha(raises: tuple[Raised | str, ...] = (), **record) -> Example:
-    """example/alpha, as its last read stated it, with ``record`` said of it."""
+def alpha(raises: tuple[Raised | str, ...] = (), runs: tuple[dict, ...] = (), **record) -> Example:
+    """example/alpha, as its last read stated it, with ``record`` said of it
+    and ``runs`` its workflows' runs."""
 
-    return Example(readings={KIND: ({**ALPHA, **record},)}, raises=raises)
+    named = {"connection_ref": ALPHA["connection_ref"], "repository": ALPHA["repository"]}
+    readings = {KIND: ({**ALPHA, **record},), RUN_KIND: tuple(named | run for run in runs)}
+    return Example(readings=readings, raises=raises)
 
 
 def waiting(since: Ago) -> list[dict]:
@@ -71,8 +75,13 @@ DENIED = {"error": "1 dependency has a denied license", "log": ["example-lib 1.2
 def failed(**failures: dict) -> dict[str, Any]:
     """The record of a workflow run whose jobs failed as ``failures`` say."""
 
-    run = {"name": "CI", "url": "https://github.com/example/alpha/actions/runs/1"}
-    return {"checks": {"state": "failure", "failing": sorted(failures), "failures": failures}, "failing_runs": [run]}
+    run = {
+        "name": "CI",
+        "branch": "main",
+        "conclusion": "failure",
+        "url": "https://github.com/example/alpha/actions/runs/1",
+    }
+    return {"checks": {"state": "failure", "failing": sorted(failures), "failures": failures}, "runs": (run,)}
 
 
 QUIET = alpha(checks={"state": "success"}, alerts={"code_scanning": {"low": 2}})

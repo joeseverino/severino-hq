@@ -1,7 +1,9 @@
 """What GitHub says about the repositories HQ is built from, and what needs you.
 
 Read from the GitHub App's ``github.repository`` reading, which the controller
-takes under a read-only token per repository; nothing here calls GitHub. A
+takes under a read-only token per repository, with the ``github.workflow_run``
+and ``github.open_pull_request`` readings taken in the same pass; nothing here
+calls GitHub. A
 project joins to its repository by its URL, and the action queue takes the
 few things on GitHub that wait on a person: a deploy held for approval, a
 default branch failing, a serious alert, an admission about to lapse.
@@ -18,7 +20,9 @@ from hq.domains.control_plane.observations.github import (
     CODE_SCANNING,
     DEPENDABOT,
     LEAKED_CREDENTIALS,
+    PULL_REQUEST_KIND,
     REPOSITORY_KIND,
+    WORKFLOW_RUN_KIND,
     JobFailure,
     RepositoryRecord,
 )
@@ -74,7 +78,7 @@ UPDATE_BRANCH = "renovate/"
 
 
 def workflow_run(run: Mapping[str, Any]) -> ListRow:
-    """One run of the reading's ``runs``, as a row of a repository's panel:
+    """One ``github.workflow_run`` record, as a row of a repository's panel:
     the workflow, what it came to (or where it is while it has not finished)
     in its tone, then its branch, commit and age."""
 
@@ -188,6 +192,10 @@ class Repository:
     observed_at: datetime | None
     # Labels of the parts GitHub would not answer for this repository.
     refused: tuple[str, ...] = field(default=())
+    # Its ``github.workflow_run`` records, newest first, and its
+    # ``github.open_pull_request`` records, as the controller listed them.
+    runs: tuple[Mapping[str, Any], ...] = ()
+    pull_requests: tuple[Mapping[str, Any], ...] = ()
 
     def __getattr__(self, item: str) -> Any:
         """A field of the record, or the reading schema's default for it."""
@@ -222,7 +230,9 @@ class Repository:
         """A link to each workflow whose newest run on the default branch failed."""
 
         found = []
-        for run in self.record.get("failing_runs") or ():
+        for run in self.runs:
+            if run.get("branch") != self.default_branch or run.get("conclusion") not in FAILED:
+                continue
             if url := web_url(run.get("url")):
                 name = run.get("name") or "Workflow"
                 found.append(read_link("failing-run", f"{name} run", url, reason=f"{name} failed on this branch."))
@@ -230,9 +240,10 @@ class Repository:
 
     @property
     def workflow_runs(self) -> tuple[ListRow, ...]:
-        """Each workflow's newest run, as the repository's panel shows it."""
+        """Each workflow's newest run on any branch, as the repository's panel shows it."""
 
-        return tuple(workflow_run(run) for run in self.record.get("runs") or ())
+        newest = {str(run.get("name") or ""): run for run in reversed(self.runs)}
+        return tuple(workflow_run(run) for run in self.runs if newest[str(run.get("name") or "")] is run)
 
     @property
     def serious_alerts(self) -> int:
@@ -271,7 +282,7 @@ class Repository:
         was opened (``opened``) and its age in whole days (``age_days``)."""
 
         found = []
-        for pull in self.record.get("pull_requests") or ():
+        for pull in self.pull_requests:
             if str(pull.get("branch") or "").startswith(UPDATE_BRANCH):
                 opened = moment(pull.get("created_at", ""))
                 age = max(0, whole(opened, timedelta(days=1))) if opened else None
@@ -282,11 +293,7 @@ class Repository:
     def other_pulls(self) -> list[dict[str, Any]]:
         """Open pull requests a person or another tool opened."""
 
-        return [
-            pull
-            for pull in self.record.get("pull_requests") or ()
-            if not str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
-        ]
+        return [pull for pull in self.pull_requests if not str(pull.get("branch") or "").startswith(UPDATE_BRANCH)]
 
     @property
     def pull_rows(self) -> tuple[ListRow, ...]:
@@ -486,8 +493,24 @@ def repositories() -> dict[str, Repository]:
     return read_once("github_estate.repositories", _load)
 
 
+def _by_repository(kind: str) -> dict[str, list[Mapping[str, Any]]]:
+    """A kind's records by the repository each names."""
+
+    found: dict[str, list[Mapping[str, Any]]] = {}
+    for snapshot in snapshots_of(kind):
+        for record in snapshot.records or ():
+            if isinstance(record, Mapping) and record.get("repository"):
+                found.setdefault(str(record["repository"]), []).append(record)
+    return found
+
+
+def _newest_first(runs: list[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    return tuple(sorted(runs, key=lambda run: str(run.get("created_at") or ""), reverse=True))
+
+
 def _load() -> dict[str, Repository]:
     found: dict[str, Repository] = {}
+    runs, pulls = _by_repository(WORKFLOW_RUN_KIND), _by_repository(PULL_REQUEST_KIND)
     for snapshot in snapshots_of(REPOSITORY_KIND):
         refused_by_repo: dict[str, list[str]] = {}
         for item in snapshot.refused_parts:
@@ -499,7 +522,14 @@ def _load() -> dict[str, Repository]:
                 # A record carried across sweeps holds what it held when it
                 # was read, so its age is that read's, never the sweep's.
                 read_at = record_read_at(record) or snapshot.observed_at
-                found[name] = Repository(name, record, read_at, tuple(refused_by_repo.get(name, ())))
+                found[name] = Repository(
+                    name,
+                    record,
+                    read_at,
+                    tuple(refused_by_repo.get(name, ())),
+                    _newest_first(runs.get(name, [])),
+                    tuple(pulls.get(name, ())),
+                )
     return found
 
 

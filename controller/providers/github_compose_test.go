@@ -54,14 +54,13 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 	for _, ref := range []string{"dddd", "eeee"} {
 		h.refuse(githubFakeAPI, "/repos/example/app/contents/compose/large/compose.yml?ref="+ref, http.StatusNotFound)
 	}
-	controller := NewController(h.r, runtime.ControllerRegistry{DependencyUpdates: runtime.DependencyUpdatesPlan{
+	NewController(h.r, runtime.ControllerRegistry{DependencyUpdates: runtime.DependencyUpdatesPlan{
 		Owners: []runtime.DependencyUpdatesOwner{{Owner: "example", Repositories: []string{"example/app"}}},
 	}})
-	report := controller.readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
-	if !report.OK || len(report.Records) != 1 || len(report.RefusedParts) != 0 {
-		t.Fatalf("report %+v", report)
+	record, _, pulls, refused := readPass(t, h)
+	if len(refused) != 0 {
+		t.Fatalf("refused %+v", refused)
 	}
-	record := report.Records[0].(GitHubRepositoryRecord)
 	encoded, _ := json.Marshal(record)
 	var view map[string]any
 	_ = json.Unmarshal(encoded, &view)
@@ -76,8 +75,8 @@ func TestAnOptedInRepositoryReadsItsApps(t *testing.T) {
 		{"each service's image at the head, and whether it builds it, an app that needs the host's variables left out", record.ComposeImages, `[{"path":"compose/example/compose.yml","service":"reader","image":"","build":true},{"path":"compose/example/compose.yml","service":"viewer","image":"example-viewer:local","build":true},{"path":"compose/example/compose.yml","service":"web","image":"example/app:1","build":false},{"path":"compose/example/compose.yml","service":"worker","image":"example/worker:3@sha256:` + strings.Repeat("a", 64) + `","build":false}]`},
 		{"each app built on its host, and the commits from the last that changed its directory to the head", record.Builds, `[{"app":"example","commits":["aaaa000000000000000000000000000000000000","c2","c1"]}]`},
 		{"each branch held with no pull request, and the apps whose image its line names whole", record.HeldBranches, `[{"branch":"renovate/example-app-2.x","marker":"unpend","apps":["example"]},{"branch":"renovate/example-worker-5.x","marker":"approve","apps":["example"]},{"branch":"renovate/other","marker":"unschedule","apps":[]}]`},
-		{"each service the update's head moves", record.PullRequests[0].Apps, `[{"app":"example","read":true,"images":[{"service":"cache","before":"","after":"example/cache:7"},{"service":"web","before":"example/app:1","after":"example/app:2"},{"service":"worker","before":"example/worker:3","after":"example/worker:4"}]},{"app":"large","read":true,"images":[]}]`},
-		{"no images for a pull request that is not an update", record.PullRequests[1].Apps, `null`},
+		{"each service the update's head moves", pulls[0].Apps, `[{"app":"example","read":true,"images":[{"service":"cache","before":"","after":"example/cache:7"},{"service":"web","before":"example/app:1","after":"example/app:2"},{"service":"worker","before":"example/worker:3","after":"example/worker:4"}]},{"app":"large","read":true,"images":[]}]`},
+		{"no images for a pull request that is not an update", pulls[1].Apps, `null`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if encoded, _ := json.Marshal(test.got); string(encoded) != test.want {
@@ -110,16 +109,12 @@ func TestAnAppThatDoesNotLoadMovesNothing(t *testing.T) {
 	routes[api("/contents/compose/unset/compose.yml?ref=eeee")] = githubContent("services:\n  db:\n    image: example/db:${DB_TAG}\n")
 	h := newGitHubHarness(t, routes, runtime.Environment{})
 	h.refuse(githubFakeAPI, "/repos/example/app/contents/compose/example/compose.yml?ref=dddd", http.StatusNotFound)
-	controller := NewController(h.r, runtime.ControllerRegistry{DependencyUpdates: runtime.DependencyUpdatesPlan{
+	NewController(h.r, runtime.ControllerRegistry{DependencyUpdates: runtime.DependencyUpdatesPlan{
 		Owners: []runtime.DependencyUpdatesOwner{{Owner: "example", Repositories: []string{"Example/App"}}},
 	}})
-	report := controller.readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
-	if !report.OK || len(report.Records) != 1 {
-		t.Fatalf("report %+v", report)
-	}
-	record := report.Records[0].(GitHubRepositoryRecord)
+	record, _, pulls, _ := readPass(t, h)
 	want := `[{"app":"built","read":true,"images":[]},{"app":"example","read":true,"images":[{"service":"web","before":"","after":"example/app:2"}]},{"app":"large","read":false,"images":[]},{"app":"unset","read":false,"images":[]}]`
-	if encoded, _ := json.Marshal(record.PullRequests[0].Apps); string(encoded) != want || record.Compose == nil || len(record.Compose) != 0 || record.Dashboard != "" {
+	if encoded, _ := json.Marshal(pulls[0].Apps); string(encoded) != want || record.Compose == nil || len(record.Compose) != 0 || record.Dashboard != "" {
 		t.Fatalf("apps %s, compose %v, dashboard %q", encoded, record.Compose, record.Dashboard)
 	}
 }

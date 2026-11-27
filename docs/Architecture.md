@@ -940,8 +940,8 @@ follow, each held by `controller/providers/github_spend_test.go`:
   read under, or one HQ's clock makes due. The clock is
   `observations.github.FULL_READ_EVERY`, at a point in the hour of its own for
   each repository (`hq/platform/application/github_repositories.py`); an
-  event about an alert since its read (`UNPROBED_EVENTS`), which the query
-  cannot see, makes it due at once. Any
+  event the query cannot see (an alert, a finished workflow run) since its
+  read (`UNPROBED_EVENTS`) makes it due at once. Any
   other repository is sent carried, and HQ keeps its record
   (`ObservationSpec.from_last`). A conditional request would not do this job:
   GitHub's ETag follows the token's text, and every sweep mints a new token.

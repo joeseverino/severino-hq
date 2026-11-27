@@ -98,6 +98,7 @@ class GitHub(Permission):
     ADMINISTRATION_READ = "Administration", "read"
     CHECKS_READ = "Checks", "read"
     CODE_SCANNING_ALERTS_READ = "Code scanning alerts", "read", "security_events"
+    COMMIT_STATUSES_READ = "Commit statuses", "read", "statuses"
     COMMIT_STATUSES_WRITE = "Commit statuses", "write", "statuses"
     CONTENTS_READ = "Contents", "read"
     CONTENTS_WRITE = "Contents", "write"

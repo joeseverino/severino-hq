@@ -684,6 +684,7 @@ const (
 	PartPageRules         ReadingPartName = "page_rules"
 	PartPosture           ReadingPartName = "posture"
 	PartProxyHosts        ReadingPartName = "proxy_hosts"
+	PartPullStates        ReadingPartName = "pull_states"
 	PartQueryLog          ReadingPartName = "querylog"
 	PartRedirectionHosts  ReadingPartName = "redirection_hosts"
 	PartRegistration      ReadingPartName = "registration"
@@ -747,6 +748,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartPosture:
 		return true
 	case PartProxyHosts:
+		return true
+	case PartPullStates:
 		return true
 	case PartQueryLog:
 		return true
@@ -899,10 +902,12 @@ const (
 	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
+	ResourceKindGitHubOpenPullRequest        ResourceKind = "github.open_pull_request"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubPullRequest            ResourceKind = "github.pull_request"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindGitHubWebhook                ResourceKind = "github.webhook"
+	ResourceKindGitHubWorkflowRun            ResourceKind = "github.workflow_run"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
 	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
@@ -992,6 +997,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindGitHubDependencyRun:
 		return true
+	case ResourceKindGitHubOpenPullRequest:
+		return true
 	case ResourceKindGitHubProfile:
 		return true
 	case ResourceKindGitHubPullRequest:
@@ -999,6 +1006,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubRepository:
 		return true
 	case ResourceKindGitHubWebhook:
+		return true
+	case ResourceKindGitHubWorkflowRun:
 		return true
 	case ResourceKindHQRequestPath:
 		return true
@@ -1165,9 +1174,11 @@ const (
 	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
+	SweptGitHubOpenPullRequest        SweptKind = "github.open_pull_request"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
 	SweptGitHubWebhook                SweptKind = "github.webhook"
+	SweptGitHubWorkflowRun            SweptKind = "github.workflow_run"
 	SweptHostEdgeReboot               SweptKind = "host.edge_reboot"
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
@@ -1236,11 +1247,15 @@ func (e SweptKind) Valid() bool {
 		return true
 	case SweptGitHubDependencyRun:
 		return true
+	case SweptGitHubOpenPullRequest:
+		return true
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
 		return true
 	case SweptGitHubWebhook:
+		return true
+	case SweptGitHubWorkflowRun:
 		return true
 	case SweptHostEdgeReboot:
 		return true
@@ -1940,6 +1955,73 @@ type GitHubMergeStatus struct {
 	Refused GitHubMergeRefusal `json:"refused,omitempty"`
 }
 
+// GitHubOpenPullRequestCheckRun One check as its last run stands: a workflow run's job, another app's
+// check, or a commit status, in GitHub's words, lower-cased.
+type GitHubOpenPullRequestCheckRun struct {
+	Conclusion string `json:"conclusion,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Status     string `json:"status,omitempty"`
+}
+
+// GitHubOpenPullRequestChecks A commit's checks, each standing as its last run did, and why each
+// failing job of a workflow run failed, by the job's name.
+type GitHubOpenPullRequestChecks struct {
+	Failing  []string                                   `json:"failing,omitempty"`
+	Failures map[string]GitHubOpenPullRequestJobFailure `json:"failures,omitempty"`
+	Names    []string                                   `json:"names,omitempty"`
+	Running  int                                        `json:"running,omitempty"`
+	State    string                                     `json:"state,omitempty"`
+	Total    int                                        `json:"total,omitempty"`
+}
+
+// GitHubOpenPullRequestJobFailure Why one failing check failed: for a workflow's job, the step it failed
+// at, the error GitHub's log of that step marks, and the step's last lines
+// of output before it; for any other check, no step, its output's title as
+// the error and its summary as the log. Each is the check's own words,
+// bounded (“github_failures.go“, “github_checks.go“).
+type GitHubOpenPullRequestJobFailure struct {
+	Error string   `json:"error,omitempty"`
+	Log   []string `json:"log,omitempty"`
+	Step  string   `json:"step,omitempty"`
+}
+
+// GitHubOpenPullRequestPullFile One file a pull request changes.
+type GitHubOpenPullRequestPullFile struct {
+	Additions int    `json:"additions,omitempty"`
+	App       string `json:"app,omitempty"`
+	Deletions int    `json:"deletions,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
+
+// GitHubOpenPullRequestRecord One open pull request. “check_runs“ is every check on its head, and “mergeable_state“ and “review_state“ GitHub's own words for whether it can merge and where its review stands (“github_pulls.go“). For one Renovate opened (its branch under “renovate/“), “checks“ is the head's with why each failing job failed, “files“ each file it changes, one page of them, and “changed_files“ how many GitHub says it changes; they are None and 0 for any other. “apps“ is “{app, read, images: [{service, before, after}]}“ per app whose directory it changes, each service whose image differs at its head, in a repository opted in to updates, and None otherwise (“github_compose.go“).
+type GitHubOpenPullRequestRecord struct {
+	Apps            []map[string]any                `json:"apps,omitempty"`
+	ArtifactProblem []string                        `json:"artifact_problem,omitempty"`
+	Author          string                          `json:"author,omitempty"`
+	Base            string                          `json:"base,omitempty"`
+	BaseBranch      string                          `json:"base_branch,omitempty"`
+	Branch          string                          `json:"branch,omitempty"`
+	Carried         bool                            `json:"carried,omitempty"`
+	ChangedFiles    int                             `json:"changed_files,omitempty"`
+	CheckRuns       []GitHubOpenPullRequestCheckRun `json:"check_runs,omitempty"`
+	Checks          GitHubOpenPullRequestChecks     `json:"checks,omitempty"`
+	ConnectionRef   string                          `json:"connection_ref"`
+	CreatedAt       string                          `json:"created_at,omitempty"`
+	Draft           bool                            `json:"draft,omitempty"`
+	Files           []GitHubOpenPullRequestPullFile `json:"files,omitempty"`
+	Head            string                          `json:"head,omitempty"`
+	HeadRepository  string                          `json:"head_repository,omitempty"`
+	Labels          []string                        `json:"labels,omitempty"`
+	MergeableState  string                          `json:"mergeable_state,omitempty"`
+	Number          int                             `json:"number,omitempty"`
+	Repository      string                          `json:"repository"`
+	ReviewState     string                          `json:"review_state,omitempty"`
+	Title           string                          `json:"title,omitempty"`
+	UpdatedAt       string                          `json:"updated_at,omitempty"`
+	URL             string                          `json:"url,omitempty"`
+}
+
 // GitHubProfilePlan Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
 type GitHubProfilePlan struct {
 	// Accounts GitHub logins.
@@ -2033,42 +2115,6 @@ type GitHubRepositoryJobFailure struct {
 	Step  string   `json:"step,omitempty"`
 }
 
-// GitHubRepositoryPullFile One file a pull request changes.
-type GitHubRepositoryPullFile struct {
-	Additions int    `json:"additions,omitempty"`
-	App       string `json:"app,omitempty"`
-	Deletions int    `json:"deletions,omitempty"`
-	Path      string `json:"path,omitempty"`
-	Status    string `json:"status,omitempty"`
-}
-
-// GitHubRepositoryPullRequest One open pull request. For one Renovate opened (its branch under
-// “renovate/“), “checks“ is the head's, “files“ each file it changes, one page of them, and
-// “changed_files“ how many GitHub says it changes; they are None and 0
-// for any other. “apps“ is
-// “{app, read, images: [{service, before, after}]}“ per app whose
-// directory it changes, each service whose image differs at its head, in a
-// repository opted in to updates, and None otherwise (“github_compose.go“).
-type GitHubRepositoryPullRequest struct {
-	Apps            []map[string]any           `json:"apps,omitempty"`
-	ArtifactProblem []string                   `json:"artifact_problem,omitempty"`
-	Author          string                     `json:"author,omitempty"`
-	Base            string                     `json:"base,omitempty"`
-	Branch          string                     `json:"branch,omitempty"`
-	ChangedFiles    int                        `json:"changed_files,omitempty"`
-	Checks          GitHubRepositoryChecks     `json:"checks,omitempty"`
-	CreatedAt       string                     `json:"created_at,omitempty"`
-	Draft           bool                       `json:"draft,omitempty"`
-	Files           []GitHubRepositoryPullFile `json:"files,omitempty"`
-	Head            string                     `json:"head,omitempty"`
-	HeadRepository  string                     `json:"head_repository,omitempty"`
-	Labels          []string                   `json:"labels,omitempty"`
-	Number          int                        `json:"number,omitempty"`
-	Title           string                     `json:"title,omitempty"`
-	UpdatedAt       string                     `json:"updated_at,omitempty"`
-	URL             string                     `json:"url,omitempty"`
-}
-
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
 	Access          GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
@@ -2081,35 +2127,32 @@ type GitHubRepositoryRecord struct {
 
 	// Checks A commit's checks, each standing as its last run did, and why each
 	// failing job of a workflow run failed, by the job's name.
-	Checks            GitHubRepositoryChecks        `json:"checks,omitempty"`
-	Compose           []string                      `json:"compose,omitempty"`
-	ComposeImages     []map[string]any              `json:"compose_images,omitempty"`
-	ConnectionRef     string                        `json:"connection_ref"`
-	Dashboard         string                        `json:"dashboard,omitempty"`
-	DefaultBranch     string                        `json:"default_branch,omitempty"`
-	DependabotAlerts  []map[string]any              `json:"dependabot_alerts,omitempty"`
-	Deployments       []map[string]any              `json:"deployments,omitempty"`
-	Environments      []map[string]any              `json:"environments,omitempty"`
-	FailingRuns       []map[string]any              `json:"failing_runs,omitempty"`
-	Fingerprint       string                        `json:"fingerprint,omitempty"`
-	Head              map[string]any                `json:"head,omitempty"`
-	HeldBranches      []map[string]any              `json:"held_branches,omitempty"`
-	Images            []map[string]any              `json:"images,omitempty"`
-	Pins              []map[string]any              `json:"pins,omitempty"`
-	Private           bool                          `json:"private,omitempty"`
-	PullRequestChecks []string                      `json:"pull_request_checks,omitempty"`
-	PullRequests      []GitHubRepositoryPullRequest `json:"pull_requests,omitempty"`
-	PushedAt          string                        `json:"pushed_at,omitempty"`
-	ReadAt            string                        `json:"read_at,omitempty"`
-	Release           map[string]any                `json:"release,omitempty"`
-	Repository        string                        `json:"repository"`
-	Rules             map[string]any                `json:"rules,omitempty"`
-	Runners           []map[string]any              `json:"runners,omitempty"`
-	Runs              []map[string]any              `json:"runs,omitempty"`
-	Updater           string                        `json:"updater,omitempty"`
-	URL               string                        `json:"url,omitempty"`
-	Variables         []string                      `json:"variables,omitempty"`
-	Waiting           []map[string]any              `json:"waiting,omitempty"`
+	Checks            GitHubRepositoryChecks `json:"checks,omitempty"`
+	Compose           []string               `json:"compose,omitempty"`
+	ComposeImages     []map[string]any       `json:"compose_images,omitempty"`
+	ConnectionRef     string                 `json:"connection_ref"`
+	Dashboard         string                 `json:"dashboard,omitempty"`
+	DefaultBranch     string                 `json:"default_branch,omitempty"`
+	DependabotAlerts  []map[string]any       `json:"dependabot_alerts,omitempty"`
+	Deployments       []map[string]any       `json:"deployments,omitempty"`
+	Environments      []map[string]any       `json:"environments,omitempty"`
+	Fingerprint       string                 `json:"fingerprint,omitempty"`
+	Head              map[string]any         `json:"head,omitempty"`
+	HeldBranches      []map[string]any       `json:"held_branches,omitempty"`
+	Images            []map[string]any       `json:"images,omitempty"`
+	Pins              []map[string]any       `json:"pins,omitempty"`
+	Private           bool                   `json:"private,omitempty"`
+	PullRequestChecks []string               `json:"pull_request_checks,omitempty"`
+	PushedAt          string                 `json:"pushed_at,omitempty"`
+	ReadAt            string                 `json:"read_at,omitempty"`
+	Release           map[string]any         `json:"release,omitempty"`
+	Repository        string                 `json:"repository"`
+	Rules             map[string]any         `json:"rules,omitempty"`
+	Runners           []map[string]any       `json:"runners,omitempty"`
+	Updater           string                 `json:"updater,omitempty"`
+	URL               string                 `json:"url,omitempty"`
+	Variables         []string               `json:"variables,omitempty"`
+	Waiting           []map[string]any       `json:"waiting,omitempty"`
 }
 
 // GitHubRepositoryRepositoryAccess Who and what can reach a repository, and how its Actions may run.
@@ -2195,6 +2238,31 @@ type GitHubWebhookRecord struct {
 	Newest        GitHubWebhookDelivery `json:"newest,omitempty"`
 	Organization  bool                  `json:"organization,omitempty"`
 	Owner         string                `json:"owner"`
+}
+
+// GitHubWorkflowRunCheckRun One check as its last run stands: a workflow run's job, another app's
+// check, or a commit status, in GitHub's words, lower-cased.
+type GitHubWorkflowRunCheckRun struct {
+	Conclusion string `json:"conclusion,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Status     string `json:"status,omitempty"`
+}
+
+// GitHubWorkflowRunRecord A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.
+type GitHubWorkflowRunRecord struct {
+	Branch        string                      `json:"branch,omitempty"`
+	Carried       bool                        `json:"carried,omitempty"`
+	Conclusion    string                      `json:"conclusion,omitempty"`
+	ConnectionRef string                      `json:"connection_ref"`
+	CreatedAt     string                      `json:"created_at,omitempty"`
+	Event         string                      `json:"event,omitempty"`
+	ID            int                         `json:"id,omitempty"`
+	Jobs          []GitHubWorkflowRunCheckRun `json:"jobs,omitempty"`
+	Name          string                      `json:"name,omitempty"`
+	Repository    string                      `json:"repository"`
+	Sha           string                      `json:"sha,omitempty"`
+	Status        string                      `json:"status,omitempty"`
+	URL           string                      `json:"url,omitempty"`
 }
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.

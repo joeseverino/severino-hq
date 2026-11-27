@@ -22,7 +22,7 @@ from .card_items import Answer
 from .container_words import named
 from .containers import Container, containers, published_digest, standing_of
 from .entity_links import EntityLink
-from .github_estate import UPDATE_BRANCH, PullChecks, Repository, pull_checks, repositories
+from .github_estate import PullChecks, Repository, pull_checks, repositories
 from .image_findings import ranked
 from .images import ImageRef
 from .projection import projection_scope, read_once
@@ -262,10 +262,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
     running = containers()
     found = []
     for _name, repository in sorted(repositories().items()):
-        pulls = (
-            pull for pull in repository.pull_requests or () if str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
-        )
-        for pull in sorted(pulls, key=lambda pull: -int(pull.get("number") or 0)):
+        for pull in sorted(repository.update_pulls, key=lambda pull: -int(pull.get("number") or 0)):
             for change in pull.get("apps") or ():
                 app = str(change.get("app") or "")
                 files = {

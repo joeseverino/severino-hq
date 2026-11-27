@@ -146,6 +146,17 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 			return
 		}
+		if _, states := variables["pulls"]; states {
+			// The pull request states query, answered by its repository's
+			// /pull_states route; none, GitHub says nothing more of any.
+			route := fmt.Sprintf("%s /repos/%s/%s/pull_states", host, variables["owner"], variables["name"])
+			if code := f.status[route]; code != 0 {
+				w.WriteHeader(code)
+				return
+			}
+			_, _ = io.WriteString(w, orDefault(f.routes[route], `{"data":{"repository":{"pullRequests":{"nodes":[]}}}}`))
+			return
+		}
 		_, _ = io.WriteString(w, f.changeQuery(body))
 		return
 	case req.Method != http.MethodGet:
@@ -456,7 +467,7 @@ func TestTheAppHoldsExactlyWhatHQAsksFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	wanted := map[string]string{}
-	for _, grant := range []githubapi.AppPermissions{githubRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
+	for _, grant := range []githubapi.AppPermissions{githubRead, githubPullStatesRead, githubChecksWrite, githubPullsWrite, githubMergeWrite, githubRenovate, {Actions: githubapi.AppPermissionsActionsWrite}, {Deployments: githubapi.AppPermissionsDeploymentsWrite}} {
 		encoded, _ := json.Marshal(grant)
 		var names map[string]string
 		_ = json.Unmarshal(encoded, &names)
@@ -564,6 +575,24 @@ func githubRepositoryRoutes() map[string]string {
 	}
 }
 
+// readPass is one pass over every repository, as each of its kinds reports
+// it: the repository's record, its workflow runs and its pull requests.
+func readPass(t *testing.T, h *githubHarness) (GitHubRepositoryRecord, []GitHubWorkflowRunRecord, []GitHubOpenPullRequestRecord, []runtime.RefusedPart) {
+	t.Helper()
+	pass := h.r.githubRepositories(t.Context())
+	if pass.err != nil || len(pass.repositories) != 1 {
+		t.Fatalf("pass %+v", pass)
+	}
+	runs, pulls := []GitHubWorkflowRunRecord{}, []GitHubOpenPullRequestRecord{}
+	for _, run := range pass.runs {
+		runs = append(runs, run.(GitHubWorkflowRunRecord))
+	}
+	for _, pull := range pass.pulls {
+		pulls = append(pulls, pull.(GitHubOpenPullRequestRecord))
+	}
+	return pass.repositories[0].(GitHubRepositoryRecord), runs, pulls, pass.refused
+}
+
 func readRepository(t *testing.T, h *githubHarness) (GitHubRepositoryRecord, []runtime.RefusedPart) {
 	t.Helper()
 	controller := NewController(h.r, runtime.ControllerRegistry{})
@@ -600,10 +629,34 @@ func TestADeploymentLiveWithACheckFailedSaysSo(t *testing.T) {
 // status one of its two words: the routes' feature GitHub might add is left
 // out, and a status word it might add is none.
 func TestGitHubRepositoryReading(t *testing.T) {
+	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
 	routes := githubRepositoryRoutes()
+	// The default branch's run, and a pull request's on another branch.
+	routes[api("/actions/runs?per_page=50")] = `{"workflow_runs":[
+		{"id":6,"name":"CI","workflow_id":11,"check_suite_id":60,"status":"completed","conclusion":"failure","event":"pull_request","head_branch":"bump","head_sha":"bbbb","html_url":"https://github.com/example/app/actions/runs/6","created_at":"2030-01-05T00:00:00Z"},
+		{"id":3,"name":"CI renamed","workflow_id":11,"status":"waiting","conclusion":null,"event":"push","head_branch":"main","head_sha":"aaaa","html_url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"},
+		{"id":1,"name":"Gone","workflow_id":99,"status":"completed","conclusion":"success","event":"push","head_branch":"old","created_at":"2030-01-01T00:00:00Z"},
+		{"id":4,"name":"Dependency graph","workflow_id":12,"status":"completed","event":"dynamic","head_branch":"bump","created_at":"2030-01-04T00:00:00Z"}]}`
+	routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[
+		{"id":3,"name":"CI renamed","workflow_id":11,"check_suite_id":30,"status":"waiting","conclusion":null,"event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"}]}`
+	routes[api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100")] = `{"check_runs":[
+		{"id":1,"name":"test","status":"completed","conclusion":"failure","started_at":"2030-01-01T00:00:00Z","check_suite":{"id":30}},
+		{"id":2,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-01T01:00:00Z","check_suite":{"id":30}},
+		{"id":3,"name":"lint","status":"in_progress","conclusion":null,"started_at":"2030-01-01T00:00:00Z","check_suite":{"id":30}}]}`
+	routes[api("/check-suites/60/check-runs?per_page=100")] = `{"check_runs":[{"id":61,"name":"test","status":"completed","conclusion":"failure","check_suite":{"id":60}}]}`
+	// As GitHub's GraphQL answers it: an Actions job, a job of GitHub's own
+	// dynamic run, a rerun, and a commit status.
+	routes[api("/pull_states")] = `{"data":{"repository":{"pullRequests":{"nodes":[
+		{"number":6,"mergeStateStatus":"BLOCKED","reviewDecision":"REVIEW_REQUIRED","statusCheckRollup":{"contexts":{"nodes":[
+			{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"pull_request"}}},
+			{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"pull_request"}}},
+			{"__typename":"CheckRun","name":"update-graph","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"dynamic"}}},
+			{"__typename":"CheckRun","name":"test","status":"IN_PROGRESS","conclusion":null,"startedAt":"2030-01-03T01:00:00Z","checkSuite":{"workflowRun":{"event":"pull_request"}}},
+			{"__typename":"StatusContext","context":"example/scan","state":"ERROR"}]}}},
+		{"number":5,"mergeStateStatus":"DRAFT","reviewDecision":null,"statusCheckRollup":null}]}}}}`
 	h := newGitHubHarness(t, routes, runtime.Environment{})
 	h.refuse(githubFakeAPI, "/repos/example/app/secret-scanning/alerts?state=open&per_page=100", 403)
-	record, refused := readRepository(t, h)
+	record, runs, pulls, refused := readPass(t, h)
 
 	got, _ := json.Marshal(record)
 	var view map[string]any
@@ -616,14 +669,17 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"head", record.Head, `{"sha":"aaaa000000000000000000000000000000000000","message":"Ship it","author":"octo","date":"2030-01-02T00:00:00Z","url":"https://github.com/example/app/commit/aaaa"}`},
 		{"a check stands as its last run did", record.Checks, `{"state":"pending","total":2,"failing":[],"running":1,"names":["lint","test"]}`},
 		{"the checks the newest pull request runs", record.PullRequestChecks, `["build","test"]`},
-		{"each open pull request, with its checks and files read only for an update's", record.PullRequests, `[{"number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"hq-example[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","base":"dddd","branch":"renovate/example-lib-2.x","labels":["dependencies","security"],"head_repository":"example/app","checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]},` +
+		{"each open pull request, with its checks and files read only for an update's", pulls, `[{"connection_ref":"hq-app","repository":"example/app","number":6,"title":"Update example-lib to v2","url":"https://github.com/example/app/pull/6","author":"hq-example[bot]","draft":false,"created_at":"2030-01-03T00:00:00Z","updated_at":"2030-01-04T00:00:00Z","head":"eeee","base":"dddd","branch":"renovate/example-lib-2.x","base_branch":"main","labels":["dependencies","security"],"head_repository":"example/app","checks":{"state":"failure","total":2,"failing":["test"],"running":0,"names":["build","test"]},` +
 			`"files":[{"path":"compose/example/compose.yml","status":"modified","additions":1,"deletions":1,"app":"example"},{"path":"README.md","status":"modified","additions":3,"deletions":0,"app":""},` +
 			`{"path":"compose/large/compose.yml","status":"added","additions":900,"deletions":0,"app":"large"},{"path":"compose/moved.yml","status":"renamed","additions":0,"deletions":0,"app":""}],"changed_files":4,"apps":null,` +
-			`"artifact_problem":["mise ERROR cannot lock jdx/mise: not configured in this project"]},` +
-			`{"number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","base":"","branch":"bump","labels":[],"head_repository":"","checks":null,"files":null,"changed_files":0,"apps":null}]`},
+			`"artifact_problem":["mise ERROR cannot lock jdx/mise: not configured in this project"],` +
+			`"mergeable_state":"blocked","review_state":"review_required","check_runs":[{"name":"build","status":"completed","conclusion":"success"},{"name":"test","status":"in_progress","conclusion":""},{"name":"example/scan","status":"completed","conclusion":"failure"}],"carried":false},` +
+			`{"connection_ref":"hq-app","repository":"example/app","number":5,"title":"Bump","url":"https://github.com/example/app/pull/5","author":"octo","draft":true,"created_at":"2030-01-01T00:00:00Z","updated_at":"2030-01-02T00:00:00Z","head":"bbbb","base":"","branch":"bump","base_branch":"","labels":[],"head_repository":"","checks":null,"files":null,"changed_files":0,"apps":null,"mergeable_state":"draft","review_state":"","check_runs":[],"carried":false}]`},
 		{"each open Dependabot alert, its package from the dependency or the vulnerability", record.DependabotAlerts, `[{"number":3,"package":"example-lib","ecosystem":"npm","manifest_path":"web/package.json","severity":"critical","first_patched_version":"2.0.1","url":"https://github.com/example/app/security/dependabot/3"},` +
 			`{"number":2,"package":"example.com/unfixed","ecosystem":"go","manifest_path":"go.mod","severity":"high","first_patched_version":null,"url":"https://github.com/example/app/security/dependabot/2"}]`},
-		{"each workflow that exists now once, under its name now", record.Runs, `[{"id":3,"name":"CI","status":"waiting","conclusion":"","event":"push","branch":"main","sha":"aaaa","url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z"}]`},
+		{"each workflow's newest run on each branch, under its name now, with its jobs", runs, `[{"connection_ref":"hq-app","repository":"example/app","id":3,"name":"CI","status":"waiting","conclusion":"","event":"push","branch":"main","sha":"aaaa000000000000000000000000000000000000","url":"https://github.com/example/app/actions/runs/3","created_at":"2030-01-03T00:00:00Z",` +
+			`"jobs":[{"name":"test","status":"completed","conclusion":"success"},{"name":"lint","status":"in_progress","conclusion":""}],"carried":false},` +
+			`{"connection_ref":"hq-app","repository":"example/app","id":6,"name":"CI","status":"completed","conclusion":"failure","event":"pull_request","branch":"bump","sha":"bbbb","url":"https://github.com/example/app/actions/runs/6","created_at":"2030-01-05T00:00:00Z","jobs":[{"name":"test","status":"completed","conclusion":"failure"}],"carried":false}]`},
 		{"waiting", record.Waiting[0].Environments, `["production"]`},
 		{"release", record.Release, `{"tag":"v1.2.0","url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}`},
 		{"the newest deployment to each environment, with what its job verified", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}],"check_failed":false,"image":"ghcr.io/example/app/composition@sha256:aaaa"}]`},
@@ -672,6 +728,41 @@ func TestGitHubRepositoryReading(t *testing.T) {
 	}
 }
 
+// A repository's runs and pull requests are read in its pass and carried with
+// it: unchanged, each kind sends the one record that names it. Refused, the
+// pull request states are refused for that kind alone, and its pull requests
+// still read.
+func TestRunsAndPullRequestsAreReadWithTheirRepository(t *testing.T) {
+	h := newGitHubHarness(t, githubRepositoryRoutes(), runtime.Environment{})
+	h.refuse(githubFakeAPI, "/repos/example/app/pull_states", http.StatusForbidden)
+	controller := NewController(h.r, runtime.ControllerRegistry{})
+	kinds := []runtime.ResourceKind{runtime.ResourceKindGitHubRepository, runtime.ResourceKindGitHubWorkflowRun, runtime.ResourceKindGitHubOpenPullRequest}
+	reports := map[runtime.ResourceKind]runtime.KindReport{}
+	for _, kind := range kinds {
+		reports[kind] = controller.readKind(t.Context(), h.r.readers[string(kind)])
+	}
+	pulls := reports[runtime.ResourceKindGitHubOpenPullRequest]
+	if refused := pulls.RefusedParts; len(refused) != 1 || refused[0].Part != runtime.PartPullStates || refused[0].Scope != "example/app" || len(pulls.Records) != 2 {
+		t.Fatalf("pull requests %+v", pulls)
+	}
+	for _, refused := range reports[runtime.ResourceKindGitHubRepository].RefusedParts {
+		if refused.Part == runtime.PartPullStates {
+			t.Errorf("the repository's reading holds the pull requests' refusal: %+v", refused)
+		}
+	}
+	if pull := pulls.Records[0].(GitHubOpenPullRequestRecord); pull.MergeableState != "" || len(pull.CheckRuns) != 0 {
+		t.Errorf("a refused part read %+v", pull)
+	}
+
+	held := heldAfter(t, reports[runtime.ResourceKindGitHubRepository])
+	NewController(h.r, runtime.ControllerRegistry{GithubRepositories: runtime.GitHubRepositoriesPlan{Held: held}})
+	for _, kind := range kinds {
+		if report := controller.readKind(t.Context(), h.r.readers[string(kind)]); !slices.Equal(carried(report), []string{"example/app"}) || len(report.Records) != 1 {
+			t.Errorf("%s sent %+v", kind, report.Records)
+		}
+	}
+}
+
 // A check run in the suite of one of GitHub's own dynamic runs (the
 // dependency graph's) fails no commit: no workflow of the repository owns it.
 func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
@@ -687,12 +778,12 @@ func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
 	routes[api("/commits/eeee/check-runs?per_page=100")] = `{"check_runs":[
 		{"id":9,"name":"build","status":"completed","conclusion":"success","check_suite":{"id":90}},
 		{"id":10,"name":"update-uv-graph","status":"completed","conclusion":"failure","check_suite":{"id":50}}]}`
-	record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
+	record, _, pulls, _ := readPass(t, newGitHubHarness(t, routes, runtime.Environment{}))
 
 	if record.Checks.State != "success" || slices.Contains(record.Checks.Names, "update-uv-graph") {
 		t.Errorf("head commit checks %+v", record.Checks)
 	}
-	pull := record.PullRequests[0].Checks
+	pull := pulls[0].Checks
 	if pull == nil || pull.State != "success" || slices.Contains(record.PullRequestChecks, "update-uv-graph") {
 		t.Errorf("pull request checks %+v, names %v", pull, record.PullRequestChecks)
 	}
@@ -746,11 +837,13 @@ func TestABranchFailsUntilEachWorkflowsNewestRunPasses(t *testing.T) {
 			h := newGitHubHarness(t, routes, runtime.Environment{})
 			// A log GitHub no longer keeps leaves why unsaid, never the step.
 			h.refuse(githubFakeAPI, "/repos/example/app/actions/jobs/72/steps/2/logs", http.StatusGone)
-			record, _ := readRepository(t, h)
+			record, runs, _, _ := readPass(t, h)
 
 			urls := []string{}
-			for _, run := range record.FailingRuns {
-				urls = append(urls, run.URL)
+			for _, run := range runs {
+				if run.Branch == "main" && githubFailed[run.Conclusion] {
+					urls = append(urls, run.URL)
+				}
 			}
 			if record.Checks.State != test.state || !slices.Equal(record.Checks.Failing, test.failing) || !slices.Equal(urls, test.runs) {
 				t.Errorf("checks %+v, failing runs %v", record.Checks, urls)
