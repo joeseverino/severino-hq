@@ -14,8 +14,8 @@ from ipaddress import ip_address
 from typing import Annotated, Any
 
 from hq.platform.application.describe import Describe, listed
+lazy from hq.platform.application.entity_links import provider_label
 
-from .connection_kinds import CONNECTION_LABELS
 from .names import in_zone, normalized_hostname
 from .observations import OBSERVATIONS, ReadingPart
 from .provider_adapters.contracts import (
@@ -96,7 +96,7 @@ class RefusedPart:
             return reason
         provider = self.part.provider or (OBSERVATIONS[self.kind].provider if self.kind in OBSERVATIONS else "")
         meaning = _STATUS_MEANS.get(int(status["code"]), _STATUS_MEANS.get(int(status["code"]) // 100 * 100, ""))
-        return (status["lead"] or "") + meaning.format(who=f"HQ's {CONNECTION_LABELS.get(provider, 'connection')}")
+        return (status["lead"] or "") + meaning.format(who=f"HQ's {provider_label(provider) or 'connection'}")
 
     @property
     def phrase(self) -> str:
