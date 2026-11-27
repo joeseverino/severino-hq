@@ -29,7 +29,7 @@ read only for the fields it names. A record's key is left out: by name,
 import ast
 import re
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -406,15 +406,16 @@ def places(path: str, tree: ast.Module) -> Iterator[tuple[ast.AST, Place]]:
 class Checker:
     """Every place a sentence is promised, each held to one; ``problems`` says where one is not."""
 
-    def __init__(self, sources: Mapping[str, ast.Module]) -> None:
+    def __init__(self, sources: Mapping[str, ast.Module], only: Collection[str] | None = None) -> None:
         self.index = Index(sources)
         self.reader = Reader(self.index)
         self.problems: list[str] = []
         self.refusals_built = 0
         self.carried = 0
         for path, tree in sources.items():
-            for node, place in places(path, tree):
-                self._check(node, place)
+            if only is None or path in only:
+                for node, place in places(path, tree):
+                    self._check(node, place)
 
     def _fail(self, place: Place, node: ast.AST, what: str) -> None:
         self.problems.append(f"{place.path}:{getattr(node, 'lineno', 0)} {what}")
@@ -521,8 +522,26 @@ class Checker:
                 self._fail(place, node, f"{func.name} returns something other than a sentence")
 
 
-def check(sources: Mapping[str, ast.Module]) -> Checker:
-    return Checker(sources)
+def check(sources: Mapping[str, ast.Module], only: Collection[str] | None = None) -> Checker:
+    return Checker(sources, only)
+
+
+def importing(sources: Mapping[str, ast.Module], paths: Collection[str]) -> set[str]:
+    """``paths`` and the modules that import one of them, where a sentence a change moved is read."""
+
+    modules = {".".join(_module(path)) for path in paths}
+
+    def named(path: str, node: ast.AST) -> set[str]:
+        if isinstance(node, ast.Import):
+            return {alias.name for alias in node.names}
+        if isinstance(node, ast.ImportFrom):
+            source = _imported_from(path, node)
+            return {source, *(f"{source}.{alias.name}" for alias in node.names)}
+        return set()
+
+    return set(paths) | {
+        path for path, tree in sources.items() if any(named(path, node) & modules for node in ast.walk(tree))
+    }
 
 
 @dataclass(frozen=True)
@@ -535,21 +554,22 @@ class Checked:
     refusals: set[str]
 
 
-def checked(root: Path) -> Checked:
-    """The checker run over every module under ``root``'s hq/ outside tests, in a process of its own."""
+def checked(root: Path, only: list[str] | None = None) -> Checked:
+    """The checker run over every module under ``root``'s hq/ outside tests, or over ``only`` and the modules
+    that import one of them, in a process of its own."""
 
-    found = apart(_checked, root)
+    found = apart(_checked, root, only)
     return Checked(found["problems"], found["refusals_built"], found["carried"], set(found["refusals"]))
 
 
-def _checked(root: str) -> dict[str, object]:
+def _checked(root: str, only: list[str] | None) -> dict[str, object]:
     base = Path(root)
     sources = {
         str(path.relative_to(base)): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for path in (base / "hq").rglob("*.py")
         if "tests" not in path.parts
     }
-    done = check(sources)
+    done = check(sources, None if only is None else importing(sources, only))
     return {
         "problems": done.problems,
         "refusals_built": done.refusals_built,

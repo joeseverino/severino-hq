@@ -461,6 +461,17 @@ reads the whole tree: fast's runs leave it out (`--exclude-tag tree`), and
 CI's `lint:source` runs it. So does the composed suite with the extensions,
 which a pull request's Composition job runs.
 
+A check that walks the tree and can read a part of it is declared with
+`walks` (`hq/platform/application/tests/source.py`) instead, on its class,
+with the globs of the files it reads, as mise reads a task's sources (`**`,
+and `!` taking paths out): `@walks("hq/**/*.py", "!**/tests/**")`. fast
+reads the globs from the source and runs the class when the change touched a
+file one matches, and in fast's run the check reads only those files
+(`walked`, from the base fast hands its tests), as the refusal text check
+reads the touched modules and those that import them. Anywhere else it reads
+the whole tree. fast names those it selected:
+`[fast] the checks that walk a file the change touched`.
+
 A run runs its selection however wide it is. `--whole` runs the whole suite
 (the tests tagged `tree` aside) with every quick gate instead, whatever
 changed, and its pass records the tree.

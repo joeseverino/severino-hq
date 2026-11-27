@@ -23,7 +23,7 @@ from hq.platform.core.tests.task import Usage, changed_paths, usage
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks
 from tools.gate import chain, turn as gate_turn
 from tools.gate.chain import SENT, fast_base, record_pass
-from tools.gate.selection import python_files, selection, source_first, whole_suite
+from tools.gate.selection import python_files, selection, source_first, walking, whole_suite
 from tools.gate.turn import ONE, in_share, weighed
 from tools.gate.verdict import Gate, Step, run
 
@@ -365,6 +365,9 @@ def main(asked: Usage) -> int:
     if gate and not every_test and whole_asked:
         print("[fast] asked for: the whole suite and every quick gate run, so a pass records this tree")
         labels, every_test = whole_suite(files), True
+    if walks := walking([*changed, *deleted], files, labels):
+        print(f"[fast] the checks that walk a file the change touched, on those files: {' '.join(walks)}")
+        labels = [*labels, *walks]
 
     if gate is None:
         print("\n".join(labels))

@@ -26,7 +26,9 @@ What the listing does not say:
   reaches through imports, names and the paths a module names. A gate or test
   that reads the whole tree (the derived files, the structural bar, a test
   tagged `tree`) are CI's and `check`'s, and the composed suite is the
-  pull request's Composition job's.
+  pull request's Composition job's. A walking check that can read part of
+  the tree declares its globs with `walks` instead, and fast runs it on the
+  files it touched.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway
