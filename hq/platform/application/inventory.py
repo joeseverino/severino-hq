@@ -232,10 +232,10 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
     """One kind as the sweep's own summary says it: its state in credential
     sight's words, its record count, and each part refused."""
 
-    state, label = standing(row)
+    found = standing(row)
     return {
-        "state": state,
-        "label": label,
+        "state": found.state,
+        "label": found.label,
         "records": len(row.records or ()) if row.connected and row.reachable else None,
         "refused_parts": [refused.phrase for refused in refused_parts(row)],
     }
@@ -745,7 +745,7 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
     found = []
     # A kind no connection could read is not a reading of zero.
     for snapshot in ProviderInventory.objects.filter(connected=True):
-        state, state_label = standing(snapshot)
+        seen = standing(snapshot)
         found.append(
             {
                 "kind": snapshot.kind,
@@ -754,8 +754,8 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
                 "reachable": snapshot.reachable,
                 "error": snapshot.error,
                 "observed_at": snapshot.observed_at,
-                "state": state,
-                "state_label": state_label,
+                "state": seen.state,
+                "state_label": seen.label,
                 "refused_parts": tuple(refused.phrase for refused in refused_parts(snapshot)),
             }
         )

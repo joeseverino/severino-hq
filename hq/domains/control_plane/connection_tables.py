@@ -142,7 +142,7 @@ def _name(row: Any, *, starts: bool) -> Cell:
             )
         )
     if sight is not None and sight.sights:
-        age = (Cell(piece=reading_age(at=sight.read_at), dot=True),) if sight.read_at else ()
+        age = (Cell(piece=reading_age(sight.age), dot=True),) if sight.age else ()
         lines.append(Cell(sight.summary, muted=True, parts=age))
     if row.fix and (mark := _fix_mark(row.fix)):
         lines.append(Cell(status=mark))

@@ -17,8 +17,9 @@ from django.utils.text import get_text_list
 from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
 from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due, swept
+from .credential_sight import Standing, standing
 from .entity_links import kind_label
-from .freshness import Freshness, freshness
+from .freshness import freshness
 from .moments import duration
 from .read_requests import ForcedRead, forced_reads
 from .tone import Tone
@@ -33,12 +34,10 @@ class KindReading:
     kind: str
     label: str
     attempted_at: datetime
-    # When a read last answered, and whether that is still current.
-    reading: Freshness
+    standing: Standing
     records: int
-    # "read", "not connected", or why the last attempt stored nothing new.
-    result: str
-    ok: bool
+    # What the provider said when the last attempt stored nothing new.
+    error: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +60,8 @@ class ControllerPage:
     # Of what every sweep reads, the reading tried longest ago: the one that
     # decides when the next sweep is due, and the one to look at when it is late.
     oldest: KindReading | None
-    # The oldest reading is more than two sweeps old: sweeps are not landing.
+    # The oldest reading was last tried longer ago than its kind may age:
+    # sweeps are not landing.
     overdue: bool
     readings: tuple[KindReading, ...]
     queue: tuple[QueuedWork, ...]
@@ -77,20 +77,13 @@ class ControllerPage:
 
 
 def _reading(row: ProviderInventory) -> KindReading:
-    if not row.connected:
-        result, ok = "Not connected", True
-    elif row.reachable and not row.error:
-        result, ok = "Read", True
-    else:
-        result, ok = (row.error or "Could not be read")[:200], False
     return KindReading(
         kind=row.kind,
         label=kind_label(row.kind),
         attempted_at=attempted_at(row.observed_at, row.updated_at),
-        reading=freshness(row.kind, row.observed_at),
+        standing=standing(row),
         records=len(row.records) if isinstance(row.records, list) else 0,
-        result=result,
-        ok=ok,
+        error=row.error if row.connected and not row.reachable else "",
     )
 
 
@@ -101,7 +94,7 @@ def _own_clocks(readings: tuple[KindReading, ...]) -> str:
 
     return get_text_list(
         [
-            f"{reading.label}{reading.reading.cadence.removeprefix(';')}{' and on each event' * covers(reading.kind)}"
+            f"{reading.label}{reading.standing.age.cadence.removeprefix(';')}{' and on each event' * covers(reading.kind)}"
             for reading in readings
             if swept(reading.kind) and not every_sweep(reading.kind)
         ],
@@ -116,7 +109,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         sorted(
             (_reading(row) for row in every_snapshot()),
             # What failed first, then the kinds in a stable order.
-            key=lambda reading: (reading.ok, reading.label.lower()),
+            key=lambda reading: (not reading.standing.failed, reading.label.lower()),
         )
     )
     age = verdict.get("age_seconds")
@@ -148,7 +141,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
         sweep_every="; ".join(filter(None, (duration(every), _own_clocks(readings)))),
         oldest=oldest,
-        overdue=oldest is not None and interval > 0 and now - oldest.attempted_at > 2 * every,
+        overdue=oldest is not None and freshness(oldest.kind, oldest.attempted_at, now).stale,
         readings=readings,
         queue=queue,
         asked=forced_reads(),

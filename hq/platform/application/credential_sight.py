@@ -26,7 +26,7 @@ from .labels import human_label
 from .projection import read_once
 from .tone import Tone, TonedChoices
 lazy from .facts import stored_snapshots
-lazy from .freshness import STALE, freshness
+lazy from .freshness import STALE, Freshness, freshness
 lazy from .ui import counted
 
 
@@ -167,11 +167,14 @@ class ProviderSight:
         return ", ".join(parts)
 
     @property
-    def read_at(self) -> datetime | None:
-        """When what it reads was last read: the oldest of them, said once."""
+    def age(self) -> Freshness | None:
+        """How old what it reads is, said once: an out-of-date reading's age,
+        else the oldest's; None when nothing was read."""
 
+        read = (found for found in map(Standing.of, self.sights) if found.read and found.age.observed_at)
         return min(
-            (sight.observed_at for sight in self.sights if sight.state in (READABLE, PARTIAL) and sight.observed_at),
+            (found.age for found in read),
+            key=lambda age: (not age.stale, age.observed_at),
             default=None,
         )
 
@@ -282,16 +285,48 @@ def sight(
     )
 
 
-def standing(row: ProviderInventory, *, now: datetime | None = None) -> tuple[str, str]:
-    """``(state, label)`` for one stored reading: a ``SightState``, or
-    freshness's ``STALE`` once a readable reading is out of date."""
+@dataclass(frozen=True, slots=True)
+class Standing:
+    """A kind's last read and its age: the one state every surface names it by,
+    a ``SightState`` or freshness's ``STALE`` once what was read is out of date."""
 
-    found = sight(row.kind, "", "reading", row)
-    if found.state in (READABLE, PARTIAL):
-        aged = freshness(row.kind, row.observed_at, now)
-        if aged.stale:
-            return STALE, aged.label
-    return found.state, found.state_label
+    sight: Sight
+    age: Freshness
+
+    @classmethod
+    def of(cls, seen: Sight, now: datetime | None = None) -> "Standing":
+        return cls(seen, freshness(seen.kind, seen.observed_at, now))
+
+    @property
+    def read(self) -> bool:
+        return self.sight.state in (READABLE, PARTIAL)
+
+    @property
+    def failed(self) -> bool:
+        return self.sight.state in (REFUSED, UNREADABLE)
+
+    @property
+    def stale(self) -> bool:
+        # Only a reading that was taken can be out of date; a refused one says so.
+        return self.read and self.age.stale
+
+    @property
+    def state(self) -> str:
+        return STALE if self.stale else self.sight.state
+
+    @property
+    def label(self) -> str:
+        return self.age.label if self.stale else self.sight.state_label
+
+    @property
+    def tone(self) -> Tone:
+        return Tone.ATTENTION if self.stale else self.sight.tone
+
+
+def standing(row: ProviderInventory, *, now: datetime | None = None) -> Standing:
+    """One stored reading's standing."""
+
+    return Standing.of(sight(row.kind, "", "reading", row), now)
 
 
 def refused_outright(rows: Iterable[Any]) -> str:

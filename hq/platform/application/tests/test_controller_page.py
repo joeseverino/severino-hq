@@ -1,7 +1,9 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
+import tempfile
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -12,6 +14,7 @@ from hq.platform.application.markup_testing import select, texts
 from hq.platform.core.templatetags.value_tags import dot
 from hq.platform.core.testing import declare, operator
 
+from ..cadence import note_activity
 from ..cadence_testing import controller_arrived
 from ..controller_page import controller_page
 from .commands import commands_on
@@ -67,10 +70,10 @@ class ControllerPageTests(TestCase):
         page = controller_page()
 
         self.assertEqual(next(reading.kind for reading in page.readings), "tailscale.device")
-        results = {reading.kind: (reading.ok, reading.result) for reading in page.readings}
-        self.assertEqual(results["adguard.rewrite"], (True, "Read"))
-        self.assertEqual(results["npm.proxy_host"], (True, "Not connected"))
-        self.assertEqual(results["tailscale.device"], (False, "The provider refused the credential."))
+        results = {reading.kind: (reading.standing.state, reading.error) for reading in page.readings}
+        self.assertEqual(results["adguard.rewrite"], ("readable", ""))
+        self.assertEqual(results["npm.proxy_host"], ("not_connected", ""))
+        self.assertEqual(results["tailscale.device"], ("unreadable", "The provider refused the credential."))
         self.assertEqual({reading.records for reading in page.readings}, {2})
 
     def test_a_kind_no_read_has_answered_was_tried_and_never_succeeded(self):
@@ -78,8 +81,17 @@ class ControllerPageTests(TestCase):
 
         reading = next(reading for reading in controller_page().readings if reading.kind == "tailscale.device")
 
-        self.assertEqual(reading.reading.state, "never")
+        self.assertEqual(reading.standing.age.state, "never")
         self.assertLess(reading.attempted_at, timezone.now() - timedelta(minutes=4))
+
+    def test_a_reading_still_current_is_never_overdue_however_short_the_live_interval(self):
+        marker = Path(tempfile.mkdtemp()) / "activity"
+        with override_settings(SEVERINO_ACTIVITY_MARKER=str(marker), SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200):
+            note_activity()
+            store("adguard.rewrite", age=timedelta(minutes=15))
+            page = controller_page()
+
+        self.assertFalse(page.overdue)
 
     def test_it_says_when_the_next_sweep_is_due(self):
         store("adguard.rewrite", age=timedelta(seconds=60))

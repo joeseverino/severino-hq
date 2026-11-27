@@ -25,11 +25,11 @@ PENDING = (
 
 
 def _result(reading) -> Cell:
-    """How a reading ended: its result, or that it failed and what it said."""
+    """How a reading stands, and what the provider said where it failed."""
 
-    if reading.ok:
-        return Cell(reading.result, tone="good")
-    return Cell("Failed", tone="serious", lines=(Cell(reading.result, muted=True, cut=True),))
+    found = reading.standing
+    lines = (Cell(reading.error, muted=True, cut=True),) if reading.error else ()
+    return Cell(found.label, tone=str(found.tone), lines=lines)
 
 
 READINGS = (
@@ -39,7 +39,7 @@ READINGS = (
         "Reading",
         kind="status",
         drop=2,
-        cell=lambda reading: Cell(piece=reading_age(reading.reading)),
+        cell=lambda reading: Cell(piece=reading_age(reading.standing.age)),
     ),
     TableColumn("Items", kind="numeric", drop=1, cell=lambda reading: Cell(str(reading.records))),
     TableColumn("Result", kind="status", css="key-col", cell=_result),
