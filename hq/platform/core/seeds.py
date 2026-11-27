@@ -28,6 +28,7 @@ lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.core import bench, example_estate
 lazy from hq.platform.core.attribution import outside_every_door
 lazy from hq.platform.core.audit import stamped
+lazy from hq.platform.core.example_estate import update_steps
 lazy from hq.platform.core.middleware import request_operation
 
 # The owner of the set whose extension demo is being written, set only while one is.
@@ -259,7 +260,7 @@ def _approved(ended: str) -> Callable[[Any], None]:
 
     def seed(owner) -> None:
         _estate(owner)
-        example_estate.work.approval(owner, ended)
+        update_steps.approval(owner, ended)
 
     return seed
 
@@ -293,18 +294,18 @@ def _updates(on: str = "") -> Callable[[Any], None]:
 
 def _opening(at: str) -> Callable[[Any], None]:
     """The update of each app (``_updates``), the one Renovate holds asked to
-    open and left as ``at`` says (``example_estate.work.opening``)."""
+    open and left as ``at`` says (``update_steps.opening``)."""
 
     def seed(owner) -> None:
         _updates()(owner)
-        example_estate.work.opening(owner, at)
+        update_steps.opening(owner, at)
 
     return seed
 
 
 def _checks_running(owner) -> None:
     _updates()(owner)
-    example_estate.work.checks_running()
+    update_steps.checks_running()
 
 
 @contextmanager

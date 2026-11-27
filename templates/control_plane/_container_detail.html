@@ -30,7 +30,7 @@ limits. Each said once; the band above has its version and standing.
     {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
     {% endif %}
   {% endfacts %}
-  {% if state %}{% steps numbered=True %}{% for step in state.flow %}{% step done=step.done tone=step.answer.tone %}<strong>{% if step.link %}{% entity step.link %}{% else %}{{ step.title }}{% endif %}</strong> {{ step.answer.short }}{% if step.answer.because %}{% list %}{% for line in step.answer.because %}<li>{% if line.label %}{% entity line %}{% else %}{% muted %}{{ line }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}{% endstep %}{% endfor %}{% endsteps %}{% endif %}
+  {% if state %}{% steps numbered=True %}{% for step in state.flow %}{% step done=step.done tone=step.standing.tone %}<strong>{% if step.link %}{% entity step.link %}{% else %}{{ step.title }}{% endif %}</strong> {{ step.standing.label }}{% if step.standing.note or step.parts %}{% list %}{% if step.standing.note %}<li>{% muted %}{{ step.standing.note }}{% endmuted %}</li>{% endif %}{% for part in step.parts %}<li>{% if part.label %}{% entity part %}{% else %}{% muted %}{{ part }}{% endmuted %}{% endif %}</li>{% endfor %}{% endlist %}{% endif %}{% endstep %}{% endfor %}{% endsteps %}{% endif %}
   {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
   {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
   {% endif %}

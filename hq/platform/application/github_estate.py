@@ -31,11 +31,11 @@ from hq.platform.application.labels import dotted
 from .action_links import read_link
 from .card_items import Badge, ListRow, RowTitle
 from .derivations import whole
-from .entity_links import web_url
+from .entity_links import EntityLink, declared_link, web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
-from .moments import moment, when
+from .moments import duration, moment, when
 from .projection import read_once
 from .thresholds import Threshold
 from .tone import Tone
@@ -148,6 +148,28 @@ def pull_checks(pull: Mapping[str, Any]) -> PullChecks:
         *(failure_cause(failures[job]) for job in checks.get("failing") or () if job in failures),
     )
     return PullChecks(badge, tone, ", ".join(checks.get("failing") or ()), next((each for each in causes if each), ""))
+
+
+# A check's state in a word, by its conclusion once it completed, else its status.
+_CONCLUDED = {"success": "passed", "failure": "failed", "cancelled": "cancelled", "timed_out": "timed out"}
+_STATUS = {"queued": "queued", "in_progress": "running", "waiting": "waiting", "pending": "queued"}
+
+
+def check_said(run: Mapping[str, Any]) -> EntityLink | str:
+    """One check of a pull request's head (``CheckRun``) as every page says
+    it, ``lint passed 58 s`` or ``test running since 2 minutes ago``, linked
+    to its run on GitHub where the reading names one."""
+
+    status = str(run.get("status") or "")
+    conclusion = str(run.get("conclusion") or "")
+    word = _CONCLUDED.get(conclusion, conclusion) if status == "completed" else _STATUS.get(status, status)
+    started, ended = moment(run.get("started_at")), moment(run.get("completed_at"))
+    took = ""
+    if started is not None:
+        took = str(duration(ended - started, short=True)) if ended is not None else f"since {when(started)}"
+    said = " ".join(part for part in (str(run.get("name") or ""), word, took) if part)
+    url = web_url(run.get("url"))
+    return declared_link(said, url, kind="dependency") if url else said
 
 
 # What GitHub's log marks a step's end with when the tool said nothing of

@@ -39,7 +39,7 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
-lazy from .app_update_flow import FlowStep, update_flow
+lazy from .app_update_flow import update_flow
 lazy from .app_update_open import OPEN, open_standing, open_target
 lazy from .asks import DONE, RUNNING, Asked, Standing
 lazy from .container_findings import BY_HAND
@@ -48,6 +48,7 @@ lazy from .finding_steps import Does
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
 lazy from .resource_operations import OperationAsked, operation_asked
+lazy from .sequences import Step
 lazy from .work_runs import standing_of as run_standing
 
 if TYPE_CHECKING:
@@ -512,7 +513,7 @@ class UpdateState:
         return live or any(run.get("status") != "completed" for run in (self.update.check_runs if self.update else ()))
 
     @property
-    def flow(self) -> tuple[FlowStep, ...]:
+    def flow(self) -> tuple[Step, ...]:
         """Its way to running, step by step (``app_update_flow``)."""
 
         return update_flow(self)

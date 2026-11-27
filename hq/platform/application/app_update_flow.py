@@ -1,141 +1,100 @@
 """An app update's way from a newer release to running it, as its card
-lists it in order: the pull request Renovate opens, its checks, the
-approval that merges it, and the apply on its host. Each step is done,
-under way, failed or waiting, said from what HQ stores of it, so the one
-press the card offers is the next step's."""
-
-from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+lists it in order (``sequences.Step``): the pull request Renovate opens, its
+checks, the approval that merges it, the apply on its host and the health
+check after it. Each step is done, under way, failed or waiting, said from
+what HQ stores of it, so the one press the card offers is the next step's."""
 
 from django.utils.text import capfirst
 
-from .app_updates import AppUpdate, UpdateKind, UpdateState, of_app
+from .app_updates import UpdateKind, UpdateState, of_app
+from .asks import DONE, FAILED, IDLE, RUNNING, Standing
 from .card_items import Answer
-from .entity_links import EntityLink, declared_link, entity_link, web_url
-from .moments import duration, moment, when
-from .references import Kind
+from .github_estate import check_said
+from .labels import dotted
+from .moments import when
+from .sequences import Step
 from .tone import Tone
 
-
-@dataclass(frozen=True, slots=True)
-class FlowStep:
-    """One step of the way, under its title: where it stands, a word over
-    its lines, and its title as a link to the page that holds it."""
-
-    title: str
-    answer: Answer
-    done: bool = False
-    link: EntityLink | None = None
-
-
-# A check's state in a word, by its conclusion once it completed, else its status.
-CONCLUDED = {"success": "passed", "failure": "failed", "cancelled": "cancelled", "timed_out": "timed out"}
-STATUS = {"queued": "queued", "in_progress": "running", "waiting": "waiting", "pending": "queued"}
+# How a step stands, by the tone its answer is said in.
+_STATES = {Tone.GOOD: DONE, Tone.ATTENTION: RUNNING, Tone.SERIOUS: FAILED}
 # The checks as a whole, by the summary state the read gives them.
-CHECKS = {
-    "success": ("Passed", Tone.GOOD),
-    "pending": ("Running", Tone.ATTENTION),
-    "failure": ("Failing", Tone.SERIOUS),
-}
+_CHECKS = {"success": ("Passed", DONE), "pending": ("Running", RUNNING), "failure": ("Failing", FAILED)}
 
 
-def update_flow(state: UpdateState) -> tuple[FlowStep, ...]:
+def update_flow(state: UpdateState) -> tuple[Step, ...]:
     """Every step of ``state``'s update in order, each as it stands."""
 
     merged = state.kind == UpdateKind.MERGED
     # An approval whose merge landed says how its apply stands, before the pull request is read closed.
     landed = state.kind == UpdateKind.OPEN and state.beside is not None and state.beside.merged
-    opened = merged or state.update is not None
+    behind = merged or landed
     return (
-        _opened(state) if opened else FlowStep("Pull request", state.answer),
-        _checks(state.update) if state.update else _waiting("Checks", "Once it opens", done="Done" if merged else ""),
+        _opened(state) if merged or state.update is not None else _said("Pull request", state.answer),
+        _checks(state) if state.update else _waiting("Checks", "Once it opens", done="Done" if merged else ""),
         _decided("Approve", state)
         if state.kind == UpdateKind.OPEN and not landed
-        else _waiting("Approve", "Once its checks pass", done="Merged" if merged or landed else ""),
-        _decided("Apply", state) if merged or landed else _waiting("Apply", "Once it merges"),
-        _health(state) if merged or landed else _waiting("Health check", "Once it applies"),
+        else _waiting("Approve", "Once its checks pass", done="Merged" if behind else ""),
+        _decided("Apply", state) if behind else _waiting("Apply", "Once it merges"),
+        _health(state) if behind else _waiting("Health check", "Once it applies"),
     )
 
 
-def _waiting(title: str, until: str, *, done: str = "") -> FlowStep:
+def _said(title: str, answer: Answer, *, url: str = "") -> Step:
+    """A step as an answer says it: its word, its reasons as its sentence."""
+
+    reasons = dotted(*(line for line in answer.because if isinstance(line, str)))
+    return Step(title, Standing(_STATES.get(answer.tone, IDLE), note=reasons, word=answer.short, url=url))
+
+
+def _waiting(title: str, until: str, *, done: str = "") -> Step:
     """A step before the one under way, waiting ``until``; or behind it, ``done`` saying how it ended."""
 
-    return FlowStep(title, Answer(done) if done else Answer("Waiting", (until,)), done=bool(done))
+    return Step(title, Standing(DONE, word=done) if done else Standing(IDLE, note=until, word="Waiting"))
 
 
-def _opened(state: UpdateState) -> FlowStep:
+def _opened(state: UpdateState) -> Step:
     update = state.update
     if update is None:
-        return FlowStep(
-            "Pull request", Answer("Merged", (f"In {state.managed.repository}",) if state.managed else ()), done=True
-        )
-    return FlowStep(
-        "Pull request",
-        Answer(f"{update.label} open", (update.title,)),
-        done=True,
-        link=declared_link("Pull request", web_url(update.url), kind="dependency"),
-    )
+        where = f"In {state.managed.repository}" if state.managed else ""
+        return Step("Pull request", Standing(DONE, note=where, word="Merged"))
+    return Step("Pull request", Standing(DONE, note=update.title, word=f"{update.label} open", url=update.url))
 
 
-def _checks(update: AppUpdate) -> FlowStep:
+def _checks(state: UpdateState) -> Step:
+    update = state.update
     said = update.checks_said
-    word, tone = CHECKS.get(str(update.checks.get("state") or ""), ("None reported", Tone.NEUTRAL))
-    lines = tuple(_check(each) for each in update.check_runs) or (said.badge,)
-    return FlowStep("Checks", Answer(word, (*lines, said.why), tone), done=tone == Tone.GOOD)
+    word, at = _CHECKS.get(str(update.checks.get("state") or ""), ("None reported", IDLE))
+    parts = tuple(map(check_said, update.check_runs))
+    return Step("Checks", Standing(at, note=said.why or ("" if parts else said.badge), word=word), parts)
 
 
-def _check(run: Mapping[str, Any]) -> EntityLink | str:
-    """One check as its line says it, ``Lint passed 58 s`` or ``Test running``,
-    linked to its run on GitHub where the reading names it."""
-
-    status = str(run.get("status") or "")
-    conclusion = str(run.get("conclusion") or "")
-    word = CONCLUDED.get(conclusion, conclusion) if status == "completed" else STATUS.get(status, status)
-    started, ended = moment(run.get("started_at")), moment(run.get("completed_at"))
-    said = " ".join(part for part in (str(run.get("name") or ""), word, _took(started, ended)) if part)
-    url = web_url(run.get("url"))
-    return declared_link(said, url, kind="dependency") if url else said
-
-
-def _took(started: datetime | None, ended: datetime | None) -> str:
-    if started is None:
-        return ""
-    return str(duration(ended - started, short=True)) if ended is not None else f"since {when(started)}"
-
-
-def _decided(title: str, state: UpdateState) -> FlowStep:
+def _decided(title: str, state: UpdateState) -> Step:
     """The step whose press the card offers: where it stands once asked,
     else the person's to take, else waiting on what the card says beside it."""
 
     if (standing := state.beside) is not None:
-        run = standing.run
-        link = entity_link(Kind.RUN, run.id, label=title) if run is not None and run.url else None
-        return FlowStep(title, standing.answer, done=standing.tone == Tone.GOOD, link=link)
-    return FlowStep(title, Answer(f"Yours to {title.lower()}") if state.action else Answer("Waiting"))
+        return _said(title, standing.answer, url=standing.run_url)
+    return Step(title, Standing(IDLE, word=f"Yours to {title.lower()}" if state.action else "Waiting"))
 
 
-def _health(state: UpdateState) -> FlowStep:
+def _health(state: UpdateState) -> Step:
     """What each container it moves says of its own health once its apply
-    was asked, as HQ last read it; waiting until a read after the ask."""
+    ended well, as HQ last read it; waiting until a read after it ended."""
 
     standing = state.beside
-    operation = standing.operation if standing is not None else None
-    since = operation.claimed_at or operation.created_at if operation is not None else None
-    if since is None or not (standing and standing.taken and standing.tone != Tone.SERIOUS):
+    operation = standing.operation if standing is not None and standing.tone == Tone.GOOD else None
+    since = operation.completed_at if operation is not None else None
+    if since is None:
         return _waiting("Health check", "Once it applies")
     items = state.update.containers if state.update else of_app(state.managed.repository, state.managed.app)
     read = [item for item in items if item.running.observed_at and item.running.observed_at > since]
     if not read or len(read) < len(items):
         return _waiting("Health check", "Once HQ reads it after the apply")
-    checks = [(item, item.running.check) for item in read]
-    if all(check is None for _item, check in checks):
-        return FlowStep("Health check", Answer("None declared"), done=True)
-    worst = next((pair for pair in checks if pair[1] is not None and pair[1].tone != Tone.GOOD), None)
-    lines = tuple(
-        f"{item.running.name} {check.value} {when(item.running.observed_at)}" for item, check in checks if check
-    )
+    checks = [(item, item.running.check) for item in read if item.running.check is not None]
+    if not checks:
+        return Step("Health check", Standing(DONE, word="None declared"))
+    parts = tuple(f"{item.running.name} {check.value} {when(item.running.observed_at)}" for item, check in checks)
+    worst = next((check for _item, check in checks if check.tone != Tone.GOOD), None)
     if worst is not None:
-        return FlowStep("Health check", Answer(capfirst(worst[1].value), lines, worst[1].tone))
-    return FlowStep("Health check", Answer("Healthy", lines, Tone.GOOD), done=True)
+        return Step("Health check", Standing(FAILED, word=capfirst(worst.value)), parts)
+    return Step("Health check", Standing(DONE, word="Healthy"), parts)
