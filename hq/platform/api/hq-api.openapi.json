@@ -2130,6 +2130,26 @@
         },
         "style": "form"
       },
+      "RecordItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "kind",
+              "record",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "RelationshipsRecordFields": {
         "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
         "explode": false,
@@ -26334,6 +26354,67 @@
         ],
         "type": "object"
       },
+      "RecordItem": {
+        "additionalProperties": false,
+        "description": "One record a reading holds, as its type's schema admits it.",
+        "properties": {
+          "kind": {
+            "description": "The reading's type, such as `github.workflow_run`.",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/AsRead"
+          }
+        },
+        "required": [
+          "kind",
+          "record"
+        ],
+        "type": "object"
+      },
+      "RecordItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/RecordItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RecordItemPartial": {
+        "additionalProperties": false,
+        "description": "One record a reading holds, as its type's schema admits it.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/RecordItem/properties/kind"
+          },
+          "record": {
+            "$ref": "#/components/schemas/AsRead"
+          }
+        },
+        "type": "object"
+      },
       "RecordProblem": {
         "additionalProperties": false,
         "description": "One record of a document HQ refused, and why.",
@@ -33087,6 +33168,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "relationships",
@@ -38333,6 +38415,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "relationships",
@@ -42688,6 +42771,178 @@
         "x-hq-resource": "projects"
       }
     },
+    "/api/v2/resources/reading.records/": {
+      "get": {
+        "description": "Each record a reading holds, of one type or every type, filtered by its own fields.",
+        "operationId": "listReadingRecordsV2",
+        "parameters": [
+          {
+            "description": "Only the records of this type of reading; absent, every type's.",
+            "explode": true,
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "npm.certificate",
+                "npm.redirect",
+                "npm.stream",
+                "npm.access_list",
+                "npm.dead_host",
+                "github.repository",
+                "github.workflow_run",
+                "github.open_pull_request",
+                "github.profile",
+                "github.dependency_run",
+                "github.allowance",
+                "github.webhook",
+                "portainer.environment",
+                "portainer.network",
+                "portainer.volume",
+                "portainer.image",
+                "portainer.runtime",
+                "portainer.compose_project",
+                "tailscale.dns",
+                "tailscale.settings",
+                "tailscale.user",
+                "adguard.client",
+                "adguard.query_summary",
+                "adguard.dns",
+                "cloudflare.pages_project",
+                "cloudflare.d1_database",
+                "cloudflare.access_app",
+                "cloudflare.access_service_token",
+                "cloudflare.tunnel",
+                "cloudflare.edge_certificate",
+                "cloudflare.redirect",
+                "r2.backup",
+                "host.firewall",
+                "host.perimeter",
+                "host.render_status",
+                "host.unit",
+                "host.tailnet_lock",
+                "host.filesystem",
+                "host.reboot",
+                "host.edge_reboot",
+                "machine.telemetry",
+                "nws.forecast",
+                "hq.request_path",
+                "registry.address",
+                "dns.reverse",
+                "registry.domain",
+                "registry.image",
+                "registry.upstream",
+                "registry.digest",
+                "registry.vulnerabilities"
+              ],
+              "type": "string"
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the records whose fields hold these values, each a field of `kind`'s records: a field that lists values holds the one given, and one a record leaves out holds its default; absent, every record.",
+            "explode": true,
+            "in": "query",
+            "name": "where",
+            "required": false,
+            "schema": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "style": "deepObject"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/RecordItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listReadingRecordsV2": {
+                "operationId": "listReadingRecordsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.kind": "$request.query.kind",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next",
+                  "query.where": "$request.query.where"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Reading records: the list",
+        "tags": [
+          "hq.connections"
+        ],
+        "x-hq-resource": "reading.records"
+      }
+    },
     "/api/v2/resources/readings/": {
       "get": {
         "description": "Each type of reading, when it was last read, and the records it holds.",
@@ -44189,6 +44444,7 @@
                 "playbook_scans",
                 "playbooks",
                 "projects",
+                "reading.records",
                 "readings",
                 "receipts",
                 "request.path",
