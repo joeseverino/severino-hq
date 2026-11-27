@@ -56,6 +56,29 @@ NESTED = (
     "{% endsection %}{% endsection %}"
 )
 CLOSED = "() => document.querySelectorAll('details:not([open])').length"
+# The rows in the order a press on the first heading sorts them.
+SORTED = """() => {
+  document.querySelector('[data-sort-local]').click();
+  return [...document.querySelectorAll('main .data-table > tbody > tr:not(.row-detail)')]
+    .map((row) => row.cells[0].textContent.trim());
+}"""
+
+
+def _sorted_fold() -> DataTable:
+    """A row heading a fold, a row and a row across the table under it, and a
+    row its sort puts first."""
+
+    columns = (TableColumn("What"), TableColumn("When"))
+    return DataTable(
+        "Events",
+        columns,
+        (
+            Row((Cell("Example second", fold=True), Cell("Nov 2")), folds="example-second"),
+            Row((Cell("Example item"), Cell("Nov 2")), folded="example-second"),
+            Row((Cell("Example rest"),), folded="example-second", across=True),
+            Row((Cell("Example first"), Cell("Nov 1"))),
+        ),
+    )
 
 
 class FoldBrowserTests(LayoutBrowserTests):
@@ -77,6 +100,15 @@ class FoldBrowserTests(LayoutBrowserTests):
 
         self.page.evaluate(PRESS_FOLD, "example-event")
         self.assertEqual(self.page.evaluate(SAID, "example-event"), [])
+
+    @with_script
+    def test_a_sort_on_the_page_keeps_a_folds_rows_under_the_row_that_heads_them(self):
+        self.pages = {**self.pages, "sorted-probe": probe("{% data_table table %}", table=_sorted_fold())}
+        self.open("sorted-probe", WIDE)
+
+        self.assertEqual(
+            self.page.evaluate(SORTED), ["Example first", "Example second", "Example item", "Example rest"]
+        )
 
     @with_script
     def test_a_defect_in_a_fold_within_a_fold_is_found_once_every_fold_is_open_and_the_folds_close_again(self):
