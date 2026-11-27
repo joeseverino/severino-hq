@@ -55,7 +55,7 @@ class TargetKind:
         taking it as this kind's keyword instead, so Python itself refuses any
         other keyword and its signature names the one it takes."""
 
-        function = cast("FunctionType", handler)
+        function = cast(FunctionType, handler)
         function.__code__ = function.__code__.replace(
             co_varnames=tuple(self._named(name) for name in function.__code__.co_varnames)
         )
