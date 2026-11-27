@@ -458,23 +458,16 @@ class PartReasonTests(SimpleTestCase):
 
         from ..credential_sight import PARTIAL, Sight
 
-        off = "not available on this repository (its plan or settings leave it off)."
+        upgrade = "Upgrade to GitHub Pro or make this repository public to enable this feature."
         scanning, rules = ReadingPart("scanning", "Code scanning alerts"), ReadingPart("rules", "Branch rules")
         parts = (
             *(
-                RefusedPart(kind="example", part=part, refusal="", reason=off, scope=f"example/{repository}")
+                RefusedPart(kind="example", part=part, refusal="", reason=upgrade, scope=f"example/{repository}")
                 for repository in ("app", "site")
                 for part in (scanning, rules)
             ),
             RefusedPart(kind="example", part=rules, refusal="", reason="GitHub timed out", scope="example/app"),
-            RefusedPart(
-                kind="example", part=scanning, refusal="", scope="example/web",
-                reason="GitHub 404 for /repos/example/web/code-scanning/alerts?state=open",
-            ),
-            RefusedPart(
-                kind="example", part=rules, refusal="", scope="example/web",
-                reason="GitHub 404 for /repos/example/web/rules/branches/main",
-            ),
+            RefusedPart(kind="example", part=scanning, refusal="", reason="the service answered 404", scope="example/web"),
         )  # fmt: skip
 
         sight = Sight(kind="example", label="Repository", source="reading", state=PARTIAL, parts=parts)
@@ -482,12 +475,9 @@ class PartReasonTests(SimpleTestCase):
         self.assertEqual(
             sight.part_reasons,
             (
-                (
-                    "Code scanning alerts, Branch rules not read on app, site: "
-                    "not available on this repository (its plan or settings leave it off)"
-                ),
+                f"Code scanning alerts, Branch rules not read on app, site: {upgrade.rstrip('.')}",
                 "Branch rules not read on app: GitHub timed out",
-                "Code scanning alerts, Branch rules not read on web: hidden from HQ's connection",
+                "Code scanning alerts not read on web: hidden from HQ's connection",
             ),
         )
 
@@ -503,8 +493,8 @@ class PartReasonTests(SimpleTestCase):
             return RefusedPart(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
 
         self.assertEqual(said("the service answered 404"), f"hidden from HQ's {label}")
-        self.assertEqual(said("Example 403 for /repos/example/app/rules"), f"closed to HQ's {label}")
-        self.assertEqual(said("provider answered 503"), "the service failed to answer; the next read tries again")
-        for reason in ("Example timed out", "Example listed more than 10 pages"):
+        self.assertEqual(said("list rules: the service answered 403"), f"list rules: closed to HQ's {label}")
+        self.assertEqual(said("the service answered 503"), "the service failed to answer; the next read tries again")
+        for reason in ("Example timed out", "Example listed more than 10 pages", "Example 403 answer"):
             with self.subTest(reason):
                 self.assertEqual(said(reason), reason)

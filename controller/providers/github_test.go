@@ -516,7 +516,7 @@ func githubRepositoryRoutes() map[string]string {
 	})
 	return map[string]string{
 		api("/issues/6/comments?per_page=100"): string(comments),
-		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
+		api(""): `{"full_name":"example/app","private":true,"archived":false,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
 			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"},"secret_scanning_push_protection":{"status":"paused"},"example_feature":{"status":"enabled"}}}`,
 		api("/commits/main"): `{"sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/commit/aaaa","author":{"login":"octo"},
 			"commit":{"message":"Ship it\n\nbody","author":{"name":"Octo","date":"2030-01-01T00:00:00Z"},"committer":{"name":"Octo","date":"2030-01-02T00:00:00Z"}}}`,
@@ -701,12 +701,12 @@ func TestGitHubRepositoryReading(t *testing.T) {
 			}
 		})
 	}
-	if record.ConnectionRef != "hq-app" || record.Repository != "example/app" || !record.Private || !record.Archived || record.DefaultBranch != "main" {
+	if record.ConnectionRef != "hq-app" || record.Repository != "example/app" || !record.Private || record.Archived || record.DefaultBranch != "main" {
 		t.Errorf("record %+v", record)
 	}
 	// A 403 under a token that holds every read permission is a feature the
 	// repository does not offer, never a permission to grant.
-	if len(refused) != 1 || refused[0].Part != runtime.PartLeakedCredentials || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission || !strings.HasPrefix(refused[0].Reason, "not available on this repository") {
+	if len(refused) != 1 || refused[0].Part != runtime.PartLeakedCredentials || refused[0].Scope != "example/app" || refused[0].Refusal == runtime.FailureClassPermission {
 		t.Fatalf("refused %+v", refused)
 	}
 	resolved := 0
@@ -1305,5 +1305,75 @@ func TestRepositoryPartRefusalSaysWhatTheStatusMeans(t *testing.T) {
 				t.Fatalf("%d refused as %q", test.status, refused)
 			}
 		})
+	}
+}
+
+// githubLeftOff is each part GitHub answers as a feature the repository's plan
+// lacks or its settings leave off, as it answers for a private repository on a
+// free plan: the path, the status and GitHub's message.
+var githubLeftOff = []struct {
+	part    runtime.ReadingPartName
+	path    string
+	status  int
+	message string
+}{
+	{runtime.PartCodeScanning, "/code-scanning/alerts?state=open&per_page=100", http.StatusForbidden,
+		"Code scanning is not enabled for this repository. Please enable code scanning in the repository settings."},
+	{runtime.PartBranchRules, "/rules/branches/main", http.StatusForbidden,
+		"Upgrade to GitHub Pro or make this repository public to enable this feature."},
+	{runtime.PartLeakedCredentials, "/secret-scanning/alerts?state=open&per_page=100", http.StatusNotFound,
+		"Secret scanning is disabled on this repository."},
+}
+
+func leaveOff(t *testing.T, routes map[string]string) *githubHarness {
+	t.Helper()
+	for _, off := range githubLeftOff {
+		body, _ := json.Marshal(map[string]string{"message": off.message, "documentation_url": "https://docs.github.com/rest", "status": strconv.Itoa(off.status)})
+		routes[githubFakeAPI+" /repos/example/app"+off.path] = string(body)
+	}
+	h := newGitHubHarness(t, routes, runtime.Environment{})
+	for _, off := range githubLeftOff {
+		h.refuse(githubFakeAPI, "/repos/example/app"+off.path, off.status)
+	}
+	return h
+}
+
+// A part GitHub leaves off is refused in GitHub's own words, so a plan without
+// the feature or a setting that leaves it off is never read as a permission
+// HQ's App lacks.
+func TestARepositoryPartLeftOffSaysWhyInGitHubsWords(t *testing.T) {
+	_, refused := readRepository(t, leaveOff(t, githubRepositoryRoutes()))
+	said := map[runtime.ReadingPartName]runtime.RefusedPart{}
+	for _, part := range refused {
+		said[part.Part] = part
+	}
+	for _, off := range githubLeftOff {
+		if got := said[off.part]; got.Reason != off.message || got.Refusal == runtime.FailureClassPermission || got.Scope != "example/app" {
+			t.Errorf("%s refused %+v, want GitHub's %q", off.part, got, off.message)
+		}
+	}
+	if len(refused) != len(githubLeftOff) {
+		t.Errorf("refused %+v", refused)
+	}
+}
+
+// An archived repository is read for what it is, and none of its parts are:
+// GitHub scans it no more and HQ measures nothing of it, so nothing it leaves
+// off is refused.
+func TestAnArchivedRepositoryReadsNoParts(t *testing.T) {
+	routes := githubRepositoryRoutes()
+	at := githubFakeAPI + " /repos/example/app"
+	routes[at] = strings.Replace(routes[at], `"archived":false`, `"archived":true`, 1)
+	h := leaveOff(t, routes)
+	record, refused := readRepository(t, h)
+	if !record.Archived || record.Head.SHA == "" || len(refused) != 0 {
+		t.Fatalf("record %+v refused %+v", record, refused)
+	}
+	for _, call := range h.recorded() {
+		for _, off := range githubLeftOff {
+			if path, _, _ := strings.Cut(off.path, "?"); call.path == "/repos/example/app"+path {
+				t.Errorf("an archived repository's %s was read", off.part)
+			}
+		}
 	}
 }

@@ -34,12 +34,9 @@ _REASON_LENGTH = 300
 _SCOPE_LENGTH = 253
 _REF_LENGTH = 160
 
-# The request a provider's reason names ("GitHub 403 for /repos/a/b/..."): the
-# scope already says which, and without it equal reasons group.
-_REQUEST = re.compile(r"\s+for\s+(?:/|https?://)\S+$")
-# A reason that is only the status a service answered ("GitHub 404", "the service
-# answered 403"), after whatever led to it.
-_STATUS = re.compile(r"(?P<lead>.*:\s+)?(?:(?:the service|provider) answered|[A-Z][\w.-]*)\s+(?P<code>[1-5]\d\d)")
+# A reason that is only the status a service answered ("the service answered
+# 403"), after whatever led to it: the service gave no words of its own.
+_STATUS = re.compile(r"(?P<lead>.*:\s+)?the service answered (?P<code>[1-5]\d\d)")
 # What each status means to the owner, by code or by its hundred.
 _STATUS_MEANS = {
     401: "{who}'s credential was refused",
@@ -87,10 +84,10 @@ class RefusedPart:
 
     @property
     def said(self) -> str:
-        """Why it was not read, in words: the provider's reason, with a bare
-        HTTP status said as what it means and without the request it named."""
+        """Why it was not read, in words: the provider's reason, and a bare
+        HTTP status said as what it means."""
 
-        reason = _REQUEST.sub("", self.reason or "the read failed").rstrip(".")
+        reason = (self.reason or "the read failed").rstrip(".")
         status = _STATUS.fullmatch(reason)
         if status is None:
             return reason
