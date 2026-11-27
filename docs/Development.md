@@ -519,6 +519,15 @@ every entry when such a rule names neither (an element, `:root`, a token).
 and leaves out a file that reaches every entry: that look is the whole
 catalog, CI's Browser job, as is any look of a Python-only change.
 
+A change to what the extensions' contract check reads (a template under
+`templates/partials/`, the template contract and its tag libraries, plugin
+validation, the file rules, `hq_sdk`, the check itself and the pins) selects
+`fast:extensions`, which runs in the heavy turn beside the tests: the check
+(`plugin:check`) of each extension package this checkout composes, as
+`tools/lib/extension-set.sh` picks the set, side by side, each line
+naming its package and how long it took. Where none is composed it says so
+and passes.
+
 The generated API cases (`test:api-properties`) stay CI's Test job and
 `mise run check`'s: every change Django loads reaches every operation, and
 Schemathesis sends each operation's boundary and refusal cases whatever the

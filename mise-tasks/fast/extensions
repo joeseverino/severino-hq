@@ -1,0 +1,40 @@
+#!/bin/sh
+#MISE description="fast's contract check of each extension package this checkout composes, when a change touches what the template contract or plugin validation reads: mise run fast"
+#MISE hide=true
+#MISE tags=["fast", "heavy"]
+#MISE sources=["templates/partials/**/*", "hq/platform/core/template_contract.py", "hq/platform/core/templatetags/**/*.py", "hq/platform/application/plugin_validation.py", "hq/platform/application/file_rules.py", "hq_sdk/**/*.py", "tools/pipeline/check-plugin.sh", "tools/pipeline/extension-imports.toml", "pyproject.toml", "uv.lock", "mise.lock"]
+#MISE outputs=[]
+
+# In fast's share of the heavy turn, beside its tests (tools/gate/fast.py,
+# heavy_gates): each package's check as its CI runs it (plugin:check), against
+# this tree, side by side, since each syncs an environment of its own. The set
+# is the one this checkout composes (mise.local.toml,
+# tools/lib/extension-set.sh), picked in a subshell so its environment reaches
+# no check.
+set -eu
+# shellcheck source=tools/lib/extension-set.sh
+. ./tools/lib/extension-set.sh
+sources="$(compose_extensions && printf '%s' "${PYTHONPATH}")"
+checks=""
+IFS=:
+for source in ${sources}; do
+    package="$(dirname -- "${source}")"
+    [ -f "${package}/pyproject.toml" ] || continue
+    (
+        started="$(date +%s)"
+        status=0
+        tools/pipeline/check-plugin.sh --plugin-root "${package}" || status=$?
+        echo "fast:extensions: ${package} checked in $(($(date +%s) - started))s"
+        exit "${status}"
+    ) &
+    checks="${checks} $!"
+done
+unset IFS
+if [ -z "${checks}" ]; then
+    echo "fast:extensions: no extension package is composed (mise.local.toml names none), so no contract check ran"
+fi
+status=0
+for check in ${checks}; do
+    wait "${check}" || status=$?
+done
+exit "${status}"
