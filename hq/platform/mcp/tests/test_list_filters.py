@@ -124,10 +124,8 @@ class FiltersInTheSchemaTests(TestCase):
         for resource in served_resources().listable:
             described = listing(resource.name)
             sent = {field: described_value(schema) for field, schema in fields(described["query_schema"]).items()}
-            paging = fields(described.get("paging", {}))
-            arguments = {"name": resource.name, "filters": sent}
-            if "limit" in paging:
-                arguments["limit"] = paging["limit"]["maximum"]
+            limit = fields(described["paging"])["limit"]
+            arguments = {"name": resource.name, "filters": sent, "limit": limit["maximum"]}
             (answer,) = calls(("list_resource", arguments))
             with self.subTest(kind=resource.name):
                 self.assertEqual(set(described.get("filters", [])), set(sent))

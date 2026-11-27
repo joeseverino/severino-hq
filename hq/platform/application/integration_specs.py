@@ -4,7 +4,7 @@ import annotationlib
 import inspect
 from annotationlib import Format
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, fields as dataclass_fields, is_dataclass, replace
+from dataclasses import dataclass, field, fields as dataclass_fields, is_dataclass, replace
 from functools import cache
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
@@ -21,7 +21,7 @@ from .ui import ended
 lazy from . import records, stored_columns
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
-lazy from .resources import several_of
+lazy from .resources import PageNumber, WholeLimit, several_of
 
 if TYPE_CHECKING:
     from .entity_links import EntityLink
@@ -551,11 +551,15 @@ class ListRead:
     # False for a list too long to count on every read: its pages say whether
     # more follow, and no total.
     counted: bool = True
+    # Whether the resource layer cuts the page: a list derived whole, whose
+    # query names no ``limit``, takes ``limit`` and ``page`` as every list does.
+    cut: bool = field(init=False, default=False)
 
     def __post_init__(self) -> None:
         if not self.fields and is_typeddict(self.item):
             object.__setattr__(self, "fields", typed_keys(self.item))
-        if self.sorts or self.filters or self.toggles:
+        object.__setattr__(self, "cut", "limit" not in self.query.model_fields)
+        if self.sorts or self.filters or self.toggles or self.cut:
             object.__setattr__(self, "query", _asked_by(self))
 
     def ordering(self, name: str | None) -> tuple[str, ...]:
@@ -612,6 +616,10 @@ def _asked_by(read: ListRead) -> type[BaseModel]:
         )
         choice: Any = Literal[names]
         asked[SORT_FIELD] = (Annotated[choice | None, Field(description=words)], None)
+    if read.cut:
+        # Absent, the page is the whole list, as the handler derives it.
+        asked["limit"] = (WholeLimit, None)
+        asked[PAGE_FIELD] = (PageNumber, 1)
     if declared := sorted(asked.keys() & read.query.model_fields.keys()):
         raise ValueError(f"{read.query.__name__} declares {declared}, which its list's declarations derive.")
     return create_model(read.query.__name__, __base__=read.query, __doc__=read.query.__doc__, **asked)
@@ -654,11 +662,12 @@ class ResourceSpec(Requires):
     def read_around(self) -> frozenset[str]:
         """The query fields the resource layer reads around the list's handler
         and never passes to it: the page, the sort, the filters and toggles,
-        and a searched kind's text."""
+        a searched kind's text, and a page's size where it cuts the page."""
 
         read = self.listing
         declared: list[str] = []
         if read:
             declared += [SORT_FIELD] if read.sorts else []
             declared += [each.name for each in read.filters] + [each.name for each in read.toggles]
+            declared += ["limit"] if read.cut else []
         return frozenset({PAGE_FIELD, *declared, *((SEARCH_FIELD,) if self.search else ())})

@@ -9,7 +9,8 @@ from pydantic import Field, create_model
 
 from hq.domains.projects.models import Project
 from hq.platform.application.integration_specs import ListRead, ResourceSpec
-from hq.platform.application.resources import BoundedQuery
+from hq.platform.application.projection import page_of
+from hq.platform.application.resources import BoundedQuery, EmptyQuery
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
@@ -66,6 +67,27 @@ class PagingArgumentTests(TestCase):
         self.assertFalse(second.is_error, rest)
         slugs = [item["slug"] for item in (*page["items"], *rest["items"])]
         self.assertEqual(sorted(slugs), ["paged-0", "paged-1", "paged-2"])
+
+    def test_a_list_its_handler_derives_whole_pages_as_every_list_does(self):
+        names = ["alpha", "beta", "gamma"]
+        whole = ResourceSpec(
+            KIND,
+            "Example records",
+            "Records an extension declares.",
+            "read",
+            listing=ListRead(
+                lambda: page_of([{"name": name, "state": "ok"} for name in names]), EmptyQuery, ExampleRecord
+            ),
+        )
+        with served(with_kind(whole)) as server:
+            (first,) = _calls(server.server, {"name": KIND, "limit": 2})
+            page = first.structured_content
+            (second,) = _calls(server.server, {"name": KIND, "limit": 2, "page": page["next"]})
+
+        self.assertFalse(first.is_error, page)
+        self.assertEqual(page["count"], 2)
+        self.assertTrue(page["truncated"])
+        self.assertEqual([item["name"] for item in (*page["items"], *second.structured_content["items"])], names)
 
     def test_paging_sent_among_the_filters_is_refused_naming_it(self):
         with served(with_kind(_example_kind())) as server:

@@ -2845,6 +2845,19 @@
         },
         "style": "form"
       },
+      "WholeLimit": {
+        "description": "How many records a page holds, 1 to 100; absent, every one.",
+        "explode": true,
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "style": "form"
+      },
       "WorkIdIdentifier": {
         "description": "The record's `id`, as each item of the list carries it.",
         "in": "path",
@@ -3425,21 +3438,6 @@
           }
         }
       },
-      "EstateFigurePageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/EstateFigurePageSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
       "ExpenseSavedSuccess": {
         "content": {
           "application/json": {
@@ -3493,21 +3491,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/HeldRequestRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "HopRowPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/HopRowPageSuccess"
             }
           }
         },
@@ -3808,21 +3791,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/PlaybookRecordSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "ProblemPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/ProblemPageSuccess"
             }
           }
         },
@@ -4171,21 +4139,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/SourcesChosenSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
-      "TailnetPageSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/TailnetPageSuccess"
             }
           }
         },
@@ -32255,6 +32208,12 @@
         "description": "The page of HQ's web interface that shows it, by its route name such as `projects:list`; null for none.",
         "title": "Web route"
       },
+      "WholeLimit": {
+        "description": "How many records a page holds, 1 to 100; absent, every one.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer"
+      },
       "WorkItem": {
         "additionalProperties": false,
         "description": "One job or run as Jobs lists it, its evidence beneath.",
@@ -38703,6 +38662,12 @@
         "operationId": "listApprovalsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/HeldRequestItemPageFields"
           }
         ],
@@ -38726,6 +38691,14 @@
                 "operationId": "getApprovalsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listApprovalsV2": {
+                "operationId": "listApprovalsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -39581,6 +39554,12 @@
         "operationId": "listConnectionsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ConnectionStandingRecordFields"
           }
         ],
@@ -39604,6 +39583,14 @@
                 "operationId": "getConnectionsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/connection_ref"
+                }
+              },
+              "listConnectionsV2": {
+                "operationId": "listConnectionsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -40319,6 +40306,12 @@
         "operationId": "listCredentialsV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/CredentialRecordFields"
           }
         ],
@@ -40342,6 +40335,14 @@
                 "operationId": "getCredentialsV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/provider"
+                }
+              },
+              "listCredentialsV2": {
+                "operationId": "listCredentialsV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -40867,12 +40868,40 @@
         "operationId": "listEstateV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/EstateFigurePageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/EstateFigurePageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EstateFigurePageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listEstateV2": {
+                "operationId": "listEstateV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -41179,12 +41208,40 @@
         "operationId": "listHqV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ProblemPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/ProblemPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listHqV2": {
+                "operationId": "listHqV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -41931,6 +41988,12 @@
         "operationId": "listPlaybookScansV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ScanResultFields"
           }
         ],
@@ -41954,6 +42017,14 @@
                 "operationId": "getPlaybookScansV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/id"
+                }
+              },
+              "listPlaybookScansV2": {
+                "operationId": "listPlaybookScansV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -42059,6 +42130,12 @@
         "operationId": "listPlaybooksV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/PlaybookRowPageFields"
           }
         ],
@@ -42082,6 +42159,14 @@
                 "operationId": "getPlaybooksV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/playbook"
+                }
+              },
+              "listPlaybooksV2": {
+                "operationId": "listPlaybooksV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -42964,12 +43049,40 @@
         "operationId": "listRequestPathV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/HopRowPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/HopRowPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HopRowPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listRequestPathV2": {
+                "operationId": "listRequestPathV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"
@@ -43358,6 +43471,12 @@
         "operationId": "listServicesV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/ServiceItemPageFields"
           }
         ],
@@ -43381,6 +43500,14 @@
                 "operationId": "getServicesV2",
                 "parameters": {
                   "path.identifier": "$response.body#/data/items/0/hostname"
+                }
+              },
+              "listServicesV2": {
+                "operationId": "listServicesV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
                 }
               }
             }
@@ -43486,12 +43613,40 @@
         "operationId": "listTailnetV2",
         "parameters": [
           {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
             "$ref": "#/components/parameters/TailnetPageFields"
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/TailnetPageSuccess"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TailnetPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "listTailnetV2": {
+                "operationId": "listTailnetV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
           },
           "400": {
             "$ref": "#/components/responses/InvalidInput"

@@ -58,6 +58,13 @@ def limit_words(most: int, *, paged: bool) -> str:
 # of its own, since the parameter the document writes carries the default.
 # The fields every paged list takes:
 type PageLimit = Annotated[int, Field(ge=1, le=MAX_PAGE_SIZE, description=limit_words(MAX_PAGE_SIZE, paged=True))]
+# A list its handler derives whole takes the same bound, and without it is answered whole.
+type WholeLimit = Annotated[
+    int,
+    Field(
+        ge=1, le=MAX_PAGE_SIZE, description=f"How many records a page holds, 1 to {MAX_PAGE_SIZE}; absent, every one."
+    ),
+]
 # A page past any list HQ holds is still one whose first row a database can count to.
 type PageNumber = Annotated[
     int,
@@ -159,9 +166,8 @@ def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
 
     if not (spec.listing and spec.identifier):
         return []
-    query = {"limit": MAX_PAGE_SIZE} if "limit" in spec.listing.query.model_fields else {}
     try:
-        page = list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
+        page = list_resource(spec.name, {"limit": MAX_PAGE_SIZE}, principal=principal, fields=[spec.identifier])
     except HostRefusal, ResourceError:
         # A list that needs a filter only the caller can choose, or whose
         # rows do not carry the identifier, holds no candidates.
@@ -372,6 +378,7 @@ def list_resource(
         read.keeps(around, searched=searched is not None),
         read.totals,
         PAGE_FIELD in type(parsed).model_fields,
+        around.get("limit"),
     )
     with paging(scope):
         result = read.reader(**asked, **_caller(spec, principal))
@@ -401,10 +408,7 @@ def every_item(
     page after page through ``list_resource`` at its largest page: what a web
     page drawing the whole list shows."""
 
-    spec = _resource(name)
-    query = {**(query or {})}
-    if spec.listing and "limit" in spec.listing.query.model_fields:
-        query["limit"] = MAX_PAGE_SIZE
+    query = {**(query or {}), "limit": MAX_PAGE_SIZE}
     items: list[dict[str, Any]] = []
     while True:
         page = list_resource(name, query, principal=principal, strict=False, fields=fields)

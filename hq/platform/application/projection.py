@@ -238,7 +238,8 @@ class PageScope:
     """One list read's page, its search, the order its caller asked for and the
     one its list declares first, whether it counts its rows, the condition its
     filters and toggles keep a row by, what reads the matched rows' totals,
-    whether its query offers a page after this one, and, once a cut claims it,
+    whether its query offers a page after this one, the page's size where the
+    read cuts a list its handler derives whole, and, once a cut claims it,
     whether more follow."""
 
     page: int = 1
@@ -249,6 +250,7 @@ class PageScope:
     keeps: Q = field(default_factory=Q)
     totals: Callable[[QuerySet], Mapping[str, Any]] | None = None
     paged: bool = True
+    limit: int | None = None
     claimed: bool = False
     more: bool = False
 
@@ -323,6 +325,7 @@ def page_of(
     past its page to learn whether more follow, and counts nothing."""
 
     scope = _claimed()
+    limit = scope.limit if limit is None else limit
     size = len(rows) if limit is None and isinstance(rows, Sequence) else page_size(limit or 0, maximum=maximum)
     start = (scope.page - 1) * size
     total: int | None

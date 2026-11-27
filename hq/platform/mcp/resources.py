@@ -151,8 +151,7 @@ def completed(uri_template: str, argument: str, typed: str, principal: Principal
     spec = next((spec for template, spec in _records().values() if template.template == uri_template), None)
     if spec is None or argument != spec.identifier or spec.listing is None or not registry.readable(spec, principal):
         return types.Completion(values=[])
-    query = {"limit": COMPLETIONS} if "limit" in spec.listing.query.model_fields else None
-    page = registry.list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
+    page = registry.list_resource(spec.name, {"limit": COMPLETIONS}, principal=principal, fields=[spec.identifier])
     found = [str(item[argument]) for item in page["items"] if argument in item]
     matches = [value for value in found if value.startswith(typed)]
     return types.Completion(
