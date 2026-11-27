@@ -94,7 +94,8 @@ class _Selection:
 
     def refuse(self, path: tuple[str, ...], error_type: str, msg: str, *, at: tuple[str, ...] = ()) -> NoReturn:
         loc = ["fields", self.origin[path], *at]
-        raise FieldMaskRefusal([{"type": error_type, "loc": loc, "msg": msg}])
+        # What was sent there, which the refusal reads to name the nearest choice and never repeats.
+        raise FieldMaskRefusal([{"type": error_type, "loc": loc, "msg": msg, "input": path[-1]}])
 
 
 def _selection(fields: Fields, declared: frozenset[str]) -> _Selection:
