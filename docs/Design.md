@@ -511,8 +511,9 @@ whose inputs are known by revision answers an unchanged question with 304.
 A live region names the read set it is drawn from, one that
 `hq/platform/core/live.py` declares, through the `live` filter or
 `live.region` in Python. The page holds one stream, `/live/`, while it is
-visible and shows a live region. Each event names the sets a commit changed
-since the change the page was drawn after, and nothing else, so each live
+visible and shows a live region. Each event names the sets whose tables the
+keeper of derived answers found written since the change the page was drawn
+after, once it has stored what they change, and nothing else, so each live
 region of those sets is asked for again, those one address answers in one
 question. A stream HQ refused or could not answer is opened again on the one
 loop, less often each time.

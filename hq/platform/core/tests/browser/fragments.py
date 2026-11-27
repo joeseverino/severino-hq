@@ -14,6 +14,7 @@ from django.test import Client
 from django.urls import reverse
 
 from hq.platform.application.pages import PageAction, PageVisit
+from hq.platform.core import ahead
 from hq.platform.core.models import UpstreamReading
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
@@ -90,13 +91,17 @@ _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 
 
 def _stored():
-    """A reading stored and taken back, each committed, from a thread of its
-    own: Django refuses this one the database while Playwright's loop runs."""
+    """A reading stored and taken back, each committed, and the keeper's pass
+    that finds them, from a thread of its own: Django refuses this one the
+    database while Playwright's loop runs."""
 
     def store():
         try:
+            keeper = ahead.Keeper()
+            keeper.turn()
             UpstreamReading.objects.create(key="example.live", value={}, observed_at=datetime.now(UTC))
             UpstreamReading.objects.filter(key="example.live").delete()
+            keeper.turn()
         finally:
             connections.close_all()
 
@@ -591,8 +596,7 @@ class FragmentBrowserTests(BrowserGate):
         )
         (stream,) = self.streams
         heard = dict(parse_qsl(urlsplit(stream.request.url).query))["after"]
-        with live.listening():
-            _stored()
+        _stored()
         stream.fulfill(headers={"Content-Type": "text/event-stream"}, body=live.said(*live.HUB.since(heard)))
         self.page.wait_for_function(
             "() => document.querySelector('[data-fragment-part=\"second\"]').textContent.includes('read again')"

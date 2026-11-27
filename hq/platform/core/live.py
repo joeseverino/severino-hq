@@ -1,15 +1,16 @@
-"""What HQ learns, heard by the pages open on it the moment it commits.
+"""What HQ learns, heard by the pages open on it once its answers are stored.
 
 A part of a page drawn from what HQ holds names the read set it is drawn from
-(``data-fragment-live``, one of ``READS``), and fragment.js asks for it again
+(``data-fragment-live``, one of ``reads``), and fragment.js asks for it again
 when a write to one of that set's tables commits. Each page holds one stream
 (``stream``) that says which sets changed, and nothing else: the part is then
 read through its own region, as any refresh is.
 
-Every writer commits in this one process (the web and the bridges beside it,
-``hq/config/asgi.py``), so a commit is heard here, through the one watch on
-what a statement writes, which the derived answers kept ahead hear too
-(``core.ahead``).
+The tables written are the ones whose revisions moved (``core.revisions``),
+which every writer moves, in any process. The keeper of derived answers reads
+them in each pass and tells this hub after it has stored what they change
+(``core.ahead``), so a burst of commits is one change and a page asking again
+finds its answer stored.
 
 Security:
 
@@ -26,31 +27,19 @@ Security:
 
 import asyncio
 import contextlib
-import logging
-import re
 import secrets
 import threading
 from collections import Counter, deque
-from collections.abc import AsyncIterator, Callable, Iterable, Iterator
-from functools import cache, partial
+from collections.abc import AsyncIterator, Iterable, Iterator
+from functools import cache
 from typing import Any
 
 from django.apps import apps
-from django.db import connections, transaction
-from django.db.backends.signals import connection_created
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET
 
 lazy from hq.platform.application.derived_inputs import DASHBOARD_READS, ESTATE_READS, READER_QUEUE_READS
 lazy from hq.platform.core import speculation
-
-logger = logging.getLogger("severino.live")
-
-# The table a statement writes, as Django and this repository's own SQL quote it.
-WRITTEN = re.compile(
-    r'\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+"(\w+)"',
-    re.IGNORECASE,
-)
 
 # How long a stream lasts before the browser opens the next, in seconds.
 LASTS = 15 * 60
@@ -82,7 +71,6 @@ def _reads() -> dict[str, tuple[str, ...]]:
             "control_plane.OperationRequest",
             "control_plane.OperationHost",
             "control_plane.InboundEvent",
-            "core.AuditLog",
         ),
     }
 
@@ -115,68 +103,6 @@ def region(name: str, drawn: bool = True) -> dict[str, str]:
     return {"fragment": "", "fragment-live": name} if drawn else {}
 
 
-# What hears each table written once its transaction commits.
-_listeners: list[Callable[[str], None]] = []
-_listening = threading.Lock()
-
-
-def _tell(table: str) -> None:
-    for listener in tuple(_listeners):
-        listener(table)
-
-
-def noted(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
-    """Run the statement; if it wrote a table, say so when its transaction commits."""
-
-    result = execute(sql, params, many, context)
-    found = WRITTEN.match(sql)
-    if found is not None:
-        told = partial(_tell, found[1])
-        try:
-            transaction.on_commit(told, using=context["connection"].alias, robust=True)
-        except transaction.TransactionManagementError:
-            # Autocommit is off and no atomic block is open: the commit is the
-            # caller's to make, and a reader reads only what has committed.
-            told()
-    return result
-
-
-def _watch(connection: Any, **kwargs: Any) -> None:
-    # First in the list, not last: ``connection.execute_wrapper()`` removes the
-    # last one when its block ends, and a connection can open inside one.
-    if noted not in connection.execute_wrappers:
-        connection.execute_wrappers.insert(0, noted)
-
-
-def _unwatch() -> None:
-    connection_created.disconnect(dispatch_uid="hq.live")
-    for connection in connections.all(initialized_only=True):
-        if noted in connection.execute_wrappers:
-            connection.execute_wrappers.remove(noted)
-
-
-@contextlib.contextmanager
-def heard(listener: Callable[[str], None]) -> Iterator[None]:
-    """``listener`` told each table a committed transaction wrote, until the block ends.
-
-    Every connection is watched while anything listens.
-    """
-
-    with _listening:
-        if not _listeners:
-            connection_created.connect(_watch, dispatch_uid="hq.live", weak=False)
-            for connection in connections.all(initialized_only=True):
-                _watch(connection)
-        _listeners.append(listener)
-    try:
-        yield
-    finally:
-        with _listening:
-            _listeners.remove(listener)
-            if not _listeners:
-                _unwatch()
-
-
 class _Hub:
     """The changes heard, numbered, and the streams waiting for the next."""
 
@@ -184,35 +110,30 @@ class _Hub:
         self._lock = threading.Lock()
         self._seq = 0
         self._kept: deque[tuple[int, frozenset[str]]] = deque(maxlen=KEPT)
-        # Heard since the last change was numbered: a burst of writes is one change.
-        self._pending: set[str] = set()
         self._waiting: dict[asyncio.Event, asyncio.AbstractEventLoop] = {}
         self._open: Counter[Any] = Counter()
 
-    def told(self, table: str) -> None:
-        names = _sets_of().get(table)
+    def told(self, tables: Iterable[str]) -> None:
+        """The tables one pass of the keeper found written: one change, for
+        every set that reads any of them."""
+
+        sets_of = _sets_of()
+        names = frozenset(name for table in tables for name in sets_of.get(table, ()))
         if not names:
             return
         with self._lock:
-            woken = not self._pending
-            self._pending |= names
-            waiting = list(self._waiting.items()) if woken else []
+            self._seq += 1
+            self._kept.append((self._seq, names))
+            waiting = list(self._waiting.items())
         for event, loop in waiting:
             with contextlib.suppress(RuntimeError):  # a loop that has closed has no stream left
                 loop.call_soon_threadsafe(event.set)
-
-    def _numbered(self) -> int:
-        if self._pending:
-            self._seq += 1
-            self._kept.append((self._seq, frozenset(self._pending)))
-            self._pending.clear()
-        return self._seq
 
     def now(self) -> str:
         """The id of the last change heard: what a page drawn now has seen."""
 
         with self._lock:
-            return f"{BOOT}.{self._numbered()}"
+            return f"{BOOT}.{self._seq}"
 
     def since(self, seen: str) -> tuple[str, frozenset[str]]:
         """The last change's id, and the sets changed after ``seen``: every set
@@ -220,7 +141,7 @@ class _Hub:
 
         boot, _, number = seen.partition(".")
         with self._lock:
-            last = self._numbered()
+            last = self._seq
             after = int(number) if boot == BOOT and number.isdigit() else -1
             oldest = self._kept[0][0] if self._kept else last + 1
             if not 0 <= after <= last or after < oldest - 1:
@@ -259,14 +180,6 @@ HUB = _Hub()
 
 def now() -> str:
     return HUB.now()
-
-
-@contextlib.contextmanager
-def listening() -> Iterator[None]:
-    """The streams told what commits, for as long as the web application runs."""
-
-    with heard(HUB.told):
-        yield
 
 
 def said(last: str, changed: Iterable[str]) -> str:

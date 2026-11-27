@@ -486,16 +486,20 @@ minutes while HQ is in use, and every report moves a revision the estate reads.
 The first request after each would otherwise derive while a person waits.
 
 So every top-level question a request asks is remembered, with its arguments,
-context and seeded projection. `hq.platform.core.ahead` watches every
-statement a connection runs. One that writes a table a remembered question
-reads wakes one thread after its transaction commits, and `derive_ahead` asks
-again whatever no longer stands. The same thread wakes when the earliest
-remembered answer's moment comes.
+context and seeded projection. One thread, `hq.platform.core.ahead`, looks
+four times a second at SQLite's `PRAGMA data_version`, which moves when any
+other connection commits, in this process or another. Once it moves, the
+thread reads the table revisions and finds the tables written since its last
+pass. When a remembered question reads one, `derive_ahead` asks again whatever
+no longer stands. Only then does it tell the pages open on HQ which read sets
+changed (`core.live`), so a page asking again finds its answer stored. The same
+thread wakes when the earliest remembered answer's moment comes.
 
 | Of the pass | Rule |
 |---|---|
 | Where it runs | for the life of the web application (the ASGI lifespan), never inside the writing transaction |
-| A rolled-back write | says nothing |
+| A rolled-back write | says nothing: its revisions never moved |
+| A writer in another process (`manage.py hq_call`) | heard as one in this process is |
 | Writes that land together | one pass, which starts once none has landed for 50 ms and no later than 0.5 s after the first |
 | Writes during a pass | answered by one more |
 | How often a question is derived | at most once per state of its tables, and by one thread when two want it |

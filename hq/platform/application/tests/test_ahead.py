@@ -1,11 +1,12 @@
 """Derived answers asked again as their inputs change, ahead of the next request."""
 
+import sqlite3
 import tempfile
 import threading
 import time
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import override
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -13,7 +14,7 @@ from django.db import connection, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from hq.domains.expenses.models import Expense
+from hq.domains.jobs.models import Job
 from hq.platform.application import derivations
 from hq.platform.application.cadence import recently_used
 from hq.platform.application.demo import demo_scope, showing_demo
@@ -355,48 +356,44 @@ class AskedTwiceTests(Remembering):
 
 
 class KeptCurrentTests(Remembering):
-    """A committed write to a table a remembered question reads derives it again."""
+    """A write to a table a remembered question reads derives it again in the keeper's next pass."""
 
     def _asked(self, register):
         read = register(_readings)
         with projection_scope():
             read()
-        return read
+        keeper = ahead.Keeper()
+        keeper.turn()
+        return read, keeper
 
-    def test_a_committed_write_derives_ahead_and_is_then_served(self):
-        with declared("test.kept.write", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
-            read = self._asked(register)
+    def test_a_write_derives_ahead_and_is_then_served(self):
+        with declared("test.kept.write", reads=(READING,)) as (register, calls):
+            read, keeper = self._asked(register)
+            _write()
 
-            with self.captureOnCommitCallbacks(execute=True):
-                _write()
-
+            self.assertEqual(keeper.turn(), {UpstreamReading._meta.db_table})
             self.assertEqual(len(calls), 2)
             with projection_scope(), counting() as (ran, _served):
                 self.assertEqual(read(), 1)
             self.assertEqual(dict(ran), {})
 
     def test_a_write_to_a_table_no_question_reads_derives_nothing(self):
-        with declared("test.kept.other", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
-            self._asked(register)
+        with declared("test.kept.other", reads=(READING,)) as (register, calls):
+            _read, keeper = self._asked(register)
+            Job.objects.create(kind="example.work", label="Example")
 
-            with self.captureOnCommitCallbacks(execute=True):
-                Expense.objects.all().delete()
-                connection.cursor().execute('DELETE FROM "expenses_expense"')
+            self.assertEqual(keeper.turn(), {Job._meta.db_table})
 
         self.assertEqual(len(calls), 1)
 
     def test_a_write_that_is_rolled_back_derives_nothing(self):
-        with declared("test.kept.rolled", reads=(READING,)) as (register, calls), ahead.keeping(inline=True):
-            self._asked(register)
+        with declared("test.kept.rolled", reads=(READING,)) as (register, calls):
+            _read, keeper = self._asked(register)
+            with self.assertRaises(RuntimeError), transaction.atomic():
+                _write()
+                raise RuntimeError("undone")
 
-            def write_then_fail():
-                with transaction.atomic():
-                    _write()
-                    raise RuntimeError("undone")
-
-            with self.captureOnCommitCallbacks(execute=True), self.assertRaises(RuntimeError):
-                write_then_fail()
-
+            self.assertEqual(keeper.turn(), set())
         self.assertEqual(len(calls), 1)
 
 
@@ -407,7 +404,7 @@ class KeeperThreadTests(TransactionTestCase):
         derivations.forget()
         self.addCleanup(derivations.forget)
 
-    def test_a_commit_wakes_the_thread_and_the_answer_is_stored_off_the_request(self):
+    def test_a_commit_by_any_writer_wakes_the_thread_and_the_answer_is_stored_off_the_request(self):
         recomputed = threading.Event()
         with declared("test.keeper.thread", reads=(READING,)) as (register, calls):
 
@@ -421,7 +418,12 @@ class KeeperThreadTests(TransactionTestCase):
             with projection_scope():
                 read()
             with ahead.keeping():
-                _write()
+                # Through a connection HQ never opened, as another process writes.
+                with closing(sqlite3.connect(connection.settings_dict["NAME"])) as other, other:
+                    other.execute(
+                        "INSERT INTO core_upstreamreading (key, value, observed_at) VALUES ('one', '{}', ?)",
+                        [MOMENT.isoformat()],
+                    )
                 self.assertTrue(recomputed.wait(10))
                 thread = ahead.KEEPER._thread
 
@@ -433,30 +435,16 @@ class KeeperThreadTests(TransactionTestCase):
             self.assertEqual(dict(ran), {})
 
     def test_writes_that_land_together_are_one_pass(self):
-        class Landing(threading.Event):
-            """A second write lands while the first window is open."""
+        keeper = ahead.Keeper()
+        # A second commit lands while the first window is open, then none.
+        landing = iter((2, 3, 3))
+        with mock.patch.object(ahead, "SETTLES", 0.01), mock.patch.object(ahead, "_version", lambda: next(landing)):
+            self.assertEqual(keeper._settle(1), 3)
 
-            waits = 0
-
-            @override
-            def wait(self, timeout: float | None = None) -> bool:
-                self.waits += 1
-                if self.waits == 1:
-                    self.set()
-                return super().wait(timeout)
-
-        keeper = ahead._Keeper()
-        keeper._woken = Landing()
-        with mock.patch.object(ahead, "SETTLES", 0.01):
-            keeper.wake()
-            keeper._settle()
-
-        # The window opened again for the write that landed in it, then closed.
-        self.assertEqual(keeper._woken.waits, 2)
-        self.assertFalse(keeper._woken.is_set())
+        self.assertIsNone(next(landing, None))
 
     def test_while_writes_keep_landing_each_pass_waits_longer_for_them_to_settle(self):
-        keeper = ahead._Keeper()
+        keeper = ahead.Keeper()
 
         windows = []
         for _ in range(6):
