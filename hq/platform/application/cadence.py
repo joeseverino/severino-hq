@@ -47,7 +47,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controlle
 lazy from hq.platform.core.attribution import queued_in
 lazy from hq.platform.core.doorbell import ask_soon
 
-from . import readings
+from . import readings, unit_timers
 from .action_links import READ_NOW_CAPABILITY
 from .asks import Asked, AskedAnswer, Standing, asked_read
 from .command_fields import Choices, Describe, Names
@@ -190,9 +190,8 @@ def note_controller() -> None:
 
 # The host also starts a pass this long after the last one ended, to catch a
 # doorbell rung while the host was off, a claim whose controller died, and the
-# day's automatic work. deploy/systemd/severino-hq-controller.timer must hold
-# the same value (tested).
-CONTROLLER_FLOOR = timedelta(minutes=15)
+# day's automatic work.
+CONTROLLER_FLOOR = unit_timers.span("severino-hq-controller.timer", "OnUnitInactiveSec")
 
 # A healthy controller arrives at least once per floor; the second floor allows
 # for a long pass.
@@ -304,9 +303,8 @@ def controller_standing(now: datetime | None = None) -> WorkerStanding:
 # moves them when it arrives.
 AUTOMATION = "automation"
 # The host starts the workers this long after the last ended, as well as at
-# its doorbell. deploy/systemd/severino-hq-automation.timer must hold the same
-# value (tested).
-AUTOMATION_FLOOR = timedelta(minutes=15)
+# its doorbell.
+AUTOMATION_FLOOR = unit_timers.span("severino-hq-automation.timer", "OnUnitInactiveSec")
 # A worker that arrives arrives at least once per floor; the second floor
 # allows for one that started late. One holding a run renews its lease instead.
 AUTOMATION_SILENT_AFTER = 2 * AUTOMATION_FLOOR
