@@ -7,34 +7,26 @@
 
 # In fast's share of the heavy turn, beside its tests (tools/gate/fast.py,
 # heavy_gates): each package's check as its CI runs it (plugin:check), against
-# this tree, side by side, since each syncs an environment of its own. The set
-# is the one this checkout composes (mise.local.toml,
+# this tree, side by side, since each syncs an environment of its own, in one
+# run of mise whose keep-order output prints each check's lines together. The
+# set is the one this checkout composes (mise.local.toml,
 # tools/lib/extension-set.sh), picked in a subshell so its environment reaches
 # no check.
 set -eu
 # shellcheck source=tools/lib/extension-set.sh
 . ./tools/lib/extension-set.sh
 sources="$(compose_extensions && printf '%s' "${PYTHONPATH}")"
-checks=""
+set --
 IFS=:
 for source in ${sources}; do
     package="$(dirname -- "${source}")"
     [ -f "${package}/pyproject.toml" ] || continue
-    (
-        started="$(date +%s)"
-        status=0
-        tools/pipeline/check-plugin.sh --plugin-root "${package}" || status=$?
-        echo "fast:extensions: ${package} checked in $(($(date +%s) - started))s"
-        exit "${status}"
-    ) &
-    checks="${checks} $!"
+    [ "$#" -eq 0 ] || set -- "$@" :::
+    set -- "$@" plugin:check --plugin-root "${package}"
 done
 unset IFS
-if [ -z "${checks}" ]; then
+if [ "$#" -eq 0 ]; then
     echo "fast:extensions: no extension package is composed (mise.local.toml names none), so no contract check ran"
+    exit 0
 fi
-status=0
-for check in ${checks}; do
-    wait "${check}" || status=$?
-done
-exit "${status}"
+exec mise run --output keep-order "$@"
