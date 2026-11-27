@@ -19,7 +19,7 @@ lazy from django.template import engines
 lazy from django.template.backends.django import get_installed_libraries
 lazy from django.template.base import FilterExpression, NodeList, Variable
 lazy from django.template.defaulttags import CommentNode, ForNode, IfNode, PartialDefNode, PartialNode, WithNode
-lazy from django.template.library import import_library
+lazy from django.template.library import TagHelperNode, import_library
 lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
@@ -313,9 +313,22 @@ class _Reads:
             self.walk(node.nodelist, bound, guards)
         elif isinstance(node, ExtendsNode):
             self.walk(node.nodelist, bound, guards)
+        elif isinstance(node, TagHelperNode):
+            self._tag(node, bound, guards)
         else:
             self._generic(node, bound, guards)
         return set()
+
+    def _tag(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
+        """A tag built to go without an argument (its parameter has a default)
+        reads what is passed there only when it is there."""
+
+        named = inspect.signature(node.func).parameters
+        positional = list(named.values())[int(node.takes_context) :]
+        given = [(positional[at] if at < len(positional) else None, value) for at, value in enumerate(node.args)]
+        for parameter, value in [*given, *((named.get(key), value) for key, value in node.kwargs.items())]:
+            defaulted = parameter is not None and parameter.default is not inspect.Parameter.empty
+            self.note(value, bound, guards, guarded=defaulted)
 
     def _include(self, node: Any, bound: set[str], guards: frozenset[str]) -> None:
         self.note(node.template, bound, guards)

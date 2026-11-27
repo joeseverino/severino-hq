@@ -2006,6 +2006,8 @@
               "records",
               "observed_at",
               "error",
+              "freshness",
+              "freshness_label",
               "provider_label",
               "read_by",
               "facet",
@@ -2038,6 +2040,8 @@
               "records",
               "observed_at",
               "error",
+              "freshness",
+              "freshness_label",
               "provider_label",
               "read_by",
               "facet",
@@ -5241,6 +5245,38 @@
           },
           "url": {
             "$ref": "#/components/schemas/AdvisoryPart/properties/url"
+          }
+        },
+        "type": "object"
+      },
+      "Aged": {
+        "additionalProperties": false,
+        "description": "How current a kind's last read is, as ``credential_sight.Standing`` says it.",
+        "properties": {
+          "freshness": {
+            "description": "How current its last read is, in one word.",
+            "type": "string"
+          },
+          "freshness_label": {
+            "description": "How current its last read is, in the words its row shows.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "freshness",
+          "freshness_label"
+        ],
+        "type": "object"
+      },
+      "AgedPartial": {
+        "additionalProperties": false,
+        "description": "How current a kind's last read is, as ``credential_sight.Standing`` says it.",
+        "properties": {
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
           }
         },
         "type": "object"
@@ -25224,6 +25260,12 @@
             "description": "What its records supply a service: `certificate`, `dns`, `network`, `proxy`, `registration` or `runtime`, or empty for none.",
             "type": "string"
           },
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
+          },
           "kind": {
             "$ref": "#/components/schemas/ReadingRow/properties/kind"
           },
@@ -25278,6 +25320,8 @@
           "records",
           "observed_at",
           "error",
+          "freshness",
+          "freshness_label",
           "provider_label",
           "read_by",
           "facet",
@@ -25326,6 +25370,12 @@
           },
           "facet": {
             "$ref": "#/components/schemas/ReadingItem/properties/facet"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/ReadingRowPartial/properties/kind"
@@ -25429,6 +25479,12 @@
           "facet": {
             "$ref": "#/components/schemas/ReadingItem/properties/facet"
           },
+          "freshness": {
+            "$ref": "#/components/schemas/Aged/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
+          },
           "items": {
             "description": "The records it holds, each as its type's schema admits it; empty for a type HQ withholds.",
             "items": {
@@ -25481,6 +25537,8 @@
           "records",
           "observed_at",
           "error",
+          "freshness",
+          "freshness_label",
           "provider_label",
           "read_by",
           "facet",
@@ -25501,6 +25559,12 @@
           },
           "facet": {
             "$ref": "#/components/schemas/ReadingItemPartial/properties/facet"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
+          },
+          "freshness_label": {
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "items": {
             "$ref": "#/components/schemas/ReadingRecord/properties/items"
@@ -28180,17 +28244,16 @@
       },
       "SeenPart": {
         "additionalProperties": false,
+        "description": "What the last sweep found of one thing a connection reads, and how current it is.",
         "properties": {
           "error": {
             "$ref": "#/components/schemas/SightPart/properties/error"
           },
           "freshness": {
-            "description": "How current its last read is, in one word.",
-            "type": "string"
+            "$ref": "#/components/schemas/Aged/properties/freshness"
           },
           "freshness_label": {
-            "description": "How current its last read is, in the words its row shows.",
-            "type": "string"
+            "$ref": "#/components/schemas/Aged/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/SightPart/properties/kind"
@@ -28250,15 +28313,16 @@
       },
       "SeenPartPartial": {
         "additionalProperties": false,
+        "description": "What the last sweep found of one thing a connection reads, and how current it is.",
         "properties": {
           "error": {
             "$ref": "#/components/schemas/SightPartPartial/properties/error"
           },
           "freshness": {
-            "$ref": "#/components/schemas/SeenPart/properties/freshness"
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness"
           },
           "freshness_label": {
-            "$ref": "#/components/schemas/SeenPart/properties/freshness_label"
+            "$ref": "#/components/schemas/AgedPartial/properties/freshness_label"
           },
           "kind": {
             "$ref": "#/components/schemas/SightPartPartial/properties/kind"

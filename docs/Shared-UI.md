@@ -29,10 +29,10 @@ and those that hold across parts in [Design](Design.md).
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `absent`, `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
-| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
+| `partials/_form_actions.html` | `verb` | `bar`, `cancel_url`, `choice_field`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | `name` | nothing | One of the host's icons, by `name`, the height of the text beside it. |
-| `partials/_identity.html` | `name`, `tip`, `tone`, `url` | `about`, `badge`, `handle`, `picture` | An account's picture, name and handle. |
+| `partials/_identity.html` | `name`, `url` | `about`, `badge`, `handle`, `picture`, `tip`, `tone` | An account's picture, name and handle. |
 | `partials/_insight_grid.html` | `items` | `label`, `level` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_meter.html` | `label`, `max`, `value` | `marks` | A proportion as a bar, or as a segment for each of what it counts. |
@@ -1463,8 +1463,8 @@ Once the page is showing, it posts that. HQ works out which kinds the page is as
 asks the controller for those whose last attempt is older than their cadence
 (`hq/platform/application/freshness.py`).
 
-- Opening a page never logs in to a machine: a kind HQ declares read by logging in is left to the
-  scheduled read, and the controller refuses every other kind's reader a shell.
+- Opening a page never logs in to a machine: a kind whose reader opens a shell is left to the
+  scheduled read.
 - A page in a background tab asks for nothing, a GET never does, and the request cannot name a
   connection or a kind.
 - When the reading lands, the page's content is fetched again and swapped in place, the ask's own
