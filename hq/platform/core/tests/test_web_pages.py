@@ -384,9 +384,8 @@ class DashboardWorkflowTests(SignedInTestCase):
 
         response = self.client.get("/action-items/")
 
-        # Each finding is its own item, linked to its own rule's evidence.
-        rule_links = f"{reverse('control_plane:findings')}?rule="
-        self.assertTrue([url for url in hrefs(response) if url.startswith(rule_links)])
+        # Each finding is its own item, linked to the record it is about.
+        self.assertTrue([url for url in hrefs(response) if "example-wildcard" in url], hrefs(response))
 
     def test_output_a_project_lacks_is_counted_but_not_queued(self):
         """A shape of the portfolio, not a decision waiting on anyone.

@@ -56,6 +56,14 @@ class DecisionTests(SimpleTestCase):
         self.assertEqual(row_hrefs(html).count("/example/review/"), 1)
         self.assertEqual(elements(html, "form"), [])
 
+    def test_a_press_it_leads_with_is_its_one_button(self):
+        """An item with no page of its own leads with its press, by the press's words."""
+
+        start = example_command("start", "Start", "infrastructure_change", "/example/start/", method="POST")
+        shown = decision(self.item(steps=(Press(start),), action="Start", url="/findings/?rule=example"))
+
+        self.assertEqual([action["url"] for action in shown["actions"]], ["/example/start/"])
+
     def test_what_is_wrong_and_its_buttons_are_on_the_face_of_the_card(self):
         fix = example_command("fix", "Restore the example", "remote_write", "/example/fix/", recommended=True)
         html = card(self.item(steps=(Press(fix),)))
