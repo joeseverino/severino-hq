@@ -38,7 +38,7 @@ class ReaderSelectionTests(SimpleTestCase):
                 self.assertEqual(labels, ["tests.test_example", "tests.test_other"])
 
     def test_a_sheet_selects_its_reader_without_consulting_python_coverage(self):
-        reader = Path("hq/platform/core/tests/test_look_reach.py")
+        reader = Path("hq/platform/core/tests/test_part_sheets.py")
         with patch.object(selection.ran, "recorded", side_effect=AssertionError("CSS has no Python edits")):
             labels, _ = selection.selection(["static/css/app/figures.css"], [], [reader, PROBES], "HEAD")
         self.assertEqual(labels, [selection.module_name(reader)])

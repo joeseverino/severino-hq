@@ -365,9 +365,8 @@ run = "go tool govulncheck -test ./..."
 
 # Each derived file against its source. A gate tagged derived is its file's
 # one declaration (docs/Development.md, Derived files): vars.writes names each
-# file it writes whole. fix:derived runs every one's fix mode, .gitattributes marks what
-# they write, and tools/tests/test_drift_gates.py holds each to what its fix
-# writes.
+# file it writes whole. fix:derived runs every one's fix mode, and .gitattributes
+# marks what they write.
 
 ["lint:drift-shared-ui-reference"]
 description = "docs/Shared-UI.md is what the host's templates offer an extension"

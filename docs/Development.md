@@ -663,9 +663,9 @@ one is its writer and that gate; everything else reads the declaration:
 - `.gitattributes` marks each declared file `linguist-generated`, written by
   `lint:drift-gitattributes` (a hand-written attribute goes in a
   `.gitattributes` in its own directory);
-- `tools/tests/test_drift_gates.py` deletes a gate's files, runs the command
-  its failure names and then its fix mode, and fails on a file the fix writes
-  that its declaration leaves out, or one it declares and does not write.
+- `tools/tests/test_drift_gates.py` fails on a drift gate that neither
+  declares its files nor records itself, and on a declared file that is not
+  in the checkout.
 
 `mise run fix` then formats as the lint gates read. It also lowers each count
 in `tools/lint/eslint-suppressions.json` that has fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
