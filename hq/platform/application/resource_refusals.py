@@ -96,7 +96,7 @@ def served(spec: ResourceSpec) -> dict[str, Any]:
 
     if spec.listing:
         return {"next": next_call("list_resource", name=spec.name)}
-    if spec.detail_handler and spec.identifier:
+    if spec.detail and spec.identifier:
         return {"identifier": spec.identifier, "next": next_call("get_resource", name=spec.name)}
     return {"next": next_call("describe_resources")}
 

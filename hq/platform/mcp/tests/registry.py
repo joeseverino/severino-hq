@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from typing import Any, TypedDict
 
-from hq.platform.application.integration_specs import ListRead, ResourceSpec
+from hq.platform.application.integration_specs import DetailRead, ListRead, ResourceSpec
 from hq.platform.application.integration_testing import override_integration_graph
 from hq.platform.application.integrations import held_graph
 from hq.platform.application.projection import page_of
@@ -43,7 +43,7 @@ def example_kind(seen: list[str] | None = None) -> ResourceSpec:
         "Records an extension declares.",
         "example_read",
         listing=ListRead(lambda: page_of([]), EmptyQuery, ExampleRecord),
-        detail_handler=detail,
+        detail=DetailRead(detail),
         identifier="name",
     )
 

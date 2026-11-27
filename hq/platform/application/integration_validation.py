@@ -263,18 +263,18 @@ def _validate_list_contract(spec: ResourceSpec) -> None:
 
 
 def _validate_detail_contract(spec: ResourceSpec) -> None:
-    if bool(spec.detail_handler) != bool(spec.identifier):
+    if bool(spec.detail) != bool(spec.identifier):
         raise ImproperlyConfigured(f"Resource {spec.name!r} must declare its detail handler and identifier together.")
-    if not spec.detail_handler:
+    if not spec.detail:
         return
     try:
-        inspect.signature(spec.detail_handler, annotation_format=Format.STRING).bind(None, **_principal_argument(spec))
+        inspect.signature(spec.detail.reader, annotation_format=Format.STRING).bind(None, **_principal_argument(spec))
     except TypeError as exc:
         raise ImproperlyConfigured(f"Resource {spec.name!r} detail handler does not accept one identifier.") from exc
 
 
 def _validate_search_contract(spec: ResourceSpec) -> None:
-    if not any((spec.listing, spec.detail_handler, spec.search)):
+    if not any((spec.listing, spec.detail, spec.search)):
         raise ImproperlyConfigured(f"Resource {spec.name!r} exposes no operations.")
     if spec.search and not isinstance(spec.search, SearchDefinition):
         raise ImproperlyConfigured(f"Resource {spec.name!r} has an invalid search definition.")
@@ -292,10 +292,8 @@ def _validate_record_types(spec: ResourceSpec) -> None:
     path), so that is not required."""
 
     typed: tuple[tuple[type, str], ...] = ((spec.listing.item, "list"),) if spec.listing else ()
-    if spec.record_type is not None:
-        if not spec.detail_handler:
-            raise ImproperlyConfigured(f"Resource {spec.name!r} types a detail read it does not serve.")
-        typed += ((spec.record_type, "detail"),)
+    if spec.detail and spec.detail.record is not None:
+        typed += ((spec.detail.record, "detail"),)
     for kind, operation in typed:
         if not is_typeddict(kind):
             raise ImproperlyConfigured(f"Resource {spec.name!r} must type its {operation} read with a TypedDict.")

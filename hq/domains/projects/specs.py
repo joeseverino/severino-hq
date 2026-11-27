@@ -20,6 +20,7 @@ from hq.platform.application.describe import Describe
 from hq.platform.application.domains import records_of
 from hq.platform.application.integration_specs import (
     CapabilitySpec,
+    DetailRead,
     ListFilter,
     ListRead,
     ListSort,
@@ -271,7 +272,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 filters=FILTERS,
                 toggles=(NEEDS_OUTPUT, NO_CONTENT, NO_DOCS, UPDATES_ON),
             ),
-            detail_handler=projects.get_project,
+            detail=DetailRead(projects.get_project, ProjectRecord),
             identifier="slug",
             search=SearchDefinition.of(
                 Project,
@@ -280,6 +281,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 title_field="name",
             ),
             web_route="projects:list",
-            record_type=ProjectRecord,
         ),
     )

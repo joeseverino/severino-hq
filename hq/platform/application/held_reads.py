@@ -17,7 +17,7 @@ from . import approval_review, approvals
 from .contracts import Effect
 from .describe import Describe
 from .held_answer import HELD, HeldRequest, applying
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from .integration_specs import CapabilitySpec, DetailRead, ListRead, ResourceSpec
 from .projection import page_of
 from .record_errors import RecordNotFound
 from .refusal_codes import Code
@@ -143,10 +143,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
             Capability.READ,
             listing=ListRead(list_held, EmptyQuery, HeldRequestItem),
-            detail_handler=get_held,
+            detail=DetailRead(get_held, HeldRequestRecord),
             identifier="id",
             pass_principal=True,
-            record_type=HeldRequestRecord,
             # Every held request is decided in the audit log's approval queue.
             web_route="core:audit_list",
         ),

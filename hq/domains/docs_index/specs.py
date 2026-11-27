@@ -5,7 +5,14 @@ from django.db.models import Q
 from hq.platform.application import documentation
 from hq.platform.application.contracts import Effect
 from hq.platform.application.documentation import DocumentationItem, DocumentationRow
-from hq.platform.application.integration_specs import CapabilitySpec, ListFilter, ListRead, ListSort, ResourceSpec
+from hq.platform.application.integration_specs import (
+    CapabilitySpec,
+    DetailRead,
+    ListFilter,
+    ListRead,
+    ListSort,
+    ResourceSpec,
+)
 from hq.platform.application.resources import BoundedQuery, SearchText
 from hq.platform.application.search_contracts import SearchDefinition
 from hq.platform.application.security import Capability
@@ -76,7 +83,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 filters=FILTERS,
                 totals=documentation.list_totals,
             ),
-            detail_handler=documentation.get_documentation,
+            detail=DetailRead(documentation.get_documentation, DocumentationItem),
             identifier="doc_id",
             pass_principal=True,
             search=SearchDefinition.of(
@@ -94,6 +101,5 @@ def resources() -> tuple[ResourceSpec, ...]:
                 badge_field="doc_id",
             ),
             web_route="docs_index:list",
-            record_type=DocumentationItem,
         ),
     )

@@ -115,25 +115,21 @@ class RecordTypeTests(TestCase):
         identifiers["approvals"] = [str(held.pk)]
         read: set[str] = set()
         for name, spec in registry.items():
-            if not spec.detail_handler:
+            if not spec.detail:
                 continue
-            record = _validator(spec.record_type)
+            record = _validator(spec.detail.record)
             for identifier in identifiers.get(name, ()):
                 with self.subTest(resource=name, identifier=identifier):
                     record.validate(_sent(get_resource(name, identifier, principal=READER)))
                     read.add(name)
         # Each read of one was checked on a real record, so none passes unread.
-        self.assertEqual(read, {name for name, spec in registry.items() if spec.detail_handler})
+        self.assertEqual(read, {name for name, spec in registry.items() if spec.detail})
 
 
 class RecordTypeContractTests(SimpleTestCase):
     def test_a_type_that_is_no_typed_dict_is_refused(self):
         with self.assertRaises(ImproperlyConfigured):
             validate_resource_spec(_spec(dict))
-
-    def test_a_record_for_a_read_the_resource_does_not_serve_is_refused(self):
-        with self.assertRaises(ImproperlyConfigured):
-            validate_resource_spec(_spec(_ExampleNote, record_type=_ExampleNote))
 
     def test_fields_its_item_does_not_declare_are_refused(self):
         with self.assertRaises(ImproperlyConfigured):

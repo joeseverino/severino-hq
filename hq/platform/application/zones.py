@@ -35,7 +35,7 @@ from .contracts import Effect
 from .domain_records import DomainRecord, DomainRow
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
-from .integration_specs import CapabilitySpec, ListRead, ResourceSpec
+from .integration_specs import CapabilitySpec, DetailRead, ListRead, ResourceSpec
 from .managed_records import ManagedResourceItem
 from .record_errors import PolicyError, RecordNotFound
 from .resources import BoundedQuery
@@ -661,9 +661,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every domain HQ manages or has read, its services and registration.",
             Capability.READ,
             listing=ListRead(derived_reads.list_domains, BoundedQuery, DomainRow),
-            detail_handler=derived_reads.get_domain,
+            detail=DetailRead(derived_reads.get_domain, DomainRecord),
             identifier="name",
             web_route="zones:index",
-            record_type=DomainRecord,
         ),
     )

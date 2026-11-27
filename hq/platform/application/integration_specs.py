@@ -660,6 +660,16 @@ def _asked_by(read: ListRead) -> type[BaseModel]:
 
 
 @dataclass(frozen=True, slots=True)
+class DetailRead:
+    """A resource's read of one record: the reader that answers it, and the
+    TypedDict it answers, where it types one."""
+
+    # Like a list's handler, checked at the call.
+    reader: Callable[..., object]
+    record: type | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ResourceSpec(Requires):
     """One declaration of a readable domain and every operation it supports."""
 
@@ -668,8 +678,7 @@ class ResourceSpec(Requires):
     summary: str
     required_capability: Capability | str | tuple[Capability | str, ...]
     listing: ListRead | None = None
-    # Like a list's handler, checked at the call.
-    detail_handler: Callable[..., object] | None = None
+    detail: DetailRead | None = None
     identifier: str | None = None
     # A type, or one an ``Annotated`` bounds (``RecordId``).
     identifier_type: Any = str
@@ -682,8 +691,6 @@ class ResourceSpec(Requires):
     # The handlers also take ``principal=``: the answer depends on what the
     # caller may see, not only on whether it may read the resource.
     pass_principal: bool = False
-    # The TypedDict a read of one record answers.
-    record_type: type | None = None
 
     def __post_init__(self) -> None:
         # A search declared through ``SearchDefinition.of`` is this resource's

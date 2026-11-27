@@ -22,7 +22,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from .container_state import ContainerCount
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
-from .integration_specs import ListRead, ResourceSpec, typed_keys
+from .integration_specs import DetailRead, ListRead, ResourceSpec, typed_keys
 from .locate import Machines, host_of, index_of, observed_answers, points_at_host
 from .machine_aliases import same_machine
 from .resources import BoundedQuery
@@ -690,9 +690,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "Every machine anything reported, its roles, addresses and what runs on it.",
             Capability.READ,
             listing=ListRead(derived_reads.list_machines, BoundedQuery, MachineRecord, fields=typed_keys(MachineRow)),
-            detail_handler=derived_reads.get_machine,
+            detail=DetailRead(derived_reads.get_machine, MachineRecord),
             identifier="name",
             web_route="control_plane:machines",
-            record_type=MachineRecord,
         ),
     )

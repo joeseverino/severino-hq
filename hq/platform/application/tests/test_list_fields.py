@@ -46,7 +46,7 @@ class ListFieldTests(TestCase):
                     page["items"],
                 )
                 # A kind whose rows are not its records may list none by its identifier.
-                if spec.detail_handler and whole["items"] and spec.identifier in whole["items"][0]:
+                if spec.detail and whole["items"] and spec.identifier in whole["items"][0]:
                     identifier = whole["items"][0][spec.identifier]
                     self.assertEqual(
                         get_resource(name, identifier, principal=OPERATOR, fields=["*"]),

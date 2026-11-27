@@ -24,7 +24,7 @@ from .adoption import ADOPT_SERVICE, AdoptServiceCommand, adopt_service
 from .cadence import CONTROLLER_REFRESH
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
-from .integration_specs import CapabilitySpec, ListFilter, ListRead, ResourceSpec, typed_keys
+from .integration_specs import CapabilitySpec, DetailRead, ListFilter, ListRead, ResourceSpec, typed_keys
 from .labels import adding, lower_first, one
 from .managed_records import ManagedResourceListed, ManagedResourceRecord, ManagedResourceRow
 from .policy_fixes import request_empty_groups_removal
@@ -383,10 +383,9 @@ def resources() -> tuple[ResourceSpec, ...]:
                     ListFilter("kinds", "Type", [(kind, each.label) for kind, each in PROVIDERS.items()], "kind"),
                 ),
             ),
-            detail_handler=resource_context.get_managed_resource,
+            detail=DetailRead(resource_context.get_managed_resource, ManagedResourceRecord),
             identifier="key",
             search=SEARCH,
             web_route="control_plane:list",
-            record_type=ManagedResourceRecord,
         ),
     )

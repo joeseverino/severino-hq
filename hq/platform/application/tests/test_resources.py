@@ -11,7 +11,7 @@ from hq.platform.application.projection import page_of
 from hq.platform.core.testing import NOBODY, OPERATOR, READER, declare
 
 from ..command_center import command_center
-from ..integration_specs import ListRead
+from ..integration_specs import DetailRead, ListRead
 from ..integrations import held_graph
 from ..plugin_testing import offering
 from ..record_errors import RecordNotFound
@@ -216,7 +216,7 @@ NESTED = ResourceSpec(
     "Synthetic records with collections inside.",
     Capability.READ,
     listing=ListRead(lambda: page_of([_nested(None), {"name": "flat"}]), EmptyQuery, _ExampleRecord),
-    detail_handler=_nested,
+    detail=DetailRead(_nested),
     identifier="name",
 )
 

@@ -763,7 +763,7 @@ declarations, each a query field the API document says.
 | Field | Set it |
 | --- | --- |
 | `listing` | to its `ListRead` |
-| `record_type` | to the TypedDict a read of one record answers |
+| `detail` | to its `DetailRead`: the handler that reads one record and the TypedDict it answers |
 | `pass_principal=True` | when the answer depends on what the caller may see; both handlers then also receive `principal=` |
 | `web_route` | to the resource's list route, which must reverse without arguments, to link it from the Command Center |
 

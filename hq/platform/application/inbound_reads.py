@@ -7,7 +7,7 @@ from hq.domains.control_plane.models import InboundEvent, InboundOutcome, Inboun
 
 from .answer_fields import DateTime
 from .describe import Describe, listed
-from .integration_specs import ListFilter, ListRead, ListSort, ResourceSpec
+from .integration_specs import DetailRead, ListFilter, ListRead, ListSort, ResourceSpec
 from .projection import guarded, iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -98,11 +98,10 @@ def resources() -> tuple[ResourceSpec, ...]:
                     ListFilter("outcome", "Outcome", InboundOutcome.choices),
                 ),
             ),
-            detail_handler=get_event,
+            detail=DetailRead(get_event, InboundEventItem),
             identifier="id",
             identifier_type=RecordId,
             web_route="control_plane:events",
-            record_type=InboundEventItem,
             # A delivery id pasted from the provider's log finds its event.
             search=SearchDefinition.of(
                 InboundEvent,

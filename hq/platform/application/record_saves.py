@@ -44,7 +44,7 @@ from .record_declaration import Records
 from .record_errors import RecordConflict, RecordNotFound, Sentence
 from .security import Principal
 lazy from .projection import iso
-lazy from .resources import resource_registry
+lazy from .resources import masked_kind, resource_registry
 lazy from .ui import ended
 
 Save = Callable[..., dict[str, Any]]
@@ -64,7 +64,7 @@ def saved_type(resource: str) -> Any:
 
     records = records_of(resource)
     spec = resource_registry()[resource]
-    record = spec.record_type or (spec.listing.item if spec.listing else None)
+    record = masked_kind(spec, listed=False) or masked_kind(spec, listed=True)
     saved: Any = TypedDict(  # type: ignore[operator]
         _saved_name(records),
         {"ok": Literal[True], "created": Created, records.noun: record, "message": CallMessage},

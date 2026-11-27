@@ -10,7 +10,7 @@ what it would take to change it. Nothing here derives a fact.
 from collections.abc import Callable
 from typing import Any
 
-from .integration_specs import ListRead, ResourceSpec, typed_keys
+from .integration_specs import DetailRead, ListRead, ResourceSpec, typed_keys
 from .projection import iso, page_of, projection_scope
 from .record_errors import one_of
 from .resources import BoundedQuery
@@ -310,10 +310,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "memory and CPU, and its posture.",
             Capability.READ,
             listing=ListRead(list_containers, BoundedQuery, ContainerRecord, fields=typed_keys(ContainerRow)),
-            detail_handler=get_container,
+            detail=DetailRead(get_container, ContainerRecord),
             identifier="address",
             web_route="control_plane:containers",
-            record_type=ContainerRecord,
         ),
         ResourceSpec(
             "upgrades",
@@ -322,10 +321,9 @@ def resources() -> tuple[ResourceSpec, ...]:
             "blockers and steps. Read-only.",
             Capability.READ,
             listing=ListRead(list_upgrades, BoundedQuery, UpgradeRecord, fields=typed_keys(UpgradeRow)),
-            detail_handler=get_upgrade,
+            detail=DetailRead(get_upgrade, UpgradeRecord),
             identifier="address",
             web_route="control_plane:containers",
-            record_type=UpgradeRecord,
         ),
         ResourceSpec(
             "app_updates",
@@ -334,9 +332,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             "the containers it moves, its checks, and what it fixes and brings. Read-only.",
             Capability.READ,
             listing=ListRead(list_app_updates, BoundedQuery, AppUpdateRecord, fields=typed_keys(AppUpdateRow)),
-            detail_handler=get_app_update,
+            detail=DetailRead(get_app_update, AppUpdateRecord),
             identifier="key",
             web_route="control_plane:containers",
-            record_type=AppUpdateRecord,
         ),
     )
