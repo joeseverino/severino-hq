@@ -165,6 +165,7 @@ class DocsDeleteView(DocsPage, RecordDeleteMixin, DeleteView):
 class ManifestImportView(View):
     runs = (SYNC,)
     template_name = "docs_index/import.html"
+    form_class = ManifestImportForm
 
     def render_form(self, request, form):
         return render(
@@ -181,10 +182,10 @@ class ManifestImportView(View):
         )
 
     def get(self, request):
-        return self.render_form(request, ManifestImportForm())
+        return self.render_form(request, self.form_class())
 
     def post(self, request):
-        form = ManifestImportForm(request.POST, request.FILES)
+        form = self.form_class(request.POST, request.FILES)
         if not form.is_valid():
             return self.render_form(request, form)
         try:

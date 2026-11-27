@@ -97,7 +97,7 @@ class ReceiptFile:
 class ReceiptUploadCommand(ReceiptMetadataCommand):
     file: Annotated[
         ReceiptFile,
-        Upload(accepts=tuple(ALLOWED_RECEIPT_CONTENT_TYPES)),
+        Upload(max_bytes=MAX_RECEIPT_BYTES, accepts=tuple(ALLOWED_RECEIPT_CONTENT_TYPES)),
         Describe(f"The receipt: a PDF or image, up to {MAX_RECEIPT_BYTES // (1024 * 1024)} MB."),
     ]
 

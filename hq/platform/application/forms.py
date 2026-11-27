@@ -14,7 +14,9 @@ from django.utils.datastructures import MultiValueDict
 lazy from hq.platform.core.held_values import format_html, format_html_join
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
-from .ui import button_classes
+from .labels import human_bytes
+from .record_errors import Sentence
+from .ui import button_classes, counted
 
 
 class MultipleFileInput(forms.FileInput):
@@ -29,8 +31,57 @@ class MultipleFileInput(forms.FileInput):
     allow_multiple_selected = True
 
 
-class MultipleFileField(forms.FileField):
-    """A ``FileField`` that validates every selected file, not just one.
+def larger_than(limit: int) -> Sentence:
+    """What is said after a file's name when it is over ``limit`` bytes, by the
+    page before it sends one and by the field when one arrives."""
+
+    return f"is larger than {human_bytes(limit)}."
+
+
+def at_most(count: int) -> str:
+    """What is said of a choice of more files than ``count``."""
+
+    return f"Choose at most {counted(count, 'file')}."
+
+
+class FileField(forms.FileField):
+    """A file a person picks, and the largest it takes (``max_bytes``).
+
+    The limit is the form's one declaration of its largest upload. Its input
+    carries it, so the page refuses a larger file before sending it (app.js),
+    the field refuses one sent anyway, and ``uploads`` derives from every
+    form's the largest request the proxy in front of HQ must let through.
+    """
+
+    def __init__(self, *, max_bytes: int, **kwargs: Any) -> None:
+        self.max_bytes = max_bytes
+        super().__init__(**kwargs)
+
+    @property
+    def largest_body(self) -> int:
+        """The most bytes of files one post of the field sends."""
+
+        return self.max_bytes
+
+    @override
+    def widget_attrs(self, widget: forms.Widget) -> dict[str, Any]:
+        return {
+            **super().widget_attrs(widget),
+            "data-max-bytes": str(self.max_bytes),
+            "data-too-large": larger_than(self.max_bytes),
+        }
+
+    @override
+    def clean(self, data: Any, initial: Any = None) -> Any:
+        upload = super().clean(data, initial)
+        if upload and upload is not initial and (upload.size or 0) > self.max_bytes:
+            raise forms.ValidationError(f"{upload.name} {larger_than(self.max_bytes)}", code="too_large")
+        return upload
+
+
+class MultipleFileField(FileField):
+    """A ``FileField`` that validates every selected file, not just one, and
+    takes at most ``max_files`` of them.
 
     ``FileField.clean`` keeps one file of a multiple input and drops the rest
     with no error. This runs the field's own validation over each upload, so
@@ -38,6 +89,23 @@ class MultipleFileField(forms.FileField):
     """
 
     widget = MultipleFileInput
+
+    def __init__(self, *, max_bytes: int, max_files: int, **kwargs: Any) -> None:
+        self.max_files = max_files
+        super().__init__(max_bytes=max_bytes, **kwargs)
+
+    @property
+    @override
+    def largest_body(self) -> int:
+        return self.max_bytes * self.max_files
+
+    @override
+    def widget_attrs(self, widget: forms.Widget) -> dict[str, Any]:
+        return {
+            **super().widget_attrs(widget),
+            "data-max-files": str(self.max_files),
+            "data-too-many": at_most(self.max_files),
+        }
 
     @override
     def clean(self, data: Any, initial: Any = None) -> list[Any]:
@@ -53,6 +121,8 @@ class MultipleFileField(forms.FileField):
             # every other field on the form would.
             clean_one(None, initial)
             return []
+        if len(uploads) > self.max_files:
+            raise forms.ValidationError(at_most(self.max_files), code="too_many")
         return [clean_one(item, initial) for item in uploads]
 
 
@@ -272,7 +342,7 @@ def file_as_sent(upload: Any) -> dict[str, str]:
     }
 
 
-class UploadField(forms.FileField):
+class UploadField(FileField):
     """A file a person picks, for a command field that takes a file as JSON.
 
     A form opened on a record holding a file names it as its initial, which

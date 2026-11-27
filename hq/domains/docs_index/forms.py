@@ -1,11 +1,14 @@
 from django import forms
 
+from hq.platform.application.forms import FileField
+
 # Several thousand doc records are a few megabytes.
 MAX_MANIFEST_BYTES = 10 * 1024 * 1024
 
 
 class ManifestImportForm(forms.Form):
-    manifest_file = forms.FileField(
+    manifest_file = FileField(
+        max_bytes=MAX_MANIFEST_BYTES,
         label="Manifest JSON",
         # The importer accepts one shape of file; the picker should offer that
         # shape. Both spellings, because a vault export written by a script is
@@ -18,9 +21,3 @@ class ManifestImportForm(forms.Form):
         initial=True,
         label="Update existing records (match on doc_id)",
     )
-
-    def clean_manifest_file(self):
-        manifest = self.cleaned_data["manifest_file"]
-        if manifest.size > MAX_MANIFEST_BYTES:
-            raise forms.ValidationError(f"A manifest is at most {MAX_MANIFEST_BYTES // (1024 * 1024)} MB.")
-        return manifest

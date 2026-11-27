@@ -115,7 +115,7 @@ class UploadCapabilityTests(_PrivateMedia):
 
         # The encoded text of each is longer than the limit; only the bytes count.
         self.assertTrue(within["ok"], within)
-        self.assertEqual(over["error"], {"code": "invalid_input", "message": "This file is 11 B. The limit is 10 B."})
+        self.assertEqual(over["error"], {"code": "invalid_input", "message": "This file is larger than 10 B."})
         self.assertEqual(Receipt.objects.count(), 1)
 
     def test_a_file_a_receipt_cannot_be_is_refused_in_the_hosts_words(self):

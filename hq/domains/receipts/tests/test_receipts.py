@@ -107,7 +107,7 @@ class ReceiptFileRuleTests(SimpleTestCase):
         with self.assertRaises(InputError) as refused:
             validate_receipt_file(upload)
 
-        self.assertEqual(refused.exception.reason, "This file is 16 MB. The limit is 15 MB.")
+        self.assertEqual(refused.exception.reason, "This file is larger than 15 MB.")
 
 
 class ReceiptEditTests(TestCase):

@@ -1,5 +1,6 @@
-"""For a form field Django lacks and HQ's renderer draws: one that takes several files."""
+"""The form fields that take files, each declaring the largest it takes, which
+the page holds before sending and HQ holds the proxy in front of it to."""
 
-from hq.platform.application.forms import MultipleFileField, MultipleFileInput
+from hq.platform.application.forms import FileField, MultipleFileField, MultipleFileInput
 
-__all__ = ["MultipleFileField", "MultipleFileInput"]
+__all__ = ["FileField", "MultipleFileField", "MultipleFileInput"]

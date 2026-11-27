@@ -37,6 +37,8 @@ REFERS = "x-hq-reference"
 UPLOAD = "x-hq-upload"
 # The media types an upload takes, which a file picker offers.
 ACCEPTS = "x-hq-accepts"
+# The largest file an upload takes, in bytes.
+MAX_BYTES = "x-hq-max-bytes"
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,17 +190,26 @@ def _marker[T](hint: Any, marker: type[T]) -> T | None:
     return None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Upload:
     """A field that is a file, sent in JSON as its ``name``, ``content_type``
     and base64 ``content``: the form offers a file to pick and sends it so
     (``forms.file_as_sent``). ``accepts`` names the media types it takes,
-    which the form's picker offers."""
+    which the form's picker offers, and ``max_bytes`` the largest file, which
+    the picker refuses before sending and ``uploads`` sums with every form's."""
 
+    max_bytes: int
     accepts: tuple[str, ...] = ()
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), UPLOAD: True, **({ACCEPTS: sorted(self.accepts)} if self.accepts else {})}
+        accepts = {ACCEPTS: sorted(self.accepts)} if self.accepts else {}
+        return {**handler(schema), UPLOAD: True, MAX_BYTES: self.max_bytes, **accepts}
+
+
+def upload_of(hint: Any) -> Upload | None:
+    """The ``Upload`` a field's type carries, when it is a file."""
+
+    return _marker(hint, Upload)
 
 
 _ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -265,6 +276,7 @@ def referred(schema: dict[str, Any]) -> tuple[str, str] | None:
 __all__ = [
     "AMONG",
     "CONFIRM_MISMATCH",
+    "MAX_BYTES",
     "NAMES_RECORDS",
     "REFERS",
     "UPLOAD",
@@ -290,4 +302,5 @@ __all__ = [
     "named_records",
     "referred",
     "stored_in",
+    "upload_of",
 ]

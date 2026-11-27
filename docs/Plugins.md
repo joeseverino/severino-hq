@@ -114,9 +114,18 @@ domain; the SDK owns integration mechanics:
 | Kept reads and derivations | `hq_sdk.reads` |
 | References to other records | `hq_sdk.references` |
 | Calendar sources | `hq_sdk.calendar` |
+| A form field that takes files, with the largest it takes | `hq_sdk.forms` |
 | Tables, forms, UI projections, money, global search | the matching `hq_sdk.*` module |
 | Moving rows the host keeps under a renamed capability | `hq_sdk.migrations` |
 | Synthetic siblings and style checks | `hq_sdk.testing` |
+
+A form that takes files names each field `hq_sdk.forms.FileField` (or
+`MultipleFileField`) with the largest file it takes, and its view names the
+form as `form_class`. The page refuses a larger file before sending it, the
+field refuses one sent anyway, and HQ holds the proxy in front of it to the
+largest request any composed form or command takes
+(`hq.platform.application.uploads`), raising `proxy-refuses-uploads` when it
+is lower.
 
 Imports from `application`, `core` or another host app are unsupported: they
 tie an extension to the host's implementation details. The extension check
