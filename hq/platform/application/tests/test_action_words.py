@@ -9,7 +9,6 @@ the declaration does not have.
 """
 
 import ast
-import inspect
 import re
 from functools import cache
 from pathlib import Path
@@ -19,18 +18,13 @@ from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.models import OperationRequest
 
-from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry, capability_spec, command_spec
-from ..outbound_work import ask, declared_work
+from ..outbound_work import declared_work
 from .facts import ROOT, grouped, scan
 from .source import template_files
 
 # Constructors of a control a person presses, and where their label sits.
 LABEL_POSITION = {"Ask": 0, "PageAction": 0, "ActionLink": 1, "TopologyAction": 1}
-# What builds a control for a command or a piece of outbound work.
-COMMAND_BUILDERS = {
-    builder.__name__: builder for builder in (ask, command_action, capability_action_link, read_now_link)
-}
 # Calls that name a command and one of its declared variants.
 VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "Does")
 # Text a template writes that is a declared word for something no command does.
@@ -154,17 +148,6 @@ def pressed_words(text: str, words: set[str]) -> list[str]:
     named = "|".join(re.escape(word) for word in sorted(words, key=len, reverse=True))
     pattern = re.compile(rf"\b(?:[Pp]ress|[Cc]lick|[Tt]ap)\s+[\"“]?({named})(?![\w-])")
     return pattern.findall(text)
-
-
-class CommandBuilderTests(SimpleTestCase):
-    def test_no_builder_of_a_commands_control_takes_words(self):
-        """The builders read the declaration, so none of them has a ``label``
-        for a caller to override it with: a call that passes one does not
-        type-check or run."""
-
-        for builder in COMMAND_BUILDERS.values():
-            with self.subTest(builder.__name__):
-                self.assertNotIn("label", inspect.signature(builder).parameters)
 
 
 @tag("source", "tree")

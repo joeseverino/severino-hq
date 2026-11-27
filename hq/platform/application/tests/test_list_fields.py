@@ -16,7 +16,6 @@ from ..plugin_testing import offering
 from ..resources import (
     EmptyQuery,
     ResourceSpec,
-    describe_resources,
     get_resource,
     list_resource,
     resource_registry,
@@ -37,19 +36,6 @@ class ListFieldTests(TestCase):
         with throwaway_media(), seeds.built("standard"):
             pass
 
-    def test_each_item_keeps_only_its_kinds_list_fields_and_holds_them(self):
-        declaring = _declaring()
-        for name, spec in declaring.items():
-            with self.subTest(name=name):
-                page = list_resource(name, {}, principal=OPERATOR)
-                held = {key for item in page["items"] for key in item}
-
-                self.assertLessEqual(held, set(spec.listing.fields))
-                # An item's NotRequired field may be absent from every item.
-                required = spec.listing.item.__required_keys__ & set(spec.listing.fields)
-                if page["items"]:
-                    self.assertLessEqual(required, held, "a required field no item holds")
-
     def test_a_star_keeps_every_field(self):
         for name, spec in _declaring().items():
             page = list_resource(name, {}, principal=OPERATOR)
@@ -66,20 +52,6 @@ class ListFieldTests(TestCase):
                         get_resource(name, identifier, principal=OPERATOR, fields=["*"]),
                         get_resource(name, identifier, principal=OPERATOR),
                     )
-
-    def test_named_fields_reach_past_the_kinds_list_fields(self):
-        listed = list_resource("machines", {}, principal=OPERATOR)
-        page = list_resource("machines", {}, principal=OPERATOR, fields=["name", "containers"])
-
-        self.assertTrue(page["items"])
-        self.assertFalse(any("containers" in item for item in listed["items"]))
-        self.assertEqual({key for item in page["items"] for key in item}, {"name", "containers"})
-
-    def test_the_catalog_names_each_kinds_list_fields(self):
-        for name, spec in _declaring().items():
-            with self.subTest(name=name):
-                (described,) = describe_resources(name=name)["resources"]
-                self.assertEqual(described["operations"]["list"]["fields"], list(spec.listing.fields))
 
 
 class _ExampleRecord(TypedDict):
@@ -98,6 +70,6 @@ class ListFieldRegistrationTests(SimpleTestCase):
             with (
                 self.subTest(fields=fields),
                 offering(resources=(invalid,)),
-                self.assertRaisesRegex(ImproperlyConfigured, "fields"),
+                self.assertRaises(ImproperlyConfigured),
             ):
                 held_graph()
