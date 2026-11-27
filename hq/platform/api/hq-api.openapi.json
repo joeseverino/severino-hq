@@ -38090,6 +38090,7 @@
                 "service-wiring-incomplete",
                 "posture-unmet",
                 "automation-worker-absent",
+                "offsite-backup-late",
                 "event-channel-silent",
                 "deploy-running",
                 "machine-offline",

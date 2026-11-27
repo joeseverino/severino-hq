@@ -82,10 +82,18 @@ row in the flow.
 {% endcomment %}
 {% layout %}
 {% section "Jobs" id="hq-work" %}
+  {% include "partials/_problems.html#rest" with rest=hq.problems_in.work|not_urgent only %}
   {% if work.unread %}
     {% muted element="p" %}{{ work.unread }}{% endmuted %}
   {% elif work.jobs %}
     {% data_table work.jobs_table %}
+  {% endif %}
+  {% if work.off_site %}
+  {% facts %}
+    {% for copy in work.off_site %}
+    {% fact "Off-site backup" %}{% if copy.uploaded_at %}{{ copy.uploaded_at|when }}{% else %}{% include "partials/_empty_state.html" with message="No copy yet" inline=True %}{% endif %}{% detail %}<small>{% if copy.copies %}{{ copy.copies|counted:"copy kept,copies kept" }} in {% endif %}<a href="{{ copy.url }}">{{ copy.connection_ref }}</a></small>{% endfact %}
+    {% endfor %}
+  {% endfacts %}
   {% endif %}
   {% if work.scheduled %}
     {% data_table work.scheduled_table %}

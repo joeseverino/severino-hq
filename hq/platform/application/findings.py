@@ -28,6 +28,7 @@ lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE
 
 from . import (
     automation_findings,
+    backup_findings,
     certificate_expiry,
     connection_findings,
     container_findings,
@@ -202,6 +203,7 @@ RULE_MODULES = (
     contradiction_findings,
     posture,
     automation_findings,
+    backup_findings,
     inbound_findings,
     delivery_findings,
     machine_findings,

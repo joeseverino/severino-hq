@@ -72,9 +72,13 @@ lists the bucket. When the bucket lacks the archive and the connection
 manages, it uploads it with `If-None-Match: *`, then lists the bucket again
 (`controller/providers/r2.go`). That listing is the `r2.backup` reading: the
 newest archive's key, size and upload time, and how many the bucket keeps,
-shown on the connection's page. The upload and the page agree because they
-read the same listing. An archive arrives on the first applying pass after
-the nightly run.
+shown on the connection's page and beside HQ's jobs on its own page. The
+upload and the pages agree because they read the same listing. An archive
+arrives on the first applying pass after the nightly run. The finding
+`offsite-backup-late` raises once two of the backup timer's runs, each up to
+its randomized delay late, pass with no newer copy, or with none at all once
+the connection has been set up that long (`backup_findings`, reading the
+timer's own `OnCalendar` and `RandomizedDelaySec`).
 
 What holds:
 

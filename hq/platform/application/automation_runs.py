@@ -309,8 +309,7 @@ def claimant(action: str, privilege: str | None) -> str:
 def run_profile(operation: OperationRequest) -> str:
     """The profile of the worker that claims ``operation``, a scan or a run."""
 
-    privilege = (operation.resource.spec or {}).get("privilege") if operation.resource is not None else None
-    return claimant(operation.action, privilege)
+    return claimant(operation.action, (operation.resource.spec or {}).get("privilege"))
 
 
 def _playbook_profile(resource: ManagedResource) -> str:

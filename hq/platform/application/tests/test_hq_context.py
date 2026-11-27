@@ -410,6 +410,46 @@ class PageTests(TestCase):
         self.assertLess(where, row)
         self.assertLess(row, work)
 
+    def test_jobs_say_the_newest_off_site_backup_and_that_it_is_late(self):
+        from django.db.models import F
+
+        from hq.domains.control_plane.models import ProviderConnection
+        from hq.domains.control_plane.observations.r2 import BACKUP_KIND
+
+        estate()
+        connection("r2", "example-backups", manages=True)
+        ProviderConnection.objects.update(created_at=F("created_at") - timedelta(days=30))
+        uploaded = timezone.now() - timedelta(days=4)
+        store(
+            BACKUP_KIND,
+            {
+                "connection_ref": "example-backups",
+                "bucket": "example-backups",
+                "key": "severino-hq-20260101T031500Z.tar.gz.age",
+                "size_bytes": 1024,
+                "uploaded_at": uploaded.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "copies": 30,
+            },
+        )
+
+        response = self.client.get(reverse("hq_self"))
+
+        page = all_elements(response)
+        work = next(index for index, element in enumerate(page) if element.attrs.get("id") == "hq-work-heading")
+        (fact,) = (
+            index
+            for index, element in enumerate(page)
+            if "fact" in element.classes and element.words.startswith("Off-site backup ")
+        )
+        self.assertIn("30 copies kept in example-backups", page[fact].words)
+        row = next(
+            index
+            for index, element in enumerate(page)
+            if "data-attention-item" in element.attrs and "off-site backup is late" in element.words
+        )
+        self.assertLess(work, row)
+        self.assertLess(work, fact)
+
     def test_an_urgent_problem_is_framed_above_the_page(self):
         estate()
         tailnet(authorized=False)

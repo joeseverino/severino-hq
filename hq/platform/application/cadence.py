@@ -368,6 +368,12 @@ def _later(one: datetime | None, other: datetime | None) -> datetime | None:
     return max((moment for moment in (one, other) if moment is not None), default=None)
 
 
+def automation_profiles() -> tuple[str, ...]:
+    """Every profile HQ has asked a scan or run of, the read profile's first."""
+
+    return (READ_PROFILE, *sorted(set(_automation_claims()) - {READ_PROFILE}))
+
+
 def automation_standing(profile: str) -> WorkerStanding:
     """The last arrival of the playbook worker lent ``profile``'s logins: its
     heartbeat, or its newest claim of the scans or runs it takes. Silent once

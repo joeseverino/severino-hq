@@ -5,13 +5,9 @@ notices: a rotated credential never arrives and a revoked one keeps working.
 The reading and each finding: docs/Secrets.md#how-hq-reads-it.
 """
 
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
-
-from django.conf import settings
 
 from hq.domains.control_plane.observations.host import (
     FAILURE_CLASSES,
@@ -23,6 +19,7 @@ from hq.domains.control_plane.observations.host import (
     UNKNOWN_FAILURE,
 )
 
+from . import unit_timers
 from .finding_model import (
     Finding,
     FindingEstate,
@@ -43,26 +40,9 @@ from .ui import ended
 # The renderer's timer starts it every OnUnitActiveSec, up to
 # RandomizedDelaySec late, read from the timer itself so the two cannot
 # disagree.
-RENDER_TIMER = Path(settings.BASE_DIR) / "deploy" / "systemd" / "severino-hq-secrets.timer"
-_SPAN = re.compile(r"(\d+)\s*(h|min|s)")
-_UNITS = {"h": timedelta(hours=1), "min": timedelta(minutes=1), "s": timedelta(seconds=1)}
-
-
-def _timer_span(key: str) -> timedelta:
-    """One time span the renderer's timer declares, in systemd's notation."""
-
-    for line in RENDER_TIMER.read_text().splitlines():
-        name, _, value = line.partition("=")
-        if name == key:
-            spans = _SPAN.findall(value)
-            if not spans or _SPAN.sub("", value).strip():
-                raise ValueError(f"{RENDER_TIMER.name}: {key} is not a span this reads: {value!r}")
-            return sum((int(count) * _UNITS[unit] for count, unit in spans), timedelta())
-    raise ValueError(f"{RENDER_TIMER.name} declares no {key}")
-
-
-RENDER_EVERY = _timer_span("OnUnitActiveSec")
-RENDER_DELAY = _timer_span("RandomizedDelaySec")
+RENDER_TIMER = "severino-hq-secrets.timer"
+RENDER_EVERY = unit_timers.span(RENDER_TIMER, "OnUnitActiveSec")
+RENDER_DELAY = unit_timers.span(RENDER_TIMER, "RandomizedDelaySec")
 # The installed files are stale once nothing has confirmed them current for
 # three runs at their latest: one missed run is a restart or a held lock, two
 # is a slow Connect.

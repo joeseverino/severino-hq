@@ -1,7 +1,7 @@
 from collections.abc import Mapping
 from datetime import timedelta
 
-from hq.domains.control_plane.models import OperationRequest, SourceProposal
+from hq.domains.control_plane.models import OperationRequest
 from hq.platform.core.models import UpstreamReading
 from hq.platform.core.testing import declare
 
@@ -12,7 +12,7 @@ from ...tone import Tone
 from . import AT, Example, Examples, Raised
 from .unit_findings import KIND as UNITS, failed, timer
 
-# A profile a runner connection lends the worker a login as, beside the read one.
+# A profile HQ asked a run of, beside the read one.
 ADMIN = "example.admin"
 
 
@@ -26,8 +26,8 @@ def worker(
 ) -> Example:
     """HQ's read profile's playbook worker last arrived ``seen`` ago, or
     never, with a playbook source unless not ``source``, on a machine whose
-    ``units`` were read; and each of ``profiles``' workers, whose logins the
-    newest scan reported, last arrived when it says."""
+    ``units`` were read; and each of ``profiles``' workers, of which a run
+    waits, last arrived when it says."""
 
     def heard(profile: str, ago: timedelta | None) -> None:
         if ago is not None:
@@ -36,24 +36,13 @@ def worker(
 
     def given() -> None:
         if source:
-            playbooks = declare("automation-source", "automation.source")
-            if profiles:
-                scan = OperationRequest.objects.create(
-                    resource=playbooks,
-                    action=OperationRequest.Action.SCAN,
-                    idempotency_key="example-scan",
-                    state=OperationRequest.State.SUCCEEDED,
-                    completed_at=AT,
-                )
-                SourceProposal.objects.create(
-                    operation=scan,
-                    repository="example/playbooks",
-                    branch="main",
-                    revision="1" * 40,
-                    verified=True,
-                    verification_reason="valid",
-                    reaches=[{"machine": "example-app", "profile": profile} for profile in ("read", *profiles)],
-                )
+            declare("automation-source", "automation.source")
+        for index, profile in enumerate(profiles or {}):
+            OperationRequest.objects.create(
+                resource=declare(f"example-run-{index}", "automation.operation", {"privilege": profile}),
+                action=OperationRequest.Action.RUN,
+                idempotency_key=f"example-run-{index}",
+            )
         heard("read", seen)
         for profile, ago in (profiles or {}).items():
             heard(profile, ago)

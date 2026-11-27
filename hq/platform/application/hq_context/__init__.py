@@ -21,7 +21,7 @@ from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
 from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
-lazy from .. import hq_self, request_context
+lazy from .. import automation_findings, backup_findings, hq_self, request_context
 lazy from ..entity_links import entity_link
 lazy from ..estate_records import Problem
 lazy from ..findings import estate_findings, finding_key
@@ -111,7 +111,7 @@ def hq_problems(principal: Principal) -> tuple[Mapping[str, Any], ...]:
     return tuple(item for _, item in _problems(machine, container, principal, reached=False))
 
 
-RELEASE, WHERE, REACH, SIGHT = "release", "where", "reach", "sight"
+RELEASE, WHERE, REACH, SIGHT, WORK = "release", "where", "reach", "sight", "work"
 
 
 def _problems(
@@ -129,12 +129,13 @@ def _problems(
         if container.project is not None:
             urls.append(container.project.get_absolute_url())
     names = [entity_link("service", name).url for name in hq_hostnames()]
-    # A controller has no page of its own, so its findings are found by key.
-    keys = [
-        finding_key(finding)
-        for finding in estate_findings(principal=principal)
-        if Kind.CONTROLLER.identity_in(finding.subject)
-    ]
+    # A controller has no page of its own, so its findings are found by key,
+    # and so are those about HQ's own work: its playbook workers and its
+    # off-site backup.
+    found = estate_findings(principal=principal)
+    keys = [finding_key(finding) for finding in found if Kind.CONTROLLER.identity_in(finding.subject)]
+    work = (automation_findings.RULE, backup_findings.RULE)
+    work_keys = [finding_key(finding) for finding in found if finding.rule in work]
     repository = repository_of(container)
     return problems_by_part(
         {
@@ -142,6 +143,7 @@ def _problems(
             WHERE: About(urls=urls if reached else urls + names, parts=_parts(container)),
             REACH: About(urls=names if reached else ()),
             SIGHT: About(keys=keys),
+            WORK: About(keys=work_keys),
         },
         principal,
     )

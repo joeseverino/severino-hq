@@ -424,17 +424,16 @@ class PlaybooksPageTests(TestCase):
 
         from hq.platform.application.cadence import automation_heartbeat
         from hq.platform.application.machines import machine_catalog
-        from hq.platform.core.example_estate.automation import PROFILES
         from hq.platform.core.models import UpstreamReading
 
         self.worker_gone(seen=timedelta(hours=3))
-        quiet, *heard = PROFILES[1], PROFILES[0], PROFILES[2]
-        for profile in heard:
-            UpstreamReading.objects.filter(key=automation_heartbeat(profile)).update(observed_at=timezone.now())
+        # The read profile's, and that of the privileged playbook the estate ran.
+        heard, quiet = "read", "example.package_admin"
+        UpstreamReading.objects.filter(key=automation_heartbeat(heard)).update(observed_at=timezone.now())
 
         rows = [row.words for row in elements(self.page(), "tr")]
         machine = machine_catalog()[0].name
-        for profile, state in ((quiet, "silent"), *((profile, "online") for profile in heard)):
+        for profile, state in ((quiet, "silent"), (heard, "online")):
             with self.subTest(profile=profile):
                 (row,) = [row for row in rows if row.startswith(profile)]
                 self.assertIn(state, row.casefold())
