@@ -1,6 +1,6 @@
 """An app update's way through its steps, as each seed leaves it: its
 approval queued, refused, applied or held on its host, and the Open PR of an
-app Renovate holds, ticking or under way."""
+app Renovate holds, from its press to the pull request its run opened."""
 
 from datetime import timedelta
 
@@ -139,41 +139,46 @@ def approval(owner, ended: str) -> None:
 
 
 # How the Open PR of the app Renovate holds stands, by the seed that leaves it so.
-TICKING, NOT_TICKED, RENOVATE_RUNNING = "ticking", "not-ticked", "renovate-running"
+ASKED, RUNNING, FAILED, OPENED = "asked", "running", "failed", "opened"
+# What each run the seeds leave reported, after the press.
+_RAN = {RUNNING: "handed_off", FAILED: "failed", OPENED: "ok"}
 
 
 def opening(owner, at: str) -> None:
     """The app Renovate holds, its Open PR pressed and left as ``at`` says:
-    its box ticking, the tick refused, or Renovate's run under way once it
-    was ticked."""
+    its run asked, taken and running, failed, or ended having opened the
+    app's pull request."""
 
-    from hq.domains.control_plane.models import OperationRequest
     from hq.platform.application.capabilities import run_capability
+    from hq.platform.application.read_requests import forced_reads, take
     from hq.platform.application.refusal_status import refused
-    from hq.platform.application.resource_operations import THEN
     from hq.platform.application.security import web_principal
 
     payload = {"repository": f"example/{APPS}", "app": HELD_APP}
     answer = run_capability("app_update.open", payload, principal=web_principal(owner), idempotency_key="example-open")
     if refused(answer.answer):
         raise RuntimeError(f"The estate's Open PR was refused: {answer.answer}")
-    if at == TICKING:
+    if at == ASKED:
         return
-    ticks = OperationRequest.objects.filter(action=OperationRequest.Action.RECONCILE)
-    if at == NOT_TICKED:
-        said = {"message": "GitHub refused the edit of its Dependency Dashboard."}
-        ticks.update(state=OperationRequest.State.FAILED, completed_at=timezone.now(), result=said)
-        return
-    ticks.update(state=OperationRequest.State.SUCCEEDED, completed_at=timezone.now(), result={THEN: {"run": "asked"}})
+    # The controller's pass took the ask and handed the run off.
+    take(forced_reads())
+    opened = {
+        "repository": f"example/{APPS}",
+        "branch": f"renovate/{HELD_APP}",
+        "result": "pr-created",
+        "pull_request": 61,
+        "files": [f"compose/{HELD_APP}/compose.yaml"],
+    }
     store(
         DEPENDENCY_RUN_KIND,
         {
             "connection_ref": GITHUB,
             "owner": "example",
             "repositories": [f"example/{APPS}"],
-            "outcome": "handed_off",
+            "outcome": _RAN[at],
             "started_at": iso(),
-            "finished_at": None,
+            "finished_at": None if at == RUNNING else iso(),
+            "branches": [opened] if at == OPENED else [],
         },
     )
 

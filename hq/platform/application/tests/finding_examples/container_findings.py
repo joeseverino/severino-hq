@@ -110,16 +110,24 @@ def applied_on(*hosts: str) -> ExitStack:
     return stack
 
 
-def update(*pulls, on: tuple[str, ...] | None = (BOX,), raises, scanned=(TARGET,), digests=(), **held) -> Example:
+def update(
+    *pulls, on: tuple[str, ...] | None = (BOX,), raises, scanned=(TARGET,), digests=(), branches=(), **held
+) -> Example:
     """example-box's app, held in example/alpha with ``pulls`` open and the
     repository's ``held`` fields, applied by a playbook written for ``on``
-    (None for no playbook); its new pin's packages ``scanned``, and what its
-    publisher attached to each digest in ``digests``."""
+    (None for no playbook); its new pin's packages ``scanned``, what its
+    publisher attached to each digest in ``digests``, and the ``branches``
+    its last dependency run reported."""
 
     def given():
         arranged(*pulls, scanned=scanned, advisories=())
         if held:
             store(**{**REPOSITORY, **held})
+        if branches:
+            run = {"owner": "example", "repositories": ["example/alpha"], "outcome": "ok"}
+            inventory(
+                "github.dependency_run", [{**run, "started_at": timezone.now().isoformat(), "branches": branches}]
+            )
         if digests:
             inventory("registry.digest", list(digests))
         return applied_on(*on) if on is not None else None
@@ -234,7 +242,16 @@ STATES = (
     # Renovate holds its branch, or has not seen the release: one press has it open the pull request.
     # Where HQ can't match the repository's files to what runs, it says so.
     update(
-        held_branches=[{"branch": "renovate/app", "marker": "unpend", "apps": ["app"]}],
+        compose=["compose/app/compose.yaml"],
+        branches=[
+            {
+                "repository": "example/alpha",
+                "branch": "renovate/app",
+                "result": "pending",
+                "pull_request": None,
+                "files": ["compose/app/compose.yaml"],
+            }
+        ],
         raises=(Raised(title=MOVED, presses=(OPEN_PR,)),),
     ),
     update(compose=["compose/app/compose.yaml"], raises=(Raised(title=MOVED, presses=(OPEN_PR,)),)),

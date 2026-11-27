@@ -200,10 +200,12 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
 
     @cached_property
     def run_asked(self):
-        """When an update run was asked for and not yet handed off. Only an
-        opted-in repository's page asks: the run covers every one of them."""
+        """When a run of the project's repository was asked for and not yet
+        handed off. Only an opted-in repository's page asks."""
 
-        return asked_at() if self.record["dependency_updates"] and self.repository is not None else None
+        if not self.record["dependency_updates"] or self.repository is None:
+            return None
+        return asked_at(self.record["repository_url"])
 
     @override
     def get_context_data(self, **kwargs):

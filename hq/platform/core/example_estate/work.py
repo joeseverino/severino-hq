@@ -229,10 +229,8 @@ def repositories():
             record["runs"] = [scan]
         if name == APPS:
             record["pull_requests"] = [app_update(name)]
-            # Renovate's Dashboard lists the updates it has not opened yet.
             record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
             record["compose_images"] = [_built()]
-            record["dashboard"] = f"https://github.com/example/{name}/issues/12"
             record["updater"] = UPDATER
         return record
 
@@ -831,6 +829,18 @@ def update_states(newer: dict[str, str]) -> None:
         REPOSITORY_KIND,
         *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
     )
+    # The morning's run left one app's branch held until its release is old enough.
+    held_back = {
+        "repository": f"example/{APPS}",
+        "branch": f"renovate/{HELD_APP}",
+        "result": "pending",
+        "pull_request": None,
+        "files": [f"compose/{HELD_APP}/compose.yaml"],
+    }
+    run = ProviderInventory.objects.get(kind=DEPENDENCY_RUN_KIND)
+    store(
+        DEPENDENCY_RUN_KIND, *({**each, "branches": [held_back]} for each in run.records), observed_at=run.observed_at
+    )
     named = {"connection_ref": GITHUB, "repository": f"example/{APPS}"}
     store(
         PULL_REQUEST_KIND,
@@ -866,5 +876,4 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
                 "image": f"{ref.name}:{newer[MERGED_APP]}",
             },
         ],
-        "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
     }

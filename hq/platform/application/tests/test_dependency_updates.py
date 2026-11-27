@@ -55,8 +55,8 @@ class PlanTests(TestCase):
         self.assertEqual(
             dependency_updates.plan()["owners"],
             [
-                {"owner": "example", "repositories": ["example/app", "example/tool"]},
-                {"owner": "example-org", "repositories": ["example-org/site"]},
+                {"owner": "example", "repositories": ["example/app", "example/tool"], "branches": []},
+                {"owner": "example-org", "repositories": ["example-org/site"], "branches": []},
             ],
         )
 
@@ -104,6 +104,16 @@ class PlanTests(TestCase):
         self.assertTrue(result["ok"], result)
         self.assertTrue(dependency_updates.plan()["due"])
         self.assertIsNotNone(dependency_updates.asked_at())
+
+    def test_the_runs_own_end_reads_its_outcome_and_asks_no_run(self):
+        from ..cadence import ask
+
+        opted_in("app", "https://github.com/example/app")
+        ran(started=timezone.now())
+
+        ask(reads=(KIND,), subject="example-renovate.service")
+
+        self.assertFalse(dependency_updates.plan()["due"])
 
 
 class RunNowTests(TestCase):

@@ -364,7 +364,7 @@ SEEDS: dict[str, Seed] = {
     # The open app update's new image, whose publisher attaches no package list.
     "update-unlisted": Seed(_unlisted, _SET_UP),
     "app-updates": Seed(_updates(), _SET_UP),
-    **{f"app-update-{at}": Seed(_opening(at), _SET_UP) for at in ("ticking", "not-ticked", "renovate-running")},
+    **{f"app-update-{at}": Seed(_opening(at), _SET_UP) for at in ("asked", "running", "failed", "opened")},
     # The open app update's checks under way.
     "app-update-checks-running": Seed(_checks_running, _SET_UP),
     # Applied only by a playbook written for another machine.

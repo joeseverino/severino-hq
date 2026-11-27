@@ -1702,13 +1702,12 @@ press would be refused now (the record's `held`), or the sentence saying what
 the press does. A pin the default branch's head holds that the container does
 not run (the repository record's `compose_images`) is Apply, which queues the
 playbook at that head on the machines the app runs on (`app_update.apply`, through
-`apply_of`). A branch the Dependency Dashboard holds with no pull request
-(`held_branches`, read from the boxes Renovate's `dependency-dashboard.ts`
-writes), or a release Renovate has not seen, is Open PR (`app_update.open`,
-`app_update_open.py`): it ticks the branch's box through a
-`github.dashboard_box` reconcile, whose token holds Issues write on that one
-repository, and asks a dependency run once the tick lands, or asks the run
-alone where there is no box. A repository that holds the app's directory but
+`apply_of`). A branch Renovate holds with no pull request (a branch of the last
+dependency run's report, `dependency_updates.Branch`), or a release Renovate
+has not seen, is Open PR (`app_update.open`, `app_update_open.py`): it asks a
+dependency run of that one repository, naming the held branch as Renovate's
+`checkedBranches`, and its card follows the run's outcome, which names the
+pull request the run opened. A repository that holds the app's directory but
 not the file the container runs from says so, and a container no repository
 holds keeps the upgrade plan's steps by hand. An action is offered only when
 nothing holds it, so a page never shows a press the capability would refuse:

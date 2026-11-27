@@ -3711,21 +3711,6 @@
           }
         }
       },
-      "OperationAskedAskedAnswerSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/OperationAskedAskedAnswerSuccess"
-            }
-          }
-        },
-        "description": "Success.",
-        "headers": {
-          "Cache-Control": {
-            "$ref": "#/components/headers/CacheControl"
-          }
-        }
-      },
       "OperationAskedDeclarationForgottenSuccess": {
         "content": {
           "application/json": {
@@ -21766,33 +21751,6 @@
         ],
         "type": "object"
       },
-      "OperationAskedAskedAnswerSuccess": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OperationAsked",
-                "title": "Operation asked"
-              },
-              {
-                "$ref": "#/components/schemas/AskedAnswer",
-                "title": "Asked answer"
-              }
-            ],
-            "description": "What the operation answers, in the shape its response names."
-          },
-          "ok": {
-            "$ref": "#/components/schemas/Outcome",
-            "const": true
-          }
-        },
-        "required": [
-          "ok",
-          "data"
-        ],
-        "type": "object"
-      },
       "OperationAskedDeclarationForgottenSuccess": {
         "additionalProperties": false,
         "properties": {
@@ -33691,7 +33649,7 @@
     },
     "/api/v2/capabilities/app_update.open/": {
       "post": {
-        "description": "Have Renovate open an app's update: tick its branch's box on the Dependency Dashboard, then ask a run.",
+        "description": "Have Renovate open an app's update: a run of its repository that opens the branch Renovate holds it under.",
         "operationId": "appUpdateOpenV2",
         "parameters": [
           {
@@ -33710,7 +33668,7 @@
         },
         "responses": {
           "200": {
-            "$ref": "#/components/responses/OperationAskedAskedAnswerSuccess"
+            "$ref": "#/components/responses/AskedAnswerSuccess"
           },
           "202": {
             "$ref": "#/components/responses/AwaitingApprovalAccepted"

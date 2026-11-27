@@ -98,10 +98,16 @@ func jobArrival(signal *dbus.Signal, heard time.Time) (runtime.InboundArrival, b
 	if unit == host.ControllerUnit || unit == host.GlanceUnit {
 		return runtime.InboundArrival{}, false
 	}
+	// The dependency run's end is its outcome, which HQ reads at once
+	// rather than comparing two readings' times.
+	event := runtime.HostEventUnitJob
+	if unit == host.RenovateUnit {
+		event = runtime.HostEventDependencyRun
+	}
 	heard = heard.UTC().Truncate(time.Microsecond)
 	return runtime.InboundArrival{
 		Provider:   runtime.InboundProviderHost,
-		Event:      string(runtime.HostEventUnitJob) + "." + result,
+		Event:      string(event) + "." + result,
 		Subject:    unit,
 		DeliveryID: fmt.Sprintf("job-%d-%d", id, heard.UnixNano()),
 		ReceivedAt: heard,
