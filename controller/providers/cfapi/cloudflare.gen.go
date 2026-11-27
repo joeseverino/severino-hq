@@ -19,6 +19,27 @@ import (
 // ServerURLClientAPI defines the Server URL for Client API
 const ServerURLClientAPI = "https://api.cloudflare.com/client/v4"
 
+// Defines values for AaaMechanismType.
+const (
+	AaaMechanismTypeEmail     AaaMechanismType = "email"
+	AaaMechanismTypePagerduty AaaMechanismType = "pagerduty"
+	AaaMechanismTypeWebhook   AaaMechanismType = "webhook"
+)
+
+// Valid indicates whether the value is a known member of the AaaMechanismType enum.
+func (e AaaMechanismType) Valid() bool {
+	switch e {
+	case AaaMechanismTypeEmail:
+		return true
+	case AaaMechanismTypePagerduty:
+		return true
+	case AaaMechanismTypeWebhook:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for D1JurisdictionNullable.
 const (
 	D1JurisdictionNullableEu      D1JurisdictionNullable = "eu"
@@ -687,19 +708,19 @@ func (e TLSCertificatesAndHostnamesType2) Valid() bool {
 
 // Defines values for TLSCertificatesAndHostnamesValidationMethod.
 const (
-	Email TLSCertificatesAndHostnamesValidationMethod = "email"
-	HTTP  TLSCertificatesAndHostnamesValidationMethod = "http"
-	Txt   TLSCertificatesAndHostnamesValidationMethod = "txt"
+	TLSCertificatesAndHostnamesValidationMethodEmail TLSCertificatesAndHostnamesValidationMethod = "email"
+	TLSCertificatesAndHostnamesValidationMethodHTTP  TLSCertificatesAndHostnamesValidationMethod = "http"
+	TLSCertificatesAndHostnamesValidationMethodTxt   TLSCertificatesAndHostnamesValidationMethod = "txt"
 )
 
 // Valid indicates whether the value is a known member of the TLSCertificatesAndHostnamesValidationMethod enum.
 func (e TLSCertificatesAndHostnamesValidationMethod) Valid() bool {
 	switch e {
-	case Email:
+	case TLSCertificatesAndHostnamesValidationMethodEmail:
 		return true
-	case HTTP:
+	case TLSCertificatesAndHostnamesValidationMethodHTTP:
 		return true
-	case Txt:
+	case TLSCertificatesAndHostnamesValidationMethodTxt:
 		return true
 	default:
 		return false
@@ -900,6 +921,51 @@ func (e CertificatePacksListCertificatePacksParamsStatus) Valid() bool {
 		return false
 	}
 }
+
+// AaaComponentsSchemasDescription Description of the notification policy (if present).
+type AaaComponentsSchemasDescription = string
+
+// AaaHistory defines model for aaa_history.
+type AaaHistory struct {
+	// AlertType Type of notification that has been dispatched.
+	AlertType AaaSchemasAlertType `json:"alert_type,omitempty"`
+
+	// Description Description of the notification policy (if present).
+	Description AaaComponentsSchemasDescription `json:"description,omitempty"`
+
+	// ID UUID
+	ID AaaUUID `json:"id,omitempty"`
+
+	// MechanismType The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.
+	MechanismType AaaMechanismType `json:"mechanism_type,omitempty"`
+
+	// Name Name of the policy.
+	Name AaaSchemasName `json:"name,omitempty"`
+
+	// PolicyID The unique identifier of a notification policy
+	PolicyID AaaPolicyID `json:"policy_id,omitempty"`
+
+	// Sent Timestamp of when the notification was dispatched in ISO 8601 format.
+	Sent AaaSent `json:"sent,omitempty"`
+}
+
+// AaaMechanismType The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.
+type AaaMechanismType string
+
+// AaaPolicyID The unique identifier of a notification policy
+type AaaPolicyID = string
+
+// AaaSchemasAlertType Type of notification that has been dispatched.
+type AaaSchemasAlertType = string
+
+// AaaSchemasName Name of the policy.
+type AaaSchemasName = string
+
+// AaaSent Timestamp of when the notification was dispatched in ISO 8601 format.
+type AaaSent = string
+
+// AaaUUID UUID
+type AaaUUID = string
 
 // AccessClientID The Client ID for the service token. Access will check for this value in the `CF-Access-Client-ID` request header.
 type AccessClientID = string
@@ -2476,6 +2542,13 @@ type AccessServiceTokensListServiceTokensParams struct {
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
+// NotificationHistoryListHistoryParams defines parameters for NotificationHistoryListHistory.
+type NotificationHistoryListHistoryParams struct {
+	Page    *float32 `form:"page,omitempty" json:"page,omitempty"`
+	PerPage *float32 `form:"per_page,omitempty" json:"per_page,omitempty"`
+	Since   *string  `form:"since,omitempty" json:"since,omitempty"`
+}
+
 // CloudflareTunnelListCloudflareTunnelsParams defines parameters for CloudflareTunnelListCloudflareTunnels.
 type CloudflareTunnelListCloudflareTunnelsParams struct {
 	Page      *float32 `form:"page,omitempty" json:"page,omitempty"`
@@ -2807,6 +2880,9 @@ type ClientInterface interface {
 	// AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
 	AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// NotificationHistoryListHistory performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+	NotificationHistoryListHistory(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CloudflareTunnelListCloudflareTunnels performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 	CloudflareTunnelListCloudflareTunnels(ctx context.Context, accountID string, params *CloudflareTunnelListCloudflareTunnelsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2921,6 +2997,19 @@ func (c *API) AccessApplicationsListAccessApplications(ctx context.Context, acco
 // AccessServiceTokensListServiceTokens performs a GET /accounts/{account_id}/access/service_tokens (the `AccessServiceTokensListServiceTokens` operationId) request.
 func (c *API) AccessServiceTokensListServiceTokens(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewAccessServiceTokensListServiceTokensRequest(c.Server, accountID, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NotificationHistoryListHistory performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+func (c *API) NotificationHistoryListHistory(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewNotificationHistoryListHistoryRequest(c.Server, accountID, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3464,6 +3553,91 @@ func NewAccessServiceTokensListServiceTokensRequest(server string, accountID str
 		if params.PerPage != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewNotificationHistoryListHistoryRequest constructs an http.Request for the NotificationHistoryListHistory method
+func NewNotificationHistoryListHistoryRequest(server string, accountID string, params *NotificationHistoryListHistoryParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "account_id", accountID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/accounts/" + pathParam0 + "/alerting/v3/history"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", *params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.PerPage != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "number", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4805,6 +4979,11 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	AccessServiceTokensListServiceTokensWithResponse(ctx context.Context, accountID string, params *AccessServiceTokensListServiceTokensParams, reqEditors ...RequestEditorFn) (*AccessServiceTokensListServiceTokensReply, error)
 
+	// NotificationHistoryListHistoryWithResponse performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	NotificationHistoryListHistoryWithResponse(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*NotificationHistoryListHistoryReply, error)
+
 	// CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5032,6 +5211,40 @@ func (r AccessServiceTokensListServiceTokensReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r AccessServiceTokensListServiceTokensReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type NotificationHistoryListHistoryReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// GetBody returns the raw response body bytes
+func (r NotificationHistoryListHistoryReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r NotificationHistoryListHistoryReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r NotificationHistoryListHistoryReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r NotificationHistoryListHistoryReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -5853,6 +6066,17 @@ func (c *ClientWithResponses) AccessServiceTokensListServiceTokensWithResponse(c
 	return ParseAccessServiceTokensListServiceTokensReply(rsp)
 }
 
+// NotificationHistoryListHistoryWithResponse performs a GET /accounts/{account_id}/alerting/v3/history (the `NotificationHistoryListHistory` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) NotificationHistoryListHistoryWithResponse(ctx context.Context, accountID string, params *NotificationHistoryListHistoryParams, reqEditors ...RequestEditorFn) (*NotificationHistoryListHistoryReply, error) {
+	rsp, err := c.NotificationHistoryListHistory(ctx, accountID, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseNotificationHistoryListHistoryReply(rsp)
+}
+
 // CloudflareTunnelListCloudflareTunnelsWithResponse performs a GET /accounts/{account_id}/cfd_tunnel (the `CloudflareTunnelListCloudflareTunnels` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6180,6 +6404,22 @@ func ParseAccessServiceTokensListServiceTokensReply(rsp *http.Response) (*Access
 	}
 
 	response := &AccessServiceTokensListServiceTokensReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseNotificationHistoryListHistoryReply parses an HTTP response from a NotificationHistoryListHistoryWithResponse call
+func ParseNotificationHistoryListHistoryReply(rsp *http.Response) (*NotificationHistoryListHistoryReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &NotificationHistoryListHistoryReply{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

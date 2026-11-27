@@ -202,6 +202,21 @@ def zone():
             ],
         },
     )
+    # The edge certificate's renewal, as the alert history keeps it.
+    store(
+        "cloudflare.alert",
+        {
+            "connection_ref": CLOUDFLARE,
+            "account_id": "0123abcd",
+            "id": "00000000-0000-4000-8000-0000000000a1",
+            "alert_type": "universal_ssl_event_type",
+            "name": "Certificate alerts",
+            "policy_id": "00000000-0000-4000-8000-0000000000a2",
+            "description": "Universal certificate issuance and renewal.",
+            "mechanism_type": "webhook",
+            "sent": iso(timedelta(minutes=9)),
+        },
+    )
     # The rest of the account: nothing on Pages, D1, Access or tunnels.
     for kind in (
         "cloudflare.pages_project",

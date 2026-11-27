@@ -132,6 +132,19 @@
       ]
     }
   ],
+  "cloudflare.alert": [
+    {
+      "account_id": "example",
+      "alert_type": "example",
+      "connection_ref": "example",
+      "description": "example",
+      "id": "example",
+      "mechanism_type": "example",
+      "name": "example",
+      "policy_id": "example",
+      "sent": "example"
+    }
+  ],
   "cloudflare.contact_submission": [
     {
       "account_id": "example",

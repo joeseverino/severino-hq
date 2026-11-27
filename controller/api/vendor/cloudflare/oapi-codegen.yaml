@@ -37,6 +37,7 @@ output-options:
     - getWorkerVersion
     - getZoneRuleset
     - listZoneRulesets
+    - notification-history-list-history
     - page-rules-list-page-rules
     - pages-project-get-projects
     - registrar-domain-registration-list

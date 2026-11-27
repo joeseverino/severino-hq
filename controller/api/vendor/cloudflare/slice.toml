@@ -22,6 +22,7 @@ cloudflare-tunnel-list-cloudflare-tunnels = ["tunnel_cfd_tunnel"]
 d1-list-databases = ["d1_database-response"]
 getWorkerVersion = ["workers_Version"]
 getZoneRuleset = ["rulesets_RedirectFromValue"]
+notification-history-list-history = ["aaa_history"]
 pages-project-get-projects = ["pages_project"]
 registrar-domain-registration-list = ["registrar-api_registration"]
 user-api-tokens-verify-token = ["iam_token_verify_response_single_segment"]
@@ -35,12 +36,15 @@ zones-get = ["zones_zone"]
 # bindings and its settings are never decoded.
 [keep]
 workers_Version = ["id", "number", "annotations", "bindings"]
+# An alert is read for its type, its policy and when it was sent; its body and
+# the address it went to are never decoded.
+aaa_history = ["id", "alert_type", "name", "description", "policy_id", "mechanism_type", "sent"]
 workers_binding_item = ["workers_binding_kind_analytics_engine"]
 workers_deployment = ["id", "created_on", "versions"]
 workers_script-response = ["id"]
 
 # Every list is read page by page to its end; certificate packs of every
-# status, and tunnels still live.
+# status, tunnels still live, and alerts sent since a time.
 [queries]
 accounts-list-accounts = ["page", "per_page"]
 access-applications-list-access-applications = ["page", "per_page"]
@@ -50,6 +54,7 @@ cloudflare-tunnel-list-cloudflare-tunnels = ["page", "per_page", "is_deleted"]
 d1-list-databases = ["page", "per_page"]
 dns-records-for-a-zone-list-dns-records = ["page", "per_page"]
 listZoneRulesets = ["cursor", "per_page"]
+notification-history-list-history = ["page", "per_page", "since"]
 pages-project-get-projects = ["page", "per_page"]
 registrar-domain-registration-list = ["cursor", "per_page"]
 web-analytics-list-sites = ["page", "per_page"]

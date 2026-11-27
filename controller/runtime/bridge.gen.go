@@ -895,6 +895,7 @@ const (
 	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
 	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
 	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
+	ResourceKindCloudflareAlert              ResourceKind = "cloudflare.alert"
 	ResourceKindCloudflareContactInbox       ResourceKind = "cloudflare.contact_inbox"
 	ResourceKindCloudflareContactSubmission  ResourceKind = "cloudflare.contact_submission"
 	ResourceKindCloudflareD1Database         ResourceKind = "cloudflare.d1_database"
@@ -980,6 +981,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareAccessApp:
 		return true
 	case ResourceKindCloudflareAccessServiceToken:
+		return true
+	case ResourceKindCloudflareAlert:
 		return true
 	case ResourceKindCloudflareContactInbox:
 		return true
@@ -1181,6 +1184,7 @@ const (
 	SweptCaddyRoute                   SweptKind = "caddy.route"
 	SweptCloudflareAccessApp          SweptKind = "cloudflare.access_app"
 	SweptCloudflareAccessServiceToken SweptKind = "cloudflare.access_service_token"
+	SweptCloudflareAlert              SweptKind = "cloudflare.alert"
 	SweptCloudflareContactSubmission  SweptKind = "cloudflare.contact_submission"
 	SweptCloudflareD1Database         SweptKind = "cloudflare.d1_database"
 	SweptCloudflareDNSRecord          SweptKind = "cloudflare.dns_record"
@@ -1243,6 +1247,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareAccessApp:
 		return true
 	case SweptCloudflareAccessServiceToken:
+		return true
+	case SweptCloudflareAlert:
 		return true
 	case SweptCloudflareContactSubmission:
 		return true
@@ -1672,6 +1678,19 @@ type CloudflareAccessServiceTokenRecord struct {
 	ExpiresAt     string                                     `json:"expires_at,omitempty"`
 	ID            string                                     `json:"id"`
 	Name          string                                     `json:"name,omitempty"`
+}
+
+// CloudflareAlertRecord One notification Cloudflare sent for the account, as its alert history keeps it. Its body and the address it went to are never kept.
+type CloudflareAlertRecord struct {
+	AccountID     string `json:"account_id,omitempty"`
+	AlertType     string `json:"alert_type,omitempty"`
+	ConnectionRef string `json:"connection_ref,omitempty"`
+	Description   string `json:"description,omitempty"`
+	ID            string `json:"id"`
+	MechanismType string `json:"mechanism_type,omitempty"`
+	Name          string `json:"name,omitempty"`
+	PolicyID      string `json:"policy_id,omitempty"`
+	Sent          string `json:"sent,omitempty"`
 }
 
 // CloudflareCAAValue A CAA record's content as flags, tag and quoted value (the three groups). HQ validates a declared CAA record with it and both sides take the content apart with it.

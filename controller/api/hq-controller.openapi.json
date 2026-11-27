@@ -3249,6 +3249,53 @@
         "type": "object",
         "description": "One cloudflare.access_service_token record: Access service token."
       },
+      "CloudflareAlertRecord": {
+        "description": "One notification Cloudflare sent for the account, as its alert history keeps it. Its body and the address it went to are never kept.",
+        "properties": {
+          "connection_ref": {
+            "default": "",
+            "type": "string"
+          },
+          "account_id": {
+            "default": "",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "alert_type": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          },
+          "policy_id": {
+            "default": "",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "mechanism_type": {
+            "default": "",
+            "type": "string"
+          },
+          "sent": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "CloudflareCAAValue": {
         "pattern": "^\\s*(\\d{1,3})\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\"\\s*$",
         "type": "string",
@@ -7044,6 +7091,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.alert",
           "cloudflare.contact_inbox",
           "cloudflare.contact_submission",
           "cloudflare.d1_database",
@@ -7118,6 +7166,7 @@
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",
+          "ResourceKindCloudflareAlert",
           "ResourceKindCloudflareContactInbox",
           "ResourceKindCloudflareContactSubmission",
           "ResourceKindCloudflareD1Database",
@@ -7224,6 +7273,7 @@
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
+          "cloudflare.alert",
           "cloudflare.contact_submission",
           "cloudflare.d1_database",
           "cloudflare.dns_record",
@@ -7277,6 +7327,7 @@
           "SweptCaddyRoute",
           "SweptCloudflareAccessApp",
           "SweptCloudflareAccessServiceToken",
+          "SweptCloudflareAlert",
           "SweptCloudflareContactSubmission",
           "SweptCloudflareD1Database",
           "SweptCloudflareDNSRecord",

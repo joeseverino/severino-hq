@@ -19,6 +19,11 @@ from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 CONTACT_SUBMISSION_KIND = "cloudflare.contact_submission"
 WORKER_KIND = "cloudflare.worker"
+PAGES_PROJECT_KIND = "cloudflare.pages_project"
+ACCESS_SERVICE_TOKEN_KIND = "cloudflare.access_service_token"  # noqa: S105 - a reading's kind, never a token
+TUNNEL_KIND = "cloudflare.tunnel"
+EDGE_CERTIFICATE_KIND = "cloudflare.edge_certificate"
+ALERT_KIND = "cloudflare.alert"
 
 
 def _present(*values: Any) -> tuple[str, ...]:
@@ -131,6 +136,23 @@ class WorkerRecord(ObservationRecord):
     cpu_time_p50_us: float | None = _INVOCATIONS
     cpu_time_p99_us: float | None = _INVOCATIONS
     answers: tuple[WorkerAnswersRecord, ...] | None = _INVOCATIONS
+
+
+class AlertRecord(ObservationRecord):
+    """One notification Cloudflare sent for the account, as its alert history
+    keeps it. Its body and the address it went to are never kept."""
+
+    connection_ref: str = ""
+    account_id: str = ""
+    id: str
+    alert_type: str = ""
+    # The policy that sent it, and its description.
+    name: str = ""
+    policy_id: str = ""
+    description: str = ""
+    # email, pagerduty or webhook.
+    mechanism_type: str = ""
+    sent: Stamp = None
 
 
 class AccessPolicyRecord(ObservationRecord):
@@ -255,7 +277,7 @@ def _origin_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
-        "cloudflare.pages_project",
+        PAGES_PROJECT_KIND,
         "cloudflare_api",
         "Pages project",
         PagesProjectRecord,
@@ -298,6 +320,17 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         ),
     ),
     ObservationSpec(
+        ALERT_KIND,
+        "cloudflare_api",
+        "Cloudflare alert",
+        AlertRecord,
+        requires=(Cloudflare.NOTIFICATIONS_READ,),
+        title=lambda record: str(record.get("name", "")),
+        describe=lambda record: str(record.get("alert_type", "")),
+        relation="Alerted on",
+        at=lambda record: str(record.get("sent", "") or ""),
+    ),
+    ObservationSpec(
         CONTACT_SUBMISSION_KIND,
         "cloudflare_api",
         "Contact message",
@@ -326,7 +359,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         console=lambda record: cloudflare_zero_trust(record, "access", "apps"),
     ),
     ObservationSpec(
-        "cloudflare.access_service_token",
+        ACCESS_SERVICE_TOKEN_KIND,
         "cloudflare_api",
         "Access service token",
         AccessServiceTokenRecord,
@@ -337,7 +370,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         expires=lambda record: str(record.get("expires_at", "")),
     ),
     ObservationSpec(
-        "cloudflare.tunnel",
+        TUNNEL_KIND,
         "cloudflare_api",
         "Tunnel",
         TunnelRecord,
@@ -357,7 +390,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         console=lambda record: cloudflare_zero_trust(record, "networks", "tunnels"),
     ),
     ObservationSpec(
-        "cloudflare.edge_certificate",
+        EDGE_CERTIFICATE_KIND,
         "cloudflare_api",
         "Edge certificate",
         EdgeCertificateRecord,

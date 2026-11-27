@@ -54,6 +54,10 @@ class Cloudflare(Permission):
     TUNNEL_READ = "Cloudflare Tunnel Read", "account"
     D1_READ = "D1 Read", "account"
     D1_EDIT = "D1 Edit", "account", "D1 Write"
+    # Reading the account's alert history: of the groups List History
+    # accepts (x-api-token-group), the read-only one that opens neither
+    # personal data nor the account's settings.
+    NOTIFICATIONS_READ = "Notifications Read", "account"
     # What List Registrations needs
     # (https://developers.cloudflare.com/api/resources/registrar/subresources/registrations/methods/list/).
     # Neither the permissions reference nor that operation in Cloudflare's

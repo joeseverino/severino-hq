@@ -122,6 +122,57 @@
     }
    }
   },
+  "/accounts/{account_id}/alerting/v3/history": {
+   "get": {
+    "operationId": "notification-history-list-history",
+    "parameters": [
+     {
+      "name": "account_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "page",
+      "in": "query",
+      "schema": {
+       "description": "Page number of paginated results.",
+       "type": "number",
+       "minimum": 1,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "per_page",
+      "in": "query",
+      "schema": {
+       "description": "Number of items per page.",
+       "type": "number",
+       "maximum": 1000,
+       "minimum": 5,
+       "x-go-type-skip-optional-pointer": false
+      }
+     },
+     {
+      "name": "since",
+      "in": "query",
+      "schema": {
+       "description": "Limit the returned results to history records newer than the specified date. This must be a timestamp that conforms to RFC3339.",
+       "type": "string",
+       "example": "2022-05-19T20:29:58.679897Z",
+       "x-go-type-skip-optional-pointer": false
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "List History response"
+     }
+    }
+   }
+  },
   "/accounts/{account_id}/cfd_tunnel": {
    "get": {
     "operationId": "cloudflare-tunnel-list-cloudflare-tunnels",
@@ -891,6 +942,77 @@
  },
  "components": {
   "schemas": {
+   "aaa_components-schemas-description": {
+    "description": "Description of the notification policy (if present).",
+    "type": "string",
+    "example": "Universal Certificate validation status, issuance, renewal, and expiration notices"
+   },
+   "aaa_history": {
+    "type": "object",
+    "properties": {
+     "alert_type": {
+      "$ref": "#/components/schemas/aaa_schemas-alert_type"
+     },
+     "description": {
+      "$ref": "#/components/schemas/aaa_components-schemas-description"
+     },
+     "id": {
+      "$ref": "#/components/schemas/aaa_uuid"
+     },
+     "mechanism_type": {
+      "$ref": "#/components/schemas/aaa_mechanism_type"
+     },
+     "name": {
+      "$ref": "#/components/schemas/aaa_schemas-name"
+     },
+     "policy_id": {
+      "$ref": "#/components/schemas/aaa_policy-id"
+     },
+     "sent": {
+      "$ref": "#/components/schemas/aaa_sent"
+     }
+    }
+   },
+   "aaa_mechanism_type": {
+    "description": "The type of mechanism to which the notification has been dispatched. This can be email/pagerduty/webhook based on the mechanism configured.",
+    "type": "string",
+    "example": "email",
+    "enum": [
+     "email",
+     "pagerduty",
+     "webhook"
+    ]
+   },
+   "aaa_policy-id": {
+    "description": "The unique identifier of a notification policy",
+    "type": "string",
+    "example": "0da2b59ef118439d8097bdfb215203c9",
+    "maxLength": 32,
+    "x-auditable": true
+   },
+   "aaa_schemas-alert_type": {
+    "description": "Type of notification that has been dispatched.",
+    "type": "string",
+    "example": "universal_ssl_event_type"
+   },
+   "aaa_schemas-name": {
+    "description": "Name of the policy.",
+    "type": "string",
+    "example": "SSL Notification Event Policy",
+    "x-auditable": true
+   },
+   "aaa_sent": {
+    "description": "Timestamp of when the notification was dispatched in ISO 8601 format.",
+    "type": "string",
+    "example": "2021-10-08T17:52:17.571336Z"
+   },
+   "aaa_uuid": {
+    "description": "UUID",
+    "type": "string",
+    "example": "f174e90afafe4643bbbc4a0ed4fc8415",
+    "maxLength": 32,
+    "x-auditable": true
+   },
    "access_client_id": {
     "description": "The Client ID for the service token. Access will check for this value in the `CF-Access-Client-ID` request header.",
     "type": "string",
