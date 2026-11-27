@@ -104,6 +104,9 @@ class DigestRecord(ObservationRecord):
     platform_digest: str = ""
     # Package URLs from the SBOM the publisher attached, when it attached one.
     packages: tuple[str, ...] = ()
+    # Those of them its Go binaries were built as: what it is built from,
+    # versioned by the commit it was built at.
+    main: tuple[str, ...] = ()
     sbom: str = ""
     provenance: ProvenanceRecord | None = None
     read_at: Stamp = None

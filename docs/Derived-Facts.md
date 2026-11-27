@@ -699,8 +699,10 @@ again on the next run.
 `registry.digest` is what the publisher attached to each of those digests,
 read once (`hq.platform.application.oci_registry.attestations`,
 `hq.platform.application.attestations`). It is the in-toto statements BuildKit
-puts beside a platform's manifest, from which HQ keeps the SBOM's package URLs
-and the SLSA provenance's source, commit, builder and base images.
+puts beside a platform's manifest, from which HQ keeps the SBOM's package URLs,
+which of them are the main modules its Go binaries were built as (the Go
+packages the others are dependencies of), and the SLSA provenance's source,
+commit, builder and base images.
 
 They are metadata beside the image, never a layer of it: nothing is pulled and
 nothing runs. The statements are the publisher's unsigned word, and the page
@@ -708,17 +710,27 @@ says "states", not "proves".
 
 `registry.vulnerabilities` is those packages checked against OSV
 (`hq.platform.application.osv`), keyless, one batch per thousand packages.
-Each vulnerability's detail is read once and kept until OSV modifies it: the
-id, the package and installed version, the fixing versions, and a severity
-where the database gives one.
+OSV decides which records affect each version. A main module versioned by a
+Go pseudo-version is not asked: OSV orders Go versions by SemVer, where
+`v0.0.0-<time>-<commit>` precedes every release, so a build from an untagged
+commit would match each advisory its project ever fixed. Grype declines the
+same comparison by default. Its project's own advisories are matched against
+the image's release instead. Each vulnerability's detail is read once and
+kept until OSV modifies it: the id, its aliases, the package and installed
+version, the fixing versions, and a severity where the database gives one. A
+page reads one vulnerability once per package: records naming each other as
+aliases (a GHSA id and its GO id) are one finding, under the rated one's id.
 
 What an image is built from is known, most trusted first, from the container's
 declaration (`source`, for an image that does not say), the image's label, its
-provenance's stated source, then the GitHub registry it lives in
-(`containers.source_of`). The page says which, and the upstream reads follow
-it. An image is vulnerable when an advisory on its source matches its version,
-or when a critical or high vulnerability in its packages has a published fix; an
-unrated or unfixed one is shown, never raised.
+provenance's stated source, the GitHub repository its SBOM's main modules
+are paths in, then the GitHub registry it lives in (`containers.source_of`).
+The page says which, and the upstream reads follow it. An image is vulnerable
+when an advisory on its source matches its version, or when a critical or high
+vulnerability in its packages is gone from the packages of the newest release,
+the one an upgrade would pin. A serious one no release is known to fix is
+shown as such, with no warning tone, and raised once a release fixes it; an
+unrated one is shown, never raised.
 
 `portainer.runtime` is how each container is run, from Docker's inspect
 through Portainer: user, privilege, capabilities, host namespaces, security
@@ -766,7 +778,7 @@ something newer published, and changes nothing. A plan holds:
 
 - the target by digest, and the size of the move;
 - which of the running version's known vulnerabilities (its advisories and
-  its urgent package findings, the set its title counts) it clears, and what
+  its serious package findings) it clears, and what
   it would bring of its own (the two digests' OSV readings compared);
 - whether the move is recommended: it brings nothing of its own and, where
   the running version is vulnerable, fixes something. A finding's title, its

@@ -38,7 +38,68 @@ class PackageTests(SimpleTestCase):
             (found["packages"], found["sbom"], found["provenance"]["source"]),
             (("pkg:npm/a@1",), "SPDX", "https://github.com/o/r"),
         )
-        self.assertEqual(reduce([]), {"packages": (), "sbom": "", "provenance": None})
+        empty = reduce([])
+        self.assertEqual((empty["packages"], empty["main"], empty["provenance"]), ((), (), None))
+
+    def test_the_main_module_is_the_go_package_the_others_are_dependencies_of(self):
+        from ..attestations import main_modules, module_repository
+
+        def package(spdx_id, purl):
+            return {
+                "SPDXID": spdx_id,
+                "externalRefs": [
+                    {"referenceCategory": "PACKAGE-MANAGER", "referenceType": "purl", "referenceLocator": purl}
+                ],
+            }
+
+        main = "pkg:golang/github.com/example/web/v2@v0.0.0-20261118030823-d859bc092c89"
+        # Syft's SPDX for a Go binary: each module it embeds, the standard
+        # library included, a dependency of the main module; other
+        # ecosystems' packages relate among themselves.
+        document = {
+            "packages": [
+                package("SPDXRef-main", main),
+                package("SPDXRef-dep", "pkg:golang/github.com/example/dep@v1.2.0"),
+                package("SPDXRef-std", "pkg:golang/stdlib@1.26.10"),
+                package("SPDXRef-musl", "pkg:apk/alpine/musl@1.2.5-r0"),
+                package("SPDXRef-busybox", "pkg:apk/alpine/busybox@1.37.0-r0"),
+            ],
+            "relationships": [
+                {
+                    "spdxElementId": "SPDXRef-dep",
+                    "relatedSpdxElement": "SPDXRef-main",
+                    "relationshipType": "DEPENDENCY_OF",
+                },
+                {
+                    "spdxElementId": "SPDXRef-std",
+                    "relatedSpdxElement": "SPDXRef-main",
+                    "relationshipType": "DEPENDENCY_OF",
+                },
+                {
+                    "spdxElementId": "SPDXRef-musl",
+                    "relatedSpdxElement": "SPDXRef-busybox",
+                    "relationshipType": "DEPENDENCY_OF",
+                },
+                {
+                    "spdxElementId": "SPDXRef-DOCUMENT",
+                    "relatedSpdxElement": "SPDXRef-main",
+                    "relationshipType": "DESCRIBES",
+                },
+            ],
+        }
+        bom = {
+            "components": [
+                {"bom-ref": "m", "purl": main},
+                {"bom-ref": "d", "purl": "pkg:golang/github.com/example/dep@v1"},
+            ],
+            "dependencies": [{"ref": "m", "dependsOn": ["d"]}, {"ref": "d", "dependsOn": []}],
+        }
+
+        self.assertEqual(main_modules(SPDX, document), (main,))
+        self.assertEqual(main_modules(CYCLONEDX, bom), (main,))
+        self.assertEqual(module_repository((main,)), "example/web")
+        # Binaries of two repositories name no one source.
+        self.assertEqual(module_repository((main, "pkg:golang/github.com/example/other@v1")), "")
 
 
 class ProvenanceTests(SimpleTestCase):

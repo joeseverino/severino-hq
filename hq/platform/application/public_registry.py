@@ -309,7 +309,7 @@ def vulnerability_reader(
     """
 
     packages = {
-        str(record.get("digest")): tuple(record.get("packages") or ())
+        str(record.get("digest")): (tuple(record.get("packages") or ()), tuple(record.get("main") or ()))
         for _snapshot, record in inventory_records(DIGEST_KIND)
     }
     remaining = [budget]
@@ -329,7 +329,7 @@ def vulnerability_reader(
 
     def read(key: str) -> dict[str, Any]:
         try:
-            checked, found = osv.matches(packages.get(key, ()))
+            checked, found = osv.matches(*packages.get(key, ((), ())))
         except OSVReadError as exc:
             raise LookupUnavailable(str(exc)) from exc
         findings, unresolved = [], []

@@ -51,6 +51,8 @@ class ImageStandingWords:
             return "not read"
         if not self.checkable:
             return "cannot check"
+        if self.unfixed:
+            return f"{len(self.unfixed)} serious" + ("" if self.fix_unread else ", no fix yet")
         return "none serious" if self.findings else "none known"
 
     @property
@@ -59,14 +61,16 @@ class ImageStandingWords:
 
         if self.advisories:
             return "Its own project says this version is affected."
-        if self.urgent and not self.newer:
-            return "A fixed version of each package exists. No release of the image includes it yet."
         if self.urgent:
-            return "Critical or high, in packages that have a fixed version."
+            return f"Critical or high. {self.latest} fixes them."
         if self.awaiting_read:
             return self.unread or "HQ has not read its source's advisories yet."
         if not self.checkable:
             return "The image does not say where its source is, and its publisher provides no package list."
+        if self.unfixed and self.fix_unread:
+            return f"The packages of {self.latest} are not checked yet."
+        if self.unfixed:
+            return "No release fixes them yet."
         return self.checked_against
 
     @property
@@ -84,10 +88,11 @@ class ImageStandingWords:
         """``vulnerabilities`` as a fact says it, over its sentence and the
         first of what is known against it, in its tone."""
 
-        lower = (f"{len(self.findings)} of lower severity",) if self.findings and not self.urgent else ()
+        minor = {str(item.get("id", "")) for item in self.findings if item not in self.serious_findings}
+        lower = (f"{len(minor)} of lower severity",) if minor and not self.urgent else ()
         return Answer(
             capfirst(self.vulnerabilities),
-            (*lower, self.vulnerabilities_note, *named(self.known_vulnerabilities)),
+            (*lower, self.vulnerabilities_note, *named(self.known_vulnerabilities or self.unfixed)),
             self.vulnerability_tone,
         )
 

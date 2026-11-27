@@ -20,9 +20,10 @@ from hq.domains.control_plane.models import OperationRequest
 
 from .card_items import Answer
 from .container_words import named
-from .containers import Container, containers, published_digest, ranked, standing_of
+from .containers import Container, containers, published_digest, standing_of
 from .entity_links import EntityLink
 from .github_estate import UPDATE_BRANCH, PullChecks, Repository, pull_checks, repositories
+from .image_findings import ranked
 from .images import ImageRef
 from .projection import projection_scope, read_once
 from .tone import Tone

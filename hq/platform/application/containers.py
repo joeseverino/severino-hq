@@ -34,6 +34,7 @@ from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import as_members, display
 from .figured import Figure
 from .github_public import github_repository
+from .image_findings import SERIOUS, ImageFindings, ranked
 from .images import ImageRef, affected, compare, newer, version
 from .moments import duration, moment
 from .projection import projection_scope, read_once
@@ -41,7 +42,7 @@ from .tone import Tone
 from .ui import counted
 lazy from . import connections
 lazy from .app_updates import builds
-lazy from .attestations import github_source
+lazy from .attestations import github_source, module_repository
 lazy from .container_hardening import hardening_of
 lazy from .container_standard import posture_of, runtime_path
 lazy from .container_usage import usage_of
@@ -52,6 +53,7 @@ lazy from .github_estate import build_of, repositories
 lazy from .infrastructure import enabled_resources
 lazy from .inventory import record_token
 lazy from .machines import Serving, machine as machine_named, served_by
+lazy from .osv import grouped
 lazy from .projects import projects_by_repository, repository_key
 lazy from .supply_chain import supply_chain_of
 
@@ -59,15 +61,13 @@ VULNERABLE = "vulnerable"
 BEHIND = "behind"
 CURRENT = "current"
 UNKNOWN = "unknown"
-# Worst first; a level not named sorts after these.
-SEVERITIES = ("critical", "high", "medium", "moderate", "low")
-SERIOUS = ("critical", "high")
 # How HQ knows what an image is built from, most trusted first: the operator's
-# word, the image's label, the provenance its publisher attached, the
-# registry it lives in.
+# word, the image's label, the provenance its publisher attached, the module
+# its SBOM says its binaries were built as, the registry it lives in.
 DECLARED = "declared"
 LABEL = "label"
 PROVENANCE = "provenance"
+SBOM = "sbom"
 REGISTRY = "registry"
 # What an image built on the machine that runs it reads as, wherever its standing is said.
 BUILT_HERE = "Built on its host"
@@ -75,6 +75,7 @@ _KNOWN_BY = {
     DECLARED: "as set in HQ",
     LABEL: "by its label",
     PROVENANCE: "by its provenance",
+    SBOM: "by its package list",
     REGISTRY: "by its registry",
 }
 
@@ -272,7 +273,7 @@ def container_watchers() -> dict[tuple[str, str], tuple[str, bool]]:
 
 
 @dataclass(frozen=True, slots=True)
-class ImageStanding(ImageStandingWords):
+class ImageStanding(ImageStandingWords, ImageFindings):
     """What is known about one image at one version, wherever it runs."""
 
     image: ImageRef
@@ -375,30 +376,6 @@ class ImageStanding(ImageStandingWords):
         return tuple(dict.fromkeys(found))
 
     @property
-    def findings(self) -> tuple[Mapping[str, Any], ...]:
-        """What OSV knows against its packages, worst first."""
-
-        return ranked((self.checked or {}).get("findings") or ())
-
-    @property
-    def urgent(self) -> tuple[Mapping[str, Any], ...]:
-        """Critical or high, with a fixed version published: what to act on.
-        An unrated or unfixed finding is shown, never raised."""
-
-        return tuple(item for item in self.findings if item.get("fixed") and item.get("severity") in SERIOUS)
-
-    @property
-    def known_vulnerabilities(self) -> tuple[Mapping[str, Any], ...]:
-        """What makes it vulnerable, each once by its id: its advisories, then
-        its urgent package findings. A title counts these, and an upgrade
-        says which of these it fixes, so both count one thing. Worst first."""
-
-        found: dict[str, Mapping[str, Any]] = {}
-        for item in (*self.advisories, *self.urgent):
-            found.setdefault(str(item.get("id", "")), item)
-        return ranked(found.values())
-
-    @property
     def state(self) -> str:
         if self.known_vulnerabilities:
             return VULNERABLE
@@ -437,12 +414,15 @@ class ImageStanding(ImageStandingWords):
     @property
     def vulnerability_tone(self) -> str:
         """What is known against it as a tone: good only once its packages were
-        checked, since its project's advisories alone miss what its image adds."""
+        checked, since its project's advisories alone miss what its image adds,
+        and neutral while what is serious has no fix to move to."""
 
         if self.serious:
             return Tone.SERIOUS
         if self.state == VULNERABLE:
             return Tone.ATTENTION
+        if self.unfixed:
+            return Tone.NEUTRAL
         return Tone.GOOD if self.checked else ""
 
     @property
@@ -833,18 +813,12 @@ def source_of(
         (declared, DECLARED),
         ("/".join(labeled) if labeled else "", LABEL),
         (github_source(str(((attested or {}).get("provenance") or {}).get("source", "") or "")), PROVENANCE),
+        (module_repository((attested or {}).get("main") or ()), SBOM),
         (image.github, REGISTRY),
     ):
         if named:
             return named, how
     return "", ""
-
-
-def ranked(findings) -> tuple[Mapping[str, Any], ...]:
-    """Worst first; unrated last."""
-
-    rank = {level: index for index, level in enumerate(SEVERITIES)}
-    return tuple(sorted(findings, key=lambda item: rank.get(str(item.get("severity", "")), len(SEVERITIES))))
 
 
 def _advisories(tag: str, upstream: Mapping[str, Any] | None) -> tuple[tuple[Mapping[str, Any], ...], int]:
@@ -965,7 +939,13 @@ def _digests() -> dict[str, Mapping[str, Any]]:
 
 
 def _checked() -> dict[str, Mapping[str, Any]]:
-    return read_once("containers.checked", lambda: _by(VULNERABILITY_KIND, "digest"))
+    def load() -> dict[str, Mapping[str, Any]]:
+        return {
+            key: {**record, "findings": grouped(record.get("findings") or ())}
+            for key, record in _by(VULNERABILITY_KIND, "digest").items()
+        }
+
+    return read_once("containers.checked", load)
 
 
 def _declared_sources() -> dict[tuple[str, str], str]:

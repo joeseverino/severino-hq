@@ -8,6 +8,7 @@ nothing here touches the image.
 """
 
 import json
+import re
 from collections.abc import Iterable, Mapping
 from itertools import batched
 from typing import Any
@@ -20,6 +21,12 @@ TIMEOUT_SECONDS = 20
 # OSV's own limit on one batch.
 BATCH = 1000
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+
+# golang.org/x/mod/module's pseudoVersionRE.
+_PSEUDO = re.compile(
+    r"^v[0-9]+\.(0\.0-|\d+\.\d+-([^+]*\.)?0\.)\d{14}-[A-Za-z0-9]+(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
+)
 
 
 class OSVReadError(Exception):
@@ -105,10 +112,29 @@ def _read(method: str, path: str, content: bytes | None = None) -> Any:
         raise OSVReadError("OSV answered with something other than JSON.") from exc
 
 
-def matches(purls: Iterable[str]) -> tuple[int, dict[str, list[tuple[str, str]]]]:
-    """``(packages checked, {purl: [(vulnerability id, modified)]})``."""
+def _unordered(purl: str) -> bool:
+    """Whether a package's version holds no place among its releases: a Go
+    pseudo-version (``module.IsPseudoVersion`` in golang.org/x/mod), or the
+    ``(devel)`` of a build with none."""
 
-    asked = [(purl, query) for purl in purls if (query := query_of(purl)) is not None]
+    parsed = _parsed(purl)
+    return parsed is not None and parsed[0] == "golang" and bool(_PSEUDO.match(parsed[3]) or parsed[3] == "(devel)")
+
+
+def matches(purls: Iterable[str], main: Iterable[str] = ()) -> tuple[int, dict[str, list[tuple[str, str]]]]:
+    """``(packages checked, {purl: [(vulnerability id, modified)]})``.
+
+    A main module (``attestations.main_modules``) with a pseudo-version is not
+    asked. OSV orders Go versions by SemVer, where ``v0.0.0-<time>-<commit>``
+    precedes every release, so a binary built from a checkout no tag names
+    would match each advisory its project ever fixed. Grype refuses the same
+    comparison by default (``allow-main-module-pseudo-version-comparison``).
+    Its project's own advisories are matched against the image's release
+    instead (``containers._advisories``).
+    """
+
+    unordered = {purl for purl in main if _unordered(purl)}
+    asked = [(purl, query) for purl in purls if purl not in unordered and (query := query_of(purl)) is not None]
     found: dict[str, list[tuple[str, str]]] = {}
     for chunk in batched(asked, BATCH, strict=False):
         answer = _post("/querybatch", {"queries": [query for _purl, query in chunk]})
@@ -161,4 +187,39 @@ def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> 
         "aliases": tuple(str(alias) for alias in vulnerability.get("aliases") or ())[:8],
         "url": f"https://osv.dev/vulnerability/{quote(identifier, safe='')}",
         "modified": modified or str(vulnerability.get("modified", "")),
+    }
+
+
+def grouped(findings: Iterable[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    """Each vulnerability once per package, in the order first found.
+
+    OSV's aliases name the same vulnerability in other databases, symmetric
+    and transitive by its schema, so a GHSA record and the GO record of one
+    vulnerability are one finding: under the id of the one that rates it,
+    with every fixed version either names.
+    """
+
+    # (where, names, members), each the package and version it is found in.
+    groups: list[tuple[tuple[Any, Any], set[str], list[Mapping[str, Any]]]] = []
+    for item in findings:
+        where = (item.get("package"), item.get("installed"))
+        names = {str(item.get("id", "")), *(str(alias) for alias in item.get("aliases") or ())} - {""}
+        joined = [group for group in groups if group[0] == where and group[1] & names]
+        members = [member for group in joined for member in group[2]]
+        if joined:
+            at = groups.index(joined[0])
+            groups[at] = (where, names.union(*(group[1] for group in joined)), [*members, item])
+            for group in joined[1:]:
+                groups.remove(group)
+        else:
+            groups.append((where, names, [item]))
+    return tuple(_merged(names, members) for _where, names, members in groups)
+
+
+def _merged(names: set[str], members: list[Mapping[str, Any]]) -> Mapping[str, Any]:
+    lead = min(members, key=lambda member: (not member.get("severity"), str(member.get("id", ""))))
+    return {
+        **lead,
+        "aliases": tuple(sorted(names - {str(lead.get("id", ""))})),
+        "fixed": tuple(dict.fromkeys(str(fixed) for member in members for fixed in member.get("fixed") or ())),
     }

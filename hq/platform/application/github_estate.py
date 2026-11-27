@@ -26,11 +26,11 @@ from hq.platform.application.labels import dotted
 
 from .action_links import read_link
 from .card_items import ListRow
-from .containers import SERIOUS
 from .derivations import whole
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
+from .image_findings import SERIOUS
 from .moments import moment, when
 from .projection import read_once
 from .thresholds import Threshold

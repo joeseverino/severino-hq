@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from unittest import mock
 
@@ -12,6 +13,7 @@ from hq.platform.core.testing import operator
 from ..containers import DECLARED, LABEL, PROVENANCE, REGISTRY, VULNERABLE, containers
 from ..report_testing import bridged
 from ..security import cli_principal
+from .network import Response, answering
 from .test_containers import container, estate, inventory
 from .test_upgrades import TARGET, published
 
@@ -135,23 +137,161 @@ class SourceTests(TestCase):
             PortainerContainerSpec(**base, source="https://gitlab.example/owner/repo")
 
 
+# OSV's answers for an image built from an untagged commit of its own
+# module (a pseudo-version) with one vulnerable dependency, recorded from
+# api.osv.dev with the module paths renamed: the querybatch answer for each
+# package, and each record's detail. Each vulnerability is listed by OSV
+# under its GHSA id and its GO id, the two naming each other as aliases.
+MAIN = "pkg:golang/github.com/example/web@v0.0.0-20261118030823-d859bc092c89"
+DEPENDENCY = "pkg:golang/github.com/example/dep/v2@v2.2.5"
+RECORDED_MATCHES = {
+    MAIN: [
+        {"id": "GHSA-9mjw-79r6-c9m8", "modified": "2024-12-04T22:18:00Z"},
+        {"id": "GO-2024-3172", "modified": "2024-10-09T20:59:24.410942Z"},
+    ],
+    DEPENDENCY: [
+        {"id": "GHSA-p7v4-vr35-mj6f", "modified": "2026-10-19T21:41:22.608698004Z"},
+        {"id": "GO-2026-6791", "modified": "2026-11-23T20:30:11.270670887Z"},
+    ],
+}
+RECORDED_DETAILS = {
+    "GHSA-9mjw-79r6-c9m8": {
+        "id": "GHSA-9mjw-79r6-c9m8",
+        "aliases": ["CVE-2024-33662", "GO-2024-3172"],
+        "summary": "Improper use of an encryption algorithm in the AesEncrypt function",
+        "modified": "2024-12-04T22:18:00Z",
+        "database_specific": {"cwe_ids": ["CWE-326", "CWE-327"], "severity": "HIGH", "github_reviewed": True},
+        "affected": [
+            {
+                "package": {"name": "github.com/example/web", "ecosystem": "Go"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "2.20.2"}]}],
+            }
+        ],
+    },
+    "GO-2024-3172": {
+        "id": "GO-2024-3172",
+        "aliases": ["CVE-2024-33662", "GHSA-9mjw-79r6-c9m8"],
+        "summary": "Improper use of an encryption algorithm in the AesEncrypt function in github.com/example/web",
+        "modified": "2024-10-09T20:59:24.410942Z",
+        "database_specific": {"review_status": "UNREVIEWED", "url": "https://pkg.go.dev/vuln/GO-2024-3172"},
+        "affected": [
+            {
+                "package": {"name": "github.com/example/web", "ecosystem": "Go"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}],
+            }
+        ],
+    },
+    "GHSA-p7v4-vr35-mj6f": {
+        "id": "GHSA-p7v4-vr35-mj6f",
+        "aliases": ["CVE-2026-95837", "GO-2026-6791"],
+        "summary": "CRI plugin: Checkpoint restore bypasses destination security context",
+        "modified": "2026-10-19T21:41:22.608698004Z",
+        "database_specific": {"github_reviewed": True, "cwe_ids": ["CWE-269"], "severity": "HIGH"},
+        "affected": [
+            {
+                "package": {"name": "github.com/example/dep/v2", "ecosystem": "Go"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "2.1.0"}, {"fixed": "2.2.7"}]}],
+            },
+            {
+                "package": {"name": "github.com/example/dep/v2", "ecosystem": "Go"},
+                "ranges": [{"type": "SEMVER", "events": [{"introduced": "2.3.0"}, {"fixed": "2.3.4"}]}],
+            },
+        ],
+    },
+    "GO-2026-6791": {
+        "id": "GO-2026-6791",
+        "aliases": ["CVE-2026-95837", "GHSA-p7v4-vr35-mj6f"],
+        "summary": "Checkpoint restore bypasses destination security context in github.com/example/dep/v2",
+        "modified": "2026-11-23T20:30:11.270670887Z",
+        "database_specific": {"url": "https://pkg.go.dev/vuln/GO-2026-6791", "review_status": "REVIEWED"},
+        "affected": [
+            {
+                "package": {"name": "github.com/example/dep/v2", "ecosystem": "Go"},
+                "ranges": [
+                    {
+                        "type": "SEMVER",
+                        "events": [
+                            {"introduced": "2.1.0"},
+                            {"fixed": "2.2.7"},
+                            {"introduced": "2.3.0"},
+                            {"fixed": "2.3.4"},
+                        ],
+                    }
+                ],
+            }
+        ],
+    },
+}
+
+
+def osv_recorded(request):
+    if request.method == "POST":
+        queries = json.loads(request.content)["queries"]
+        return Response(
+            {"results": [{"vulns": RECORDED_MATCHES.get(query["package"]["purl"], [])} for query in queries]}
+        )
+    return Response(RECORDED_DETAILS[str(request.url).rpartition("/")[2]])
+
+
 class VulnerabilityTests(TestCase):
-    def test_only_a_serious_vulnerability_with_a_fix_makes_an_image_vulnerable(self):
+    def test_an_image_of_its_own_untagged_commit_is_judged_by_what_a_release_can_fix(self):
+        from ..public_registry import vulnerability_reader
+
         estate()
-        inventory("registry.digest", [attested(APP)])
+        web = "docker.io/example/web@sha256:web"
         inventory(
-            "registry.vulnerabilities", [checked(APP, [found("LOW", severity="low"), found("UNFIXED", fixed=())])]
+            "portainer.image",
+            [
+                {
+                    "connection_ref": "example-portainer",
+                    "host": "example-box",
+                    "id": "sha256:w",
+                    "tags": ["example/web:1.0.0"],
+                    "digests": ["example/web@sha256:web"],
+                    "containers": [{"container": "web", "reference": "example/web:1.0.0"}],
+                },
+            ],
         )
+        inventory("registry.digest", [{**attested(web, packages=(MAIN, DEPENDENCY), revision=""), "main": [MAIN]}])
+        with answering(osv_recorded):
+            record = vulnerability_reader({})(web)
+        inventory("registry.vulnerabilities", [{**record, "read_at": timezone.now().isoformat()}])
 
-        standing = item("app").standing
+        standing = item("web").standing
+        # Its own module is not matched against releases its commit is newer
+        # than, and the dependency's one vulnerability is one finding.
+        self.assertEqual([each["id"] for each in standing.findings], ["GHSA-p7v4-vr35-mj6f"])
+        self.assertIn("GO-2026-6791", standing.findings[0]["aliases"])
+        # The module its SBOM names is the source when the image names none.
+        self.assertEqual((standing.upstream, standing.source_from), ("example/web", "sbom"))
+        # No release fixes it, so it is said and never raised.
+        self.assertEqual((standing.urgent, standing.state != VULNERABLE), ((), True))
+        result = next(each for each in item("web").supply_chain.results if each.check.id == "no-urgent")
+        self.assertTrue(result.met)
+        self.assertIn("No release fixes", result.reading.evidence)
+
+    def test_a_serious_vulnerability_is_urgent_once_the_newest_release_is_clear_of_it(self):
+        estate()
+        published()
+        inventory("registry.digest", [attested(APP), attested(APP_TARGET)])
+
+        def standing_with(target):
+            inventory("registry.vulnerabilities", [checked(APP, [found("HIGH")]), *target])
+            return item("app").standing, next(
+                each for each in item("app").supply_chain.results if each.check.id == "no-urgent"
+            )
+
+        standing, result = standing_with([checked(APP_TARGET, [])])
+        self.assertEqual((standing.state, standing.summary), (VULNERABLE, "1 serious vulnerability"))
+        self.assertEqual(result.state, "unmet")
+
+        standing, result = standing_with([checked(APP_TARGET, [found("HIGH")])])
         self.assertNotEqual(standing.state, VULNERABLE)
-        self.assertEqual(len(standing.findings), 2)
+        self.assertTrue(result.met)
 
-        inventory("registry.vulnerabilities", [checked(APP, [found("HIGH")])])
-        standing = item("app").standing
-        self.assertEqual(
-            (standing.state, standing.summary, standing.worst), (VULNERABLE, "1 serious vulnerability", "high")
-        )
+        standing, result = standing_with([])
+        self.assertNotEqual(standing.state, VULNERABLE)
+        self.assertEqual(result.state, "unavailable")
 
 
 class UpgradeTests(TestCase):
