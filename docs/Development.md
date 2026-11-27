@@ -1168,23 +1168,24 @@ host name outside the reserved and shared ranges it names.
 | To run | Command |
 | --- | --- |
 | both estates in another engine | `HQ_BROWSER_ENGINE=chromium` or `firefox` |
-| the legs named | `mise run browser <leg>...` (`webkit`, `demo`) |
+| the legs named | `mise run browser <leg>...` (`webkit`, `catalog`, `demo`) |
 | one CI share of a leg | `HQ_BROWSER_SHARD=2/7 mise run browser:webkit` |
 | one browser test | `mise run test <label>`, which installs the engine first |
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`chromium`) or test labels |
 
-`browser:webkit` runs every browser test in WebKit, which judges, since HQ is
-read in Safari. Chromium is a second opinion, `browser:chromium`, which `mise
-run browser` leaves to CI: the catalog of shared parts, the example estate at
-a phone and a laptop, and the layout shifts only Chromium records. Every
-test it runs is also run in WebKit.
+`browser:webkit` runs every browser test but the catalog walk in WebKit,
+which judges, since HQ is read in Safari. Chromium is a second opinion,
+`browser:chromium`, which `mise run browser` leaves to CI: the catalog of
+shared parts, the example estate at a phone and a laptop, and the layout
+shifts only Chromium records. Every test it runs is also run in WebKit.
 
 An engine draws in its system's fonts, and macOS's monospace face is wider
-than Linux's, so a part can fit in CI's Linux legs and wrap in Safari.
-`browser:catalog` runs the catalog's layout tests in the engine
-`HQ_BROWSER_ENGINE` names, and CI runs it on a macOS runner in both engines,
-its findings joining the other legs' in Browser verdict. `mise run browser`
-leaves it out: on a Mac, `browser:webkit` already runs those tests.
+than Linux's, so a part can fit in CI's Linux legs and wrap in Safari. So the
+catalog walk (the classes tagged `catalog`) runs once per engine: in WebKit
+on a macOS runner (`browser:catalog`, WebKit unless `HQ_BROWSER_ENGINE` names
+another), its findings joining the other legs' in Browser verdict, and in
+Chromium on Linux (`browser:chromium`). On a Mac, `mise run browser` runs
+`browser:catalog` in the Mac's own fonts.
 
 CI splits each engine's gate into shares that run side by side, `i/n` in
 the browser jobs' matrices. A sweep marked `@sweep` runs in every share and reads

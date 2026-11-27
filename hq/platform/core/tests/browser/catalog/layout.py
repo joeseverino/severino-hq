@@ -6,6 +6,8 @@ from dataclasses import replace
 from typing import override
 from unittest import mock
 
+from django.test import tag
+
 from hq.platform.core.tests.browser import survey
 from hq.platform.core.tests.browser.catalog import PAGES, left_out_on, page, premise_of
 from hq.platform.core.tests.browser.gate import BrowserGate
@@ -18,6 +20,10 @@ _MAP_ENTRY = "part/topology-map"
 _NO_MAP = "part/modal"
 
 
+# The catalog walk, which CI runs once per engine: WebKit on macOS
+# (browser:catalog), Chromium on Linux (browser:chromium). browser:webkit
+# leaves it out by this tag.
+@tag("catalog")
 class EntryLayoutTests(LayoutBrowserTests):
     """Every catalog entry under the whole survey, in one of the two states
     its page is read in (`widths.ENTRY`, `widths.SCRIPTED_ENTRY`): as the
