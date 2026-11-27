@@ -4,6 +4,7 @@ and then applies the merge's commit through the adopted playbook that applies
 app updates, as that person, once. Each step that ends badly says so on the
 update, and stops what comes after it."""
 
+from types import SimpleNamespace
 from typing import Annotated
 
 from django.db import transaction
@@ -120,11 +121,23 @@ class ApproveUpdateTests(TestCase):
         return self.settle(**settled)
 
     def standing(self):
-        from ..app_update_approval import merge_standing
-        from ..app_updates import app_updates
+        """Where the update stands, as its card says it: the step its sequence
+        is at, else its last, and whether HQ is moving it (``at_work``)."""
+
+        from ..app_updates import app_updates, update_state
 
         (update,) = app_updates()
-        return merge_standing(update)
+        state = update_state(update.containers[0])
+        step = state.flow.at or state.flow.steps[-1]
+        said = step.standing
+        return SimpleNamespace(
+            title=step.title,
+            tone=said.tone,
+            live=step.live,
+            url=said.url,
+            words=f"{step.title} {step.line}",
+            taken=state.at_work,
+        )
 
     def container_page(self, name="app"):
         from hq.platform.core.testing import declare, operator
@@ -147,7 +160,7 @@ class ApproveUpdateTests(TestCase):
         from ..work_runs import run_url
 
         self.assertTrue(self.standing().live)
-        self.assertEqual(self.standing().run_url, run_url(str(preview.pk)))
+        self.assertEqual(self.standing().url, run_url(str(preview.pk)))
         # The worker is told nothing of the steps after it.
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         self.assertNotIn("then", claimed["input"])
@@ -172,8 +185,8 @@ class ApproveUpdateTests(TestCase):
         # It names the task it stopped on, in its own words as in its detail.
         self.assertEqual((standing.tone, standing.live), ("serious", False))
         self.assertIn(REFUSED_TASK, standing.words)
-        self.assertIn(REFUSED_SAID, standing.lines)
-        self.assertEqual(standing.run_url, run_url(str(preview.pk)))
+        self.assertIn(REFUSED_SAID, standing.words)
+        self.assertEqual(standing.url, run_url(str(preview.pk)))
         # Once the host is fixed it is approved again, which previews again.
         self.assertEqual(approval_of(app_updates()[0]).held, "")
         page = self.container_page()
@@ -183,7 +196,7 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(self.runs(input__check=True).count(), 2)
 
     def test_a_retried_press_neither_previews_nor_merges_twice(self):
-        from ..app_update_approval import succeeded
+        from ..resource_operations import succeeded
 
         self.assertTrue(self.press()["ok"])
         self.assertTrue(self.press()["ok"])
@@ -214,7 +227,7 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(merge.requested_actor, PERSON.actor)
         self.assertEqual(merge.input["correlation"], preview.input["correlation"])
         self.assertEqual(preview.result["then"], {"merge": str(merge.pk)})
-        self.assertEqual((self.standing().live, self.standing().operation), (True, merge))
+        self.assertEqual((self.standing().title, self.standing().live), ("Merge", True))
 
     def test_the_container_page_draws_the_press_that_previews_the_update(self):
         page = self.container_page()
@@ -399,7 +412,7 @@ class ApproveUpdateTests(TestCase):
 
         from ..work_runs import run_url
 
-        self.assertEqual(self.standing().run_url, run_url(str(run.pk)))
+        self.assertEqual(self.standing().url, run_url(str(run.pk)))
         self.assertTrue(self.standing().live)
         operator(self.client)
         (steps,) = self.client.get(run_url(str(run.pk))).context["events"]
@@ -418,17 +431,19 @@ class ApproveUpdateTests(TestCase):
         self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
 
         standing = self.standing()
-        self.assertEqual((standing.tone, standing.taken, standing.live), ("serious", True, False))
+        # The apply is the person's to press again, at main.
+        self.assertEqual(
+            (standing.title, standing.tone, standing.taken, standing.live), ("Apply", "serious", False, False)
+        )
         self.assertIn("Start the pull unit", standing.words)
-        self.assertIn("The pull unit failed.", standing.lines)
         self.merged_on_main()
         apply = self.container_page().context["container"]["act"]
         from .test_containers import named, queued
 
         # Its card keeps how it went, the run's page named by its standing.
         (card,) = [item for item in queued() if "app" in named(item, "Container")]
-        run, *said = [value for label, value in card.evidence if label == "Apply"]
-        self.assertEqual(run.url, reverse("jobs:run", kwargs={"pk": standing.run.id}))
+        run, said = [value for label, value in card.evidence if label == "Apply"]
+        self.assertEqual(run.url, standing.url)
         self.assertIn("Failed", run.label)
         self.assertIn("The pull unit failed.", said)
         self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
@@ -518,11 +533,12 @@ class ApproveUpdateTests(TestCase):
 
         self.worked(stated=receipt(apps=[{"project": "app", "result": "ok", "changed": True}]))
 
-        self.assertEqual((self.standing().word, self.standing().tone), ("Applied", "good"))
+        # Past its apply, the update waits on HQ's next read of the container's health.
+        self.assertEqual((self.standing().taken, self.standing().title), (True, "Health check"))
         # A closed update that applied offers nothing more on the container's page.
         self.merged_on_main()
         container = self.container_page().context["container"]
-        self.assertEqual((container["state"].standing.word, container["act"]), ("Applied", None))
+        self.assertEqual((container["state"].at_work, container["act"]), (True, None))
 
     def test_an_apply_whose_pull_did_not_release_every_app_does_not_stand_applied(self):
         self.merged()
@@ -533,7 +549,7 @@ class ApproveUpdateTests(TestCase):
         standing = self.standing()
         self.assertNotEqual(standing.tone, "good")
         self.assertNotIn("applied", standing.words.lower())
-        self.assertTrue(any("app" in line and "Rolled back" in line for line in standing.lines), standing.lines)
+        self.assertIn("Rolled back", standing.words)
 
     def test_a_preview_says_the_machines_last_pull_as_attempted_and_an_unchanged_app_as_left_alone(self):
         from ..work_runs import run_row
@@ -581,7 +597,7 @@ class ApproveUpdateTests(TestCase):
         self.assertEqual(self.applies().count(), 2)
 
     def test_a_replayed_settle_queues_no_second_run(self):
-        from ..app_update_approval import succeeded
+        from ..resource_operations import succeeded
 
         merge = self.merged()
 

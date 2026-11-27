@@ -19,7 +19,7 @@ from hq.platform.application.routes import reverse
 from .container_standard import STANDARD
 from .containers import VULNERABLE, Container, ImageStanding, containers
 from .display_words import Code
-from .entity_links import entity_link
+from .entity_links import declared_link, entity_link
 from .exposure import LEVELS, OPEN, UNKNOWN, exposure_of_container, status_at
 from .finding_model import (
     CANNOT_EDIT_COMPOSE,
@@ -41,9 +41,9 @@ from .tone import Tone
 from .ui import agreed, ended
 from .workflow_contracts import ActionLink
 lazy from .app_updates import UpdateKind, UpdateState, update_state
+lazy from .asks import FAILED
 lazy from .topology_estate import machine_nodes
 lazy from .upgrades import HIGH, MAJOR, Plan, plan_for
-lazy from .work_runs import standing_of as run_standing
 
 # The files a stack's override is read from, beside its compose file.
 OVERRIDES = (
@@ -100,9 +100,10 @@ def _of(running: list[Container], subject: str) -> Iterator[Finding]:
         # Once a press is asked, its card says where that stands, in the
         # words its page does; while its run is under way, the run's own
         # standing says it (``Finding.under_way``).
-        pressed = state.standing
-        under_way = pressed.standing if pressed else None
-        explanation = ended(pressed.words) if pressed and not under_way else state.words
+        at = state.flow.at
+        under_way = at.standing if at is not None and at.live and state.at_work else None
+        asked = state.at_work or (at is not None and at.standing.state == FAILED)
+        explanation = ended(state.flow.said) if asked and not under_way else state.words
         # What the title and its line say is not said again among its facts;
         # a link opens a page, which no words say.
         said = f"{title} {explanation}".casefold()
@@ -222,28 +223,26 @@ def _upgrade(running: list[Container], plan: Plan | None, state: UpdateState | N
         said = [*([MAJOR] if plan.change == MAJOR else []), *([f"fixes {len(plan.fixes)}"] if plan.fixes else [])]
         label = f"Upgrade to {plan.target_tag}" + (f" ({', '.join(said)})" if said else "")
         return {"primary": opens(label, page.url), "fixes": _by_hand(running, plan), "evidence": evidence}
-    if state.offered is None:
+    if state.offered is None or state.at_work:
         # What holds it back is what to clear, so it is the one step, said once.
-        return {"fixes": (Do(state.reason),), "evidence": evidence, "no_help_reason": state.reason}
+        reason = state.reason or ended(state.flow.said)
+        return {"fixes": (Do(reason),), "evidence": evidence, "no_help_reason": reason}
     return {"evidence": evidence, "fixes": (state.offered.remedy,)}
 
 
 def _standing(state: UpdateState) -> tuple[Fact, ...]:
-    """Where its last press stands once its run is not under way, under the
-    label its page says it under: the run's page, named by the state it
-    ended in, then what it waits on, or the step it stopped on, what that said
-    and each app it did not release."""
+    """Where what HQ was asked stands once it is not under way: the step it
+    stopped at, else its last, linked to the page that holds it, over its sentence."""
 
-    standing = state.standing
-    if standing is None or standing.standing is not None:
+    flow = state.flow
+    step = flow.at if flow.at is not None and flow.at.standing.state == FAILED else None
+    if step is None and state.at_work and flow.steps and not flow.live:
+        step = flow.steps[-1]
+    if step is None:
         return ()
-    run = standing.run
-    lead = (
-        entity_link(Kind.RUN, run.id, label=run_standing(run).label)
-        if run is not None and run.url
-        else ended(standing.word)
-    )
-    return tuple((state.standing_label, said) for said in (lead, *map(ended, standing.lines)))
+    said = step.standing
+    lead = declared_link(said.label, said.url) if said.url else ended(said.label)
+    return tuple((step.title, said) for said in (lead, *([ended(said.note)] if said.note else [])))
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

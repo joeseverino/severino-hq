@@ -16,8 +16,6 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.models import OperationRequest
-
 from .card_items import Answer
 from .container_words import named
 from .containers import Container, containers, published_digest, standing_of
@@ -41,20 +39,17 @@ lazy from .app_update_approval import (
 )
 lazy from .app_update_flow import UPDATE
 lazy from .app_update_open import OPEN, open_standing, open_target
-lazy from .asks import DONE, RUNNING, Asked, Standing
+lazy from .asks import Standing
 lazy from .container_findings import BY_HAND
 lazy from .dependency_updates import last_run
 lazy from .finding_model import Fact
 lazy from .finding_steps import Does
 lazy from .labels import lower_first
 lazy from .pages import PageAction, command_reach
-lazy from .resource_operations import OperationAsked, operation_asked
-lazy from .sequences import Sequence
-lazy from .work_runs import standing_of as run_standing
+lazy from .sequences import PERSON, Sequence
 
 if TYPE_CHECKING:
     from .dependency_updates import Branch
-    from .work_runs import WorkRun
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
@@ -397,82 +392,6 @@ class UpdateAction:
 
 
 @dataclass(frozen=True, slots=True)
-class MergeStanding:
-    """How an approved update stands: its preview, its merge, and the run
-    that applies it."""
-
-    # Where it stands in a word or two ("Waiting", "Apply failed").
-    word: str
-    tone: str
-    # Whether it previews, merges, applies or merged, so no second approval is offered.
-    taken: bool = False
-    # Whether its merge landed, so what it says is its apply's.
-    merged: bool = False
-    # Its fact's detail: what it waits on, or of a preview or an apply that
-    # ended, the step it stopped on, what that said and each app the run did
-    # not release.
-    lines: tuple[str, ...] = ()
-    # The run or merge it stands on; None for Renovate's run, which is a
-    # read asked of the controller rather than an operation.
-    operation: OperationRequest | None = None
-    # That operation as every list of work shows it, whose page and standing
-    # each surface that names it shows.
-    run: WorkRun | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "lines", tuple(map(str, self.answer.because)))
-
-    @property
-    def answer(self) -> Answer:
-        """How it stands as its fact draws it: its word, over why."""
-
-        return Answer(self.word, self.lines, self.tone)
-
-    @property
-    def words(self) -> str:
-        """How it stands as one line of prose, for a message or a reason."""
-
-        return self.answer.said
-
-    @property
-    def run_url(self) -> str:
-        """The page of the run it stands on, the preview or the apply; "" for none."""
-
-        return self.run.url if self.run else ""
-
-    @property
-    def standing(self) -> Standing | None:
-        """How its run stands while it is under way (``work_runs.standing_of``); None otherwise."""
-
-        return run_standing(self.run) if self.live and self.run else None
-
-    @property
-    def live(self) -> bool:
-        """Whether a step of it is under way, so its card asks again until it ends:
-        taken and not yet ended, which is the one standing said in attention."""
-
-        return self.taken and self.tone == Tone.ATTENTION
-
-    @property
-    def again(self) -> Asked:
-        """What pressing it again answers while it stands taken: where it
-        stands, never a refusal, since the first press is still its request."""
-
-        if self.live:
-            return Asked(self.standing or Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
-        return Asked(Standing(DONE, self.words), message=ended(self.words))
-
-    def asked(self) -> OperationAsked:
-        """``again`` as a repeated ask of the operation it stands on answers
-        it, queuing nothing; only Renovate's run stands on none."""
-
-        if self.operation is None:
-            raise LookupError("Renovate's run is no operation, so its standing answers as ``again``.")
-        said = self.again
-        return operation_asked(self.operation, queued=False, standing=said.standing, message=said.message)
-
-
-@dataclass(frozen=True, slots=True)
 class UpdateState:
     """Where one container's update stands, and the one thing to do about it,
     as its finding, the queue and its page all say it (``update_state``)."""
@@ -491,8 +410,8 @@ class UpdateState:
     said: str = ""
     # Held because no one adopted playbook applies it: the Playbooks page's step.
     adopt: bool = False
-    # How its approval or its apply stands, once one is asked.
-    standing: MergeStanding | None = None
+    # How its last Open PR stands, once one is asked (``app_update_open.open_standing``).
+    opening: Standing | None = None
     update: AppUpdate | None = None
     managed: Managed | None = None
 
@@ -504,15 +423,12 @@ class UpdateState:
 
     @property
     def at_work(self) -> bool:
-        """Whether HQ is moving it now, or moved it: nothing is asked of anyone."""
+        """Whether HQ is moving it now, or moved it: nothing is asked of
+        anyone. So it is once the person's steps are done, or while the one
+        they pressed is under way."""
 
-        return self.standing is not None and self.standing.taken
-
-    @property
-    def standing_label(self) -> str:
-        """The label its standing is said under, on every page: the press it stands on."""
-
-        return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
+        flow, at = self.flow, self.flow.at
+        return bool(flow.steps) and (flow.next is None or (at is not None and at.by == PERSON and at.live))
 
     @property
     def follows(self) -> bool:
@@ -525,13 +441,6 @@ class UpdateState:
         """Its way to running, step by step (``app_update_flow.UPDATE``)."""
 
         return UPDATE.of(self)
-
-    @property
-    def beside(self) -> MergeStanding | None:
-        """Its standing where a page says it beside its answer: an approval's
-        or an apply's. An Open PR's is its answer, so it is said once."""
-
-        return self.standing if self.kind in (UpdateKind.OPEN, UpdateKind.MERGED) else None
 
 
 UNOPENED = "Renovate has not seen the release yet."
@@ -578,25 +487,20 @@ def update_state(item: Container) -> UpdateState:
         )
     action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
     held = app_branch(managed.repository, managed.app)
-    standing = open_standing(managed.repository, managed.app)
-    # While an Open PR is under way it is held back, as an approval is (``_decided``).
-    reason = standing.words if standing is not None and standing.taken else ""
+    opening = open_standing(managed.repository, managed.app)
     if held is not None and held.held:
         words = ended(f"Renovate is holding its branch {held.until}")
         said = ended(f"Asks Renovate to open {held.branch}")
-        answer = standing.answer if standing else Answer("Held by Renovate", (capfirst(held.until),))
-        return UpdateState(
-            UpdateKind.HELD, latest, words, answer, action, reason, said, standing=standing, managed=managed
-        )
+        answer = Answer("Held by Renovate", (capfirst(held.until),))
+        return UpdateState(UpdateKind.HELD, latest, words, answer, action, said=said, opening=opening, managed=managed)
     return UpdateState(
         UpdateKind.UNOPENED,
         latest,
         UNOPENED,
-        standing.answer if standing else Answer("Not opened", (UNOPENED,)),
+        Answer("Not opened", (UNOPENED,)),
         action,
-        reason,
-        "Asks Renovate to run.",
-        standing=standing,
+        said="Asks Renovate to run.",
+        opening=opening,
         managed=managed,
     )
 
@@ -607,7 +511,7 @@ def _decided(
     """A state whose press runs while ``approval`` holds nothing back."""
 
     held = {"reason": approval.held, "adopt": approval.adopt} if approval.held else {"said": approval.said}
-    return UpdateState(kind, move, words, answer, action, standing=approval.standing, **held, **of)
+    return UpdateState(kind, move, words, answer, action, **held, **of)
 
 
 def of_app(repository: str, app: str) -> tuple[Container, ...]:

@@ -10,7 +10,7 @@ it declares its commands, through its integration's ``sequences``."""
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Annotated, Final, TypedDict
+from typing import Annotated, Any, Final, TypedDict
 
 lazy from hq.domains.control_plane.provider_adapters import CONNECTIONS, INBOUND, OBSERVATIONS
 
@@ -22,6 +22,9 @@ from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_sequences
 
+# What a step queues once the operation it asked succeeds: handed that
+# operation and what it carries, the record of what it queued.
+type FollowOn = Callable[[Any, dict[str, Any]], dict[str, str]]
 # The mover of a step that is the person's to take; every other mover is a
 # provider, by the key HQ admits it under.
 PERSON: Final = "person"
@@ -213,6 +216,10 @@ class SequenceSpec[Subject]:
     about: Callable[[Subject], str]
     subject: Callable[[str], Subject]
     examples: Mapping[str, Example] = field(default_factory=dict)
+    # What a step queues once the operation it asked succeeds, by that
+    # operation's action: handed the operation and what it carries (its
+    # ``then``), it answers what it queued (``resource_operations.succeeded``).
+    follow_ons: Mapping[str, FollowOn] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if strays := [name for name, each in self.examples.items() if each.at and each.at not in self.steps]:
@@ -221,6 +228,15 @@ class SequenceSpec[Subject]:
     def of(self, subject: Subject) -> Sequence:
         steps = (step.of(subject) for step in self.steps)
         return Sequence(self.about(subject), tuple(step for step in steps if step is not None))
+
+
+def follow_on(action: str) -> FollowOn | None:
+    """The step a declared workflow queues once an operation of ``action`` succeeds."""
+
+    found = [spec.follow_ons[action] for spec in declared() if action in spec.follow_ons]
+    if len(found) > 1:
+        raise ValueError(f"Two workflows follow a succeeded {action!r}; one declares it.")
+    return found[0] if found else None
 
 
 def declared() -> tuple[SequenceSpec, ...]:

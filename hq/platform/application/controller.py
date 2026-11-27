@@ -38,8 +38,7 @@ from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
 from .projection import iso, serialized_reads
 from .record_errors import PolicyError
-from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation
-lazy from .app_update_approval import succeeded
+from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation, succeeded
 lazy from .automation_runs import held_runs, operation_registry, other_profiles, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept

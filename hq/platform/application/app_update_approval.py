@@ -6,13 +6,13 @@ The preview and the apply are runs of the adopted playbook that fixes an
 image update and takes the commit to apply as its ``revision``, the preview
 in Ansible's check mode; the merge is the controller's
 (``github.pull_request``'s ``merge``). Each step carries the next in its
-input (``THEN``), queued once it succeeds (``succeeded``). What binds them
+input (``THEN``), queued once it succeeds (``resource_operations.succeeded``). What binds them
 and what each may do: docs/Architecture.md, "Approving an app update".
 """
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Annotated, Any, Final
 
 from django.db import transaction
@@ -25,7 +25,6 @@ from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUE
 lazy from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
-from .app_updates import MergeStanding
 from .command_fields import Describe
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
@@ -35,7 +34,8 @@ from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
 from .work_runs import StatedKind
-lazy from .app_updates import AppUpdate, app_updates, merged_of
+lazy from .app_update_flow import again
+lazy from .app_updates import AppUpdate, app_updates, merged_of, update_state
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_manifest import REVISION_INPUT as REVISION, OperationManifest
@@ -59,10 +59,8 @@ lazy from .images import ImageRef
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, suggest_key
 lazy from .labels import dotted
 lazy from .machines import served_by
-lazy from .moments import when
 lazy from .payload_words import ChangeRow
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
-lazy from .work_runs import WorkRun, run_row, standing_of as run_standing
 
 _COMMIT = re.compile(COMMIT)
 _ACTIVE = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
@@ -269,9 +267,8 @@ def approve_update(command: ApproveUpdateCommand, *, consented: Consented) -> Op
         reason = _unapprovable(update)
         if reason:
             raise PolicyError(reason)
-    standing = merge_standing(updates[0])
-    if standing is not None and standing.taken:
-        return standing.asked()
+    if updates[0].containers and (repeated := again(update_state(updates[0].containers[0]))) is not None:
+        return repeated
     hosts = applied_on(manifest, tuple(item for update in updates for item in update.containers))
     reached(manifest, hosts)
     pull = _declared(command, consented=consented)
@@ -359,9 +356,8 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
         raise RecordNotFound("Every container of that app runs what its default branch pins.")
     if (repositories()[command.repository].head or {}).get("sha") != command.head_sha:
         raise PolicyError("Its default branch has a new head since you looked. Look again.")
-    standing = _apply_standing(manifest.id, command.head_sha, items)
-    if standing is not None and standing.taken:
-        return standing.asked()
+    if (repeated := again(update_state(items[0]))) is not None:
+        return repeated
     hosts = applied_on(manifest, items)
     reached(manifest, hosts)
     return queue_run(
@@ -378,28 +374,9 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
     )
 
 
-def succeeded(operation: OperationRequest) -> None:
-    """Queue the step ``operation`` carries now that it succeeded (a
-    preview's merge, a merge's apply), and say on it what was queued or why
-    nothing was."""
+def merge_previewed(preview: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
+    """Queue the merge a preview carries, now that it passed."""
 
-    then = (operation.input or {}).get(THEN)
-    step = {
-        OperationRequest.Action.RUN: _merge,
-        OperationRequest.Action.MERGE: _follow,
-    }.get(operation.action)
-    if not isinstance(then, dict) or step is None:
-        return
-    try:
-        with transaction.atomic():
-            said = step(operation, then)
-    except PolicyError as refused:
-        said = {"refused": str(refused)}
-    operation.result = {**(operation.result or {}), THEN: said}
-    OperationRequest.objects.filter(pk=operation.pk).update(result=operation.result)
-
-
-def _merge(preview: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
     # Only a preview carries a merge: a run that acted merges nothing.
     if (preview.input or {}).get(CHECK) is not True:
         raise PolicyError("Only a preview queues a merge, so nothing merged.")
@@ -417,7 +394,9 @@ def _merge(preview: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
     return {"merge": str(merge.pk)}
 
 
-def _follow(merge: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
+def apply_merged(merge: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
+    """Queue the run that applies the commit a merge made, now that it landed."""
+
     # GitHub's sha is the one value the approval did not fix.
     sha = str(((merge.result or {}).get("status") or {}).get("merge_sha") or "")
     if not _COMMIT.fullmatch(sha):
@@ -513,152 +492,6 @@ REFUSED = {
     "checks_pending": ("Merge held", "Its checks have not all passed"),
     "not_installed": ("Merge refused", "HQ's GitHub App is not installed on its repository"),
 }
-
-
-def merge_standing(update: AppUpdate) -> MergeStanding | None:
-    """Where the approval of ``update`` at its head stands, as the update says
-    it: its newest preview or merge; None before either is asked."""
-
-    merge = (
-        OperationRequest.objects.filter(
-            action=OperationRequest.Action.MERGE,
-            resource__kind=PULL_REQUEST_KIND,
-            resource__spec__repository=update.repository,
-            resource__spec__number=update.number,
-            input__head_sha=update.head,
-        )
-        .order_by("-created_at")
-        .first()
-    )
-    preview = (
-        OperationRequest.objects.filter(
-            action=OperationRequest.Action.RUN,
-            input__check=True,
-            input__then__head_sha=update.head,
-            input__correlation__startswith=f"{update.repository}#{update.number}@",
-        )
-        .order_by("-created_at")
-        .first()
-    )
-    if preview is not None and (merge is None or preview.created_at > merge.created_at):
-        return _previewed(preview)
-    return _merged(merge) if merge is not None else None
-
-
-def _previewed(preview: OperationRequest) -> MergeStanding:
-    run = run_row(preview)
-    if preview.state in _ACTIVE:
-        return _under_way(preview, run)
-    if preview.state == OperationRequest.State.SUCCEEDED:
-        refused = str(((preview.result or {}).get(THEN) or {}).get("refused") or "")
-        return MergeStanding("Previewed", Tone.SERIOUS, lines=(refused or "Not merged",), operation=preview, run=run)
-    return _failed("Preview failed", "approve", preview, run)
-
-
-def _merged(merge: OperationRequest) -> MergeStanding:
-    result = merge.result or {}
-    if merge.state in _ACTIVE:
-        return _under_way(merge, run_row(merge))
-    if merge.state == OperationRequest.State.SUCCEEDED:
-        then = result.get(THEN) or {}
-        if then.get("run"):
-            return _applied(merge, str(then["run"]))
-        return MergeStanding(
-            "Not applied",
-            Tone.SERIOUS,
-            taken=True,
-            merged=True,
-            lines=(str(then.get("refused") or "Its apply was not asked"),),
-            operation=merge,
-        )
-    refused = str((result.get("status") or {}).get("refused") or "")
-    word, why = REFUSED.get(refused) or ("Merge failed", str(result.get("message") or ""))
-    return MergeStanding(word, Tone.SERIOUS, lines=(why or "GitHub gave no reason",), operation=merge)
-
-
-def _applied(merge: OperationRequest, first: str) -> MergeStanding:
-    """How the merge's apply stands: its newest run of the merge commit."""
-
-    queued = OperationRequest.objects.filter(pk=first).first()
-    if queued is None:
-        return MergeStanding("Merged", Tone.GOOD, taken=True, merged=True, operation=merge)
-    revision = str(((queued.input or {}).get("parameters") or {}).get(REVISION) or "")
-    standing = _apply_standing(str((queued.input or {}).get("operation", "")), revision) or MergeStanding(
-        "Merged", Tone.GOOD, taken=True, operation=queued, run=run_row(queued)
-    )
-    # Once merged, a failed apply is pressed again from the default branch (``app_updates.UpdateKind.MERGED``).
-    return replace(standing, taken=True, merged=True)
-
-
-def _apply_standing(operation: str, revision: str, items: tuple[Container, ...] = ()) -> MergeStanding | None:
-    """How the newest run of the playbook ``operation`` that applied (rather
-    than previewed) the commit ``revision`` stands; None before one is asked,
-    and once ``items``, which run a pin from before it, were read after it
-    applied, since what they run says it no longer holds."""
-
-    apply = (
-        OperationRequest.objects.filter(
-            action=OperationRequest.Action.RUN,
-            input__operation=operation,
-            **{f"input__parameters__{REVISION}": revision},
-        )
-        .exclude(input__has_key=CHECK)
-        .order_by("-created_at")
-        .first()
-    )
-    if apply is None:
-        return None
-    run = run_row(apply)
-    if apply.state in _ACTIVE:
-        return _under_way(apply, run)
-    if apply.state == OperationRequest.State.SUCCEEDED:
-        done = apply.completed_at
-        if done is not None and any(item.running.observed_at > done for item in items):
-            return None
-        # Applied only where every machine's pull released every app.
-        if pull_applied(run.evidence.stated):
-            return MergeStanding("Applied", Tone.GOOD, taken=True, operation=apply, run=run)
-        return _failed("Incomplete", "apply", apply, run)
-    return _failed("Apply failed", "apply", apply, run)
-
-
-def _under_way(operation: OperationRequest, run: WorkRun) -> MergeStanding:
-    """A step under way, said as its run stands (``work_runs.standing_of``),
-    with what it waits on while nothing has taken it."""
-
-    standing = run_standing(run)
-    return MergeStanding(
-        standing.label,
-        Tone.ATTENTION,
-        taken=True,
-        lines=(
-            standing.note,
-            waits_on(operation),
-            f"asked {when(standing.since)}" if standing.since else "",
-        ),
-        operation=operation,
-        run=run,
-    )
-
-
-def _failed(what: str, again: str, operation: OperationRequest, run: WorkRun) -> MergeStanding:
-    """A step that ended badly, with the task it stopped on and the press
-    that asks it again; its detail what that task said and each app the run
-    did not release."""
-
-    step, said = run.stopped
-    return MergeStanding(
-        what,
-        Tone.SERIOUS,
-        lines=(
-            f"At “{step}”" if step else "",
-            said,
-            *(line for line, _tone in run.evidence.amiss),
-            f"Fix what stopped it, then {again} again",
-        ),
-        operation=operation,
-        run=run,
-    )
 
 
 def waits_on(operation: OperationRequest) -> str:
@@ -827,10 +660,9 @@ def approve_target(update: AppUpdate) -> dict[str, str]:
 @dataclass(frozen=True, slots=True)
 class Approval:
     """Where approving an update stands, as its page, its finding and its
-    record each show it: the merge asked at its head, why no approval is
-    offered (``held``, "" when one is), and what the press does when it is."""
+    record each show it: why no approval is offered (``held``, "" when one
+    is), and what the press does when it is."""
 
-    standing: MergeStanding | None
     held: str = ""
     said: str = ""
     # Held because no one adopted playbook applies it: the Playbooks page's step.
@@ -842,7 +674,6 @@ def approval_of(update: AppUpdate) -> Approval:
     approval resolves it (``applier``), so no surface offers a press it refuses."""
 
     return _approval(
-        merge_standing(update),
         update.containers,
         _unapprovable(update),
         f"Merges {update.label} and applies its merge commit",
@@ -855,31 +686,28 @@ def apply_of(repository: str, head: str, items: tuple[Container, ...]) -> Approv
     try:
         manifest = applier()
     except PolicyError as refusal:
-        return Approval(None, str(refusal), adopt=True)
-    return _approval(_apply_standing(manifest.id, head, items), items, "", f"Applies {repository} at {head[:7]}")
+        return Approval(str(refusal), adopt=True)
+    del manifest
+    return _approval(items, "", f"Applies {repository} at {head[:7]}")
 
 
-def _approval(standing: MergeStanding | None, items: tuple[Container, ...], refused: str, does: str) -> Approval:
-    """Its press held back while a step of it stands taken, no one playbook
-    applies it, it is ``refused``, or that playbook does not run where ``items`` run."""
+def _approval(items: tuple[Container, ...], refused: str, does: str) -> Approval:
+    """Its press held back while no one playbook applies it, it is
+    ``refused``, or that playbook does not run where ``items`` run."""
 
-    if standing is not None and standing.taken:
-        return Approval(standing, standing.words)
     try:
         manifest = applier()
     except PolicyError as refusal:
-        return Approval(standing, str(refusal), adopt=True)
+        return Approval(str(refusal), adopt=True)
     if refused:
-        return Approval(standing, refused)
+        return Approval(refused)
     try:
         hosts = applied_on(manifest, items)
     except PolicyError as refusal:
-        return Approval(standing, str(refusal))
+        return Approval(str(refusal))
     # A press while another run holds the playbook or its machines is refused (``queue_run``).
     if busy := run_in_way(manifest, hosts):
-        return Approval(standing, busy)
+        return Approval(busy)
     interrupts = [f"{doing} {counted(len(names), 'name')}" for doing, names in interrupted(items)]
     said = ended(f"{does} on {get_text_list(list(hosts), 'and')}")
-    return Approval(
-        standing, said=ended(f"{said} Interrupts {get_text_list(interrupts, 'and')}") if interrupts else said
-    )
+    return Approval(said=ended(f"{said} Interrupts {get_text_list(interrupts, 'and')}") if interrupts else said)

@@ -14,21 +14,23 @@ from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.observations.github import PROVIDER as GITHUB
 from hq.domains.control_plane.observations.host import PROVIDER as HOST
 
+from .app_update_approval import apply_merged, merge_previewed
 from .app_updates import Managed, UpdateKind, UpdateState, of_app, update_state
 from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
 from .card_items import Answer
 from .containers import containers
 from .github_estate import check_state, check_step, repositories
-from .labels import dotted
+from .labels import dotted, lower_first
 from .moments import when
 from .projection import read_once
 from .routes import reverse
 from .sequences import PERSON, Example, Read, SequenceSpec, Step, StepSpec
 from .tone import Tone
+from .ui import ended
 lazy from .app_update_approval import REFUSED, pull_applied, waits_on
 lazy from .automation_manifest import REVISION_INPUT as REVISION
 lazy from .automation_runs import CHECK
-lazy from .resource_operations import THEN
+lazy from .resource_operations import THEN, OperationAsked, operation_asked
 lazy from .work_runs import run_row, standing_of
 
 # How a step stands, by the tone its answer is said in.
@@ -123,6 +125,8 @@ def _pull_request(state: UpdateState) -> Read | None:
         return Read(Standing(DONE, note=f"In {state.managed.repository}", word="Merged"))
     if (update := state.update) is not None:
         return Read(Standing(DONE, word=f"{update.label} opened", url=update.url))
+    if state.opening is not None:
+        return Read(state.opening, yours=True)
     standing = _answered(state.answer)
     if state.offered is None:
         return Read(standing)
@@ -249,6 +253,19 @@ def _health(state: UpdateState) -> Read | None:
     return Read(Standing(DONE, word="Healthy"), parts)
 
 
+def again(state: UpdateState) -> OperationAsked | None:
+    """What a second press answers while HQ moves the update, or once it
+    moved it: where it stands, queuing nothing; None while a press would act."""
+
+    asked = _asked(state)
+    if not state.at_work or (operation := asked.apply or asked.merge or asked.preview) is None:
+        return None
+    step = state.flow.at or state.flow.steps[-1]
+    said = f"{step.title} {lower_first(step.line)}"
+    message = ended(f"Already asked. {said}" if step.live else said)
+    return operation_asked(operation, queued=False, standing=step.standing, message=message)
+
+
 def _about(state: UpdateState) -> str:
     return f"Update {state.move}" if state.move else "Update"
 
@@ -275,10 +292,11 @@ UPDATE = SequenceSpec(
     (PULL_REQUEST, CHECKS, APPROVE, PREVIEW, MERGE, APPLY, HEALTH),
     about=_about,
     subject=_subject,
+    follow_ons={OperationRequest.Action.RUN: merge_previewed, OperationRequest.Action.MERGE: apply_merged},
     examples={
         "held": Example("app-updates", _HELD, PULL_REQUEST, IDLE),
-        "opening": Example("app-update-ticking", _HELD, PULL_REQUEST, RUNNING),
-        "not-opened": Example("app-update-not-ticked", _HELD, PULL_REQUEST, FAILED),
+        "opening": Example("app-update-running", _HELD, PULL_REQUEST, RUNNING),
+        "not-opened": Example("app-update-failed", _HELD, PULL_REQUEST, FAILED),
         "checks-running": Example("app-update-checks-running", _UPDATED, CHECKS, RUNNING),
         "to-approve": Example("app-updates", _UPDATED, APPROVE, IDLE),
         "previewing": Example("update-queued", _UPDATED, PREVIEW, QUEUED),

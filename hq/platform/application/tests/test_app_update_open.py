@@ -16,6 +16,7 @@ from ..app_update_open import open_standing
 from ..capabilities import run_capability
 from ..dependency_updates import KIND, plan
 from ..inventory_testing import store as stored
+from ..labels import DOT, dotted
 from ..read_requests import forced_reads, take
 from ..security import Capability, Principal
 from .test_app_updates import arranged
@@ -80,16 +81,16 @@ class OpenUpdateTests(TestCase):
     def test_its_card_reads_the_runs_outcome(self):
         ran(HELD)
         self.press()
-        self.assertEqual(open_standing("example/alpha", "app").lines[0], "Renovate's run is asked")
+        self.assertEqual(open_standing("example/alpha", "app").note.split(DOT)[0], "Renovate's run is asked")
 
         # The controller's pass takes the ask and hands the run off.
         take(forced_reads())
         ran(HELD, outcome="handed_off")
-        self.assertEqual(open_standing("example/alpha", "app").lines, ("Renovate is running",))
+        self.assertEqual(open_standing("example/alpha", "app").note, "Renovate is running")
 
         ran({**HELD, "result": "pr-created", "pull_request": 61})
         self.assertEqual(
-            open_standing("example/alpha", "app").lines, ("Renovate opened pull request #61", "HQ reads it next")
+            open_standing("example/alpha", "app").note, dotted("Renovate opened pull request #61", "HQ reads it next")
         )
 
         ran(outcome="failed")
@@ -115,7 +116,7 @@ class OpenUpdateTests(TestCase):
         page = self.container_page()
         container = page.context["container"]
         self.assertIsNone(container["act"])
-        self.assertTrue(container["state"].standing.live)
+        self.assertTrue(container["state"].opening.live)
         # Its card is drawn again as it moves, until it ends.
         self.assertIn("data-fragment-live", tag_of(page, 'id="upgrade"'))
         asked = forced_reads()

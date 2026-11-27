@@ -70,6 +70,7 @@ lazy from .integration_specs import requested
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
+lazy from .sequences import follow_on
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
 lazy from .work_runs import WorkRun, run_row, run_rows, run_status_url, seen_as_runs, shown_result, standing_of
 
@@ -888,3 +889,21 @@ def request_certificate_renewal(
     if not allowed:
         raise PolicyError(explanation)
     return _queue_operation(resource, command, consented=consented, action=OperationRequest.Action.RENEW)
+
+
+def succeeded(operation: OperationRequest) -> None:
+    """Queue the step a declared workflow follows ``operation`` with now that
+    it succeeded (``sequences.SequenceSpec.follow_ons``), and say on it what
+    was queued or why nothing was."""
+
+    then = (operation.input or {}).get(THEN)
+    step = follow_on(operation.action)
+    if not isinstance(then, dict) or step is None:
+        return
+    try:
+        with transaction.atomic():
+            said = step(operation, then)
+    except PolicyError as refused:
+        said = {"refused": str(refused)}
+    operation.result = {**(operation.result or {}), THEN: said}
+    OperationRequest.objects.filter(pk=operation.pk).update(result=operation.result)

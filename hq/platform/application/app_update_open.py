@@ -21,17 +21,17 @@ from django.utils import timezone
 lazy from hq.domains.jobs.models import JobState
 
 from .app_update_approval import App, Holder
-from .app_updates import MergeStanding
 from .contracts import Effect
 from .integration_specs import CapabilitySpec
 from .record_errors import RecordNotFound
 from .security import Capability, Principal
-from .tone import Tone
 lazy from .app_updates import UpdateKind, app_branch, of_app, update_state
-lazy from .asks import DONE, Asked, AskedAnswer, Standing
+lazy from .asks import DONE, FAILED, RUNNING, Asked, AskedAnswer, Standing
 lazy from .cadence import controller_standing
 lazy from .dependency_updates import asked_at, last_run, request_open
+lazy from .labels import dotted
 lazy from .refusal_status import RefusalEnvelope
+lazy from .ui import ended
 
 OPEN = "app_update.open"
 
@@ -62,8 +62,8 @@ def open_update(command: OpenUpdateCommand, *, principal: Principal) -> AskedAns
     # Asked again while it is under way, or once Renovate opened it, it is
     # the same request: answered with where it stands, never refused.
     opening = (UpdateKind.HELD, UpdateKind.UNOPENED)
-    if under_way := next((state.standing for state in states if state.at_work and state.kind in opening), None):
-        return under_way.again.answer()
+    if under_way := next((state.opening for state in states if state.opening and state.opening.live), None):
+        return Asked(under_way, message=ended(f"Already asked. {dotted(under_way.label, under_way.note)}")).answer()
     if not kinds & set(opening):
         if kinds & {UpdateKind.OPEN, UpdateKind.MERGED}:
             return Asked(Standing(DONE, OPENED), message=OPENED).answer()
@@ -72,7 +72,7 @@ def open_update(command: OpenUpdateCommand, *, principal: Principal) -> AskedAns
     return request_open(command.repository, branch.branch if branch and branch.held else "", message=ASKED)
 
 
-def open_standing(repository: str, app: str) -> MergeStanding | None:
+def open_standing(repository: str, app: str) -> Standing | None:
     """How the last Open PR of ``app`` stands, as the one fact its card says
     it under: the run asked, running, failed, or ended having opened the
     app's pull request, which its outcome names. None before one is asked,
@@ -88,7 +88,7 @@ def open_standing(repository: str, app: str) -> MergeStanding | None:
     if run.seen == JobState.RUNNING:
         return _opening("Renovate is running")
     if run.seen != JobState.SUCCEEDED:
-        return MergeStanding("Failed", Tone.SERIOUS, lines=(RENOVATE, run.seen.label, ASKS_AGAIN))
+        return Standing(FAILED, dotted(RENOVATE, run.seen.label, ASKS_AGAIN), word="Failed")
     branch = app_branch(repository, app)
     if branch is None or branch.pull_request is None:
         return None
@@ -103,10 +103,10 @@ ASKED = "Renovate is asked to open its pull request."
 OPENED = "Renovate has opened its pull request."
 
 
-def _opening(*lines: str) -> MergeStanding:
+def _opening(*lines: str) -> Standing:
     """An Open PR under way, and the step it is at."""
 
-    return MergeStanding(OPENING, Tone.ATTENTION, taken=True, lines=lines)
+    return Standing(RUNNING, dotted(*lines), word=OPENING)
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
