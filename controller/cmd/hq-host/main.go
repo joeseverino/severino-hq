@@ -432,6 +432,7 @@ func deployer(stdout io.Writer) *host.Deployer {
 			SecretDir: hostcore.SecretDir, ACME: host.ACMEDir,
 			LookPath: exec.LookPath, Poll: time.Second,
 		},
+		Lock: host.DeployLock,
 	}
 }
 

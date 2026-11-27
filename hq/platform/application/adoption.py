@@ -157,6 +157,10 @@ class _Management:
         provider = PROVIDERS.get(kind)
         if provider is None:
             return False
+        # A kind that acts through no connection acts on HQ's own machine,
+        # through the controller HQ runs.
+        if not provider.connection_providers:
+            return True
         found = [flag for name in provider.connection_providers for _, flag in self._by_provider.get(name, ())]
         return bool(found) and all(found)
 

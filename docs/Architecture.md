@@ -1420,6 +1420,37 @@ Portainer token can already do to those containers through Docker. Planting a
 labeled container can only block a real unit from being acted on: a refusal,
 never an action.
 
+### HQ's own units
+
+Each unit HQ's release installs on its machine is a `host.unit` declaration
+(`provider_adapters/host.py`). The set is derived: a sweep takes on each unit
+the `host.unit` reading lists that is not `foreign`, and forgets one the
+reading no longer lists (`ProviderSpec.listed_whole`), so nobody adopts or
+removes one. Its verbs are Start, Restart, Clear failure (`reset-failed`) and
+Enable. Each is queued like a container's and handed to the same socket. A
+finding about a unit offers the verb as a press, and its command line only to
+a reader who may not press it.
+
+The socket takes these in a second grammar, beside the container's:
+
+- **The installed release decides.** The verb is start, restart, reset-failed
+  or enable, and the name one of the unit files `host.Shipped` lists in the
+  tree, read for each request. Drop-ins and templates are not units to ask
+  for. Any other name falls to the container grammar, which takes neither of
+  the new verbs.
+- **Nothing starts on its own.** The kind's reconcile is locked, and no verb
+  is automatic: only a person's or an agent's request changes a unit.
+- **A deploy holds the units.** The socket takes `host.DeployLock` shared
+  while it acts, and refuses when it cannot. A deploy takes it exclusively
+  while it holds the timers and replaces the release, so a timer the deploy
+  stopped on purpose is not started under it.
+- **A start does not wait.** `--no-block` queues the job and returns, so the
+  controller's own pass can ask for its unit without waiting on itself. The
+  next reading says how it went.
+
+An account that takes over the controller gains these four verbs on units
+root already installed, and none on any other unit.
+
 ### Operation manifests
 
 An automation procedure (an Ansible playbook a worker runs against a host) is

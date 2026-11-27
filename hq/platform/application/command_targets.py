@@ -191,10 +191,18 @@ def with_requested_target(
     item = detail.get("resource", detail)
     if not isinstance(item, dict):
         return options
-    wanted = dict(spec.target_query)
-    if any(item.get(field) != value for field, value in wanted.items()):
+    if not all(_keeps(item, field, value) for field, value in spec.target_query):
         return options
     return (_option(item, target), *options)
+
+
+def _keeps(item: dict[str, Any], field: str, value: Any) -> bool:
+    """Whether a listing filtered on ``field`` keeps ``item``. A plural filter
+    (``kinds``) keeps any of its comma-separated values of the singular field."""
+
+    if field not in item and field.endswith("s") and field[:-1] in item:
+        return item[field[:-1]] in str(value).split(",")
+    return item.get(field) == value
 
 
 def capability_target_initial(spec: CapabilitySpec, target: str, *, principal: Principal) -> dict[str, Any]:

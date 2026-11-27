@@ -101,6 +101,10 @@ const (
 	// controller's container mounts it, at the same path.
 	UnitSocketDir = "/run/severino-hq-unit"
 	UnitSocket    = UnitSocketDir + "/unit.sock"
+	// DeployLock is held exclusively while a deploy replaces the release and
+	// holds its timers, and shared by the unit socket while it acts on a unit
+	// the release ships, so HQ never starts one a deploy stopped on purpose.
+	DeployLock = hostcore.RunDir + "/deploy.lock"
 	// ACMEDir is the controller's certificate state on the host.
 	ACMEDir = "/opt/apps/severino-hq/secrets/acme"
 	// SealDir holds the private keys HQ's web seals secrets to: the

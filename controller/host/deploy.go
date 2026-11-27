@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
@@ -85,6 +86,23 @@ type Deployer struct {
 	Free func(path string) (uint64, error)
 	// Rehearsal is where a release rehearses itself before it is installed.
 	Rehearsal Rehearsal
+	// Lock is the deploy lock (DeployLock), held from the hold to the
+	// deploy's end so the unit socket starts nothing the hold stopped.
+	Lock string
+}
+
+// HoldDeploys takes the deploy lock at path exclusively, waiting out a unit
+// action that holds it shared, and returns its release.
+func HoldDeploys(path string) (func(), error) {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("the deploy lock could not be opened: %w", err)
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		file.Close()
+		return nil, fmt.Errorf("the deploy lock could not be taken: %w", err)
+	}
+	return func() { file.Close() }, nil
 }
 
 // verified refuses image unless root's cosign finds it signed by the
@@ -191,11 +209,13 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	if err := d.rehearse(ctx, image); err != nil {
 		return err
 	}
-	held, err := d.hold(ctx)
+	held, release, err := d.hold(ctx)
 	if err != nil {
 		d.restart(held)
 		return err
 	}
+	// Deferred first, so it is released after a rollback restarts what was held.
+	defer release()
 	units, err := d.SnapshotUnits()
 	if err != nil {
 		d.restart(held)
@@ -404,11 +424,17 @@ func (d *Deployer) restoreSchema(ctx context.Context, kept string) error {
 
 // hold stops every timer and path unit the tree ships that is active, so
 // nothing starts against a half-replaced release, and waits for the runs
-// they already started. It returns what it stopped.
-func (d *Deployer) hold(ctx context.Context) ([]string, error) {
+// they already started. It takes the deploy lock first and returns what it
+// stopped, with the lock's release.
+func (d *Deployer) hold(ctx context.Context) ([]string, func(), error) {
+	release, err := HoldDeploys(d.Lock)
+	if err != nil {
+		return nil, nil, err
+	}
 	shipped, err := Shipped(d.UnitDir())
 	if err != nil {
-		return nil, err
+		release()
+		return nil, nil, err
 	}
 	var held []string
 	for _, name := range shipped {
@@ -422,16 +448,17 @@ func (d *Deployer) hold(ctx context.Context) ([]string, error) {
 	deadline := time.Now().Add(d.Drain)
 	for time.Now().Before(deadline) {
 		if !d.active(ctx, ControllerUnit) && !d.active(ctx, GlanceUnit) && !d.active(ctx, SecretsUnit) {
-			return held, nil
+			return held, release, nil
 		}
 		select {
 		case <-ctx.Done():
-			return held, ctx.Err()
+			release()
+			return held, nil, ctx.Err()
 		case <-time.After(d.Poll):
 		}
 	}
 	fmt.Fprintln(d.Out, "A run started before the deploy is still going; it fails against the new image and the next one retries.")
-	return held, nil
+	return held, release, nil
 }
 
 // restart releases the hold of a deploy that ends before its whole setup,

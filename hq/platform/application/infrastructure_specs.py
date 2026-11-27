@@ -1,12 +1,13 @@
 """The records HQ manages: their commands and their readable resource."""
 
+from functools import partial
 from typing import Any, override
 
 from django.db.models import Model
+from django.utils.text import capfirst, get_text_list
 from pydantic import Field, create_model
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, spec_withheld
@@ -34,6 +35,20 @@ from .resources import BoundedQuery, one_of, several_of
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability
 from .tailnet import POLICY_KIND as TAILNET_POLICY_KIND, TAILNET_KIND
+
+
+def _acting(action: str) -> tuple[str, ...]:
+    """The kinds whose controller may run ``action``, as each declares."""
+
+    return tuple(
+        kind for kind, provider in PROVIDERS.items() if getattr(provider.actions.get(action), "mode", "") == "apply"
+    )
+
+
+def _acted_on(action: str) -> str:
+    """What ``action`` acts on, in words: the labels of the kinds that run it."""
+
+    return get_text_list([PROVIDERS[kind].label.lower() for kind in _acting(action)], "or")
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -149,30 +164,28 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 effect,
                 Capability.MANAGE_INFRASTRUCTURE,
                 operations.OperationCommand,
-                handler,
+                partial(operations.request_lifecycle, action=action),
                 "key",
                 "infrastructure",
-                target_label="Container",
-                target_help="The container to act on.",
-                target_query=(("kind", CONTAINER_KIND),),
+                target_label=capfirst(_acted_on(action)),
+                target_help=f"The {_acted_on(action)} to act on.",
+                target_query=(("kinds", ",".join(_acting(action))),),
                 execution_notes=(
-                    "Refuse a container switched off in HQ, or one Portainer cannot do this to.",
+                    "Refuse a record switched off in HQ, or one its kind cannot do this to.",
                     "Queue it once for the controller, which does it outside this request.",
                 ),
-                label=f"{action.label} a container",
+                label=f"{action.label} a {_acted_on(action)}",
                 verb=action.label,
             )
-            for action, handler, summary, effect in (
+            for action, summary, effect in (
                 (
                     OperationRequest.Action.RESTART,
-                    operations.request_restart,
-                    "Restart the container through Portainer.",
+                    "Restart a container, or a background job of HQ's own.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 (
                     OperationRequest.Action.START,
-                    operations.request_start,
-                    "Start the container through Portainer.",
+                    "Start a container, or a background job of HQ's own.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 # A stop takes the thing away from whoever uses it until someone
@@ -180,9 +193,18 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 # person's is confirmed on a page of its own.
                 (
                     OperationRequest.Action.STOP,
-                    operations.request_stop,
                     "Stop the container through Portainer; it stays down until it is started.",
                     Effect.DESTRUCTIVE,
+                ),
+                (
+                    OperationRequest.Action.RESET_FAILED,
+                    "Clear the failure systemd holds against one of HQ's background jobs.",
+                    Effect.INFRASTRUCTURE_CHANGE,
+                ),
+                (
+                    OperationRequest.Action.ENABLE,
+                    "Have one of HQ's background jobs start at boot.",
+                    Effect.INFRASTRUCTURE_CHANGE,
                 ),
             )
         ),

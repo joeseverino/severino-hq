@@ -8,7 +8,7 @@ what admitting one takes, is docs/Architecture.md#providers.
 from collections.abc import Collection, Iterable, Mapping
 from typing import Any
 
-from ..observations import glance, host, hq, public_registry
+from ..observations import glance, hq, public_registry
 from ..observations.contract import ObservationSpec, registry
 from ..provider_spec import ConnectionKind, InboundSpec
 from . import (
@@ -18,6 +18,7 @@ from . import (
     cloudflare,
     declarations,
     github,
+    host,
     npm,
     portainer,
     r2,
@@ -26,9 +27,9 @@ from . import (
 )
 
 # A provider is its adapter, which brings its readings module's OBSERVATIONS
-# with it. A source HQ reads with no connection a person makes (the
-# controller's own machine, HQ's own requests, the keyless public registries)
-# has no adapter, so its readings module is admitted alone.
+# with it. A source HQ reads with no connection a person makes and declares
+# nothing of (HQ's own requests, the keyless public registries) has no
+# adapter, so its readings module is admitted alone.
 ADMITTED = (
     tls,
     npm,

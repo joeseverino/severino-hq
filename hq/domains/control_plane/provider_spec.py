@@ -623,6 +623,12 @@ class ProviderSpec:
     # connection HQ was given created them. A kind that can also see things
     # nobody declared anywhere says which of its records are safe to adopt.
     adopts: Callable[[dict[str, Any]], bool] | None = None
+    # Where a sweep lists every record of this kind, the part of the estate a
+    # declaration is listed in (its machine), or None for one kept when it is
+    # missing. A declaration a complete listing of its part no longer holds is
+    # gone, and is forgotten (``inventory.retire_departed``). None: a record
+    # missing from a listing is not known to be gone.
+    listed_whole: Callable[[dict[str, Any]], str | None] | None = None
     # What sorts of connection stand behind this, matching what the controller
     # calls them. This is the join between a declaration and the credentials
     # that would carry it out: it tells a form which connections to offer, and

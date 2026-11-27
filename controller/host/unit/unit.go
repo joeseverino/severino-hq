@@ -34,6 +34,15 @@
 //     container.
 //   - The unit is loaded under exactly that name, so an alias cannot stand in
 //     for another unit.
+//
+// A second grammar acts on HQ's own units: the verb is start, restart,
+// reset-failed or enable, and the name one of the unit files the installed
+// release ships (host.Shipped), read from the tree on each request, never
+// from the request. No container check applies, since the release is root's.
+// It holds host.DeployLock shared while it acts and refuses when a deploy
+// holds it exclusively, so a timer a deploy stopped on purpose is not started
+// under it. A start is queued without waiting (--no-block), so the
+// controller's own pass can ask for its unit without waiting on itself.
 package unit
 
 import (
@@ -46,10 +55,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -64,6 +76,13 @@ var Name = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,240}\.service$`)
 
 // Verbs are what may be asked of a unit, as systemctl spells them.
 var Verbs = []string{"stop", "start", "restart"}
+
+// ShippedName is the shape of a unit the release ships that may be asked
+// for: a plain unit of a type that runs or starts something, no template.
+var ShippedName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,240}\.(service|timer|path|socket|mount)$`)
+
+// ShippedVerbs are what may be asked of a unit the release ships.
+var ShippedVerbs = []string{"start", "restart", "reset-failed", "enable"}
 
 // Outcomes a Result reports.
 const (
@@ -82,6 +101,12 @@ type Runner struct {
 	// Command builds a program's command with the environment root's run
 	// keeps.
 	Command func(ctx context.Context, name string, args ...string) *exec.Cmd
+	// Shipped lists the unit files the installed release ships; nil ships
+	// none, so only the container grammar is read.
+	Shipped func() ([]string, error)
+	// DeployLock is the lock a deploy holds while it replaces the release;
+	// "" holds none.
+	DeployLock string
 }
 
 // refusal is a reason nothing was done.
@@ -110,7 +135,9 @@ func Main(ctx context.Context, args []string, euid int, stdin io.Reader, stdout 
 	if err := admit(stdin); err != nil {
 		result = Result{Outcome: Refused, Reason: err.Error()}
 	} else {
-		runner := &Runner{EUID: euid, Command: rootCommand}
+		runner := &Runner{EUID: euid, Command: rootCommand, Shipped: func() ([]string, error) {
+			return host.Shipped(filepath.Join(host.Lib, "deploy", "systemd"))
+		}, DeployLock: host.DeployLock}
 		result = runner.Serve(ctx, stdin)
 	}
 	write(stdout, result)
@@ -182,13 +209,28 @@ func (r *Runner) Run(ctx context.Context, request string) Result {
 	if err == nil && r.EUID != 0 {
 		err = refusal("must run as root")
 	}
+	args := []string{verb, "--", name}
 	if err == nil {
-		err = r.Verify(ctx, name)
+		var shipped bool
+		if shipped, err = r.ships(verb, name); err == nil && shipped {
+			var release func()
+			if release, err = r.unheld(); err == nil {
+				defer release()
+				err = r.loaded(ctx, name)
+			}
+			if verb == "start" || verb == "restart" {
+				args = []string{verb, "--no-block", "--", name}
+			}
+		} else if err == nil && (!slices.Contains(Verbs, verb) || !Name.MatchString(name)) {
+			err = refusal(verb + " " + name + " is not a unit the release ships, and a container's unit takes only stop, start or restart")
+		} else if err == nil {
+			err = r.Verify(ctx, name)
+		}
 	}
 	if err != nil {
 		return Result{Outcome: Refused, Reason: err.Error()}
 	}
-	if out, err := r.Command(ctx, "systemctl", verb, "--", name).CombinedOutput(); err != nil {
+	if out, err := r.Command(ctx, "systemctl", args...).CombinedOutput(); err != nil {
 		return Result{Outcome: Failed, Verb: verb, Unit: name, Reason: failure(string(out), err)}
 	}
 	return Result{Outcome: Done, Verb: verb, Unit: name}
@@ -203,19 +245,64 @@ func write(out io.Writer, result Result) {
 // Request is the line that asks for verb on name.
 func Request(verb, name string) string { return verb + " " + name }
 
-// Parse reads `VERB NAME` and nothing else.
+// Parse reads `VERB NAME` and nothing else, in either grammar's words.
 func Parse(request string) (verb, name string, err error) {
 	verb, name, ok := strings.Cut(request, " ")
 	if !ok || strings.Contains(name, " ") {
 		return "", "", refusal("a request is a verb and a unit, one space between")
 	}
-	if !slices.Contains(Verbs, verb) {
-		return "", "", refusal("the verb is not stop, start or restart")
+	if !slices.Contains(Verbs, verb) && !slices.Contains(ShippedVerbs, verb) {
+		return "", "", refusal("the verb is not stop, start, restart, reset-failed or enable")
 	}
-	if !Name.MatchString(name) {
-		return "", "", refusal("the unit is not a plain .service name")
+	if !Name.MatchString(name) && !ShippedName.MatchString(name) {
+		return "", "", refusal("the unit is not a plain unit name")
 	}
 	return verb, name, nil
+}
+
+// ships is whether the request is the second grammar's: a verb it takes on a
+// unit the installed release ships. Anything else is the container grammar's,
+// which refuses what is not its own.
+func (r *Runner) ships(verb, name string) (bool, error) {
+	if r.Shipped == nil || !slices.Contains(ShippedVerbs, verb) || !ShippedName.MatchString(name) {
+		return false, nil
+	}
+	shipped, err := r.Shipped()
+	if err != nil {
+		return false, refusal("the release's units could not be listed")
+	}
+	return slices.Contains(shipped, name), nil
+}
+
+// unheld takes the deploy lock shared, refusing while a deploy holds it.
+func (r *Runner) unheld() (func(), error) {
+	if r.DeployLock == "" {
+		return func() {}, nil
+	}
+	file, err := os.OpenFile(r.DeployLock, os.O_CREATE|os.O_RDONLY, 0o600)
+	if err != nil {
+		return nil, refusal("the deploy lock could not be opened")
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		file.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, refusal("a deploy is replacing the release; ask again once it ends")
+		}
+		return nil, refusal("the deploy lock could not be taken")
+	}
+	return func() { file.Close() }, nil
+}
+
+// loaded refuses a unit systemd does not hold loaded under exactly that name.
+func (r *Runner) loaded(ctx context.Context, name string) error {
+	out, err := r.Command(ctx, "systemctl", "show", "--property=Id", "--property=LoadState", "--", name).Output()
+	if err != nil {
+		return refusal("systemd could not show " + name)
+	}
+	if !strings.Contains(string(out), "Id="+name+"\n") || !strings.Contains(string(out), "LoadState=loaded\n") {
+		return refusal(name + " is not a loaded unit of that name")
+	}
+	return nil
 }
 
 // Verify refuses a unit no container on this machine names, or one whose

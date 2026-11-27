@@ -12373,6 +12373,19 @@
         },
         "type": "object"
       },
+      "DeclaredHostUnitSpec": {
+        "properties": {
+          "kind": {
+            "const": "host.unit",
+            "description": "What type of record it is.",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/HostUnitSpec"
+          }
+        },
+        "type": "object"
+      },
       "DeclaredMachineSpec": {
         "properties": {
           "kind": {
@@ -16972,6 +16985,23 @@
         },
         "type": "object"
       },
+      "HostUnitSpec": {
+        "additionalProperties": false,
+        "description": "One unit HQ's release installs, by name: identity and nothing else,\nsince its unit file is the release's and HQ does not edit it.",
+        "properties": {
+          "unit": {
+            "description": "The unit's name, as systemd knows it.",
+            "maxLength": 255,
+            "pattern": "^(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice)$",
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit"
+        ],
+        "type": "object"
+      },
       "HqImportRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -17810,6 +17840,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredSourceSpec",
                 "title": "Declared source spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredHostUnitSpec",
+                "title": "Declared host unit spec"
               }
             ],
             "description": "The command: the fields its input schema names.",
@@ -17850,6 +17884,9 @@
           "payload"
         ],
         "type": "object"
+      },
+      "InfrastructureResourceEnableRequest": {
+        "$ref": "#/components/schemas/InfrastructureResourceResetFailedRequest"
       },
       "InfrastructureResourceReconcileRequest": {
         "additionalProperties": false,
@@ -17899,6 +17936,33 @@
         ],
         "type": "object"
       },
+      "InfrastructureResourceResetFailedRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "$ref": "#/components/schemas/InfrastructureResourceResetFailedTarget"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
+      "InfrastructureResourceResetFailedTarget": {
+        "description": "The background job to act on: its key.",
+        "examples": [
+          "example-key"
+        ],
+        "minLength": 1,
+        "type": "string"
+      },
       "InfrastructureResourceRestartRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -17919,7 +17983,7 @@
         "type": "object"
       },
       "InfrastructureResourceRestartTarget": {
-        "description": "The container to act on: its key.",
+        "description": "The container or background job to act on: its key.",
         "examples": [
           "example-key"
         ],
@@ -17930,7 +17994,28 @@
         "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
       },
       "InfrastructureResourceStopRequest": {
-        "$ref": "#/components/schemas/InfrastructureResourceRestartRequest"
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "description": "The container to act on: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
       },
       "InfrastructureResourceUpdateRequest": {
         "additionalProperties": false,
@@ -18017,6 +18102,10 @@
               {
                 "$ref": "#/components/schemas/DeclaredSourceSpec",
                 "title": "Declared source spec"
+              },
+              {
+                "$ref": "#/components/schemas/DeclaredHostUnitSpec",
+                "title": "Declared host unit spec"
               }
             ],
             "description": "The command: the fields its input schema names.",
@@ -19576,7 +19665,8 @@
           "cloudflare.dns_record",
           "cloudflare.zone",
           "automation.operation",
-          "automation.source"
+          "automation.source",
+          "host.unit"
         ],
         "type": "string",
         "x-enumDescriptions": {
@@ -19589,6 +19679,7 @@
           "github.dashboard_box": "Dashboard box",
           "github.delivery": "HQ deploys",
           "github.pull_request": "Pull request",
+          "host.unit": "Background job",
           "machine": "Machine",
           "network": "Network",
           "npm.proxy_host": "Proxy host",
@@ -21698,7 +21789,7 @@
         "type": "object"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run`, `scan` or `merge`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `reset-failed`, `enable`, `approve-routes`, `run`, `scan` or `merge`.",
         "type": "string"
       },
       "OperationAsked": {
@@ -30132,7 +30223,7 @@
           "host.reboot": "Pending restart",
           "host.render_status": "Credentials refresh",
           "host.tailnet_lock": "Tailnet lock",
-          "host.unit": "Background jobs",
+          "host.unit": "Background job",
           "hq.request_path": "Requests reaching HQ",
           "machine": "Machine",
           "machine.telemetry": "Machine figures",
@@ -36225,6 +36316,81 @@
         "x-hq-effect": "remote_write"
       }
     },
+    "/api/v2/capabilities/infrastructure.resource.enable/": {
+      "post": {
+        "description": "Have one of HQ's background jobs start at boot.",
+        "operationId": "infrastructureResourceEnableV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceEnableRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Enable a background job",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.enable",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/infrastructure.resource.reconcile/": {
       "post": {
         "description": "Apply HQ's copy of one record to the live system.",
@@ -36375,9 +36541,84 @@
         "x-hq-effect": "destructive"
       }
     },
+    "/api/v2/capabilities/infrastructure.resource.reset_failed/": {
+      "post": {
+        "description": "Clear the failure systemd holds against one of HQ's background jobs.",
+        "operationId": "infrastructureResourceResetFailedV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceResetFailedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationAskedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Clear failure a background job",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.reset_failed",
+        "x-hq-effect": "infrastructure_change"
+      }
+    },
     "/api/v2/capabilities/infrastructure.resource.restart/": {
       "post": {
-        "description": "Restart the container through Portainer.",
+        "description": "Restart a container, or a background job of HQ's own.",
         "operationId": "infrastructureResourceRestartV2",
         "parameters": [
           {
@@ -36442,7 +36683,7 @@
             ]
           }
         ],
-        "summary": "Restart a container",
+        "summary": "Restart a container or background job",
         "tags": [
           "hq.infrastructure"
         ],
@@ -36452,7 +36693,7 @@
     },
     "/api/v2/capabilities/infrastructure.resource.start/": {
       "post": {
-        "description": "Start the container through Portainer.",
+        "description": "Start a container, or a background job of HQ's own.",
         "operationId": "infrastructureResourceStartV2",
         "parameters": [
           {
@@ -36517,7 +36758,7 @@
             ]
           }
         ],
-        "summary": "Start a container",
+        "summary": "Start a container or background job",
         "tags": [
           "hq.infrastructure"
         ],
@@ -38212,8 +38453,10 @@
                 "infrastructure.resource.accept_observed",
                 "infrastructure.resource.adopt",
                 "infrastructure.resource.create",
+                "infrastructure.resource.enable",
                 "infrastructure.resource.reconcile",
                 "infrastructure.resource.remove",
+                "infrastructure.resource.reset_failed",
                 "infrastructure.resource.restart",
                 "infrastructure.resource.start",
                 "infrastructure.resource.stop",
@@ -41877,7 +42120,7 @@
             "required": false,
             "schema": {
               "maxLength": 2000,
-              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source))*$",
+              "pattern": "^(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit)(?:,(?:tls\\.certificate|tls\\.uploaded_certificate|npm\\.proxy_host|github\\.delivery|github\\.pull_request|github\\.dashboard_box|portainer\\.container|tailscale\\.device|tailscale\\.policy|network|pki\\.authority|machine|tls\\.delivery_target|caddy\\.route|adguard\\.rewrite|cloudflare\\.dns_record|cloudflare\\.zone|cloudflare\\.contact_inbox|automation\\.operation|automation\\.source|host\\.unit))*$",
               "type": "string"
             },
             "style": "form"
@@ -41909,7 +42152,8 @@
                 "cloudflare.zone",
                 "cloudflare.contact_inbox",
                 "automation.operation",
-                "automation.source"
+                "automation.source",
+                "host.unit"
               ],
               "type": "string"
             },
@@ -41967,6 +42211,13 @@
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
+              "infrastructureResourceEnableV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceEnableV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
               "infrastructureResourceReconcileV2": {
                 "operationId": "infrastructureResourceReconcileV2",
                 "requestBody": {
@@ -41979,22 +42230,29 @@
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
+              "infrastructureResourceResetFailedV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceResetFailedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
               "infrastructureResourceRestartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceRestartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
               "infrastructureResourceStartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceStartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
               "infrastructureResourceStopV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container`.",
                 "operationId": "infrastructureResourceStopV2",
                 "requestBody": {
                   "target": "{$response.body#/data/items/0/key}"
@@ -42132,6 +42390,13 @@
                   "target": "{$response.body#/data/key}"
                 }
               },
+              "infrastructureResourceEnableV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceEnableV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
               "infrastructureResourceReconcileV2": {
                 "operationId": "infrastructureResourceReconcileV2",
                 "requestBody": {
@@ -42144,22 +42409,29 @@
                   "target": "{$response.body#/data/key}"
                 }
               },
+              "infrastructureResourceResetFailedV2": {
+                "description": "Only for a record whose `kinds` is `host.unit`.",
+                "operationId": "infrastructureResourceResetFailedV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/key}"
+                }
+              },
               "infrastructureResourceRestartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceRestartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
               "infrastructureResourceStartV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container,host.unit`.",
                 "operationId": "infrastructureResourceStartV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
               "infrastructureResourceStopV2": {
-                "description": "Only for a record whose `kind` is `portainer.container`.",
+                "description": "Only for a record whose `kinds` is `portainer.container`.",
                 "operationId": "infrastructureResourceStopV2",
                 "requestBody": {
                   "target": "{$response.body#/data/key}"

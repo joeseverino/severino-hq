@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -47,6 +48,7 @@ func newDeployer(f *fakeHost) (*Deployer, *handover) {
 			LookPath: func(string) (string, error) { return "", exec.ErrNotFound },
 			Poll:     time.Millisecond,
 		},
+		Lock: filepath.Join(f.root, "deploy.lock"),
 	}, handed
 }
 
@@ -379,14 +381,41 @@ func TestTheHoldWaitsOutEveryPassUnderWay(t *testing.T) {
 			f.active = []string{unit}
 			d, _ := newDeployer(f)
 
-			if _, err := d.hold(context.Background()); err != nil {
+			_, release, err := d.hold(context.Background())
+			if err != nil {
 				t.Fatal(err)
 			}
+			release()
 
 			if !strings.Contains(f.out.String(), "still going") {
 				t.Errorf("the hold did not wait for %s", unit)
 			}
 		})
+	}
+}
+
+// The hold keeps the deploy lock until its release, so the unit socket,
+// which takes it shared and never waits, refuses while it stands.
+func TestTheHoldKeepsTheDeployLock(t *testing.T) {
+	d, _ := newDeployer(newFakeHost(t))
+	_, release, err := d.hold(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := func() error {
+		file, err := os.Open(d.Lock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer file.Close()
+		return syscall.Flock(int(file.Fd()), syscall.LOCK_SH|syscall.LOCK_NB)
+	}
+	if shared() == nil {
+		t.Error("a shared hold was granted while the deploy held the lock")
+	}
+	release()
+	if err := shared(); err != nil {
+		t.Errorf("the lock stayed held after its release: %v", err)
 	}
 }
 

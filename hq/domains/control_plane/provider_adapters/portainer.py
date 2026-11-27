@@ -164,6 +164,8 @@ CONTAINER = ProviderSpec(
     readout=_container_readout,
     _from_record=_container_from_record,
     adopts=_container_adopts,
+    # One marked on demand is declared precisely because it comes and goes.
+    listed_whole=lambda spec: None if spec.get("on_demand") else spec.get("host", ""),
     sample_record={
         "name": "example-web",
         "host": "example-host",
