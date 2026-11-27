@@ -70,7 +70,7 @@ ENTRIES = {
     # one with no fields, which is its closing row alone, and a form that asks
     # (partials/_form.html method="get"), one question on its button's line,
     # once more with its help and an error under them; a new option of either
-    # comes with an entry here (test_form_page).
+    # comes with an entry here.
     "form/page": Example(
         '{% include "form_page.html#form_card" %}',
         {
