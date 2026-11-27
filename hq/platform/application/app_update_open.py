@@ -62,7 +62,7 @@ def open_update(command: OpenUpdateCommand, *, principal: Principal) -> AskedAns
     # Asked again while it is under way, or once Renovate opened it, it is
     # the same request: answered with where it stands, never refused.
     opening = (UpdateKind.HELD, UpdateKind.UNOPENED)
-    if under_way := next((state.opening for state in states if state.opening and state.opening.live), None):
+    if under_way := next((state.pull for state in states if state.pull and state.pull.live), None):
         return Asked(under_way, message=ended(f"Already asked. {dotted(under_way.label, under_way.note)}")).answer()
     if not kinds & set(opening):
         if kinds & {UpdateKind.OPEN, UpdateKind.MERGED}:

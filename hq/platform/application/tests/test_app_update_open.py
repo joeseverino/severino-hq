@@ -116,7 +116,7 @@ class OpenUpdateTests(TestCase):
         page = self.container_page()
         container = page.context["container"]
         self.assertIsNone(container["act"])
-        self.assertTrue(container["state"].opening.live)
+        self.assertTrue(container["state"].pull.live)
         # Its card is drawn again as it moves, until it ends.
         self.assertIn("data-fragment-live", tag_of(page, 'id="upgrade"'))
         asked = forced_reads()

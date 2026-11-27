@@ -17,7 +17,6 @@ from hq.domains.control_plane.observations.host import PROVIDER as HOST
 from .app_update_approval import apply_merged, merge_previewed
 from .app_updates import Managed, UpdateKind, UpdateState, of_app, update_state
 from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
-from .card_items import Answer
 from .containers import containers
 from .github_estate import check_state, check_step, repositories
 from .labels import dotted, lower_first
@@ -33,8 +32,6 @@ lazy from .automation_runs import CHECK
 lazy from .resource_operations import THEN, OperationAsked, operation_asked
 lazy from .work_runs import run_row, standing_of
 
-# How a step stands, by the tone its answer is said in.
-_STATES = {Tone.GOOD: DONE, Tone.ATTENTION: RUNNING, Tone.SERIOUS: FAILED}
 # A step waiting on the steps before it, said in the words its declaration gives.
 WAITING = Read(Standing(IDLE))
 # The kinds of update HQ moves through its steps; the rest a person moves by hand.
@@ -125,19 +122,7 @@ def _pull_request(state: UpdateState) -> Read | None:
         return Read(Standing(DONE, note=f"In {state.managed.repository}", word="Merged"))
     if (update := state.update) is not None:
         return Read(Standing(DONE, word=f"{update.label} opened", url=update.url))
-    if state.opening is not None:
-        return Read(state.opening, yours=True)
-    standing = _answered(state.answer)
-    if state.offered is None:
-        return Read(standing)
-    return Read(Standing(standing.state, dotted(standing.note, state.said), word=standing.word), yours=True)
-
-
-def _answered(answer: Answer) -> Standing:
-    """A step as an answer says it: its word, its reasons as its sentence."""
-
-    reasons = dotted(*(line for line in answer.because if isinstance(line, str)))
-    return Standing(_STATES.get(answer.tone, IDLE), note=reasons, word=answer.short)
+    return Read(state.pull or Standing(IDLE), yours=True)
 
 
 def _checks(state: UpdateState) -> Read | None:

@@ -39,12 +39,12 @@ lazy from .app_update_approval import (
 )
 lazy from .app_update_flow import UPDATE
 lazy from .app_update_open import OPEN, open_standing, open_target
-lazy from .asks import Standing
+lazy from .asks import IDLE, Standing
 lazy from .container_findings import BY_HAND
 lazy from .dependency_updates import last_run
 lazy from .finding_model import Fact
 lazy from .finding_steps import Does
-lazy from .labels import lower_first
+lazy from .labels import dotted, lower_first
 lazy from .pages import PageAction, command_reach
 lazy from .sequences import PERSON, Sequence
 
@@ -401,8 +401,6 @@ class UpdateState:
     move: str
     # The sentence beside the title.
     words: str
-    # Where it stands as its fact says it, a word or two over why.
-    answer: Answer
     # The press it stands on, offered while nothing holds it back.
     action: UpdateAction | None = None
     # Why the press is held back, "" when it is offered; and what the press does.
@@ -410,8 +408,9 @@ class UpdateState:
     said: str = ""
     # Held because no one adopted playbook applies it: the Playbooks page's step.
     adopt: bool = False
-    # How its last Open PR stands, once one is asked (``app_update_open.open_standing``).
-    opening: Standing | None = None
+    # How its pull request stands before Renovate opened it: its last Open
+    # PR (``app_update_open.open_standing``), else what Renovate waits for.
+    pull: Standing | None = None
     update: AppUpdate | None = None
     managed: Managed | None = None
 
@@ -460,7 +459,6 @@ def update_state(item: Container) -> UpdateState:
             UpdateKind.OPEN,
             pin.said if pin else latest,
             ended(f"Pull request {update.label} moves it{fixes}"),
-            Answer("Open", (f"Pull request {update.label}",)),
             UpdateAction(APPROVE, approve_target(update)),
             approval_of(update),
             update=update,
@@ -470,9 +468,8 @@ def update_state(item: Container) -> UpdateState:
         if (unmatched := _unmatched(item)) is not None:
             holder, why = unmatched
             words = ended(f"HQ can't match it to the Compose files in {holder}")
-            answer = Answer("Not matched", (f"No Compose file in {holder} matches it",))
-            return UpdateState(UpdateKind.UNMATCHED, latest, words, answer, reason=why)
-        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND, Answer("By hand", ("No repository HQ reads holds it",)))
+            return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
+        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
     repository = repositories()[managed.repository]
     if (move := _behind(item, repository, managed.app)) is not None:
         head = str((repository.head or {}).get("sha") or "")
@@ -480,7 +477,6 @@ def update_state(item: Container) -> UpdateState:
             UpdateKind.MERGED,
             move,
             ended(f"Merged in {managed.repository}, not applied"),
-            Answer("Not applied", (f"Merged in {managed.repository}",)),
             UpdateAction(APPLY, apply_target(managed, head)),
             apply_of(managed.repository, head, (item,)),
             managed=managed,
@@ -489,29 +485,22 @@ def update_state(item: Container) -> UpdateState:
     held = app_branch(managed.repository, managed.app)
     opening = open_standing(managed.repository, managed.app)
     if held is not None and held.held:
-        words = ended(f"Renovate is holding its branch {held.until}")
         said = ended(f"Asks Renovate to open {held.branch}")
-        answer = Answer("Held by Renovate", (capfirst(held.until),))
-        return UpdateState(UpdateKind.HELD, latest, words, answer, action, said=said, opening=opening, managed=managed)
-    return UpdateState(
-        UpdateKind.UNOPENED,
-        latest,
-        UNOPENED,
-        Answer("Not opened", (UNOPENED,)),
-        action,
-        said="Asks Renovate to run.",
-        opening=opening,
-        managed=managed,
-    )
+        pull = opening or Standing(IDLE, dotted(capfirst(held.until), said), word="Held by Renovate")
+        words = ended(f"Renovate is holding its branch {held.until}")
+        return UpdateState(UpdateKind.HELD, latest, words, action, said=said, pull=pull, managed=managed)
+    said = "Asks Renovate to run."
+    pull = opening or Standing(IDLE, dotted(UNOPENED, said), word="Not opened")
+    return UpdateState(UpdateKind.UNOPENED, latest, UNOPENED, action, said=said, pull=pull, managed=managed)
 
 
 def _decided(
-    kind: UpdateKind, move: str, words: str, answer: Answer, action: UpdateAction, approval: Approval, **of: Any
+    kind: UpdateKind, move: str, words: str, action: UpdateAction, approval: Approval, **of: Any
 ) -> UpdateState:
     """A state whose press runs while ``approval`` holds nothing back."""
 
     held = {"reason": approval.held, "adopt": approval.adopt} if approval.held else {"said": approval.said}
-    return UpdateState(kind, move, words, answer, action, **held, **of)
+    return UpdateState(kind, move, words, action, **held, **of)
 
 
 def of_app(repository: str, app: str) -> tuple[Container, ...]:
