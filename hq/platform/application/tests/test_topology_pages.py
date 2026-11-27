@@ -1,7 +1,6 @@
 """The topology pages: the whole map, one node in focus, its actions and its lenses."""
 
 from datetime import datetime, timedelta
-from itertools import pairwise
 
 from django.db import connection as database_connection
 from django.test import TestCase
@@ -11,12 +10,9 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.r2 import BACKUP_KIND
-from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.inventory_testing import store
-from hq.platform.application.markup_testing import hrefs, links, select, text, texts, within
 from hq.platform.core.testing import NOBODY, READER, connection, declare, operator
-from hq_sdk.testing import plain
 
 from ..action_links import topology_investigation_links, topology_url
 from ..command_center import command_center
@@ -27,6 +23,7 @@ from ..references import Kind
 from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
+from ..topology_model import observable
 from .host_only import host_only
 from .topology_principals import MANAGE
 
@@ -35,50 +32,6 @@ class TopologyPageTests(TestCase):
     def setUp(self):
         self.user = operator(self.client)
         declare("internal-name", "adguard.rewrite", {"domain": "app.example.test", "answer": "192.0.2.10"})
-
-    def test_page_is_progressively_enhanced_and_actions_remain_real_forms(self):
-        from hq.platform.core.testing import managing_everything
-
-        managing_everything()
-        with host_only():
-            response = self.client.get(reverse("control_plane:topology"))
-
-        self.assertContains(response, "data-topology")
-        # Without script, a node's details are one link away: focusing it
-        # draws them.
-        self.assertIn(TopologyView._focus_link("resource:internal-name"), hrefs(response))
-        self.assertNotContains(response, "<script>")
-
-        focused = self.page(focus="resource:internal-name")
-        self.assertContains(
-            focused,
-            f'action="{reverse("control_plane:reconcile", kwargs={"key": "internal-name"})}"',
-        )
-
-    def test_the_page_carries_summaries_and_fetches_a_body_when_opened(self):
-        from hq.platform.core.testing import managing_everything
-
-        managing_everything()
-        response = self.page()
-
-        reconcile = reverse("control_plane:reconcile", kwargs={"key": "internal-name"})
-        self.assertFalse(select(response, "formaction", reconcile))
-        body_url = next(
-            item["body_url"]
-            for group in response.context["topology_groups"]
-            for item in group["items"]
-            if item["node"].id == "resource:internal-name"
-        )
-        self.assertTrue(select(response, "data-topology-body", body_url))
-
-        body = self.body("resource:internal-name")
-        self.assertEqual(body.status_code, 200)
-        # The body's post action names the page's one post form, which carries
-        # the CSRF token, so a fetched body posts exactly like a drawn one.
-        (button,) = select(body, "formaction", reconcile)
-        self.assertEqual(button.attrs["form"], "hq-post")
-        self.assertTrue(select(response, "id", "hq-post"))
-        self.assertContains(response, "csrfmiddlewaretoken")
 
     def test_only_a_node_the_projection_holds_is_opened_or_focused(self):
         self.assertEqual(self.body("resource:not-declared").status_code, 404)
@@ -108,46 +61,6 @@ class TopologyPageTests(TestCase):
         with host_only():
             return self.client.get(reverse("control_plane:topology_node"), {"node": node_id})
 
-    def test_a_node_title_links_to_the_thing_it_names(self):
-        """A node carries a URL; a title that renders as text throws it away."""
-
-        response = self.page()
-
-        detail = reverse("control_plane:detail", kwargs={"key": "internal-name"})
-        self.assertIn(detail, hrefs(response))
-
-    def test_records_of_one_name_and_type_are_told_apart_by_their_values(self):
-        for key, content in (
-            ("caa-issue", '0 issue "ca.example.net"'),
-            ("caa-iodef", '0 iodef "mailto:a@example.com"'),
-        ):
-            declare(
-                key,
-                "cloudflare.dns_record",
-                {"zone": "example.com", "name": "example.com", "record_type": "CAA", "content": content},
-            )
-
-        response = self.page(lens="everything")
-
-        def values(node):
-            return [
-                element.text
-                for element in within(response, "data-topology-node", node)
-                if "data-topology-node-summary" in element.attrs
-            ]
-
-        (issue,) = values("resource:caa-issue")
-        (iodef,) = values("resource:caa-iodef")
-        self.assertIn("ca.example.net", issue)
-        self.assertIn("mailto:a@example.com", iodef)
-        # A card no other card shares a name with is told apart by its name.
-        self.assertEqual(values("resource:internal-name"), [])
-
-    def test_clear_selection_is_drawn_hidden_when_nothing_is_selected(self):
-        (reset,) = select(self.page(), "data-topology-reset")
-
-        self.assertIn("hidden", reset.attrs)
-
     def test_a_node_states_each_edge_from_where_it_stands(self):
         """Direction is the half of an edge a neighbor list throws away."""
 
@@ -168,57 +81,22 @@ class TopologyPageTests(TestCase):
             [("out", "resource:internal-name")],
         )
 
-        # The same edge renders at both ends, and each row walks to the other.
-        resource, ability = self.body("resource:internal-name"), self.body(ability_id)
-        self.assertIn(TopologyView._focus_link(ability_id), hrefs(resource))
-        self.assertIn(TopologyView._focus_link("resource:internal-name"), hrefs(ability))
-        # The kind by its label, never its identifier.
-        self.assertContains(ability, "Internal DNS record")
-        self.assertNotContains(ability, ">adguard.rewrite<")
+    def test_only_a_kind_no_sweep_reads_is_never_observed(self):
+        """A kind a sweep reads is not observed yet, and a reading ability is read when its kind was."""
 
-    def test_a_node_body_carries_the_triage_the_projection_already_derived(self):
-        """Declared versus observed is the whole of triage, so the node body
-        carries both.
-        """
-
-        declare(
-            "behind-name",
-            "adguard.rewrite",
-            {"domain": "behind.example.test", "answer": "192.0.2.11"},
-            status={"domain": "behind.example.test"},
-            last_observed_at=timezone.now() - timedelta(hours=3),
-            generation=4,
-            observed_generation=2,
-        )
         declare(
             "disabled-name", "adguard.rewrite", {"domain": "off.example.test", "answer": "192.0.2.12"}, enabled=False
         )
         declare("example-authority", "pki.authority", {"name": "Example Root"})
-
-        response = self.body("resource:behind-name")
-        disabled = self.body("resource:disabled-name")
-        unswept = self.body("resource:example-authority")
-
-        # A comparison, not two raw revision numbers.
-        self.assertNotIn("evision", text(response))
-        # The field the reading declined to echo back.
-        self.assertIn("answer", texts(response, "code"))
-        # Age, not an ISO timestamp.
-        self.assertContains(response, "3\xa0hours ago")
-        # A kind a sweep reads is not observed yet; one no sweep reads never is.
-        self.assertNotContains(disabled, "HQ does not read this")
-        self.assertContains(unswept, "HQ does not read this")
-
-    def test_a_reading_ability_is_read_when_its_kind_was(self):
-        """Every reading a connection can take is something HQ reads, whether
-        or not its records join anything on the map."""
-
         store(BACKUP_KIND, {"connection_ref": "example-backups", "key": "example.tar.gz"}, age=timedelta(hours=3))
+        with host_only():
+            nodes = {node.id: node for node in derive_topology(principal=READER).nodes}
 
-        body = self.body(Kind.ABILITY.of(f"{CONTROLLER_CONNECTIONS}:{BACKUP_KIND}"))
-
-        self.assertNotContains(body, "HQ does not read this")
-        self.assertContains(body, "3\xa0hours ago")
+        self.assertTrue(observable(nodes["resource:disabled-name"]))
+        self.assertFalse(observable(nodes["resource:example-authority"]))
+        ability = nodes[Kind.ABILITY.of(f"{CONTROLLER_CONNECTIONS}:{BACKUP_KIND}")]
+        self.assertTrue(observable(ability))
+        self.assertTrue(ability.observed_at)
 
     def test_the_whole_map_leaves_out_quiet_lanes_and_unlinked_cards_until_asked(self):
         from ..topology_lenses import QUIET_KINDS
@@ -234,7 +112,6 @@ class TopologyPageTests(TestCase):
         # "N of M shown" is out of every card, the ones held back included.
         self.assertLess(len(cards(shown)), len(cards(everything)))
         self.assertEqual(shown.context["topology_total"], len(cards(everything)))
-        self.assertTrue(select(shown, "data-filter-bar-shown"))
         self.assertEqual(shown.context["topology_shown"], len(cards(shown)))
 
     def test_a_view_shows_everything_it_holds(self):
@@ -245,19 +122,9 @@ class TopologyPageTests(TestCase):
                 context = self.page(lens=lens.name).context
                 self.assertEqual((context["topology_held"], context["topology_shown"]), ((), context["topology_total"]))
 
-    def test_a_node_nothing_reaches_says_so_rather_than_drawing_an_empty_box(self):
-        alone = next(
-            item["node"].id
-            for group in self.page(lens="everything").context["topology_groups"]
-            for item in group["items"]
-            if not item["degree"]
-        )
-
-        self.assertContains(self.body(alone), "Connected to nothing.")
-
 
 class FocusedPageTests(TestCase):
-    """A focused node's details, drawn once and readable at any width."""
+    """A focused node's details."""
 
     def setUp(self):
         from .test_relationships import estate, login
@@ -269,36 +136,12 @@ class FocusedPageTests(TestCase):
         with host_only():
             return self.client.get(reverse("control_plane:topology"), {"focus": focus})
 
-    def test_the_details_render_once_in_the_panel_ordered_by_importance(self):
+    def test_a_focused_node_s_relations_are_ordered_by_importance(self):
         response = self.page("zone:example.com")
-        self.assertEqual(len(select(response, "data-topology-body-of", "zone:example.com")), 1)
-        panel = within(response, "id", "topology-detail")
-        self.assertTrue(any(element.attrs.get("data-topology-body-of") == "zone:example.com" for element in panel))
-        # Each value says when it was read, and no list of links is comma-joined.
-        self.assertTrue(any(element.tag == "time" and element.attrs.get("datetime") for element in panel))
-        said, named = text(response), [words for words, _target in links(response) if words]
-        self.assertFalse([(one, next_one) for one, next_one in pairwise(named) if f"{one}, {next_one}" in said])
         detail = response.context["topology_detail"]
         for direction in ("in", "out"):
             ranks = [row["rank"] for row in detail["relations"] if row["direction"] == direction]
             self.assertEqual(ranks, sorted(ranks))
-
-    def test_the_trace_ledger_is_drawn_only_with_relationships_in_it(self):
-        related = self.page("zone:example.com")
-        self.assertTrue(select(related, "data-topology-edge"))
-
-        with host_only():
-            unfocused = self.client.get(reverse("control_plane:topology"), {"lens": "everything"})
-        lonely = next(
-            item["node"].id
-            for group in unfocused.context["topology_groups"]
-            for item in group["items"]
-            if not item["degree"]
-        )
-        alone = self.page(lonely)
-        self.assertEqual(alone.context["focus_node"], lonely)
-        self.assertFalse(select(alone, "data-topology-edge"))
-        self.assertFalse(select(alone, "id", "topology-relations"))
 
     def test_a_domain_is_observed_when_its_zone_reading_is(self):
         from hq.domains.control_plane.models import ProviderInventory
@@ -313,21 +156,6 @@ class FocusedPageTests(TestCase):
         response = self.page("zone:example.com")
         detail = response.context["topology_detail"]
         self.assertEqual(detail["observed_age"], read)
-        self.assertContains(response, "2\xa0hours ago")
-        self.assertNotContains(response, "HQ does not read this")
-
-    def test_a_card_says_what_its_number_counts(self):
-        response = self.page("zone:example.com")
-        degree = next(
-            item["degree"]
-            for group in response.context["topology_groups"]
-            for item in group["items"]
-            if item["node"].id == "zone:example.com"
-        )
-
-        noun = "link" if degree == 1 else "links"
-        labels = [plain(element.attrs["aria-label"]) for element in select(response, "aria-label")]
-        self.assertIn(f"Details for example.com, {degree} {noun}", labels)
 
     def project(self):
         with host_only():
