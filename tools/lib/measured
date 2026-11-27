@@ -48,7 +48,7 @@
 # The one thing it ends is a run of tests that stopped making progress where
 # each test process's own stall watch (hq/platform/core/stalls.py) cannot see:
 # a worker that never starts, a parent waiting on a pipe, a process that hangs
-# on its way out. Once the tree holds a test run, a test, class fixture or
+# on its way out. While the tree holds a test run, a test, class fixture or
 # subtest starting in any process (its mark, written under HQ_TEST_MARKS) or
 # the tree spending 1% of a core is progress; with neither for twice the
 # test's stall bound, so a test's own watch fails it first, each marked
@@ -114,7 +114,7 @@ exec perl -e '
         return "children";
     }
     # The CPU seconds each process of the tree has spent, by pid, and whether
-    # it has held a test run, as of the last sample.
+    # it holds a test run, as of the last sample.
     my (%cpu, $tested);
     my $ticks = POSIX::sysconf(POSIX::_SC_CLK_TCK()) || 100;
     # ps prints CPU time as [[dd-]hh:]mm:ss[.ss]; Linux only to the second, so it is read from /proc there.
@@ -145,7 +145,7 @@ exec perl -e '
                 push @todo, $_;
             }
         }
-        %cpu = ();
+        (%cpu, $tested) = ();
         for my $each (keys %role) {
             $tested = 1 if $role{$each} eq "test run";
             $cpu{$each} = seconds_of($time{$each});
@@ -249,7 +249,8 @@ exec perl -e '
         my $spent = 0;
         $spent += $after[$_] - $before[$_] for 0 .. 3;
         $pause = 20 * $spent > 2 ? 20 * $spent : 2;
-        judge(\@after) if $bound && $tested && $sum;
+        # The gate around a test run, before it starts or once it has ended, is not judged.
+        if ($bound && $sum) { $tested ? judge(\@after) : undef $since }
     }
     my $grace = Time::HiRes::time + 1;
     while (reap() && (my $left = $grace - Time::HiRes::time) > 0) { Time::HiRes::sleep($left) }

@@ -1254,7 +1254,7 @@ turn or a CI job until its bound. A loop that spins (a renderer inside
 
 A hang outside every test process's watch (a worker that never starts, a
 parent waiting on a pipe, a process stuck on its way out) is the measurer's
-(`tools/lib/measured`, which runs every heavy gate). Once its tree holds a
+(`tools/lib/measured`, which runs every heavy gate). While its tree holds a
 test run, a test beginning in any process (each mark is left in the folder
 `HQ_TEST_MARKS` names) or the tree spending 1% of a core is progress. With
 neither for twice `HQ_TEST_STALL_SECONDS`, so a test's own watch fails it
