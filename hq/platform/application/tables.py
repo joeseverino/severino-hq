@@ -155,6 +155,9 @@ class Piece:
     words: str
     # It draws a field a reader fills in (a select), which fills its column.
     field: bool = False
+    # It draws words only its row's open line shows (``row-more``), so its
+    # row opens at every width to show them.
+    more: bool = False
 
     def __post_init__(self) -> None:
         if not self.part.partial:

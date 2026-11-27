@@ -9,7 +9,7 @@ from hq.domains.control_plane.provider_adapters.contracts import REFUSALS
 from hq.domains.control_plane.reading_parts import RefusedPart
 
 from . import finding_steps, findings
-from .answer_fields import AsRead, ObservedAt
+from .answer_fields import AsRead, DateTime, ObservedAt
 from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
 from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS, ConnectionFact, ConnectionLink
 from .connection_lifecycle import Lifecycle
@@ -234,6 +234,15 @@ class ReadPart(TypedDict):
     label: Annotated[str, Describe("What it reads, in words.")]
     sight: Annotated[SeenPart | None, Describe("What was last read of it; null when nothing reads it yet.")]
     ability: Annotated[AbilityPart | None, Describe("The permissions behind it; null when none are named.")]
+    newest: Annotated[
+        WrittenLink | None,
+        Describe("Its newest record, for a reading whose records join no subject; null otherwise."),
+    ]
+    newest_at: Annotated[
+        str | None,
+        DateTime(),
+        Describe("When what that record tells of happened, an ISO 8601 date-time; null without one."),
+    ]
 
 
 class ReachMachinePart(TypedDict):

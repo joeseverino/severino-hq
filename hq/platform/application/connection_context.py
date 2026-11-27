@@ -10,8 +10,10 @@ path. None of them derives a fact the others cannot return.
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
+from operator import itemgetter
 from typing import Any
 
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.platform.core.audit import last_activity
 from hq.platform.core.models import AuditLog
 lazy from hq.platform.application.routes import reverse
@@ -36,10 +38,11 @@ from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, read_through, sight_by_connection
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
-from .entity_links import entity_link
+from .entity_links import EntityLink, entity_link
+from .facts import records_for_connection
 from .freshness import freshness
 from .json_schemas import as_written
-from .moments import when
+from .moments import moment, when
 from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
@@ -70,11 +73,15 @@ class Read:
 
     ``sight`` is what the last sweep found of it, for a kind a sweep reads.
     ``ability`` is what grants it, when the connection declares one.
+    ``newest`` is its newest record, worded, and ``newest_at`` when that
+    happened, for a reading whose records join no subject: shown nowhere else.
     """
 
     label: str
     sight: Sight | None = None
     ability: ConnectionAbilityState | None = None
+    newest: EntityLink | None = None
+    newest_at: datetime | None = None
 
     @property
     def whole(self) -> bool:
@@ -82,6 +89,13 @@ class Read:
         provider's kind are named together, and wrap between them."""
 
         return self.sight is None or self.sight.source != PART_SOURCE
+
+    @property
+    def opens(self) -> bool:
+        """Whether its part says more on the row's open line: what the last
+        sweep found of it."""
+
+        return self.sight is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,7 +136,10 @@ class ConnectionRow:
         sights = self.sight.sights if self.sight is not None else ()
         swept = set(fed_kinds(self.sight.provider)) if self.sight is not None else set()
         reads = (
-            *(Read(sight.label, sight=sight, ability=granted.get(sight.kind)) for sight in sights),
+            *(
+                Read(sight.label, sight=sight, ability=granted.get(sight.kind), **_newest(sight, self.instance))
+                for sight in sights
+            ),
             *(
                 Read(state.ability.label, ability=state)
                 for state in self.connection.abilities
@@ -230,6 +247,28 @@ class ConnectionRow:
         )
 
 
+def _newest(sight: Sight, instance: ConnectionInstance) -> dict[str, Any]:
+    """The newest record of a reading no subject joins, and when it happened:
+    the latest by its spec's ``at``, or its one record where it says more than
+    the reading's name. The sweep's own time is the sight's, said beside it."""
+
+    spec = OBSERVATIONS.get(sight.kind)
+    if spec is None or spec.joins or spec.withheld:
+        return {}
+    records = list(records_for_connection(spec.kind, instance.connection_ref))
+    dated = [(at, record) for record in records if (at := moment(spec.at(record))) is not None]
+    if dated:
+        at, record = max(dated, key=itemgetter(0))
+    elif len(records) == 1:
+        at, record = None, records[0]
+    else:
+        return {}
+    newest = entity_link(spec.kind, "", record=record)
+    if at is None and not newest.detail and newest.label in (spec.label, sight.label):
+        return {}
+    return {"newest": newest, "newest_at": at}
+
+
 def _sight(sight: ProviderSight) -> CredentialSightPart:
     return record_saves.row(sight, CredentialSightPart, tally=tally(sight))
 
@@ -239,6 +278,8 @@ def _read(read: Read) -> ReadPart:
         "label": read.label,
         "sight": _seen(read.sight) if read.sight is not None else None,
         "ability": serialize_ability(read.ability) if read.ability is not None else None,
+        "newest": as_written(read.newest) if read.newest is not None else None,
+        "newest_at": iso(read.newest_at),
     }
 
 

@@ -135,6 +135,12 @@ Rules:
   `redirects_to` edge between the two services. `upstream` reads where a record
   hands one hostname on (a tunnel's ingress service). `restricts` marks a gate
   in front of what it names (Cloudflare Access, an NPM access list).
+- **A reading no subject joins is shown on its connection.** One that declares
+  no join key (`ObservationSpec.joins` is false) reaches no other page, so the
+  connection's row names its newest record on its open line, with its
+  `describe` and when it happened: the latest by `at` (an upload, a run's end),
+  or its one record. Such a reading words what its records found through
+  `describe`.
 - **A reading can speak for its connection.** `facts` returns `(key, value)`
   pairs that land on the connection's topology node, where a finding rule reads
   them: AdGuard's filtering off, a plain upstream, a rewritten name nobody

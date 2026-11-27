@@ -142,6 +142,9 @@ class ObservationSpec:
     short_label: str = ""
     # When the record stops being valid, as ISO 8601, and who vouches for it.
     expires: Callable[[Mapping[str, Any]], str] = _blank
+    # When what a record tells of happened (an upload, a run's end), as ISO
+    # 8601: the newest of a reading's records is the latest by it.
+    at: Callable[[Mapping[str, Any]], str] = _blank
     issuer: Callable[[Mapping[str, Any]], str] = _blank
     read_by: Reader = "controller"
     # How often HQ reads it itself; for a controller's, a clock of its own,
@@ -229,6 +232,13 @@ class ObservationSpec:
     @property
     def joins_keys(self) -> bool:
         return self.keys is not _none
+
+    @property
+    def joins(self) -> bool:
+        """Whether a record can join a subject by any key: one that cannot is
+        shown only on the connection that read it."""
+
+        return self.joins_hostnames or self.joins_addresses or self.containers is not _none or self.joins_keys
 
     def relation_to(self, *, by_address: bool, by_container: bool = False, by_key: bool = False) -> str:
         """The phrase for a record joined by key, container, address or hostname."""

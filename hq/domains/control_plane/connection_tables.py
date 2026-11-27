@@ -87,7 +87,7 @@ def _connection_row(row: Any, request: Any, *, starts: bool) -> Row:
         (
             replace(_name(row, starts=starts), below=_name_below(row)),
             Cell(
-                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label")),
+                parts=_pieces(row, CONNECTION_READ, "read", row.reads, attrgetter("label"), attrgetter("opens")),
                 fit=True,
                 below=(
                     (
@@ -197,10 +197,16 @@ def _name_below(row: Any) -> tuple[Below, ...]:
     )
 
 
-def _pieces(row: Any, part: Any, key: str, items: Iterable[Any], label: Any) -> tuple[Cell, ...]:
-    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part."""
+def _pieces(
+    row: Any, part: Any, key: str, items: Iterable[Any], label: Any, more: Any = lambda _item: False
+) -> tuple[Cell, ...]:
+    """Each of a connection's items (what it reads, what it lets HQ change) drawn as its part,
+    ``more`` saying which hold words for the row's open line."""
 
-    return tuple(Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item))) for item in items)
+    return tuple(
+        Cell(piece=Piece(part, {key: item, "connection": row.connection}, label(item), more=more(item)))
+        for item in items
+    )
 
 
 def _reaches(instance: Any) -> Cell:

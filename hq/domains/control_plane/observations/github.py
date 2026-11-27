@@ -15,7 +15,9 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, StrictInt
 from pydantic.json_schema import SkipJsonSchema
 
+lazy from hq.platform.application import dependency_updates
 lazy from hq.platform.application.moments import moment, since_when, when
+lazy from hq.platform.application.ui import counted
 
 from ..permissions import GitHub
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
@@ -530,7 +532,12 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             GitHub.DEPENDABOT_ALERTS_READ,
         ),
         title=lambda record: str(record.get("owner", "")),
+        describe=lambda record: (
+            f"{counted(len(record.get('repositories') or ()), 'repository', 'repositories')}"
+            f" · {dependency_updates.seen(str(record.get('outcome', ''))).label}"
+        ),
         relation="Dependency updates of",
+        at=lambda record: str(record.get("finished_at") or record.get("started_at") or ""),
         every=_DEPENDENCY_RUN_EVERY,
     ),
     ObservationSpec(

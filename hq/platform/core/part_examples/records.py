@@ -14,6 +14,8 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.cadence import CONTROLLER_REFRESH
 lazy from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 lazy from hq.platform.application.card_items import Insight, ListRow, Timeline, TimelineItem
+lazy from hq.platform.application.connection_context import Read
+lazy from hq.platform.application.credential_sight import Sight
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.decisions import decision
 lazy from hq.platform.application.display_words import Code
@@ -720,6 +722,56 @@ METER_STATES = {
                 {"tone": Tone.SERIOUS, "group": "every"},
                 {"tone": Tone.GOOD, "group": "public"},
                 {"tone": Tone.NEUTRAL, "group": "public"},
+            )
+        },
+    ),
+}
+
+
+def _read(label, state="readable", records=0, **given):
+    """One thing an example connection reads, as its last sweep found it."""
+
+    sight = Sight(
+        f"example.{label.lower().replace(' ', '_')}", label, "reading", state, records, DRAWN_AT - timedelta(hours=1)
+    )
+    return Read(label, sight=sight, **given)
+
+
+def _reads(*reads):
+    """An example connection's Reads, each drawn as its part, opened where it says more."""
+
+    pieces = tuple(
+        Cell(piece=Piece(included_parts.CONNECTION_READ, {"read": read}, read.label, more=read.opens)) for read in reads
+    )
+    return table(
+        "Example connections",
+        (TableColumn("Connection", kind="identifier"), TableColumn("Reads", drop=3)),
+        ("example-backups", Cell(parts=pieces, fit=True)),
+    )
+
+
+# A reading and the records its last sweep found, as a connection's row opens to it.
+CONNECTION_READ = Example(context=lambda: {"read": _read("Example host", records=3)})
+
+CONNECTION_READ_STATES = {
+    # A connection's Reads in its row, opened: a count, a refusal, a reading
+    # no subject joins with its newest record and when it happened, and one
+    # whose one record names itself and says what it holds.
+    "newest": Example(
+        "{% data_table table %}",
+        lambda: {
+            "table": _reads(
+                _read("Example host", records=3),
+                _read("Example zone", state="refused"),
+                _read(
+                    "Example backup",
+                    records=1,
+                    newest=EntityLink(
+                        "example-backup-01.tar.gz.age", kind="example.backup", detail="46 MB · 90 copies kept"
+                    ),
+                    newest_at=DRAWN_AT - timedelta(hours=7),
+                ),
+                _read("Example settings", records=1, newest=EntityLink("example-tailnet", kind="example.settings")),
             )
         },
     ),

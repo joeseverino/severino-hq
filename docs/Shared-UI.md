@@ -408,7 +408,9 @@ permission note in its tone where it differs from its neighbors or cannot be use
 
 A part of a connection's Reads, given the `read` and its `connection`: its name, quiet where its
 credential cannot use it, then on the row's open line its state word in its tone where it was not
-read cleanly, its record count where it was, and why it was not read.
+read cleanly, its record count where it was, and why it was not read. A reading whose records join
+no subject (`ObservationSpec.joins`) is shown on no other page, so its `newest` record follows the
+count: its title, what it says and when (`newest_at`).
 
 ### control_plane/_credential_fix.html (host only)
 

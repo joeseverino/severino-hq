@@ -462,6 +462,16 @@
               "reads.ability.action.reason",
               "reads.ability.action.recommended",
               "reads.ability.action.refusal",
+              "reads.newest",
+              "reads.newest.label",
+              "reads.newest.url",
+              "reads.newest.external",
+              "reads.newest.kind",
+              "reads.newest.kind_label",
+              "reads.newest.title",
+              "reads.newest.detail",
+              "reads.newest.identity",
+              "reads.newest_at",
               "changes",
               "changes.name",
               "changes.label",
@@ -25143,6 +25153,30 @@
             "description": "What it reads, in words.",
             "type": "string"
           },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLink",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its newest record, for a reading whose records join no subject; null otherwise."
+          },
+          "newest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When what that record tells of happened, an ISO 8601 date-time; null without one.",
+            "format": "date-time"
+          },
           "sight": {
             "anyOf": [
               {
@@ -25159,7 +25193,9 @@
         "required": [
           "label",
           "sight",
-          "ability"
+          "ability",
+          "newest",
+          "newest_at"
         ],
         "type": "object"
       },
@@ -25180,6 +25216,21 @@
           },
           "label": {
             "$ref": "#/components/schemas/ReadPart/properties/label"
+          },
+          "newest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EntityLinkPartial",
+                "title": "Entity link"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its newest record, for a reading whose records join no subject; null otherwise."
+          },
+          "newest_at": {
+            "$ref": "#/components/schemas/ReadPart/properties/newest_at"
           },
           "sight": {
             "anyOf": [

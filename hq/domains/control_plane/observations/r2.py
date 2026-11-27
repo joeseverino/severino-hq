@@ -37,5 +37,6 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
             f"{human_bytes(record.get('size_bytes', 0))} · {counted(record.get('copies', 0), 'copy', 'copies')} kept"
         ),
         relation="Off-site backup in",
+        at=lambda record: str(record.get("uploaded_at", "") or ""),
     ),
 )
