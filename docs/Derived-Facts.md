@@ -972,15 +972,18 @@ the operator grants it. The API's name stands beside it where the two differ
 cites the provider's documentation it follows. The registry refuses a
 permission written as text, and the controller names a Tailscale scope by the
 constant the bridge contract carries (`TailscaleScope`). The minting tasks ask for the API name of every
-member `observer_permissions` in `hq.domains.control_plane.credential_reads`
-returns: each reading's `requires` plus the reads that are not readings yet.
+member `credential_permissions` in `hq.domains.control_plane.credential_reads`
+returns: each reading's `requires`, the reads that are not readings yet, and
+the connection kind's `writes`.
 Minting is in [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see
 
 Each connection's row folds in what its provider's credential can see: every
-reading it feeds and every resource kind a sweep reads. A kind with an
-`unobserved_reason` is read by no sweep and is not listed. Each kind is one of:
+reading it feeds and every resource kind a sweep reads
+(`providers.provider_reads`). A kind is read back from a sweep or says why
+not in `unobserved_reason`, exactly one (`ProviderSpec.sweeps`); one nothing
+sweeps is not listed. Each kind is one of:
 
 - **Readable**, with its record count and age.
 - **Refused**. The controller reports `refusal` on the kind. It is `permission`

@@ -505,9 +505,12 @@ create nothing: a secret goes into 1Password and nowhere else.
   `oauth_keys` scope: an API access token, or an OAuth client given as
   `TAILSCALE_BOOTSTRAP_CLIENT_ID` and `TAILSCALE_BOOTSTRAP_CLIENT_SECRET`.
 
-Both lists are `observer_permissions` in
+Both lists are `credential_permissions` in
 `hq.domains.control_plane.credential_reads`: the `requires` of every reading
-for that provider plus the reads that are not readings yet. `--permissions` and
+for that provider, the reads that are not readings yet, and the `writes` its
+connection kind declares (D1 Edit for the contact inbox), the same list the
+setup card and a credential fix name. Each task is its connection kind's
+`minter`. `--permissions` and
 `--scopes` take a file of names instead.
 
 `mise run wire-pocket-id` writes Pocket ID's permission list for HQ's API the
