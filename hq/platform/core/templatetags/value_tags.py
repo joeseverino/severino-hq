@@ -160,20 +160,23 @@ def bytes_(value):
 
 
 @register.filter
-def money(value, form=""):
+def money(value):
     """``{{ amount|money }}``: "$1,234.50", the one way a page writes an amount.
 
-    ``{{ amount|money:"whole" }}`` leaves the cents off a figure that is
-    scanned, never reconciled. A negative amount takes a true minus sign and a
-    missing one the mark for a missing value. Never ``floatformat`` and
-    ``intcomma`` behind a dollar sign, which say a negative amount as "$-5.00".
+    A negative amount takes a true minus sign and a missing one the mark for a
+    missing value. Never ``floatformat`` and ``intcomma`` behind a dollar sign,
+    which say a negative amount as "$-5.00".
     """
 
-    if form not in ("", "whole"):
-        raise template.TemplateSyntaxError(f"money takes 'whole' or nothing; got {form!r}.")
-    if no_value(value):
-        return empty_value()
-    return _money(value, cents=form != "whole")
+    return empty_value() if no_value(value) else _money(value)
+
+
+@register.filter
+def money_whole(value):
+    """``{{ amount|money_whole }}``: ``money`` without the cents, for a figure
+    that is scanned, never reconciled."""
+
+    return empty_value() if no_value(value) else _money(value, cents=False)
 
 
 @register.filter

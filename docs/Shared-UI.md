@@ -230,7 +230,7 @@ and those that hold across parts in [Design](Design.md).
 | `words` | `capability`, first and unnamed | required |  | The command, by name. |
 | `words` | `variant` |  |  | Which of its words, where it has more than one. |
 
-Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host filters: `|breakable[:arg]`, `|counted:arg`, `|measured:arg`, `|money`, `|money_whole`, `|or_empty`, `|outside`, `|queue_entries`, `|readout`, `|record[:arg]`, `|span`, `|web_url`, `|when[:arg]`, `|when_text[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `cell-part`, `cell-whole`, `compact`, `count`, `danger`, `date-col`, `eyebrow`, `form`, `ghost`, `glyph`, `help`, `inline`, `key-col`, `keyboard-only`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `prose`, `row-actions`, `row-below`, `row-empty`, `row-gutter`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `subtle-link`, `swatch`, `swatch-key`, `table-scroll`, `tone-attention`, `tone-good`, `tone-neutral`, `tone-serious`, `visually-hidden`, `whole`, `wide-only`.
 
