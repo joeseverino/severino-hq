@@ -394,8 +394,10 @@ systemd through the runner image CI built, then checks it clean.
 
 The setup installs every unit and drop-in under `deploy/systemd`, found by
 walking the directory (`controller/host/units.go`), and enables and starts
-every timer, path and unit with an `[Install]` section. Adding a unit is adding
-its file. A unit a release no longer ships is stopped, disabled and removed. A
+every timer, path and unit with an `[Install]` section. What starts a
+controller pass (a timer or path whose unit is the controller's) starts last,
+once the rest is up, since a pass reads every unit's state. Adding a unit is
+adding its file. A unit a release no longer ships is stopped, disabled and removed. A
 drop-in the host adds beside a shipped one is the host's, and `verify` does not
 compare it.
 
@@ -526,12 +528,12 @@ nothing. `hq-host deploy`:
    healthy on it. The old HQ cuts a request or stream still open at its
    graceful bound (`GRACEFUL_SHUTDOWN_SECONDS` in `hq/config/serve.py`), so
    production is down for that and the new image's boot.
-8. Applies the whole setup: the controller preflight is the release's first
-   pass against the new bridge.
-9. Starts what step 6 stopped.
+8. Applies the whole setup, which starts what step 6 stopped among every
+   unit, and what starts a controller pass last: the controller preflight is
+   the release's first pass against the new bridge.
 
 A failure from step 6 on puts back the previous image, tree and units, then
-restarts what was held. A unit that was not active before the deploy is not
+restarts what was held, what starts a controller pass last. A unit that was not active before the deploy is not
 started by it. A failure of that rollback ends the deploy with a status of its
 own, so its deployment says production's state is unknown.
 

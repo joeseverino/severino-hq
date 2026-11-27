@@ -124,6 +124,9 @@ func TestAnInstallSetsUpInTheVerifiedRunner(t *testing.T) {
 	}
 	f.before(t, verify, "docker pull "+runnerImage)
 	f.before(t, "docker pull "+runnerImage, apply[0])
+	// The playbook starts every unit but what starts a controller pass, which
+	// comes last, so the first pass finds the rest up.
+	f.before(t, apply[0], "systemctl start severino-hq-controller.path")
 }
 
 // A setup that fails part way puts every unit file back as it was.

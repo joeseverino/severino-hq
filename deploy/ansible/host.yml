@@ -1,5 +1,6 @@
 # The host's own setup: the release's units, drop-ins and tmpfiles rule, the
-# drop-ins and deploy rule host.json decides, each unit enabled and started.
+# drop-ins and deploy rule host.json decides, each unit enabled and started
+# but those that start a controller pass, which hq-host starts last.
 # hq-host runs it in the runner image the release pins (controller/host/
 # setup.go, which states its security properties and gives every variable).
 #
@@ -177,11 +178,13 @@
       loop: "{{ units | reject('search', '@\\.') | list }}"
       register: enabled
 
+    # A controller pass reads every unit's state, so what starts one is left
+    # to hq-host, which starts it once this has started the rest.
     - name: Start every unit that installs
       ansible.builtin.systemd_service:
         name: "{{ item.item }}"
         state: started
-      loop: "{{ enabled.results | rejectattr('status.UnitFileState', 'equalto', 'static') | list }}"
+      loop: "{{ enabled.results | rejectattr('status.UnitFileState', 'equalto', 'static') | rejectattr('item', 'in', pass_starters) | list }}"
       loop_control:
         label: "{{ item.item }}"
 

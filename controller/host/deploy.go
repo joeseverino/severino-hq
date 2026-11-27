@@ -251,10 +251,11 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return fmt.Errorf("the new image did not become healthy: %w", err)
 	}
 	fmt.Fprintln(d.Out, "HQ is healthy on the new image.")
+	// The whole setup starts every unit the release ships, what was held
+	// among them, and what starts a controller pass last.
 	if err := d.Setup(ctx, runner, d.Lib); err != nil {
 		return err
 	}
-	d.restart(held)
 	// The release stands, so the copy is not needed; the backups hold that state.
 	if err := os.Remove(kept); err != nil && !errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintf(d.Out, "The database kept before migrating is still at %s: %v\n", kept, err)
@@ -433,10 +434,10 @@ func (d *Deployer) hold(ctx context.Context) ([]string, error) {
 	return held, nil
 }
 
+// restart releases the hold of a deploy that ends before its whole setup,
+// which would have. The deploy's own error is the one it returns.
 func (d *Deployer) restart(held []string) {
-	for _, name := range held {
-		_ = d.run(context.Background(), "systemctl", "start", name)
-	}
+	_ = d.start(context.Background(), d.UnitDir(), held)
 }
 
 func (d *Deployer) backupTree() (string, error) {
