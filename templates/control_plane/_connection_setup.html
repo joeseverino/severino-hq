@@ -40,8 +40,8 @@ connected is in one place.
             {% endstep %}
             {% step %}
               <strong>Then</strong>
-              <p>HQ's host reads the vault every hour; the connection then appears above. To read the vault now:</p>
-              {% if read_vault %}{% include "partials/_page_action.html" with action=read_vault only %}{% else %}{% command text="sudo systemctl start severino-hq-secrets.service" %}{% endif %}
+              <p>HQ's host reads the vault every hour; the connection then appears above.</p>
+              {% for step in read_vault %}{% if step.kind == "press" %}{% include "partials/_page_action.html" with action=step.link|workflow_action only %}{% else %}{% include "partials/_operator_step.html#said" %}{% endif %}{% endfor %}
             {% endstep %}
           {% endsteps %}
         {% endsection %}

@@ -376,24 +376,32 @@ def _press(fix: Does, principal: Principal, subject: TopologyNode | None) -> Pre
 def _steps(
     finding: Finding, adopted: Iterable[Does], principal: Principal, subject: TopologyNode | None
 ) -> tuple[Step, ...]:
-    """What this principal is shown to do about ``finding``: each command HQ
-    runs that they may press, each route once, then the rest in the detector's
-    order, a ``Does`` they may not press said by its ``by_hand``; else, where
-    nothing is left, its rule's ``operator_action`` in words."""
+    """What this principal is shown to do about ``finding``: its fixes as
+    ``offered``; else, where nothing is left, its rule's ``operator_action`` in words."""
+
+    if steps := offered((*finding.fixes, *adopted), principal, subject):
+        return steps
+    found = _RULE_BY_NAME.get(finding.rule)
+    return (Do(found.operator_action),) if found else ()
+
+
+def offered(
+    fixes: Iterable[Does | ByHand | Do], principal: Principal, subject: TopologyNode | None = None
+) -> tuple[Step, ...]:
+    """What this principal is shown of ``fixes``, on a finding or any page: each
+    command HQ runs that they may press, each route once, then the rest in
+    order, a ``Does`` they may not press said by its ``by_hand``."""
 
     pressed: dict[tuple[str, str], Press] = {}
     rest: list[ByHand | Do] = []
-    for fix in (*finding.fixes, *adopted):
+    for fix in fixes:
         if not isinstance(fix, Does):
             rest.append(fix)
         elif (press := _press(fix, principal, subject)) is not None:
             pressed.setdefault((press.link.method, press.link.url), press)
         elif fix.by_hand is not None:
             rest.append(fix.by_hand)
-    if pressed or rest:
-        return (*pressed.values(), *rest)
-    found = _RULE_BY_NAME.get(finding.rule)
-    return (Do(found.operator_action),) if found else ()
+    return (*pressed.values(), *rest)
 
 
 def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
