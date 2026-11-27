@@ -37,7 +37,6 @@ vars.labels = """\
   hq.platform.core.tests.browser.catalog.layout.ScriptedCatalogLayoutTests \
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.plants.CheckExampleTests \
-  hq.platform.core.tests.browser.components.ComponentLayoutTests.test_opening_every_row_a_reader_can_open_moves_nothing_they_did_not_ask_for \
   hq.platform.core.tests.browser.components.ComponentLayoutTests.test_the_face_arriving_late_is_the_gates_move_under_a_fixed_clock"""
 
 # The catalog walk, every shared part, in the system faces of the machine it
