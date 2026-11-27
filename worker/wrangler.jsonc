@@ -52,6 +52,7 @@
     "run_worker_first": [
       "/github",
       "/tailscale",
+      "/cloudflare",
       "/socket"
     ]
   },
@@ -59,6 +60,7 @@
     "required": [
       "GITHUB_WEBHOOK_SECRET",
       "TAILSCALE_WEBHOOK_SECRET",
+      "CLOUDFLARE_WEBHOOK_SECRET",
       "SOCKET_TOKEN"
     ]
   }

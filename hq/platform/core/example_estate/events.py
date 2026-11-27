@@ -1,11 +1,13 @@
-"""What the estate was told happened outside it: GitHub's deliveries through
-the event listener, one it does not take, and a unit HQ's host saw fail."""
+"""What the estate was told happened outside it: GitHub's deliveries and a
+Cloudflare alert through the event listener, one it does not take, and a unit
+HQ's host saw fail."""
 
 from datetime import timedelta
 
 from django.utils import timezone
 
 from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource
+from hq.domains.control_plane.observations.cloudflare import ALERT_KIND, EDGE_CERTIFICATE_KIND
 from hq.domains.control_plane.observations.github import PROVIDER as GITHUB, REPOSITORY_KIND
 from hq.domains.control_plane.observations.host import UNIT_FAILED, UNIT_KIND
 from hq.platform.application import readings
@@ -16,6 +18,14 @@ from . import doors
 # Each as a source sends it: who, what, about what, how long ago, and the readings it made due.
 EVENTS = (
     (InboundSource.WORKER, GITHUB, "push", "example/hq", timedelta(minutes=4), (REPOSITORY_KIND,)),
+    (
+        InboundSource.WORKER,
+        "cloudflare_api",
+        "universal_ssl_event_type",
+        "0123abcd",
+        timedelta(minutes=9),
+        (EDGE_CERTIFICATE_KIND, ALERT_KIND),
+    ),
     (InboundSource.WORKER, GITHUB, "pull_request", "example/site", timedelta(hours=3), (REPOSITORY_KIND,)),
     (InboundSource.WORKER, GITHUB, "star", "example/hq", timedelta(hours=7), ()),
     (InboundSource.HOST, "host", UNIT_FAILED, "example-upload.service", timedelta(days=2), (UNIT_KIND,)),

@@ -7,9 +7,11 @@ import pullRequest from "./fixtures/pull_request.opened.json";
 import ping from "./fixtures/ping.json";
 import push from "./fixtures/push.json";
 import tailscaleEvents from "./fixtures/tailscale.json";
+import cloudflareNotifications from "./fixtures/cloudflare.json";
 
 const github = routes.providers.find((route) => route.provider === "github_app")!;
 const tailscale = routes.providers.find((route) => route.provider === "tailscale")!;
+const cloudflare = routes.providers.find((route) => route.provider === "cloudflare_api")!;
 const ORIGIN = "https://example.com";
 
 /** A listener: the Hub's opening, then each event its socket has been sent, in order. */
@@ -244,6 +246,68 @@ describe("a Tailscale delivery", () => {
 
     expect(refused.status).toBe(status);
     expect(await listener.next()).toMatchObject({ event: "policyUpdate" });
+  });
+});
+
+/**
+ * POSTs `notification` as Cloudflare sends a generic webhook (Notifications,
+ * Webhook payload schema): one JSON object, the destination's secret in
+ * cf-webhook-auth unless `secret` gives another or null for none.
+ */
+async function cloudflareDelivery(notification: unknown, secret: string | null = env.CLOUDFLARE_WEBHOOK_SECRET) {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (secret !== null) headers[cloudflare.scheme.header] = secret;
+  return exports.default.fetch(`${ORIGIN}${cloudflare.path}`, { method: "POST", headers, body: JSON.stringify(notification) });
+}
+
+describe("a Cloudflare notification", () => {
+  const [test, alert] = cloudflareNotifications;
+
+  it("reaches a listener by its alert type and account alone", async () => {
+    const listener = await listen();
+
+    const response = await cloudflareDelivery(alert);
+
+    expect(response.status).toBe(202);
+    expect(await listener.next()).toStrictEqual({
+      provider: "cloudflare_api",
+      event: "dedicated_ssl_certificate_event_type",
+      subject: "0123abcd",
+      delivery_id: expect.any(String),
+      received_at: expect.any(String),
+    });
+  });
+
+  it("with no alert type, as the test message a destination is saved with, is answered 202 as the unnamed event", async () => {
+    const listener = await listen();
+
+    const response = await cloudflareDelivery(test);
+
+    expect(response.status).toBe(202);
+    expect(await listener.next()).toMatchObject({ event: cloudflare.unnamed_event, subject: "" });
+  });
+
+  it("sent again is the event it first was", async () => {
+    const listener = await listen();
+
+    await cloudflareDelivery(alert);
+    const first = await listener.next();
+    await cloudflareDelivery(alert);
+
+    expect(await listener.next()).toMatchObject({ delivery_id: first.delivery_id });
+  });
+
+  it.each<[string, string | null]>([
+    ["another secret", "another-cloudflare-secret"],
+    ["no secret", null],
+  ])("with %s never reaches a listener", async (_, secret) => {
+    const listener = await listen();
+
+    const refused = await cloudflareDelivery(alert, secret);
+    await cloudflareDelivery({ ...alert, alert_type: "tunnel_health_event" });
+
+    expect(refused.status).toBe(401);
+    expect(await listener.next()).toMatchObject({ event: "tunnel_health_event" });
   });
 });
 

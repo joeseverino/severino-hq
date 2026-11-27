@@ -109,6 +109,18 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(asked(), ["host.unit"])
 
+    def test_a_cloudflare_alert_makes_its_reading_and_the_alert_history_due(self):
+        """As the Worker forwards a Cloudflare notification: its alert_type,
+        the account it fired for, and the body's digest as the delivery."""
+
+        self.apply(worker({
+            "provider": "cloudflare_api", "event": "tunnel_health_event", "subject": "0123abcd",
+            "delivery_id": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "received_at": "2026-11-26T12:00:00Z",
+        }))  # fmt: skip
+
+        self.assertEqual(asked(), ["cloudflare.alert", "cloudflare.tunnel"])
+
     def test_a_host_event_outside_the_declaration_makes_nothing_due(self):
         from hq.domains.control_plane.models import InboundEvent
 
@@ -301,7 +313,7 @@ class EventsWorkerTests(TestCase):
         routes = {route.path: route for route in events_worker().routes}
 
         # Every route it serves, counted or not, and none it no longer serves.
-        self.assertEqual(set(routes), {"/github", "/tailscale", "/socket"})
+        self.assertEqual(set(routes), {"/github", "/tailscale", "/cloudflare", "/socket"})
         github = routes["/github"]
         self.assertEqual((github.accepted, github.refused, github.unsigned), (40, 5, 3))
         self.assertEqual((github.accepted_last_hour, github.unsigned_last_hour), (5, 1))

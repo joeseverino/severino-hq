@@ -1,0 +1,30 @@
+[
+  {
+    "text": "Hello World! This is a test message sent from https://cloudflare.com. If you can see this, your webhook is configured properly."
+  },
+  {
+    "name": "Example certificate alerts",
+    "text": "Advanced certificate for example.com is active.",
+    "data": {
+      "account_name": "Example account",
+      "account_tag": "0123abcd",
+      "certificate_id": "00000000-0000-4000-8000-000000000001",
+      "certificate_pack_id": "00000000-0000-4000-8000-000000000002",
+      "certificate_pack_status": "active",
+      "certificate_status": "active",
+      "event_type": "ssl.custom.certificate.issued",
+      "hostnames": ["example.com", "*.example.com"],
+      "pack_ca": "lets_encrypt",
+      "pack_validation": "txt",
+      "zone_name": "example.com",
+      "zone_tag": "4567efab"
+    },
+    "ts": 1136214245,
+    "account_id": "0123abcd",
+    "policy_id": "00000000-0000-4000-8000-000000000003",
+    "policy_name": "Example certificate alerts",
+    "alert_type": "dedicated_ssl_certificate_event_type",
+    "alert_correlation_id": "00000000-0000-4000-8000-000000000004",
+    "alert_event": "ALERT_STATE_EVENT_START"
+  }
+]

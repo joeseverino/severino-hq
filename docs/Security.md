@@ -756,6 +756,12 @@ path from the public internet. Setting it up is
   is refused once its window passes. Its delivery names no ID, so each event
   is named by the body's SHA-256 and its place in the body: a body sent again
   is the events already stored.
+- Cloudflare's notifications carry the destination's secret itself in
+  `cf-webhook-auth`, signing nothing, so the Worker compares it with
+  `CLOUDFLARE_WEBHOOK_SECRET` in constant time, over the two values' SHA-256
+  digests so neither length shows. A holder of the secret can send any body
+  and send one again; each is a name that asks a coalesced read, and a body
+  sent again, named by its SHA-256, is the event already stored.
 - Workers Logs records each request as its method, path and status, which
   the Worker logs itself. Invocation logs are off, since they keep the
   request's headers, the bearer among them.
@@ -765,8 +771,8 @@ path from the public internet. Setting it up is
   it already holds. A route that refused every request of the last hour,
   three or more, for its signature or token raises
   `events-worker-refusing`, naming the secret to check.
-- Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET` and
-  `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
+- Its secrets, `GITHUB_WEBHOOK_SECRET`, `TAILSCALE_WEBHOOK_SECRET`,
+  `CLOUDFLARE_WEBHOOK_SECRET` and `SOCKET_TOKEN`, live in a 1Password item of the operator's, and the
   listener holds the same
   `SOCKET_TOKEN` as the `cloudflare_events` connection's credential. They
   are Worker secrets, set by `mise run worker:deploy --with-secrets` from the

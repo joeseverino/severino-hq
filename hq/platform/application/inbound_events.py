@@ -232,9 +232,10 @@ def _routes(answers: list[dict[str, Any]]) -> tuple[RouteAnswers, ...]:
     """Each route the Worker serves now, with its answers counted by status."""
 
     declared = [
-        (str(route["path"]), label, label, "signature", str(route["secret_binding"]))
-        for route in inbound_worker.routes()
-        for label in (provider_label(str(route["provider"])),)
+        (spec.path, label, label, spec.scheme.proof, spec.secret_binding)
+        for provider, spec in INBOUND.items()
+        if spec.scheme
+        for label in (provider_label(provider),)
     ]
     listener = (capfirst(LISTENER_NAMED), f"the {LISTENER_NAMED}", "token", inbound_worker.SOCKET_TOKEN)
     declared.append((inbound_worker.SOCKET_PATH, *listener))

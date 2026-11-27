@@ -6057,11 +6057,13 @@
         "type": "string",
         "description": "A provider whose events HQ takes, as an admitted module's INBOUND declares it.",
         "enum": [
+          "cloudflare_api",
           "github_app",
           "host",
           "tailscale"
         ],
         "x-enum-varnames": [
+          "InboundProviderCloudflareAPI",
           "InboundProviderGitHubApp",
           "InboundProviderHost",
           "InboundProviderTailscale"

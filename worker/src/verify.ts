@@ -1,9 +1,15 @@
-// The one check of a provider's signature. Each route names its scheme as
-// data (InboundSpec.scheme in HQ's provider_spec.py), so a provider with a
-// new scheme declares it there and no verifier is written for it.
+// The one check of a provider's signature or secret. Each route names its
+// scheme as data (InboundSpec.scheme in HQ's provider_spec.py), so a provider
+// with a new scheme declares it there and no verifier is written for it.
+import { tag } from "./hub";
 
-/** How a provider signs: an HMAC-SHA256 in hex, in a header of `key=value` parts. */
+/**
+ * How a provider proves a request its own: an HMAC-SHA256 in hex, in a
+ * header of `key=value` parts ("hmac"), or the route's secret itself in the
+ * header ("shared-secret"), which signs nothing.
+ */
 export interface Scheme {
+  form: string;
   header: string;
   /** The part that holds a digest; any one of several matching passes. */
   digest: string;
@@ -45,10 +51,21 @@ function message(scheme: Scheme, found: [string, string][], body: Uint8Array, no
 }
 
 /**
- * Whether `header`, as `scheme` reads it, signs `body` with `secret` at a
- * time within the scheme's window of `now` (milliseconds since the epoch).
- * The HMAC is computed once, and each digest compared with it in constant
- * time.
+ * Whether `presented` is `held`, a secret the Worker holds, compared in
+ * constant time over their tags, which are one length, so neither value's
+ * length shows. A secret unset matches nothing.
+ */
+export async function sameSecret(presented: string, held: string): Promise<boolean> {
+  if (!held) return false;
+  return crypto.subtle.timingSafeEqual(encoder.encode(await tag(presented)), encoder.encode(await tag(held)));
+}
+
+/**
+ * Whether `header`, as `scheme` reads it, proves `body` sent with `secret`:
+ * the secret itself for a shared secret; else a signature of the body at a
+ * time within the scheme's window of `now` (milliseconds since the epoch),
+ * its HMAC computed once and each digest compared with it in constant time.
+ * A form the Worker does not know proves nothing.
  */
 export async function verify(
   scheme: Scheme,
@@ -57,8 +74,9 @@ export async function verify(
   body: Uint8Array,
   now: number = Date.now(),
 ): Promise<boolean> {
+  if (scheme.form === "shared-secret") return header !== null && sameSecret(header, secret);
   const found = header ? parts(header) : null;
-  if (!secret || !found) return false;
+  if (scheme.form !== "hmac" || !secret || !found) return false;
   const digests = found.filter(([key]) => key === scheme.digest).map(([, value]) => digestOf(value));
   const signed = message(scheme, found, body, now);
   if (!signed || !digests.length || digests.includes(null)) return false;

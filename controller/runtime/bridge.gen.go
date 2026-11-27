@@ -565,14 +565,17 @@ func (e HostService) Valid() bool {
 
 // Defines values for InboundProvider.
 const (
-	InboundProviderGitHubApp InboundProvider = "github_app"
-	InboundProviderHost      InboundProvider = "host"
-	InboundProviderTailscale InboundProvider = "tailscale"
+	InboundProviderCloudflareAPI InboundProvider = "cloudflare_api"
+	InboundProviderGitHubApp     InboundProvider = "github_app"
+	InboundProviderHost          InboundProvider = "host"
+	InboundProviderTailscale     InboundProvider = "tailscale"
 )
 
 // Valid indicates whether the value is a known member of the InboundProvider enum.
 func (e InboundProvider) Valid() bool {
 	switch e {
+	case InboundProviderCloudflareAPI:
+		return true
 	case InboundProviderGitHubApp:
 		return true
 	case InboundProviderHost:

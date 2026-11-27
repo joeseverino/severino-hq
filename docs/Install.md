@@ -411,12 +411,13 @@ Worker answers on, `0123abcd` for your Cloudflare account ID, and the vault
 and item names for you to fill in.
 
 1. Create the item holding the Worker's secrets, `GITHUB_WEBHOOK_SECRET`,
-   `TAILSCALE_WEBHOOK_SECRET` and `SOCKET_TOKEN`. Tailscale makes its own
+   `TAILSCALE_WEBHOOK_SECRET`, `CLOUDFLARE_WEBHOOK_SECRET` and
+   `SOCKET_TOKEN`. Tailscale makes its own
    secret (step 6), so until then that field holds one nobody signs with,
    and the Worker's Tailscale route takes nothing:
 
    ```sh
-   op item create --vault 'Example Vault' --category password --title 'example events' "GITHUB_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "TAILSCALE_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "SOCKET_TOKEN[password]=$(openssl rand -hex 32)"
+   op item create --vault 'Example Vault' --category password --title 'example events' "GITHUB_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "TAILSCALE_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "CLOUDFLARE_WEBHOOK_SECRET[password]=$(openssl rand -hex 32)" "SOCKET_TOKEN[password]=$(openssl rand -hex 32)"
    ```
 
 2. Mint the Worker's deploy token, Workers Scripts Write alone, into an API
@@ -459,7 +460,7 @@ and item names for you to fill in.
    them; run this again after rotating one:
 
    ```sh
-   CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets
+   CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' CLOUDFLARE_WEBHOOK_SECRET='op://Example Vault/example events/CLOUDFLARE_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets
    ```
 
 5. Point HQ's GitHub App's webhook at the Worker: the command from [step
@@ -484,7 +485,14 @@ and item names for you to fill in.
 
    Then send the console's test event: it shows on Events as `test`,
    Ignored, since HQ takes no `test` event and reads nothing for it.
-7. Add the `cloudflare_events` connection, which the listener waits for
+7. With a Cloudflare API connection, send the account's notifications to
+   the Worker. In the dashboard, under Notifications, Destinations, create a
+   webhook, `https://events.example.com/cloudflare`, its secret the item's
+   `CLOUDFLARE_WEBHOOK_SECRET`, and Save and Test: the test shows on Events
+   as `test`, Ignored. Then add a notification for each alert type
+   `worker/src/generated/routes.json` lists for `cloudflare_api`, with that
+   webhook as its destination.
+8. Add the `cloudflare_events` connection, which the listener waits for
    before it starts: an item in the vault `host.json` names, laid out as
    [Connections](Connections.md#cloudflare-inbound-events) says, its
    `credential` the `SOCKET_TOKEN` from step 1 and its `website` the Worker's

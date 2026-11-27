@@ -198,6 +198,7 @@ def zone():
                 {"route": "/github", "status": 401, "requests": 3, "last_hour": 0},
                 {"route": "/github", "status": 413, "requests": 1, "last_hour": 0},
                 {"route": "/tailscale", "status": 401, "requests": 34, "last_hour": 12},
+                {"route": "/cloudflare", "status": 202, "requests": 2, "last_hour": 1},
                 {"route": "/socket", "status": 101, "requests": 6, "last_hour": 0},
             ],
         },

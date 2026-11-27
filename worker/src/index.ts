@@ -9,8 +9,10 @@
 //   read once, before anything parses it, by the one check every route's
 //   scheme goes through (verify.ts), which compares in constant time. A
 //   scheme that signs its time is refused outside its window, so a captured
-//   request is not accepted again later. A request that fails is answered
-//   401 and never reaches the Hub.
+//   request is not accepted again later. A shared secret signs nothing: it
+//   proves the sender holds it, and a body it carries, replayed or not, is
+//   only a name to forward. A request that fails is answered 401 and never
+//   reaches the Hub.
 // - A socket is accepted only with the SOCKET_TOKEN bearer, compared in
 //   constant time before the upgrade reaches the Hub, and an event reaches
 //   only a socket that presented the token the Worker holds now, so a
@@ -28,16 +30,14 @@
 // - A request is logged as its method, path and status alone, never a header
 //   or the body, and counted in Analytics Engine by its path and status alone.
 import routes from "./generated/routes.json";
-import { bearer, Hub, tag, withinContract, type InboundEvent } from "./hub";
-import { verify } from "./verify";
+import { bearer, Hub, withinContract, type InboundEvent } from "./hub";
+import { sameSecret, verify } from "./verify";
 
 export { Hub };
 
 type Route = (typeof routes.providers)[number];
 
 const ROUTES = new Map(routes.providers.map((route): [string, Route] => [route.path, route]));
-
-const encoder = new TextEncoder();
 
 /** The value at an RFC 6901 pointer, or undefined where the path ends. */
 function pointer(document: unknown, path: string): unknown {
@@ -56,9 +56,7 @@ const text = (value: unknown): string => (typeof value === "string" ? value : ""
 /** Whether `header` is `Bearer <token>` for a configured token, compared in constant time. */
 async function bearerMatches(header: string | null, token: string): Promise<boolean> {
   const presented = bearer(header);
-  if (!token || presented === null) return false;
-  // Tags of equal length, so the comparison reveals neither value's length.
-  return crypto.subtle.timingSafeEqual(encoder.encode(await tag(presented)), encoder.encode(await tag(token)));
+  return presented !== null && sameSecret(presented, token);
 }
 
 const answer = (status: number): Response => new Response(null, { status });
@@ -103,7 +101,7 @@ async function webhook(request: Request, env: Env, route: Route): Promise<Respon
   // Every event a verified request carries is sent, one HQ takes or not, so
   // a provider's test event or a new event type shows in HQ.
   const events = sent.map((item: unknown, index): InboundEvent => {
-    const name = named ?? text(pointer(item, route.event_pointer));
+    const name = named ?? (text(pointer(item, route.event_pointer)) || route.unnamed_event);
     const action = route.action_pointer ? text(pointer(item, route.action_pointer)) : "";
     return {
       provider: route.provider,
