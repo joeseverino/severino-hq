@@ -4339,6 +4339,21 @@
           }
         }
       },
+      "UploadsAllowedSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UploadsAllowedSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
       "VisitRefreshedSuccess": {
         "content": {
           "application/json": {
@@ -17972,6 +17987,30 @@
         ],
         "type": "object"
       },
+      "InfrastructureResourceUploadsAllowRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/OperationCommand"
+          },
+          "target": {
+            "description": "The proxy record to change: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "type": "object"
+      },
       "InfrastructureServiceAdoptRequest": {
         "additionalProperties": false,
         "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
@@ -21132,6 +21171,14 @@
             "description": "Secures these names. Required when Force HTTPS is on.",
             "title": "Certificate",
             "type": "string"
+          },
+          "client_max_body_size": {
+            "default": 0,
+            "description": "In MB. 0 keeps Nginx Proxy Manager's own limit.",
+            "maximum": 9223372036854775807,
+            "minimum": 0,
+            "title": "Largest request",
+            "type": "integer"
           },
           "domain_names": {
             "description": "One per line.",
@@ -32179,6 +32226,52 @@
         ],
         "type": "object"
       },
+      "UploadsAllowed": {
+        "additionalProperties": false,
+        "description": "The proxy as saved letting through the largest request HQ takes, and why that was asked.",
+        "properties": {
+          "applying": {
+            "$ref": "#/components/schemas/Applying"
+          },
+          "created": {
+            "$ref": "#/components/schemas/Created"
+          },
+          "message": {
+            "$ref": "#/components/schemas/CallMessage"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OperationReason"
+          },
+          "resource": {
+            "$ref": "#/components/schemas/ManagedResourceItem"
+          }
+        },
+        "required": [
+          "created",
+          "resource",
+          "applying",
+          "message",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "UploadsAllowedSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/UploadsAllowed"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
       "UsagePart": {
         "additionalProperties": false,
         "properties": {
@@ -36547,6 +36640,81 @@
         "x-hq-effect": "remote_write"
       }
     },
+    "/api/v2/capabilities/infrastructure.resource.uploads.allow/": {
+      "post": {
+        "description": "Set a proxy in front of HQ to let through the largest upload HQ takes, then apply it.",
+        "operationId": "infrastructureResourceUploadsAllowV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InfrastructureResourceUploadsAllowRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UploadsAllowedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "manage_infrastructure"
+            ]
+          }
+        ],
+        "summary": "Let HQ's uploads through",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "infrastructure.resource.uploads.allow",
+        "x-hq-effect": "remote_write"
+      }
+    },
     "/api/v2/capabilities/infrastructure.service.adopt/": {
       "post": {
         "description": "Manage every record HQ found live behind one hostname, or none of them.",
@@ -38015,6 +38183,7 @@
                 "infrastructure.resource.start",
                 "infrastructure.resource.stop",
                 "infrastructure.resource.update",
+                "infrastructure.resource.uploads.allow",
                 "infrastructure.service.adopt",
                 "infrastructure.zone.adopt",
                 "lookup.address.read",
@@ -38253,6 +38422,7 @@
                 "split-horizon-disagrees",
                 "published-port-unfronted",
                 "service-wiring-incomplete",
+                "proxy-refuses-uploads",
                 "posture-unmet",
                 "automation-worker-absent",
                 "offsite-backup-late",
@@ -41800,6 +41970,12 @@
                   "target": "{$response.body#/data/items/0/key}"
                 }
               },
+              "infrastructureResourceUploadsAllowV2": {
+                "operationId": "infrastructureResourceUploadsAllowV2",
+                "requestBody": {
+                  "target": "{$response.body#/data/items/0/key}"
+                }
+              },
               "listInfrastructureV2": {
                 "operationId": "listInfrastructureV2",
                 "parameters": {
@@ -41957,6 +42133,12 @@
                 "operationId": "infrastructureResourceUpdateV2",
                 "requestBody": {
                   "expected_updated_at": "{$response.body#/data/updated_at}",
+                  "target": "{$response.body#/data/key}"
+                }
+              },
+              "infrastructureResourceUploadsAllowV2": {
+                "operationId": "infrastructureResourceUploadsAllowV2",
+                "requestBody": {
                   "target": "{$response.body#/data/key}"
                 }
               },
