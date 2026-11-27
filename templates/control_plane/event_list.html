@@ -1,0 +1,10 @@
+{% extends "list_page.html" %}
+{% comment %}
+The events list, then every event HQ takes (`inbound_events.taken`): each
+admitted provider's declaration, its events by the readings they make due.
+{% endcomment %}
+{% block page %}{{ block.super }}
+{% section "What HQ takes" %}
+  {% data_table taken %}
+{% endsection %}
+{% endblock %}

@@ -24,6 +24,7 @@ from .labels import human_label
 from .references import Kind
 lazy from .connections import connection_names
 lazy from .infrastructure import enabled_resources
+lazy from .outbound_work import job_names, reader_of
 lazy from .projection import read_once
 
 
@@ -193,6 +194,9 @@ def kind_label(kind: str) -> str:
 
     if kind in NODE_KINDS:
         return NODE_KINDS[kind].noun.capitalize()
+    # A reading only HQ's own work takes is called what that work is.
+    if kind not in PROVIDERS and kind not in OBSERVATIONS and (reader := reader_of(kind)):
+        return job_names()[reader]
     return registry_label(kind)
 
 

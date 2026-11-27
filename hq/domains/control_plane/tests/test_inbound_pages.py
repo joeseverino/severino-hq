@@ -3,13 +3,18 @@ standing beside the controller's. Its list read is held with every other
 by test_list_paging."""
 
 from datetime import timedelta
+from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
 from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource
+from hq.domains.control_plane.provider_adapters import INBOUND
+from hq.domains.control_plane.provider_spec import InboundSpec
+from hq.domains.control_plane.providers import registry_label
+from hq.platform.application.entity_links import kind_label
 from hq.platform.core.testing import channel_heard, operator
 
 SOURCE = override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq")
@@ -46,6 +51,30 @@ class EventsPageTests(TestCase):
             [("Worker", ["example.new", "example.old"]), ("Host", ["example.host"])],
         )
 
+    def test_what_hq_takes_is_each_declared_event_under_its_provider_by_what_it_makes_due(self):
+        declared = InboundSpec(
+            {
+                "example.started": ("example.reading",),
+                "example.stopped": ("example.reading",),
+                "example.moved": ("example.place",),
+            },
+            complete=("example.place",),
+        )
+        with mock.patch.dict(INBOUND, {"example": declared}):
+            taken = self.client.get(reverse("control_plane:events")).context["taken"]
+
+        group = next(group for group in taken.groups if group.label == "Example")
+        self.assertEqual(group.count, 3)
+        self.assertEqual(
+            [tuple(cell.text for cell in row.cells[:3]) for row in group.rows],
+            [
+                ("example.started, example.stopped", kind_label("example.reading"), ""),
+                ("example.moved", kind_label("example.place"), kind_label("example.place")),
+            ],
+        )
+        # A source that reports over the bridge alone arrives by HQ's host jobs.
+        self.assertEqual({row.cells[3].text for row in group.rows}, {InboundSource.HOST.label})
+
     def test_a_listener_never_heard_points_to_its_setup_and_the_host_is_not_called_unset(self):
         empty = self.client.get(reverse("control_plane:events"))
         channel_heard(InboundSource.WORKER)
@@ -66,3 +95,12 @@ class EventsPageTests(TestCase):
         self.assertNotContains(arrived, GUIDE)
         self.assertIn("Last seen just now.", strip_tags(arrived.content.decode()))
         self.assertContains(arrived, reverse("control_plane:events"))
+
+
+class MadeDueTests(SimpleTestCase):
+    def test_every_reading_a_declared_event_makes_due_is_named(self):
+        unnamed = registry_label("example.undeclared")
+        for provider, spec in INBOUND.items():
+            for kind in {kind for kinds in spec.events.values() for kind in kinds}:
+                with self.subTest(provider=provider, kind=kind):
+                    self.assertNotEqual(kind_label(kind), unnamed)

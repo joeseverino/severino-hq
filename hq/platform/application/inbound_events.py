@@ -1,9 +1,11 @@
-"""What HQ knows of the events it was told of: each channel's standing.
+"""What HQ knows of the events it was told of and the ones it takes: each
+channel's standing, and what each declared event makes due.
 
 The reading side of ``inbound``, which alone writes them, so a page or a
 finding reads here without being able to say an event happened.
 """
 
+from dataclasses import dataclass
 from datetime import timedelta
 
 from hq.domains.control_plane.models import InboundSource
@@ -76,3 +78,35 @@ def arrives_by(spec: InboundSpec) -> InboundSource:
     one with a path, and HQ's own host jobs tell the rest."""
 
     return InboundSource.WORKER if spec.path else InboundSource.HOST
+
+
+@dataclass(frozen=True, slots=True)
+class Taken:
+    """Events one provider's declaration takes that make the same readings due."""
+
+    provider: str
+    source: InboundSource
+    # Its channel's standing now.
+    heard: WorkerState
+    events: tuple[str, ...]
+    reads: tuple[str, ...]
+    # Those of ``reads`` the declaration keeps current while its channel is heard.
+    kept: tuple[str, ...]
+
+
+def taken() -> tuple[Taken, ...]:
+    """Every event an admitted provider's declaration takes, its events
+    gathered by the readings they make due, in the order each declares them."""
+
+    heard = {source: channel_standing(source).state for source in InboundSource}
+    found: list[Taken] = []
+    for provider, spec in INBOUND.items():
+        alike: dict[tuple[str, ...], list[str]] = {}
+        for event, reads in spec.events.items():
+            alike.setdefault(reads, []).append(event)
+        source = arrives_by(spec)
+        found += (
+            Taken(provider, source, heard[source], tuple(events), reads, tuple(k for k in reads if k in spec.complete))
+            for reads, events in alike.items()
+        )
+    return tuple(found)
