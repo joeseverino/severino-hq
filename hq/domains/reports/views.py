@@ -14,7 +14,7 @@ from hq.domains.assets.models import ASSET_CATEGORY_CHOICES, Asset
 from hq.domains.content.models import ContentItem
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.card_items import Counted, Kpi, ListRow
+from hq.platform.application.card_items import Counted, Kpi, ListRow, RowTitle
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.expenses import cost_totals, costs_by_category
 from hq.platform.application.money import money
@@ -113,7 +113,7 @@ class ReportsView(PageMixin, TemplateView):
             ),
             largest_expenses=[
                 ListRow(
-                    link=entity_link("expense", str(expense.pk), label=expense.label),
+                    entity_link("expense", str(expense.pk), label=expense.label),
                     detail=expense.get_category_display(),
                     meta=money(expense.total_cost),
                     at=expense.date,
@@ -122,8 +122,7 @@ class ReportsView(PageMixin, TemplateView):
             ],
             assets_by_category=[
                 ListRow(
-                    title=row["label"],
-                    url=row["url"],
+                    RowTitle(row["label"], row["url"]),
                     detail=counted(row["totals"].count, "asset"),
                     meta=money(row["totals"].total) if row["totals"].total else "",
                 )

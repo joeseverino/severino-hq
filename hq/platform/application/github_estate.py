@@ -29,7 +29,7 @@ from hq.domains.control_plane.observations.github import (
 from hq.platform.application.labels import dotted
 
 from .action_links import read_link
-from .card_items import ListRow
+from .card_items import Badge, ListRow, RowTitle
 from .derivations import whole
 from .entity_links import web_url
 from .expiry import days_until
@@ -93,12 +93,9 @@ def workflow_run(run: Mapping[str, Any]) -> ListRow:
         tone = Tone.NEUTRAL
     state = (conclusion or status).replace("_", " ").capitalize()
     return ListRow(
-        str(run.get("name") or "Workflow"),
-        url=web_url(run.get("url")),
-        external=True,
-        badge=state,
-        status=tone if state else "",
+        RowTitle(str(run.get("name") or "Workflow"), web_url(run.get("url")), external=True),
         meta=dotted(str(run.get("branch") or ""), str(run.get("sha") or "")[:7], _age(run.get("created_at"))),
+        state=Badge(state, tone) if state else None,
     )
 
 
@@ -109,17 +106,14 @@ def _age(stamp: object) -> str:
     return when(found) if found else ""
 
 
-def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", badge: str = "", status: str = "") -> ListRow:
+def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", state: Badge | None = None) -> ListRow:
     """A pull request as a row: its title leading to it on GitHub, its number first in the detail."""
 
     return ListRow(
-        str(pull.get("title") or ""),
-        url=web_url(pull.get("url")),
-        external=True,
+        RowTitle(str(pull.get("title") or ""), web_url(pull.get("url")), external=True),
         detail=dotted(f"#{pull.get('number')}", *details),
         meta=meta,
-        badge=badge,
-        status=status,
+        state=state,
     )
 
 
@@ -138,7 +132,7 @@ class PullChecks(NamedTuple):
     job's cause (``failure_cause``)."""
 
     badge: str
-    tone: str
+    tone: Tone
     failing: str
     why: str
 
@@ -305,7 +299,7 @@ class Repository:
                 pull,
                 str(pull.get("author") or ""),
                 meta=_age(pull.get("updated_at")),
-                badge="Draft" if pull.get("draft") else "",
+                state=Badge("Draft") if pull.get("draft") else None,
             )
             for pull in self.other_pulls
         )
@@ -326,23 +320,20 @@ class Repository:
             opened = f"opened {when(pull['opened'])}" if pull["opened"] else ""
             said = apps.get(pull.get("number"), ())
             rows.append(
-                _pull_row(pull, *said, checks.failing, checks.why, meta=opened, badge=checks.badge, status=checks.tone)
+                _pull_row(pull, *said, checks.failing, checks.why, meta=opened, state=Badge(checks.badge, checks.tone))
             )
         for alert in self.unmatched_alerts:
             fixed = alert.get("first_patched_version")
             severity = str(alert.get("severity") or "")
             rows.append(
                 ListRow(
-                    str(alert.get("package") or ""),
-                    url=web_url(alert.get("url")),
-                    external=True,
+                    RowTitle(str(alert.get("package") or ""), web_url(alert.get("url")), external=True),
                     detail=dotted(
                         "No update open",
                         f"fixed in {fixed}" if fixed else "no fixed version yet",
                         str(alert.get("manifest_path") or ""),
                     ),
-                    badge=severity,
-                    status=severity_tone(severity) if severity else "",
+                    state=Badge(severity, severity_tone(severity)) if severity else None,
                 )
             )
         return tuple(rows)

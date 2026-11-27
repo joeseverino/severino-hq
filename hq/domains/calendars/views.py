@@ -19,7 +19,7 @@ from hq.platform.application.calendar_entries import (
     when_label,
 )
 from hq.platform.application.capabilities import capability_title
-from hq.platform.application.card_items import ListRow
+from hq.platform.application.card_items import ListRow, RowTitle
 from hq.platform.application.entity_links import web_url
 from hq.platform.application.moments import stamp_day, when, when_day, when_range
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
@@ -120,10 +120,10 @@ def _upcoming(calendar) -> tuple:
         day = max(event.first_day, calendar.today)
         rows.append(
             ListRow(
-                title=event.title,
+                RowTitle(
+                    event.title, event.url or month_url(day.replace(day=1), day), external=bool(web_url(event.url))
+                ),
                 meta=when(event.starts) if event.timed else when_day(day),
-                url=event.url or month_url(day.replace(day=1), day),
-                external=bool(web_url(event.url)),
             )
         )
     return tuple(rows)
@@ -137,11 +137,9 @@ def _rows(day, *, opened: str = "") -> tuple:
     for source, events in day.groups:
         rows = tuple(
             ListRow(
-                title=event.title,
+                RowTitle(event.title, event.url, external=bool(web_url(event.url))),
                 detail=event.detail,
                 meta=event.time_label or (when_range(event.first_day, event.last_day) if event.span else ""),
-                url=event.url,
-                external=bool(web_url(event.url)),
             )
             for event in events
             if not (opened and event.id.startswith(f"{opened}:"))

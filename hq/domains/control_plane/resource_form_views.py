@@ -10,7 +10,7 @@ from django.views import View
 
 from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE
 from hq.platform.application.asks import APPLIES_SHORTLY
-from hq.platform.application.card_items import ListRow
+from hq.platform.application.card_items import Badge, ListRow, RowTitle
 from hq.platform.application.certificates import UPLOAD
 from hq.platform.application.entity_links import kind_label, page_url
 from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
@@ -91,11 +91,14 @@ class ResourceFormView(View):
                     # context it needs is already established.
                     "choices": [
                         ListRow(
-                            title=provider["label"],
+                            RowTitle(
+                                provider["label"],
+                                with_query(reverse("control_plane:create"), {"kind": provider["kind"]}),
+                            ),
                             detail=provider["summary"],
-                            url=with_query(reverse("control_plane:create"), {"kind": provider["kind"]}),
-                            status=Tone.ATTENTION if provider["public_effect"] else "",
-                            badge="Visible on the internet" if provider["public_effect"] else "",
+                            state=Badge("Visible on the internet", Tone.ATTENTION)
+                            if provider["public_effect"]
+                            else None,
                         )
                         for provider in describe_providers()["providers"]
                         if not provider["created_from"]

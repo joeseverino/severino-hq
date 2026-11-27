@@ -6,7 +6,17 @@ from hq.platform.application.cadence_chart import (
     CadenceRow,
     CadenceWeek,
 )
-from hq.platform.application.card_items import Answer, Counted, Insight, Kpi, ListRow, Timeline, TimelineItem
+from hq.platform.application.card_items import (
+    Answer,
+    Badge,
+    Counted,
+    Insight,
+    Kpi,
+    ListRow,
+    RowTitle,
+    Timeline,
+    TimelineItem,
+)
 from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import (
@@ -45,6 +55,7 @@ __all__ = [
     "ActivityCalendar",
     "AllocationBar",
     "Answer",
+    "Badge",
     "Cadence",
     "CadenceMatrix",
     "CadenceRow",
@@ -64,6 +75,7 @@ __all__ = [
     "PathSegment",
     "PlanNote",
     "PlannedDay",
+    "RowTitle",
     "SectionPart",
     "Share",
     "StackedBarChart",

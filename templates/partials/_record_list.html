@@ -3,8 +3,8 @@ Record list: a compact list of records that speak for themselves.
 
   {% include "partials/_record_list.html" with rows=recent empty="Nothing yet." %}
 
-`rows` are application.ui.ListRow, each named by its `title` and `url` or
-by its `link`, an entity drawn as `{% entity %}` draws one. A row's `actions` (PageAction) end its
+`rows` are application.ui.ListRow, each named by a `RowTitle` (its title and url) or
+by a link, an entity drawn as `{% entity %}` draws one. A row's `actions` (PageAction) end its
 line as compact controls, a POST one through `{% button %}`. A search hit's
 `snippet` is a line of its own under the row, its match marked. Its `chips` follow its line.
 With `whole_rows`, a list of places to go, each row is its title's link. Use _insight_grid.html instead when each
@@ -15,9 +15,9 @@ entry needs interpreting rather than just identifying.
     <li>
       <span class="row-main">
         {% if row.category %}<span class="swatch-key cat-dot cat-{{ row.category }}" aria-hidden="true"></span>{% endif %}
-        {% if row.link %}<strong>{% entity row.link %}</strong>{% elif row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title }}</strong></a>{% else %}<strong>{{ row.title }}</strong>{% endif %}
+        {% with named=row.named %}{% if row.link %}<strong>{% entity named %}</strong>{% elif named.url and named.external %}<strong>{% entity named.url|outside label=named.title %}</strong>{% elif named.url %}<a href="{{ named.url }}"><strong>{{ named.title }}</strong></a>{% else %}<strong>{{ named.title }}</strong>{% endif %}{% endwith %}
         {% if row.detail %}{% muted %}{{ row.detail }}{% endmuted %}{% endif %}
-        {% if row.badge %}{% status row.badge tone=row.status|default:"neutral" %}{% endif %}
+        {% if row.state %}{% status row.state.text tone=row.state.tone %}{% endif %}
       </span>
       {% if row.chips %}<span class="row-chips">{% for chip in row.chips %}{% status chip chip=True %}{% endfor %}</span>{% endif %}
       {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}

@@ -40,24 +40,3 @@ class MultipleFileFieldTests(SimpleTestCase):
             field.clean([self._upload("a.csv"), self._upload("b.csv"), self._upload("c.csv")])
         self.assertEqual(refused.exception.messages, [attrs["data-too-many"]])
         self.assertEqual(len(field.clean([self._upload("a.csv", b"x" * 8)])), 1)
-
-
-class ListRowTests(SimpleTestCase):
-    """State on a shared row is never carried by color alone."""
-
-    def test_status_requires_its_own_text(self):
-        from ..card_items import ListRow
-
-        ListRow(title="Import", status="attention", badge="Needs review")
-        with self.assertRaises(ValueError):
-            ListRow(title="Import", status="attention")
-
-    def test_a_row_names_its_record_once(self):
-        from ..card_items import ListRow
-        from ..entity_links import EntityLink
-
-        host = EntityLink("example-host", "/example/host/", kind="machine", kind_label="machine")
-        ListRow(link=host, meta="An example note")
-        for named in ({"title": "Example host"}, {"url": "/example/other/"}):
-            with self.subTest(named=named), self.assertRaises(ValueError):
-                ListRow(link=host, **named)

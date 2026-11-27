@@ -100,9 +100,13 @@ def sentences(registrar: str) -> None:
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     ui.Kpi("Net worth", "$1.00", tone="goood")  # type: ignore[arg-type]
     ui.Kpi("Notes", 3)  # type: ignore[arg-type]
-    ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
-    ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
-    ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Group"), actions=("Up",))  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), snippet="nightly backup")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), chips="Running")  # type: ignore[arg-type]
+    # A row names its record once, and its state is words with their tone, never a tone alone.
+    ui.ListRow("Backup host")  # type: ignore[arg-type]
+    ui.ListRow(ui.RowTitle("Backup host"), link=None)  # type: ignore[call-arg]
+    ui.ListRow(ui.RowTitle("Import"), state=ui.Tone.ATTENTION)  # type: ignore[arg-type]
 
 
 def the_demo(due: date, at: datetime) -> None:
