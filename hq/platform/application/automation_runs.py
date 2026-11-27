@@ -419,7 +419,7 @@ def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationReq
 
     One run per procedure is also the database's rule
     (``one_active_operation_per_resource_action``); one writer per host is
-    this, read under the write lock every request takes.
+    this, read where no other writer commits before the run it queues.
     """
 
     active = OperationRequest.objects.select_related("resource").filter(

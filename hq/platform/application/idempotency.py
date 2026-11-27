@@ -75,40 +75,42 @@ def execute_once(
     """``(answer, replayed)``: run once, or replay the committed answer for the same request.
 
     Only an answer that ran (``ok``) is kept; one that did not (a refusal, a
-    call held for a person) frees its key while what the operation wrote
+    call held for a person) keeps no key while what the operation wrote
     commits, so the same key runs once the cause has gone.
     """
 
     actor_sha256 = _actor_sha256(actor)
     now = timezone.now()
     ttl = timedelta(seconds=settings.SEVERINO_API_IDEMPOTENCY_TTL_SECONDS)
-    # The reservation and the operation share a transaction, so a crashed
-    # process leaves neither a partial domain write nor a poisoned pending key,
-    # and concurrent retries converge on one committed record on both SQLite
-    # and PostgreSQL.
+    held = IdempotencyRecord.objects.filter(actor_sha256=actor_sha256, key=key)
+    # The answer is kept in the operation's transaction once it ran, so a
+    # crash leaves neither a partial write nor a poisoned key. Its caller's
+    # transaction is serialized (``database.serialized``), so two retries
+    # converge on one committed record and one committed act.
     with transaction.atomic():
-        IdempotencyRecord.objects.filter(expires_at__lte=now).delete()
-        record, created = IdempotencyRecord.objects.get_or_create(
-            actor_sha256=actor_sha256,
-            key=key,
-            defaults={
-                "actor": actor[:255],
-                "request_sha256": request_sha256,
-                "expires_at": now + ttl,
-            },
-        )
-        if not created:
-            record = IdempotencyRecord.objects.select_for_update().get(pk=record.pk)
-            if record.request_sha256 != request_sha256:
-                raise IdempotencyConflict("This retry key was already used for a different request.")
-            if record.response is None:
-                raise RuntimeError("An idempotency record has no committed response.")
-            return record.response, True
-
+        if (first := _first(held, request_sha256, now)) is not None:
+            return first, True
         response = operation()
         if not response.get("ok", False):
-            record.delete()
             return response, False
-        record.response = response
-        record.save(update_fields=("response",))
+        IdempotencyRecord.objects.filter(expires_at__lte=now).delete()
+        IdempotencyRecord.objects.create(
+            actor_sha256=actor_sha256,
+            key=key,
+            actor=actor[:255],
+            request_sha256=request_sha256,
+            expires_at=now + ttl,
+            response=response,
+        )
         return response, False
+
+
+def _first(held: Any, request_sha256: str, now: Any) -> dict[str, Any] | None:
+    """The answer the key committed before, unexpired, or None; a key first used for another request is refused."""
+
+    record = held.filter(expires_at__gt=now).first()
+    if record is None:
+        return None
+    if record.request_sha256 != request_sha256:
+        raise IdempotencyConflict("This retry key was already used for a different request.")
+    return record.response

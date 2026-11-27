@@ -25,6 +25,7 @@ from hq.domains.control_plane.providers import (
 )
 from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
+from hq.platform.core.database import serialized
 from hq.platform.core.facets import Failure
 lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
@@ -314,19 +315,22 @@ def _automatic(resource: ManagedResource, controller_id: str, reason: str) -> Pr
     }
 
 
-@transaction.atomic
 def _finding_repairs(controller_id: str, now) -> list[str]:
     """Queue repairs for findings the controller contract already runs itself.
 
     A second source of due work beside `_automatic_action`, which cannot see
     this class of fault: it asks "has the declaration changed, or is something
     reporting broken?" and the failure it misses is the one where nothing
-    changed and nothing looked broken.
+    changed and nothing looked broken. Serialized, so deriving the findings
+    holds no writer back.
     """
 
     if not settings.SEVERINO_FINDINGS_AUTO_REMEDY:
         return []
+    return serialized(partial(_repairs, controller_id, now))
 
+
+def _repairs(controller_id: str, now) -> list[str]:
     queued: list[str] = []
     manages = manages_through()
     for repair in auto_remediable(principal=cli_principal()):

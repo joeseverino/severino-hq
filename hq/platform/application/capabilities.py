@@ -14,6 +14,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError as PydanticValidat
 
 from hq.platform.core import bindings
 from hq.platform.core.audit import audit_connection, record_event, tallied
+from hq.platform.core.database import serialized
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tracing import note, span
 lazy from hq.domains.control_plane.providers import PROVIDERS
@@ -398,15 +399,19 @@ def _authorized_run(
             sent=frozenset(payload),
         )
 
+    # Every capability is one transaction, holding the write lock only from
+    # its first write, so nothing it reads or derives first holds a writer back.
     if not key:
-        return Ran(act())
+        return Ran(serialized(act))
     try:
-        return _once(
-            spec,
-            key,
-            {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
-            act,
-            actor=agent_subject(principal),
+        return serialized(
+            lambda: _once(
+                spec,
+                key,
+                {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
+                act,
+                actor=agent_subject(principal),
+            )
         )
     except idempotency.IdempotencyConflict as exc:
         return Ran(refuse(Code.IDEMPOTENCY_CONFLICT, exc.reason))
