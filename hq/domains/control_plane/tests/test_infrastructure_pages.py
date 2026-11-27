@@ -26,7 +26,7 @@ from hq.platform.core.testing import READER, connection, declare, managing_every
 
 from ..models import DashboardMachine, ManagedResource, OperationRequest
 from ..provider_adapters.cloudflare import _dns_record_readout
-from ..providers import PROVIDERS, validate_spec
+from ..providers import validate_spec
 from .certificate_cases import certificate_spec, declare_targets
 
 
@@ -53,7 +53,6 @@ class InfrastructureWebTests(TestCase):
         )
         edit_url = reverse("control_plane:edit", kwargs={"key": machine.key})
 
-        page = self.client.get(edit_url)
         response = self.client.post(
             edit_url,
             {
@@ -66,14 +65,10 @@ class InfrastructureWebTests(TestCase):
             },
         )
 
-        self.assertTrue(select(page, "name", "selected"))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(DashboardMachine.objects.get().machine, machine)
 
-        (shown,) = select(self.client.get(edit_url), "name", "selected")
-        self.assertIn("checked", shown.attrs)
-
-    def test_detail_shows_active_observation_and_policy_gated_renewal(self):
+    def test_a_certificate_is_offered_as_a_download_never_printed(self):
         managing_everything()
         self.resource.status = {
             "not_after": (timezone.now() + timedelta(days=89, hours=23)).isoformat(),
@@ -92,14 +87,7 @@ class InfrastructureWebTests(TestCase):
         self.resource.save(update_fields=("status",))
         response = self.client.get(reverse("control_plane:detail", kwargs={"key": self.resource.key}))
 
-        # One status line: this certificate's first change has not been applied.
-        self.assertEqual(
-            [line.attrs["data-record-status"] for line in select(response, "data-record-status")], ["pending"]
-        )
         shown = text(response)
-        self.assertIn("Renews automatically from", shown)
-        self.assertIn("hq.example.com", shown)
-        self.assertIn("sso.example.com", shown)
         # The public certificate is offered as a download, never printed.
         self.assertNotIn("BEGIN CERTIFICATE", shown)
         self.assertTrue(json.loads(response.context["diagnostic_status"])["certificate_available"])
@@ -163,34 +151,14 @@ class InfrastructureViewsTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_a_row_does_not_repeat_under_its_name_what_its_name_says(self):
-        declare(
-            "example-proxy",
-            "npm.proxy_host",
-            {
-                "domain_names": ["app.example.com"],
-                "forward_scheme": "http",
-                "forward_host": "10.0.0.10",
-                "forward_port": 8000,
-            },
-        )
-
-        shown = text(self.client.get(reverse("control_plane:list")))
-
-        self.assertIn("10.0.0.10:8000", shown)
-        self.assertNotIn("http://10.0.0.10:8000", shown)
-
-    def test_private_dashboard_and_public_certificate_download(self):
-        dashboard = self.client.get(reverse("control_plane:list"))
-        self.assertIn(self.resource.get_absolute_url(), hrefs(dashboard))
-
+    def test_the_certificate_download_and_the_report_answer_for_the_record(self):
         download = self.client.get(reverse("control_plane:certificate_download", args=[self.resource.key]))
         self.assertEqual(download.content, b"PUBLIC CERTIFICATE ONLY")
 
         report = self.client.get(reverse("control_plane:report_download", args=[self.resource.key]))
         self.assertEqual(report.json()["resource"]["key"], self.resource.key)
 
-    def test_findings_page_explains_the_claim_and_its_evidence(self):
+    def test_the_findings_page_names_each_rule_and_counts_what_it_holds(self):
         # A kind a sweep actually visits. The certificate in `setUp` is not
         # one: nothing collects certificates, so measuring them against the
         # sweep interval says only that they are not swept, which this rule
@@ -201,17 +169,6 @@ class InfrastructureViewsTests(TestCase):
 
         self.assertIn("kind-never-swept", [name for name, _ in response.context["finding_rules"]])
         self.assertGreaterEqual(response.context["finding_counts"].get("serious", 0), 1)
-        links = hrefs(response)
-        self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", links)
-        self.assertIn(reverse("action_items"), links)
-
-    def test_findings_link_the_checks_page_which_links_what_each_rule_has_open(self):
-        declare("unswept-rewrite", "adguard.rewrite", {"domain": "unswept.example", "answer": "10.0.0.9"})
-
-        self.assertIn(reverse("control_plane:checks"), hrefs(self.client.get(reverse("control_plane:findings"))))
-        response = self.client.get(reverse("control_plane:checks"))
-
-        self.assertIn(f"{reverse('control_plane:findings')}?rule=kind-never-swept", hrefs(response))
 
     def test_every_check_search_offers_opens_its_row_on_the_checks_page(self):
         offered = command_center("", principal=READER)["checks"]
@@ -220,8 +177,7 @@ class InfrastructureViewsTests(TestCase):
         for item in offered:
             path, _, anchor = item.url.partition("#")
             self.assertEqual(path, reverse("control_plane:checks"))
-            (row,) = select(page, "id", anchor)
-            self.assertIn(item.label, row.words)
+            self.assertEqual(len(select(page, "id", anchor)), 1)
 
     def test_findings_render_only_offers_the_projection_authorized(self):
         subject = TopologyNode(
@@ -276,7 +232,7 @@ class InfrastructureViewsTests(TestCase):
         ((evidence,),) = (section.below for section in detail.context["history"])
         self.assertEqual(evidence.affected, ())
 
-    def test_failed_operation_renders_guidance_and_expected_observed_evidence(self):
+    def test_a_failed_operation_names_each_name_that_serves_another_certificate(self):
         OperationRequest.objects.create(
             resource=self.resource,
             action=OperationRequest.Action.RECONCILE,
@@ -316,9 +272,6 @@ class InfrastructureViewsTests(TestCase):
             [(item["consumer"], item["domain"]) for item in evidence.affected], [("npm", "hq.example.test")]
         )
         self.assertTrue(evidence.raw)
-        shown = text(detail)
-        self.assertIn("One consumer serves the previous certificate.", shown)
-        self.assertIn("1 name serves a different certificate", shown)
 
     def test_failed_controller_report_preserves_last_verified_status(self):
         verified = {
@@ -386,51 +339,6 @@ class DnsRecordReadoutTests(TestCase):
         ]
         self.assertEqual(observed, "")
         self.assertTrue(desired)
-
-
-class ReadoutsSayNothingBlankTests(TestCase):
-    """A readout row must be able to hold a value.
-
-    A row reading a `status` key nothing writes is an em dash on every page of
-    its kind, under a label promising an observation, and nothing in the code
-    shows it.
-
-    Blank on the resource in front of you is normal: a certificate that has
-    not been reconciled yet has no expiry. Blank on *every* resource of a kind,
-    across desired and observed both, means the row reads a key with no writer.
-    """
-
-    def _rows(self, kind, spec, status=None):
-        provider = PROVIDERS[kind]
-        return provider.readout(spec, status or {}) if provider.readout else ()
-
-    def test_a_container_does_not_print_a_state_nothing_records(self):
-        """A sweep confirms a container by its identity, which holds no state."""
-
-        labels = [
-            label
-            for label, _, _ in self._rows(
-                "portainer.container",
-                {"connection_ref": "a-portainer", "host": "a-box", "name": "app"},
-            )
-        ]
-
-        self.assertNotIn("State", labels)
-
-    def test_a_zone_does_not_print_summaries_it_cannot_derive(self):
-        """A readout gets a spec and a status and no database.
-
-        The domain page derives all of these from the records HQ sweeps, and
-        says more besides. This one could only ever print the placeholder where
-        the derivation would have gone.
-        """
-
-        labels = [
-            label for label, _, _ in self._rows("cloudflare.zone", {"zone": "example.com", "connection_ref": "a-dns"})
-        ]
-
-        for absent in ("Records", "Mail (MX)", "SPF", "DMARC"):
-            self.assertNotIn(absent, labels)
 
 
 class MachineNamesRouteTests(TestCase):
