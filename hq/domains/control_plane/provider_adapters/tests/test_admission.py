@@ -103,9 +103,10 @@ class ProviderReadsTests(SimpleTestCase):
         from hq.domains.control_plane.providers import provider_reads
         from hq.platform.application.readings import KEPT
 
-        listed = {
-            (provider, read.kind, read.source): read for provider, reads in provider_reads().items() for read in reads
-        }
+        every = [(provider, read) for provider, reads in provider_reads().items() for read in reads]
+        listed = {(provider, read.kind, read.source): read for provider, read in every}
+        # Nothing a provider reads is listed twice.
+        self.assertEqual(len(listed), len(every))
         named = {read.kind for read in listed.values()}
         self.assertLessEqual({*OBSERVATIONS, *(kind for kind, spec in PROVIDERS.items() if spec.sweeps)}, named)
         self.assertFalse({kind for kind, spec in PROVIDERS.items() if not spec.sweeps} & named)

@@ -37,7 +37,7 @@ from .conditions import DEGRADED, DRIFTED, READY, stamped
 from .contracts import endpoint_has_private_parts
 from .credential_mint import parse_expiry, store_references
 from .ui import counted, ended
-lazy from .credential_sight import standing
+lazy from .credential_sight import READABLE, standing
 lazy from .facts import inventory_records
 lazy from .payload_words import value_words
 lazy from .projection import iso
@@ -232,7 +232,7 @@ def _summary(row: ProviderInventory) -> dict[str, Any]:
     """One kind as the sweep's own summary says it: its state in credential
     sight's words, its record count, and each part refused."""
 
-    found = standing(row)
+    found = standing(row.kind, row)
     return {
         "state": found.state,
         "label": found.label,
@@ -745,17 +745,18 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
     found = []
     # A kind no connection could read is not a reading of zero.
     for snapshot in ProviderInventory.objects.filter(connected=True):
-        seen = standing(snapshot)
+        seen = standing(snapshot.kind, snapshot)
         found.append(
             {
                 "kind": snapshot.kind,
                 "label": registry_label(snapshot.kind),
                 "count": len(snapshot.records),
-                "reachable": snapshot.reachable,
+                "read": seen.read,
                 "error": snapshot.error,
-                "observed_at": snapshot.observed_at,
+                "age": seen.age,
                 "state": seen.state,
                 "state_label": seen.label,
+                "tone": "" if seen.state == READABLE else str(seen.tone),
                 "refused_parts": tuple(refused.phrase for refused in refused_parts(snapshot)),
             }
         )

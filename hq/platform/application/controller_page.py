@@ -81,7 +81,7 @@ def _reading(row: ProviderInventory) -> KindReading:
         kind=row.kind,
         label=kind_label(row.kind),
         attempted_at=attempted_at(row.observed_at, row.updated_at),
-        standing=standing(row),
+        standing=standing(row.kind, row),
         records=len(row.records) if isinstance(row.records, list) else 0,
         error=row.error if row.connected and not row.reachable else "",
     )

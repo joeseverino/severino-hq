@@ -35,11 +35,10 @@ from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import ConnectionSecurityPosture, connection_security_posture
 from .connection_setup import ProviderSetup, guide_url, setups
 from .credential_mint import CredentialFix, credential_fixes
-from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, read_through, sight_by_connection
+from .credential_sight import ProviderSight, Sight, Standing, fed_kinds, read_through, sight_by_connection
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
 from .entity_links import EntityLink, entity_link
 from .facts import records_for_connection
-from .freshness import freshness
 from .json_schemas import as_written
 from .moments import moment
 from .path_model import ServicePath
@@ -87,7 +86,7 @@ class Read:
         """Whether its label is one name, kept on one line: the parts of another
         provider's kind are named together, and wrap between them."""
 
-        return self.sight is None or self.sight.source != PART_SOURCE
+        return self.sight is None or self.sight.source != "part"
 
     @property
     def opens(self) -> bool:
@@ -268,7 +267,7 @@ def _read(read: Read) -> ReadPart:
 
 
 def _seen(sight: Sight) -> SeenPart:
-    aged = freshness(sight.kind, sight.observed_at)
+    aged = Standing.of(sight).age
     return record_saves.row(sight, SeenPart, freshness=aged.state, freshness_label=aged.label)
 
 

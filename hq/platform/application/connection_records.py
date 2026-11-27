@@ -18,6 +18,7 @@ from .credential_sight import SightState
 from .describe import Describe, listed
 from .json_schemas import Written
 from .policy_links import PolicyName
+from .reading_records import Aged
 from .record_parts import WrittenLink
 from .tone import Tone
 from .ui import ended
@@ -225,9 +226,8 @@ class AbilityPart(TypedDict):
     action: WrittenAction | None
 
 
-class SeenPart(SightPart):
-    freshness: Annotated[str, Describe("How current its last read is, in one word.")]
-    freshness_label: Annotated[str, Describe("How current its last read is, in the words its row shows.")]
+class SeenPart(SightPart, Aged):
+    """What the last sweep found of one thing a connection reads, and how current it is."""
 
 
 class ReadPart(TypedDict):

@@ -19,7 +19,7 @@ from ..resources import EmptyQuery
 from ..tone import Tone
 from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
-from .sight_part import KEYLESS, HqSight, Sees, sight, sight_json, sight_tile
+from .sight_part import KEYLESS, HqSight, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
 lazy from .. import automation_findings, backup_findings, hq_self, request_context
 lazy from ..entity_links import entity_link
@@ -266,7 +266,6 @@ __all__ = [
     "HqSight",
     "Release",
     "Renderer",
-    "Sees",
     "Work",
     "WorkUnit",
     "hq_context",

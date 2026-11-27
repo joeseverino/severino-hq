@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from functools import cache
 
 lazy from django.core.exceptions import ImproperlyConfigured
+lazy from django.utils.text import capfirst
 
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS, provider_reads
@@ -47,16 +48,44 @@ def last_read(at: datetime | str) -> str:
     return f"{LAST_READ} {when(at)}"
 
 
-def reading_age(reading: Freshness | None = None, *, at: datetime | None = None, unread: str = "") -> Piece:
-    """A reading and its age as a table's cell draws it, in the one wording
-    every page uses (``partials/_reading_age.html``), given as it takes them."""
+@dataclass(frozen=True, slots=True)
+class Age:
+    """A reading and its age as every page says it: the moment it was taken,
+    then what follows it (out of date and how often its kind is read, or why
+    there is none). ``partials/_reading_age.html`` draws it."""
+
+    # What the drawing names its state by: a ``Freshness`` state, or "read"
+    # for a moment alone.
+    state: str
+    at: datetime | None = None
+    note: str = ""
+    stale: bool = False
+
+    @property
+    def words(self) -> str:
+        return dotted(last_read(self.at) if self.at else "", self.note) or "No reading yet"
+
+
+def age_of(reading: Freshness | None = None, *, at: datetime | None = None, unread: str = "") -> Age:
+    """The one wording of a reading's age: over its ``Freshness`` where the
+    page has one, else ``at``, the moment alone, else ``unread``, why there is
+    none."""
 
     if reading is not None:
-        stale = reading.observed_at and reading.stale
-        words = dotted(reading.last_read, f"{reading.label.lower()}{reading.cadence}" if stale else "")
-    else:
-        words = last_read(at) if at else unread or "No reading yet"
-    return Piece(READING_AGE, {"reading": reading, "at": at, "unread": unread}, words)
+        if reading.observed_at is None:
+            return Age(reading.state, note=reading.label)
+        stale = reading.stale
+        return Age(reading.state, reading.observed_at, f"{reading.label.lower()}{reading.cadence}" * stale, stale)
+    if at is not None:
+        return Age("read", at)
+    return Age(NEVER, note=capfirst(unread))
+
+
+def reading_age(reading: Freshness | None = None, *, at: datetime | None = None, unread: str = "") -> Piece:
+    """A reading's age as a table's cell draws it (``age_of``)."""
+
+    age = age_of(reading, at=at, unread=unread)
+    return Piece(READING_AGE, {"reading": reading, "at": at, "unread": unread}, age.words)
 
 
 # Cadence names for readings that are not observation kinds.
@@ -252,6 +281,12 @@ class Freshness:
         """When the reading was taken, as a sentence; its label when none was."""
 
         return last_read(self.observed_at) if self.observed_at else self.label
+
+    @property
+    def said(self) -> str:
+        """Its age in the one wording every page uses (``age_of``)."""
+
+        return age_of(self).words
 
     @property
     def cadence(self) -> str:

@@ -28,6 +28,7 @@ lazy from .connection_catalog import connection_catalog
 lazy from .connection_security import estate_readings, ingress_kinds, tailnet_policy_reading
 lazy from .connection_setup import docs_url, setups
 lazy from .connections import connection_rows
+lazy from .credential_sight import standing as reading_standing
 lazy from .derivations import present
 lazy from .facts import stored_snapshots
 lazy from .github_estate import REPOSITORY_KIND
@@ -76,7 +77,7 @@ def _not_read(kinds: tuple[str, ...], *, held: str = "") -> Reading:
         )
     stored = stored_snapshots()
     rows = [row for kind in kinds for row in stored.get(kind, ())]
-    if failed := next((row for row in rows if not row.reachable), None):
+    if failed := next((row for row in rows if reading_standing(row.kind, row).failed), None):
         said = failed.error or f"The last read of {registry_label(failed.kind)} failed"
         return Reading.unavailable(said.rstrip("."))
     if rows:

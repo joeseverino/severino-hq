@@ -551,12 +551,21 @@ def records_for_connection(kind: str, connection_ref: str) -> Iterator[Mapping[s
     its own, and those naming no connection."""
 
     for snapshot in _inventory(kind):
-        if not snapshot.reachable:
-            continue
-        for record in snapshot.records:
-            ref = str(record.get("connection_ref", "") or "")
-            if not ref or ref == connection_ref:
-                yield record
+        if snapshot.reachable:
+            yield from records_through(snapshot.records, connection_ref)
+
+
+def records_through(records: Iterable[Any], connection_ref: str) -> list[Mapping[str, Any]]:
+    """The records that speak for ``connection_ref``: its own, and those
+    naming no connection, which speak for every connection of their provider;
+    every record for a blank ref, the provider as a whole."""
+
+    return [
+        record
+        for record in records or ()
+        if isinstance(record, dict)
+        and (not connection_ref or str(record.get("connection_ref", "") or "") in ("", connection_ref))
+    ]
 
 
 def snapshots_of(kind: str) -> tuple[Any, ...]:

@@ -22,6 +22,7 @@ from .moments import when
 from .references import Kind
 from .tone import Tone
 from .topology_model import TopologyNode, derived_id
+lazy from .credential_sight import standing
 lazy from .facts import snapshots_of
 lazy from .refused_reports import READINGS_ACTION, open_refusals
 lazy from .topology_estate import machine_nodes
@@ -59,7 +60,7 @@ class ReadingRow:
         """What one stored reading says: a row per record, and the reading's
         own failure as a row of ``UNREAD`` or ``REFUSED``."""
 
-        if not snapshot.reachable:
+        if not standing(snapshot.kind, snapshot).read:
             yield cls(reason=UNREAD)
             return
         for record in snapshot.records or ():

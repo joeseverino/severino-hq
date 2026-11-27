@@ -24,7 +24,7 @@ lazy from . import connections, dashboard, estate, machines, request_context
 lazy from .action_items import filter_items
 lazy from .command_center import estate_search
 lazy from .connection_records import CredentialRecord, TallyPart
-lazy from .credential_sight import credential_sight, sight
+lazy from .credential_sight import credential_sight, standing
 lazy from .domain_records import DnsRecordPart, DomainRecord, DomainRow, InsightPart
 lazy from .entity_links import entity_link, provider_label
 lazy from .estate import estate_reading
@@ -338,7 +338,8 @@ def list_request_path(*, principal: Principal | None = None) -> dict[str, Any]:
 
 def _reading(kind: str, row: ProviderInventory | None) -> ReadingItem:
     spec = OBSERVATIONS[kind]
-    seen = sight(kind, spec.label, "reading", row, permissions=tuple(spec.requires))
+    found = standing(kind, row, label=spec.label, permissions=tuple(spec.requires))
+    seen = found.sight
     return {
         "kind": kind,
         "label": spec.label,
@@ -351,6 +352,8 @@ def _reading(kind: str, row: ProviderInventory | None) -> ReadingItem:
         "state": seen.state,
         "records": seen.records,
         "observed_at": _moment(seen.observed_at),
+        "freshness": found.age.state,
+        "freshness_label": found.age.label,
         "error": seen.error,
         "refusal": seen.refusal,
         "remedy": seen.remedy,

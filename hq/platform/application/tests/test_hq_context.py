@@ -263,7 +263,7 @@ class ProjectionTests(TestCase):
         estate()
         store("github.repository", age=timedelta(days=30))
 
-        rows = {row.kind: row for row in self.context().sight.rows}
+        rows = {row.sight.kind: row for row in self.context().sight.rows}
 
         self.assertTrue(rows["github.repository"].stale)
         self.assertFalse(rows[UNIT_KIND].stale)
@@ -287,7 +287,7 @@ class ProjectionTests(TestCase):
         seen = self.context().sight
         groups = dict(seen.groups)
 
-        self.assertIn("registry.vulnerabilities", {row.kind for row in groups[KEYLESS]})
+        self.assertIn("registry.vulnerabilities", {row.sight.kind for row in groups[KEYLESS]})
         self.assertEqual(seen.groups[-1][0], KEYLESS)
         self.assertLessEqual(set(seen.unconnected), set(CONNECTION_LABELS.values()))
         self.assertGreaterEqual(seen.never, 1)

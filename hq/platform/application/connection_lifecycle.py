@@ -5,6 +5,7 @@ Every surface that says how a connection stands reads it from
 ``standing`` here, once per projection.
 """
 
+from .freshness import OUT_OF_DATE
 from .references import Kind
 from .tone import Tone, TonedChoices
 
@@ -20,7 +21,7 @@ class Lifecycle(TonedChoices):
     REACHABLE = "reachable", Tone.GOOD, "Working"
     UNREACHABLE = "unreachable", Tone.SERIOUS, "Not answering"
     UNAUTHORIZED = "unauthorized", Tone.SERIOUS, "Permission missing"
-    STALE = "stale", Tone.ATTENTION, "Out of date"
+    STALE = "stale", Tone.ATTENTION, OUT_OF_DATE
     REVOKED = "revoked", Tone.SERIOUS, "Credential refused"
     # Its controller's report came with no connections, and the row is what
     # HQ kept of it.

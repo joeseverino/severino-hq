@@ -23,6 +23,7 @@ lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.entity_links import EntityLink
 lazy from hq.platform.application.finding_model import Finding, opens
 lazy from hq.platform.application.finding_steps import Do, Run
+lazy from hq.platform.application.freshness import CURRENT, NEVER, STALE, Freshness, ReadCadence
 lazy from hq.platform.application.integration_specs import ListSort
 lazy from hq.platform.application.pages import PageAction
 lazy from hq.platform.application.relationships import Relationships
@@ -143,41 +144,46 @@ def _toolbar():
 
 # Each provider's last sweep, as ``inventory.inventory_state`` hands it over:
 # one current, one out of date, one unreachable.
-_INVENTORY = (
-    {
-        "kind": "example.records",
-        "label": "Example records",
-        "count": 12,
-        "reachable": True,
-        "error": "",
-        "observed_at": DRAWN_AT - timedelta(minutes=5),
-        "state": "readable",
-        "state_label": "Readable",
-        "refused_parts": (),
-    },
-    {
-        "kind": "example.hosts",
-        "label": "Example hosts",
-        "count": 4,
-        "reachable": True,
-        "error": "",
-        "observed_at": DRAWN_AT - timedelta(days=2),
-        "state": "stale",
-        "state_label": "Out of date",
-        "refused_parts": ("Example addresses not read",),
-    },
-    {
-        "kind": "example.zones",
-        "label": "An example provider with a long name",
-        "count": 0,
-        "reachable": False,
-        "error": "The example provider refused the credential.",
-        "observed_at": None,
-        "state": "refused",
-        "state_label": "Refused",
-        "refused_parts": (),
-    },
-)
+def _inventory() -> tuple[dict, ...]:
+    hourly = ReadCadence(timedelta(hours=1), timedelta(hours=1))
+    return (
+        {
+            "kind": "example.records",
+            "label": "Example records",
+            "count": 12,
+            "read": True,
+            "error": "",
+            "age": Freshness(CURRENT, DRAWN_AT - timedelta(minutes=5), hourly),
+            "state": "readable",
+            "state_label": "Readable",
+            "tone": "",
+            "refused_parts": (),
+        },
+        {
+            "kind": "example.hosts",
+            "label": "Example hosts",
+            "count": 4,
+            "read": True,
+            "error": "",
+            "age": Freshness(STALE, DRAWN_AT - timedelta(days=2), hourly),
+            "state": "stale",
+            "state_label": "Out of date",
+            "tone": "attention",
+            "refused_parts": ("Example addresses not read",),
+        },
+        {
+            "kind": "example.zones",
+            "label": "An example provider with a long name",
+            "count": 0,
+            "read": False,
+            "error": "The example provider refused the credential.",
+            "age": Freshness(NEVER, None, hourly),
+            "state": "refused",
+            "state_label": "Refused",
+            "tone": "serious",
+            "refused_parts": (),
+        },
+    )
 
 
 # The open problems about the thing a page shows: an urgent one in its
@@ -616,20 +622,20 @@ TABLE_TOOLBAR_STATES = {
 # How old each provider's last reading is: folded as a grid, one of them
 # out of date and one unreachable; one provider's as a sentence; and its
 # age alone, in a heading's aside.
-SWEEP_FRESHNESS = Example(context=lambda: {"inventory": _INVENTORY})
+SWEEP_FRESHNESS = Example(context=lambda: {"inventory": _inventory()})
 
 
 SWEEP_FRESHNESS_STATES = {
     "one": Example(
         '{% section "Example records 2" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
         "{% endsection %}",
-        lambda: {"inventory": _INVENTORY},
+        lambda: {"inventory": _inventory()},
     ),
     "inline": Example(
         '{% section "Example records 3" %}<p>An example line.</p>{% aside %}12 example records'
         '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}'
         "{% endsection %}",
-        lambda: {"inventory": _INVENTORY},
+        lambda: {"inventory": _inventory()},
     ),
 }
 

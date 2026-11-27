@@ -5,9 +5,8 @@ A reading and its age, in the one wording every page uses.
   {% include "partials/_reading_age.html" with at=standing.read_at only %}
   {% include "partials/_reading_age.html" with unread=release.signed_unread only %}
 
-`reading` is an `application.freshness.Freshness`: an out-of-date one says so
-beside its age, with how often its kind is read. `at` is the moment alone, where the page knows when it was read
-and not how often it should be. "Last read" either way (`last_read`, from
-`freshness.LAST_READ`), because a page shows the last reading there is, and
-with neither it says there is none: `unread` is why, where the page knows.
-{% endcomment %}{% if reading %}<span class="reading-age{% if reading.stale %} is-stale tone-attention{% endif %}" data-reading-age="{{ reading.state }}">{% if reading.observed_at %}{{ reading.observed_at|last_read }}{% if reading.stale %}{% dot %}{{ reading.label|lower }}{{ reading.cadence }}{% endif %}{% else %}{{ reading.label }}{% endif %}</span>{% elif at %}<span class="reading-age" data-reading-age="read">{{ at|last_read }}</span>{% else %}<span class="reading-age" data-reading-age="never">{% if unread %}{{ unread|capfirst }}{% else %}{% status "no reading yet"|absent pill=False %}{% endif %}</span>{% endif %}
+`reading` is an `application.freshness.Freshness`, `at` the moment alone
+where the page knows when it was read and not how often it should be, and
+`unread` why there is none. `freshness.age_of` words them, for this drawing
+and a table's cell alike.
+{% endcomment %}{% reading_age_of reading at unread as age %}<span class="reading-age{% if age.stale %} is-stale tone-attention{% endif %}" data-reading-age="{{ age.state }}">{% if age.at %}{{ age.at|last_read }}{% if age.note %}{% dot %}{{ age.note }}{% endif %}{% elif age.note %}{{ age.note }}{% else %}{% status "no reading yet"|absent pill=False %}{% endif %}</span>
