@@ -5427,6 +5427,13 @@
         },
         "type": "object"
       },
+      "AllFields": {
+        "description": "Every field a record here holds, each a name `fields` may keep; a dot after one keeps a part inside it. Only in a read of this one resource.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
       "Allocation": {
         "additionalProperties": false,
         "description": "Who an address was allocated to, as the registry that allocated it says; empty when it could not be read.",
@@ -15764,6 +15771,9 @@
         "additionalProperties": false,
         "description": "How one record of a resource is read, where it can be.",
         "properties": {
+          "all_fields": {
+            "$ref": "#/components/schemas/AllFields"
+          },
           "identifier": {
             "description": "The field of a record that `get_resource` finds it by.",
             "type": "string"
@@ -18487,6 +18497,9 @@
         "additionalProperties": false,
         "description": "How a resource is listed, where it can be.",
         "properties": {
+          "all_fields": {
+            "$ref": "#/components/schemas/AllFields"
+          },
           "fields": {
             "description": "The fields each item keeps unless the caller names its own.",
             "items": {
@@ -18502,7 +18515,7 @@
             "type": "array"
           },
           "paging": {
-            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
+            "description": "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource.",
             "type": "object"
           },
           "query_schema": {

@@ -191,6 +191,14 @@ class DescribeResourcesNarrowsTests(TestCase):
         self.assertEqual(set(listed["query_schema"]["properties"]), set(listed["filters"]))
         self.assertEqual(set(listed["paging"]["properties"]), {"limit", "page"})
 
+    def test_every_field_a_kind_names_is_one_its_list_keeps(self):
+        for resource in served_resources().listable:
+            named = listing(resource.name)["all_fields"]
+            (answer,) = calls(("list_resource", {"name": resource.name, "fields": named, "limit": 1}))
+            with self.subTest(kind=resource.name):
+                self.assertTrue(named)
+                self.assertFalse(answer.is_error, answer.structured_content)
+
     def test_a_name_is_one_of_the_kinds_composed_at_the_call(self):
         # The server is reached first with no extension installed, as an
         # earlier test in the same process may have reached it.

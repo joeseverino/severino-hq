@@ -205,6 +205,17 @@ def resource_search_capabilities() -> dict[str, tuple[Capability | str, ...]]:
     return {spec.search.scope: spec.required_capabilities for spec in held_graph().resources.values() if spec.search}
 
 
+# Every top-level field a mask over a resource's records may name, which a read
+# of that one resource lists, so a call names them right the first time.
+type AllFields = Annotated[
+    list[str],
+    Describe(
+        "Every field a record here holds, each a name `fields` may keep; a dot after one keeps a part inside it. "
+        "Only in a read of this one resource."
+    ),
+]
+
+
 class ListOperation(TypedDict):
     """How a resource is listed, where it can be."""
 
@@ -216,6 +227,7 @@ class ListOperation(TypedDict):
         ),
     ]
     fields: NotRequired[Annotated[list[str], Describe("The fields each item keeps unless the caller names its own.")]]
+    all_fields: NotRequired[AllFields]
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
@@ -231,7 +243,7 @@ class ListOperation(TypedDict):
             Describe(
                 "The JSON Schema of `limit`, with the most it may ask for, and `page`, where the list takes them: "
                 "`list_resource` takes each as an argument of its own beside `filters`, and the machine API as a "
-                "query parameter beside them. Only in a read of this one resource; absent, the list takes neither."
+                "query parameter beside them. Only in a read of this one resource."
             ),
         ]
     ]
@@ -241,6 +253,7 @@ class GetOperation(TypedDict):
     """How one record of a resource is read, where it can be."""
 
     identifier: Annotated[str, Describe("The field of a record that `get_resource` finds it by.")]
+    all_fields: NotRequired[AllFields]
 
 
 class SearchOperation(TypedDict):
@@ -301,12 +314,26 @@ def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     listing: ListOperation = {"filters": list(list_filters(spec.listing.query))}
     if whole:
         listing["fields"] = list(spec.listing.fields)
+        listing["all_fields"] = _top_level(spec, listed=True)
         schema = sent_schema(spec.listing.query)
         properties = schema.get("properties", {})
         listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
         if PAGING & properties.keys():
             listing["paging"] = narrowed(schema, PAGING)
     return listing
+
+
+def _getting(spec: ResourceSpec, *, whole: bool) -> GetOperation | None:
+    if not spec.identifier:
+        return None
+    getting: GetOperation = {"identifier": spec.identifier}
+    if whole and (named := _top_level(spec, listed=False)):
+        getting["all_fields"] = named
+    return getting
+
+
+def _top_level(spec: ResourceSpec, *, listed: bool) -> list[str]:
+    return [path for path in mask_paths(spec, listed=listed) if "." not in path]
 
 
 def _described(spec: ResourceSpec, principal: Principal | None, *, whole: bool) -> ResourceDescription:
@@ -318,7 +345,7 @@ def _described(spec: ResourceSpec, principal: Principal | None, *, whole: bool) 
         "required_capabilities": list(required_capability_names(spec)),
         "operations": {
             "list": _listing(spec, whole=whole),
-            "get": ({"identifier": spec.identifier} if spec.identifier else None),
+            "get": _getting(spec, whole=whole),
             "search": ({"scope": spec.search.scope} if spec.search else None),
         },
     }
