@@ -40,6 +40,7 @@ SSH = MACHINE
 # edge too, which a controller may run on.
 CONTROLLER = MACHINE
 GITHUB = "github"
+BACKUPS = "r2"
 
 
 def hexed(*parts, length=64):
