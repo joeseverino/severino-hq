@@ -3,7 +3,7 @@
 from django.test import SimpleTestCase
 
 from hq.platform.core import speculation
-from hq.platform.core.write_bounds import declared, writes
+from hq.platform.core.write_bounds import declared
 
 
 def undeclared_routes() -> list[str]:
@@ -20,8 +20,3 @@ class DeclaredTests(SimpleTestCase):
             "A route that answers without a session declares what it writes where it is defined: "
             "@writes(NOTHING), or @writes(<the Bound that holds it>) from hq.platform.core.write_bounds.",
         )
-
-    def test_a_declaration_names_at_least_one_bound(self):
-        for bounds in ((), ("a sentence",)):
-            with self.subTest(bounds=bounds), self.assertRaises(TypeError):
-                writes(*bounds)

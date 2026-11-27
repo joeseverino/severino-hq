@@ -51,8 +51,8 @@ from hq.platform.core.views import (
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
 
 
-def public(urlconf: str, *bounds: Bound):
-    """``include(urlconf)`` with every route in it answering without a session, and writing under ``bounds``.
+def public(urlconf: str, first: Bound, *rest: Bound):
+    """``include(urlconf)`` with every route in it answering without a session, and writing under its bounds.
 
     For a mount whose views are someone else's (the SSO handshake) or carry
     their own credential (the bearer-token API), where the exemption is a fact
@@ -63,7 +63,7 @@ def public(urlconf: str, *bounds: Bound):
     for pattern in included[0].urlpatterns:
         if not isinstance(pattern, URLPattern):
             raise TypeError(f"{urlconf} nests an include; mark its views instead.")
-        writes(*bounds)(login_not_required(pattern.callback))
+        writes(first, *rest)(login_not_required(pattern.callback))
     return included
 
 
