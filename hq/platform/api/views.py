@@ -586,7 +586,18 @@ class _UnreadableQuery(QueryRefusal):
 # int() never meets its digit limit; a plus, a space, an underscore or another
 # script's digits stays text.
 _COUNT = re.compile(r"-?[0-9]{1,18}")
-_MEMBER = re.compile(r"(?P<field>[A-Za-z_][A-Za-z0-9_]*)\[(?P<member>[^\[\]]+)\]")
+
+
+def _member(key: str) -> tuple[str, str] | None:
+    """``field[member]``, the document's deepObject style, as its field and
+    member; None for any other key. Read by partition, never a pattern a key
+    could make backtrack."""
+
+    field, opened, rest = key.partition("[")
+    member, closed, after = rest.partition("]")
+    if not (opened and closed) or after or not member or "[" in member:
+        return None
+    return (field, member) if field.isascii() and field.isidentifier() else None
 
 
 def _counts(schema: Mapping[str, Any]) -> bool:
@@ -744,8 +755,8 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
     filters: dict[str, Any] = {}
     for key, values in request.GET.lists():
         # An object's member is sent as ``field[member]``, the document's deepObject style.
-        found = _MEMBER.fullmatch(key)
-        into, place = (filters.setdefault(found["field"], {}), found["member"]) if found else (filters, key)
+        found = _member(key)
+        into, place = (filters.setdefault(found[0], {}), found[1]) if found else (filters, key)
         if len(values) != 1 or not isinstance(into, dict) or place in into:
             return _fail(
                 f"Query field {key!r} may appear only once.",
