@@ -545,6 +545,24 @@ func (e HostRenderStatusRecordState) Valid() bool {
 	}
 }
 
+// Defines values for HostService.
+const (
+	ControllerUnit HostService = "severino-hq-controller.service"
+	SecretsUnit    HostService = "severino-hq-secrets.service"
+)
+
+// Valid indicates whether the value is a known member of the HostService enum.
+func (e HostService) Valid() bool {
+	switch e {
+	case ControllerUnit:
+		return true
+	case SecretsUnit:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for InboundProvider.
 const (
 	InboundProviderGitHubApp InboundProvider = "github_app"
@@ -776,6 +794,45 @@ func (e Refusal) Valid() bool {
 	case RefusalPermission:
 		return true
 	case RefusalUnclassified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RenderFailure.
+const (
+	RenderFailureBusy               RenderFailure = "busy"
+	RenderFailureConfig             RenderFailure = "config"
+	RenderFailureConnectDenied      RenderFailure = "connect_denied"
+	RenderFailureConnectResponse    RenderFailure = "connect_response"
+	RenderFailureConnectUnavailable RenderFailure = "connect_unavailable"
+	RenderFailureContent            RenderFailure = "content"
+	RenderFailureHost               RenderFailure = "host"
+	RenderFailureInternal           RenderFailure = "internal"
+	RenderFailureWebUnhealthy       RenderFailure = "web_unhealthy"
+)
+
+// Valid indicates whether the value is a known member of the RenderFailure enum.
+func (e RenderFailure) Valid() bool {
+	switch e {
+	case RenderFailureBusy:
+		return true
+	case RenderFailureConfig:
+		return true
+	case RenderFailureConnectDenied:
+		return true
+	case RenderFailureConnectResponse:
+		return true
+	case RenderFailureConnectUnavailable:
+		return true
+	case RenderFailureContent:
+		return true
+	case RenderFailureHost:
+		return true
+	case RenderFailureInternal:
+		return true
+	case RenderFailureWebUnhealthy:
 		return true
 	default:
 		return false
@@ -1067,6 +1124,21 @@ const (
 func (e RunnerRole) Valid() bool {
 	switch e {
 	case Runner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SecretRenderer.
+const (
+	SecretRendererHQ SecretRenderer = "hq"
+)
+
+// Valid indicates whether the value is a known member of the SecretRenderer enum.
+func (e SecretRenderer) Valid() bool {
+	switch e {
+	case SecretRendererHQ:
 		return true
 	default:
 		return false
@@ -2381,6 +2453,9 @@ type HostRenderStatusSecretRenderSuccess struct {
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
+// HostService A unit of HQ's host that HQ tells an operator to start or read.
+type HostService string
+
 // HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.
 type HostTailnetLockRecord struct {
 	Enabled       bool                               `json:"enabled,omitempty"`
@@ -2891,6 +2966,9 @@ type RefusedPart struct {
 	Scope   string       `json:"scope"`
 }
 
+// RenderFailure A word a secret renderer files a failed run under.
+type RenderFailure string
+
 // RenderFullReadSeconds The longest, in seconds, a secret renderer whose vault is unchanged goes without reading it in full.
 type RenderFullReadSeconds = int
 
@@ -3022,6 +3100,9 @@ type ScannedRole struct {
 	ArgumentSpec any    `json:"argument_spec"`
 	Role         string `json:"role"`
 }
+
+// SecretRenderer A secret renderer the host's launcher names.
+type SecretRenderer string
 
 // SettingName A setting's name, as a vault item's projection states it.
 type SettingName = string

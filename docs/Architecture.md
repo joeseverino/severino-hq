@@ -1136,7 +1136,7 @@ fuse by hand. Bridge messages decode into types generated from
 | Half | Written by | Holds |
 |---|---|---|
 | What the bridge alone defines | hand, in `hq/domains/control_plane/bridge_base.json` | each action's path, parameters and payload; the messages that are not registry facts (claims, reports, sweep verdicts, problems) |
-| Everything the registry owns | `bridge_registry`, from the registry's declarations | resource kinds, swept kinds, connection providers, failure classes, reading parts, the record of every reading (from the Pydantic model HQ validates it with), and the values both sides check |
+| Everything the registry owns | `bridge_registry`, from the registry's declarations | resource kinds, swept kinds, connection providers, failure classes, reading parts, the job states HQ answers a unit with, the host units and secret renderers HQ names, the record of every reading (from the Pydantic model HQ validates it with), and the values both sides check |
 
 A module that owns such a value (a Caddyfile token pattern, the
 `github.delivery` defaults, a certificate name) declares it once in `SHARED`.

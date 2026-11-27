@@ -4,6 +4,7 @@ import re
 from dataclasses import replace
 from datetime import date
 
+from hq.domains.control_plane.observations.host import CONTROLLER_UNIT, SECRETS_UNIT
 from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, ENVIRONMENT_KIND
 from hq.domains.control_plane.providers import PROVIDERS, unswept
 
@@ -30,15 +31,11 @@ from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
 from .moments import duration, when
 from .reading_facts import refusals
-from .render_status_findings import RENDERER_UNITS
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted, ended
 lazy from .facts import inventory_records
 lazy from .moments import moment
-
-# The background job that runs the controller on its machine (deploy/systemd).
-CONTROLLER_UNIT = "severino-hq-controller.service"
 
 
 def _many(kind_key: str) -> str:
@@ -701,7 +698,7 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
 def _refresh_steps(machine: str):
     """How the owner runs the refresh job again on its machine and reads what it wrote."""
 
-    unit = RENDERER_UNITS["hq"]
+    unit = SECRETS_UNIT
     return (
         *machine_step("Run the refresh job now", machine, f"systemctl start {unit}"),
         *journal_step("Read the refresh job's log", machine, unit),

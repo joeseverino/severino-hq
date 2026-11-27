@@ -5460,6 +5460,18 @@
         },
         "type": "object"
       },
+      "HostService": {
+        "type": "string",
+        "description": "A unit of HQ's host that HQ tells an operator to start or read.",
+        "enum": [
+          "severino-hq-controller.service",
+          "severino-hq-secrets.service"
+        ],
+        "x-enum-varnames": [
+          "ControllerUnit",
+          "SecretsUnit"
+        ]
+      },
       "HostTailnetLockRecord": {
         "description": "Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.",
         "properties": {
@@ -6663,6 +6675,32 @@
           "RefusalPermission"
         ]
       },
+      "RenderFailure": {
+        "type": "string",
+        "description": "A word a secret renderer files a failed run under.",
+        "enum": [
+          "config",
+          "host",
+          "busy",
+          "connect_unavailable",
+          "connect_denied",
+          "connect_response",
+          "content",
+          "web_unhealthy",
+          "internal"
+        ],
+        "x-enum-varnames": [
+          "RenderFailureConfig",
+          "RenderFailureHost",
+          "RenderFailureBusy",
+          "RenderFailureConnectUnavailable",
+          "RenderFailureConnectDenied",
+          "RenderFailureConnectResponse",
+          "RenderFailureContent",
+          "RenderFailureWebUnhealthy",
+          "RenderFailureInternal"
+        ]
+      },
       "RenderFullReadSeconds": {
         "default": 86400,
         "type": "integer",
@@ -6822,6 +6860,16 @@
         "const": "runner",
         "type": "string",
         "description": "The role of an SSH transport the automation worker runs playbooks through."
+      },
+      "SecretRenderer": {
+        "type": "string",
+        "description": "A secret renderer the host's launcher names.",
+        "enum": [
+          "hq"
+        ],
+        "x-enum-varnames": [
+          "SecretRendererHQ"
+        ]
       },
       "SettingName": {
         "pattern": "^[A-Z][A-Z0-9_]*$",

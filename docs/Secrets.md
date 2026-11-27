@@ -217,7 +217,9 @@ read forces one.
 
 Failures are filed under one word each, in the journal line
 (`event=secrets.render.failed class=...`), in the status document, and as the
-exit status:
+exit status. HQ declares the words and what each means (`FAILURE_CLASSES` in
+`hq/domains/control_plane/observations/host.py`), and the renderer's constants
+are generated from the bridge contract that carries them:
 
 | Class | Exit | Meaning |
 |---|---|---|

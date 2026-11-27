@@ -569,7 +569,7 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 	oneItem := func(r *http.Request) bool { return r.URL.Path == items+"/"+id(1) }
 	cases := []struct {
 		name   string
-		class  string
+		class  Failure
 		change func(*machine)
 	}{
 		{"Connect unavailable", "connect_unavailable", func(h *machine) {
@@ -658,7 +658,7 @@ func TestAFailedRefreshPreservesEveryInstalledFile(t *testing.T) {
 			}
 			// The failure is on record, and the last success is still the last success.
 			status := h.status()
-			if status.LastAttempt.Outcome != "failed" || status.LastAttempt.Failure != c.class || !status.LastAttempt.At.Equal(h.now) {
+			if status.LastAttempt.Outcome != "failed" || status.LastAttempt.Failure != string(c.class) || !status.LastAttempt.At.Equal(h.now) {
 				t.Fatalf("status attempt: %+v", status.LastAttempt)
 			}
 			if status.LastSuccess == nil || !status.LastSuccess.At.Equal(succeeded.At) || status.LastSuccess.Counts != succeeded.Counts {
@@ -1426,7 +1426,7 @@ func TestNothingOutsideATestCanMakeAClientWithoutThePortRule(t *testing.T) {
 }
 
 func TestClassesAreDistinct(t *testing.T) {
-	for class, err := range map[string]error{
+	for class, err := range map[Failure]error{
 		"config": ErrConfig, "busy": install.ErrBusy, "host": install.ErrHost, "connect_denied": connect.ErrDenied,
 		"connect_unavailable": connect.ErrUnavailable, "connect_response": connect.ErrResponse, "content": project.ErrContent,
 		"web_unhealthy": ErrUnhealthy, "internal": errors.New("anything else"),

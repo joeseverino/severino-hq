@@ -27,9 +27,10 @@ import (
 
 // exitCodes gives each failure class its own status, so a unit's result says
 // which kind of failure it was without anyone reading a message.
-var exitCodes = map[string]int{
-	"internal": 1, "config": 2, "host": 3, "busy": 4, "connect_unavailable": 5,
-	"connect_denied": 6, "connect_response": 7, "content": 8, "web_unhealthy": 9,
+var exitCodes = map[secrets.Failure]int{
+	secrets.RenderFailureInternal: 1, secrets.RenderFailureConfig: 2, secrets.RenderFailureHost: 3,
+	secrets.RenderFailureBusy: 4, secrets.RenderFailureConnectUnavailable: 5, secrets.RenderFailureConnectDenied: 6,
+	secrets.RenderFailureConnectResponse: 7, secrets.RenderFailureContent: 8, secrets.RenderFailureWebUnhealthy: 9,
 }
 
 func main() {
@@ -104,7 +105,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 	fail := func(err error) int {
 		class := secrets.Class(err)
 		// The message is the renderer's own words: no value, no token, no URL.
-		log.Error(err.Error(), slog.String("event", "secrets.render.failed"), slog.String("class", class))
+		log.Error(err.Error(), slog.String("event", "secrets.render.failed"), slog.String("class", string(class)))
 		return exitCodes[class]
 	}
 	// A dry run makes the host reads a render begins with and nothing else:

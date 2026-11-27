@@ -14,10 +14,13 @@ from typing import Any
 from django.conf import settings
 
 from hq.domains.control_plane.observations.host import (
+    FAILURE_CLASSES,
     FULL_READ_EVERY,
     RENDER_READ,
     RENDER_STATUS_KIND,
     RENDER_UNREADABLE,
+    RENDERER_UNITS,
+    UNKNOWN_FAILURE,
 )
 
 from .finding_model import (
@@ -68,28 +71,6 @@ CONFIRMED_WITHIN = missed(RENDER_EVERY + RENDER_DELAY, 3).stale_after
 # passed. Never sooner than ``CONFIRMED_WITHIN`` after a
 # full read falls due, so a renderer two runs behind raises one claim, not two.
 RENDERED_WITHIN = FULL_READ_EVERY + CONFIRMED_WITHIN
-
-# The unit that runs each renderer the launcher names
-# (Renderers in controller/host/layout.go), for the exact command. A renderer with no unit
-# here gets its rule's steps in words.
-RENDERER_UNITS = {"hq": "severino-hq-secrets.service"}
-
-# A failure filed under a word the table below does not hold, or under none.
-UNKNOWN_FAILURE = "an error HQ does not recognize"
-
-# What each word a failed run is filed under means (``Class`` in
-# controller/secrets/render.go, and the table in docs/Secrets.md).
-FAILURE_CLASSES = {
-    "config": "the job's configuration was refused",
-    "host": "a folder, mount, lock file or destination on the machine is not as it should be",
-    "busy": "another refresh was already running",
-    "connect_unavailable": "1Password Connect did not answer in time, or the vault kept changing",
-    "connect_denied": "1Password Connect refused the token",
-    "connect_response": "1Password Connect gave an answer HQ could not use",
-    "content": "something in the vault was refused",
-    "web_unhealthy": "the web container did not come back after its settings changed",
-    "internal": UNKNOWN_FAILURE,
-}
 
 # Why the reading holds no document for a renderer, as evidence says it.
 UNREAD_REASONS = {

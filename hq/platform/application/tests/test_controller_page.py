@@ -2,9 +2,8 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -136,15 +135,3 @@ class ControllerPageTests(TestCase):
         operator(self.client, "someone")
 
         self.assertContains(self.client.get("/"), f'href="{reverse("control_plane:controller")}"')
-
-
-@tag("source")
-class HostLayoutTests(SimpleTestCase):
-    """The unit names HQ tells an operator to inspect are the host's own."""
-
-    def test_the_controller_unit_is_the_one_the_host_declares(self):
-        from ..controller_findings import CONTROLLER_UNIT
-
-        layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
-
-        self.assertIn(f'ControllerUnit = "{CONTROLLER_UNIT}"', layout)

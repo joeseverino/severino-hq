@@ -1,6 +1,5 @@
 """The secret render reading, and what HQ says when the secrets go stale."""
 
-import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -78,17 +77,10 @@ def sweep(*records, **fields) -> None:
 
 @tag("source")
 class OneDeclarationTests(SimpleTestCase):
-    """What HQ restates of the renderer, held to where the renderer declares it."""
+    """What HQ says of the renderer, held to the units the host ships."""
 
     def source(self, *parts: str) -> str:
         return ROOT.joinpath(*parts).read_text(encoding="utf-8")
-
-    def test_every_failure_class_is_explained(self):
-        source = self.source("controller", "secrets", "render.go")
-        body = source[source.index("func Class(err error) string") :]
-        classes = set(re.findall(r'return "(\w+)"', body[: body.index("\n}\n")]))
-
-        self.assertEqual(classes, set(rules.FAILURE_CLASSES))
 
     def test_the_thresholds_are_the_timers(self):
         timer = self.source("deploy", "systemd", "severino-hq-secrets.timer")
@@ -102,12 +94,7 @@ class OneDeclarationTests(SimpleTestCase):
         self.assertEqual(rules.CONFIRMED_WITHIN, timedelta(hours=3, seconds=90))
         self.assertEqual(rules.RENDERED_WITHIN, timedelta(hours=27, seconds=90))
 
-    def test_every_renderer_the_launcher_names_has_its_unit(self):
-        layout = self.source("controller", "host", "layout.go")
-        block = layout[layout.index("var Renderers = ") :]
-        named = re.findall(r'^\t\{"([^"]+)", "[^"]+"\},$', block[: block.index("\n}\n")], re.MULTILINE)
-
-        self.assertEqual(named, list(rules.RENDERER_UNITS))
+    def test_every_renderer_has_its_unit(self):
         for name, unit in rules.RENDERER_UNITS.items():
             with self.subTest(renderer=name):
                 self.assertRegex(name, RENDERER_NAME)

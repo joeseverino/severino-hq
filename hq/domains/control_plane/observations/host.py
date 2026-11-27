@@ -65,8 +65,29 @@ class HostPerimeterRecord(ObservationRecord):
 # stored as ``UNREADABLE_WORD``, never as what it said.
 STATUS_WORD = r"^[A-Za-z0-9_.+-]{1,64}$"
 UNREADABLE_WORD = "unreadable"
-# A renderer's name is a fixed word the launcher chooses, never a path.
+# A renderer's name is a fixed word, never a path.
 RENDERER_NAME = r"^[a-z][a-z0-9-]{0,31}$"
+# The units of HQ's host a finding tells an operator to start or read, as
+# deploy/systemd names them, and each secret renderer the launcher names, by
+# the unit that runs it. The host's layout takes them from the contract.
+CONTROLLER_UNIT = "severino-hq-controller.service"
+SECRETS_UNIT = "severino-hq-secrets.service"
+RENDERER_UNITS = {"hq": SECRETS_UNIT}
+# Every word a renderer files a failed run under (``Class`` in
+# controller/secrets, whose constants are generated from the contract), and
+# what each means.
+UNKNOWN_FAILURE = "an error HQ does not recognize"
+FAILURE_CLASSES = {
+    "config": "the job's configuration was refused",
+    "host": "a folder, mount, lock file or destination on the machine is not as it should be",
+    "busy": "another refresh was already running",
+    "connect_unavailable": "1Password Connect did not answer in time, or the vault kept changing",
+    "connect_denied": "1Password Connect refused the token",
+    "connect_response": "1Password Connect gave an answer HQ could not use",
+    "content": "something in the vault was refused",
+    "web_unhealthy": "the web container did not come back after its settings changed",
+    "internal": UNKNOWN_FAILURE,
+}
 # What a record says of the read itself, and why a document could not be read.
 RenderState = Literal["read", "unreadable"]
 RENDER_READ, RENDER_UNREADABLE = get_args(RenderState)
@@ -481,6 +502,14 @@ SHARED = (
         Annotated[str, Field(pattern=STATUS_WORD)],
         "Every string a secret renderer's status document carries besides its times.",
     ),
+    SharedValue(
+        "HostService",
+        (CONTROLLER_UNIT, SECRETS_UNIT),
+        "A unit of HQ's host that HQ tells an operator to start or read.",
+        varnames=("ControllerUnit", "SecretsUnit"),
+    ),
+    SharedValue("SecretRenderer", tuple(RENDERER_UNITS), "A secret renderer the host's launcher names."),
+    SharedValue("RenderFailure", tuple(FAILURE_CLASSES), "A word a secret renderer files a failed run under."),
     SharedValue(
         "RenderFullReadSeconds",
         Annotated[int, Field(default=int(FULL_READ_EVERY.total_seconds()))],
