@@ -19,10 +19,15 @@ from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import outbound_work
+from hq.platform.application.adoption import adopt_discovered
 from hq.platform.application.conditions import READY
 from hq.platform.application.images import ImageRef
+from hq.platform.application.security import internal_principal
+from hq.platform.application.sweep import ADOPT
+from hq.platform.core import bindings
 from hq.platform.core.audit import stamped
 
+from . import doors
 from .names import (
     BUILT,
     CONTAINERS,
@@ -596,6 +601,15 @@ def _ran(declared, ago, work):
     )
 
 
+def _take_on_units() -> None:
+    """Each unit the release ships declared, as the controller's sweep takes
+    them on (``sweep.record_sweep``), so a unit's verbs are presses."""
+
+    hq = internal_principal(doors.CONTROLLER)
+    with doors.controller("sweep"), bindings.audit_operation(operation=ADOPT, principal=hq):
+        adopt_discovered(UNIT_KIND, principal=hq)
+
+
 def units(*more: dict):
     """systemd's word on each unit HQ ships and on a service it keeps
     restarting, then on ``more``, and the last credentials render."""
@@ -680,6 +694,7 @@ def units(*more: dict):
         "read_at": stamp(),
     }
     store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found), looping)
+    _take_on_units()
     store(
         RENDER_STATUS_KIND,
         {
