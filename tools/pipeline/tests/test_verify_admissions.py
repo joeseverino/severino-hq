@@ -7,20 +7,18 @@ import tempfile
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest import mock
 
 from django.test import SimpleTestCase
 
 from tools.pipeline import verify_admissions
 
 POLICY = b'{"version": 1}\n'
-BASE_POLICY = b'{"version": 0}\n'
 WORKFLOW = ".github/workflows/admit-plugin.yml"
 WHEEL = "example_alpha-1.0-py3-none-any.whl"
 
 
 class FakeRun:
-    """git and node as Compose runs them: node writes an entry unless told to fail."""
+    """node as Compose runs it: it writes an entry unless told to fail."""
 
     def __init__(self, *, node_fails: bool = False):
         self.node_fails = node_fails
@@ -32,8 +30,7 @@ class FakeRun:
             if self.node_fails:
                 raise subprocess.CalledProcessError(1, args)
             stdout.write(b'{"verified": true}\n')
-        shown = BASE_POLICY if args[:2] == ["git", "show"] else b""
-        return subprocess.CompletedProcess(args, 0, stdout=shown)
+        return subprocess.CompletedProcess(args, 0)
 
     def node(self) -> list[list[str]]:
         return [call for call in self.calls if call[0] == "node"]
@@ -63,22 +60,18 @@ class VerifyAdmissionsTests(SimpleTestCase):
         if "wheel" in files:
             (directory / wheel).write_bytes(b"wheel")
 
-    def verify(self, run, *, candidate=False, coordinated=""):
+    def verify(self, run):
         (self.root / "set.json").write_text(json.dumps({"extensions": self.extensions}))
-        (self.root / "coordinated.txt").write_text(coordinated)
         paths = {
             "--policy": "policy.json",
             "--set": "set.json",
-            "--coordinated": "coordinated.txt",
             "--artifacts": "artifacts",
             "--cordon": "cordon",
             "--out": "build/compose-args",
-            "--candidate-wheels": "candidate-wheels",
         }
         argv = [part for name, path in paths.items() for part in (name, str(self.root / path))]
-        env = {"CANDIDATE": "true" if candidate else "false", "BASE_SHA": "c" * 40}
         printed = StringIO()
-        with mock.patch.dict("os.environ", env), redirect_stdout(printed):
+        with redirect_stdout(printed):
             status = verify_admissions.main(argv, run=run)
         return status, printed.getvalue()
 
@@ -143,14 +136,3 @@ class VerifyAdmissionsTests(SimpleTestCase):
         status, _ = self.verify(FakeRun(node_fails=True))
         self.assertNotEqual(status, 0)
         self.assertFalse((self.root / "build" / "compose-args").exists())
-
-    def test_a_candidate_verifies_the_rest_under_the_base_policy_and_keeps_their_wheels(self):
-        self.extension("example.alpha", "example/alpha", policy=BASE_POLICY)
-        self.extension("example.beta", "example/extensions")
-        run = FakeRun()
-        status, _ = self.verify(run, candidate=True, coordinated="example/extensions=" + "d" * 40 + "\n")
-        self.assertEqual(status, 0)
-        self.assertIn(["git", "fetch", "--quiet", "--depth", "1", "origin", "c" * 40], run.calls)
-        self.assertEqual([flag(call, "--repository") for call in run.node()], ["example/alpha"])
-        self.assertEqual(self.compose_args()[1], hashlib.sha256(BASE_POLICY).hexdigest())
-        self.assertEqual([path.name for path in (self.root / "candidate-wheels").iterdir()], [WHEEL])

@@ -19,6 +19,7 @@ waits on a schedule.
 | :--- | :--- | :--- |
 | **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
+| **Check extensions** (`extensions.yml`) | Compose on a pull request; an extension pull request's dispatch | each extension's checks against the host, and the change's extension branches composed onto the host image as a verify-only candidate; for an extension pull request, its result as HQ's check on its head, which that merge's admission stands on ([Cordon admission](Plugins.md#cordon-admission)) |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared

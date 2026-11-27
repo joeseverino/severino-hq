@@ -95,110 +95,30 @@ env:
   WITHHELD_DIR: /tmp/severino-hq-withheld
 
 jobs:
-  # The checks an extension passes before admission (plugin-checks.yml), run
-  # with this pull request's host. Build HQ reuses wheels admitted against
-  # main, so only this job sees a host change that breaks an extension before
-  # it merges, and the composition fails with it. A job of its own: it needs
-  # no host image, so it runs beside the composition rather than ahead of its
-  # suite, and the extension code it runs shares no job with Build HQ's
-  # registry credential and signing identity.
+  # The checks an extension passes before admission, run with this pull
+  # request's host, and the composition of any extension branch the change
+  # carries (extensions.yml). A job of its own: it needs no host image of its
+  # own making, so it runs beside Build HQ rather than ahead of its suite, and
+  # the extension code it runs shares no job with Build HQ's registry
+  # credential and signing identity.
   extensions:
-    name: Check extensions
+    name: Extensions
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    uses: ./.github/workflows/extensions.yml
+    # What extensions.yml's job declares, which a caller must grant.
     permissions:
       contents: read
-    steps:
-      - name: Check out host
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Read the toolchain pins
-        id: pins
-        run: echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
-
-      - name: Read the composition set
-        # A secret, passed through the environment as Build HQ reads it.
-        env:
-          COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
-        run: python3 -m tools.pipeline.composition_set write composition-set.json
-
-      - name: Mask the extension names for the rest of the job
-        run: python3 -m tools.pipeline.composition_set mask composition-set.json
-
-      # HQ's app, asked to read the extensions' code and nothing else.
-      - name: Mint a token that can only read the extensions
-        id: reader
-        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
-        with:
-          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
-          private-key: ${{ secrets.HQ_APP_KEY }}
-          owner: ${{ github.repository_owner }} # zizmor: ignore[github-app] scoped by the installation, so no private repository name reaches the public log
-          permission-contents: read
-
-      - name: Find coordinated extension branches
-        env:
-          GH_TOKEN: ${{ steps.reader.outputs.token }}
-          BRANCH: ${{ github.head_ref }}
-        run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
-
-      - name: Check out each extension as this pull request meets it
-        # Its coordinated branch when one was found above, else its default
-        # branch: what each will be checked and admitted with once this
-        # merges. Without .git, so no copy carries the reader token.
-        env:
-          GH_TOKEN: ${{ steps.reader.outputs.token }}
-        run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
-
-      - name: Build the extension installer
-        # The host's Python ABI and uv, holding none of this job's
-        # credentials: where extension code is checked.
-        run: |
-          docker build -f composition/Dockerfile --target installer-base \
-            -t "severino-hq-installer:$GITHUB_SHA" .
-
-      - name: Check each extension against this host
-        run: tools/pipeline/check-extensions.sh composition-set.json "severino-hq-installer:$GITHUB_SHA"
-
-      - name: Install the pinned age
-        if: failure()
-        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
-        env:
-          MISE_LOCKED_VERIFY_PROVENANCE: "1"
-        with:
-          version: ${{ steps.pins.outputs.mise }}
-          install_args: age
-          cache: false
-      - name: Seal the withheld output
-        id: seal
-        if: failure()
-        run: |
-          set -euo pipefail
-          tools/pipeline/seal-failure-logs.sh "$WITHHELD_DIR" failure-logs.tar.age
-          if [ -f failure-logs.tar.age ]; then echo "sealed=true" >> "$GITHUB_OUTPUT"; fi
-
-      - name: Upload the sealed output
-        # Named apart from Build HQ's, since both can fail in one run;
-        # `mise run failure-logs` opens every failure-logs* artifact.
-        if: failure() && steps.seal.outputs.sealed == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: failure-logs-extensions
-          path: failure-logs.tar.age
-          retention-days: 14
-
-      - name: Say where the reason is
-        if: failure() && steps.seal.outputs.sealed == 'true'
-        run: |
-          {
-            echo "### An extension fails this host"
-            echo
-            echo "Withheld output, for the operator: \`mise run failure-logs ${GITHUB_RUN_ID}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+      packages: read
+      actions: read
+    with:
+      host-image: ${{ inputs.host-image }}
+      runner-image: ${{ inputs.runner-image }}
+    secrets:
+      HQ_APP_CLIENT_ID: ${{ secrets.HQ_APP_CLIENT_ID }}
+      HQ_APP_KEY: ${{ secrets.HQ_APP_KEY }}
+      COMPOSITION_EXTENSIONS: ${{ secrets.COMPOSITION_EXTENSIONS }}
 
   compose:
     name: Build HQ
@@ -337,10 +257,9 @@ jobs:
 
       - name: Find coordinated extension branches
         # A pull request whose branch name an extension also carries is a
-        # coordinated change: the two must be verified together, so that
-        # extension is built from its branch instead of reusing its admission.
-        # Verify only. The resulting image is local to this job, carries no
-        # lock, and no step that publishes can reach it.
+        # coordinated change: the two are verified together by the
+        # Extensions job, which builds that extension from its branch, so
+        # nothing below composes the admitted set.
         id: coordinated
         if: github.event_name == 'pull_request'
         env:
@@ -348,24 +267,11 @@ jobs:
           BRANCH: ${{ github.head_ref }}
         run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
 
-      - name: Check out each extension as this pull request meets it
-        # For the coordinated branches built below. Without .git, so no copy
-        # carries the reader token.
-        if: steps.coordinated.outputs.found == 'true'
-        env:
-          GH_TOKEN: ${{ steps.reader.outputs.token }}
-        run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
-
-      - name: Build the extension installer
-        # The host's Python ABI and uv, holding none of this job's
-        # credentials: where a coordinated branch is built below.
-        if: steps.coordinated.outputs.found == 'true'
-        run: |
-          docker build -f composition/Dockerfile --target installer-base \
-            -t "severino-hq-installer:$GITHUB_SHA" .
-
       - name: Decide whether anything changed
+        # Not for a coordinated change, so every step that builds below,
+        # which waits on its answer, skips.
         id: fingerprint
+        if: steps.coordinated.outputs.found != 'true'
         env:
           FORCE: ${{ github.event_name != 'workflow_dispatch' || inputs.force }}
           HOST_IMAGE: ${{ steps.host.outputs.image }}
@@ -435,19 +341,11 @@ jobs:
         # an extension produced. The identity checked is the one declared in
         # composition-set.json, so an extension cannot widen who is
         # allowed to sign for it by editing its own repository.
-        #
-        # With coordinated branches, an extension on one is built from it
-        # instead, and every other admission was signed under the base
-        # branch's policy, so that is the policy it is verified against.
-        env:
-          CANDIDATE: ${{ steps.coordinated.outputs.found == 'true' }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: python3 -m tools.pipeline.verify_admissions
 
       - name: Merge locks and stage the build context
         if: >-
-          steps.coordinated.outputs.found != 'true' &&
-          (steps.fingerprint.outputs.build == 'true')
+          steps.fingerprint.outputs.build == 'true'
         # Every value that names an extension passes between steps as a file:
         # a step's env block is printed in its public log.
         env:
@@ -473,8 +371,7 @@ jobs:
         # release compares with its pull request's.
         id: identity
         if: >-
-          steps.coordinated.outputs.found != 'true' &&
-          (steps.fingerprint.outputs.build == 'true')
+          steps.fingerprint.outputs.build == 'true'
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
           RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
@@ -508,10 +405,9 @@ jobs:
 
       - name: Build composed image
         # Skipped by an admission's dispatch that found nothing to do, by a
-        # coordinated change, which builds the candidate below instead, and by
-        # a release that promotes its pull request's composition.
+        # coordinated change, and by a release that promotes its pull
+        # request's composition.
         if: >-
-          steps.coordinated.outputs.found != 'true' &&
           steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
@@ -529,46 +425,6 @@ jobs:
             --build-arg HQ_COMPOSITION="$IDENTITY" \
             -t "ghcr.io/${{ github.repository }}/composition:$HOST_SHA" .
 
-      - name: Build coordinated extension branches
-        # Branch code is unreviewed, and this job holds a registry credential
-        # and an OIDC identity. So it builds in a throwaway Python installer
-        # with no token, credential file or docker socket, from a copy with no
-        # .git. This is the same Python ABI as the verified host image.
-        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
-        run: tools/pipeline/extension-branches.sh build composition-set.json coordinated.txt "severino-hq-installer:$GITHUB_SHA"
-
-      - name: Stage the candidate
-        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
-        run: |
-          set -euo pipefail
-          args=()
-          for wheel in candidate-wheels/*.whl; do args+=(--wheel "$wheel"); done
-          python3 -m tools.pipeline.compose_plugins --candidate "${args[@]}" --out build/candidate
-
-      - name: Build the candidate image
-        # Admission off: these wheels are unsigned branch builds. The tag has no
-        # registry, so no push in this workflow can publish it.
-        if: github.event_name == 'pull_request' && steps.coordinated.outputs.found == 'true'
-        env:
-          HQ_IMAGE: ${{ steps.host.outputs.image }}
-        run: |
-          set -euo pipefail
-          staged=build/candidate
-          docker build -f composition/Dockerfile --target candidate -t "severino-hq-candidate:$GITHUB_SHA" \
-            --build-arg HQ_IMAGE="$HQ_IMAGE" \
-            --build-arg STAGED=build/candidate \
-            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" .
-
-      - name: Name the composed image the checks below run
-        # The candidate a coordinated change built here, else the composition
-        # of the host commit: named once, for every check after it.
-        id: candidate
-        if: >-
-          steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
-        env:
-          IMAGE: ${{ steps.coordinated.outputs.found == 'true' && format('severino-hq-candidate:{0}', github.sha) || format('ghcr.io/{0}/composition:{1}', github.repository, steps.host.outputs.sha) }}
-        run: echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-
       - name: Verify the composition as one application
         # Skipped by an admission's dispatch that found nothing to do, and by
         # a release that promotes what its pull request verified here.
@@ -583,7 +439,7 @@ jobs:
         # The log gets totals and failing host test ids only: an extension's
         # tests name its models, routes and fixtures (tools/pipeline/composed-suite.sh).
         env:
-          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE: ghcr.io/${{ github.repository }}/composition:${{ steps.host.outputs.sha }}
         run: tools/pipeline/composed-suite.sh "$IMAGE"
 
       - name: The composed image comes up healthy
@@ -592,7 +448,7 @@ jobs:
         if: >-
           steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
-          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE: ghcr.io/${{ github.repository }}/composition:${{ steps.host.outputs.sha }}
         run: tools/pipeline/image-health.sh "$IMAGE"
 
       # The scan's vulnerability database, kept by the day under this key.
@@ -626,7 +482,7 @@ jobs:
         if: >-
           steps.fingerprint.outputs.build == 'true' && steps.proven.outputs.image == ''
         env:
-          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE: ghcr.io/${{ github.repository }}/composition:${{ steps.host.outputs.sha }}
           TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
           # Trivy is the one tool this task runs, installed above.
           MISE_TASK_RUN_AUTO_INSTALL: "false"
@@ -660,8 +516,7 @@ jobs:
       - name: Publish the verified composition for its merge
         id: verified
         if: >-
-          github.event_name == 'pull_request' && steps.coordinated.outputs.found != 'true' &&
-          steps.scan.outcome == 'success'
+          github.event_name == 'pull_request' && steps.scan.outcome == 'success'
         env:
           HOST_SHA: ${{ steps.host.outputs.sha }}
         run: |

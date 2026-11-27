@@ -326,10 +326,16 @@ class JobConditionTests(SimpleTestCase):
 class LeastPrivilegeTests(SimpleTestCase):
     def test_no_workflow_writes_a_check_of_its_own(self):
         # A job's result is its check, and the deployment says where a commit
-        # stands: the ruleset requires Ready, from GitHub Actions.
+        # stands: the ruleset requires Ready, from GitHub Actions. The one
+        # check written is on an extension's commit, the host's verdict on it,
+        # by a token minted for that one other repository.
         for path in workflows():
-            with self.subTest(workflow=path.name):
-                self.assertIsNone(re.search(r"check-runs|permission-checks|checks: write", code(path.read_text())))
+            for name, job in jobs(load(path)).items():
+                with self.subTest(workflow=path.name, job=name):
+                    self.assertNotEqual(job.get("permissions", {}).get("checks"), "write")
+                    for step in steps(job):
+                        if "permission-checks" in step.get("with", {}):
+                            self.assertNotRegex(step["with"].get("repositories", "github.repository"), r"github\.")
 
     def test_only_a_job_that_signs_or_publishes_holds_an_identity_token(self):
         # The actions whose only work is to present the job's OIDC identity.
@@ -482,10 +488,7 @@ class ReleaseTests(SimpleTestCase):
         """A pull request's verified composition is pushed and signed as its
         own, which no deploy accepts, so its release can promote it."""
         gates = {"env.IS_RELEASE == 'true'", "steps.verified.outputs.image != ''"}
-        opens = (
-            "env.IS_RELEASE == 'true' &&",
-            "github.event_name == 'pull_request' && steps.coordinated.outputs.found != 'true'",
-        )
+        opens = ("env.IS_RELEASE == 'true' &&", "github.event_name == 'pull_request' &&")
         publishing = [step for step in self.steps if re.search(r"docker push|cosign sign\b", script(step))]
         self.assertGreaterEqual(len(publishing), 3)
         for step in publishing:
@@ -493,20 +496,6 @@ class ReleaseTests(SimpleTestCase):
                 gate = condition(step)
                 self.assertTrue(gate in gates or gate.startswith(opens))
                 self.assertNotIn("candidate", text(step))
-
-    def test_branch_code_builds_without_the_jobs_credentials(self):
-        """tests/shell/test-extension-branches.sh holds the behavior; this holds the workflow to it."""
-        branches = {
-            match.group(1): text(step)
-            for step in self.steps
-            if (match := re.search(r"tools/pipeline/extension-branches\.sh (\w+)", script(step)))
-        }
-        self.assertEqual(set(branches), {"checkout", "build"})
-        source = code((ROOT / "tools" / "pipeline" / "extension-branches.sh").read_text())
-        for absent in ("GH_TOKEN", "docker.sock", "pip wheel"):
-            with self.subTest(absent=absent):
-                self.assertNotIn(absent, source)
-                self.assertNotIn(absent, branches["build"])
 
 
 @tag("source")
@@ -563,10 +552,11 @@ class VerdictNeedsTests(SimpleTestCase):
 
 @tag("source")
 class ExtensionsAgainstHostTests(SimpleTestCase):
-    """A pull request cannot pass its composition while an extension fails its checks against that host."""
+    """A change cannot pass while an extension fails its checks against that host."""
 
     def setUp(self):
-        self.jobs = jobs(workflow("compose.yml"))
+        self.compose = jobs(workflow("compose.yml"))
+        self.jobs = jobs(workflow("extensions.yml"))
         (self.name,) = [name for name, job in self.jobs.items() if "tools/pipeline/check-extensions.sh" in text(job)]
         self.job = self.jobs[self.name]
         self.steps = steps(self.job)
@@ -580,25 +570,53 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
 
         A job of the composition, so the composition a pull request's Ready
         reads fails with it."""
-        checks = {term.strip() for term in condition(self.job).split("&&")}
-        composes = {term.strip() for term in condition(self.jobs["compose"]).split("||")}
+        (caller,) = [job for job in self.compose.values() if job.get("uses") == "./.github/workflows/extensions.yml"]
+        checks = {term.strip() for term in condition(caller).split("&&")}
+        composes = {term.strip() for term in condition(self.compose["compose"]).split("||")}
         # The pull requests the composition builds: every one but a fork's.
         self.assertEqual(checks - composes, {"github.event_name == 'pull_request'"})
         check = self.index("tools/pipeline/check-extensions.sh composition-set.json")
-        for node in (self.job, self.steps[check]):
+        for node in (caller, self.job, self.steps[check]):
             self.assertNotIn("continue-on-error", node)
         self.assertNotIn("GH_TOKEN", text(self.steps[check]))
 
     def test_the_extension_code_it_runs_shares_no_job_with_a_credential_that_writes(self):
-        self.assertEqual(self.job["permissions"], {"contents": "read"})
-        self.assertNotIn(self.name, needed(self.jobs["compose"]))
-        self.assertFalse(needed(self.job))
+        """A dispatch can name any commit, so the most it can do is check it
+        and say so on that commit: the one write is a checks token, minted in
+        a job that runs no extension code."""
+        for name, job in self.jobs.items():
+            with self.subTest(job=name):
+                self.assertNotIn("write", job["permissions"].values())
+        writes = [
+            (name, {key: level for key, level in step["with"].items() if key.startswith("permission-")})
+            for name, job in self.jobs.items()
+            for step in steps(job)
+            if step.get("uses", "").startswith("actions/create-github-app-token@") and "write" in step["with"].values()
+        ]
+        self.assertEqual([requested for _, requested in writes], [{"permission-checks": "write"}])
+        ((reporter, _),) = writes
+        self.assertNotEqual(reporter, self.name)
+        self.assertNotRegex(text(self.jobs[reporter]), r"docker|check-extensions|extension-branches")
 
     def test_an_extension_is_checked_from_its_coordinated_branch_or_its_default_branch(self):
         clone = self.index("tools/pipeline/extension-branches.sh checkout")
         self.assertIn("coordinated.txt", script(self.steps[clone]))
         self.assertLess(self.index("tools/pipeline/coordinated-branches.sh"), clone)
         self.assertLess(clone, self.index("tools/pipeline/check-extensions.sh"))
+
+    def test_branch_code_builds_without_the_jobs_credentials(self):
+        """tests/shell/test-extension-branches.sh holds the behavior; this holds the workflow to it."""
+        branches = {
+            match.group(1): text(step)
+            for step in self.steps
+            if (match := re.search(r"tools/pipeline/extension-branches\.sh (\w+)", script(step)))
+        }
+        self.assertEqual(set(branches), {"checkout", "build"})
+        source = code((ROOT / "tools" / "pipeline" / "extension-branches.sh").read_text())
+        for absent in ("GH_TOKEN", "docker.sock", "pip wheel"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, source)
+                self.assertNotIn(absent, branches["build"])
 
 
 @tag("source")
@@ -666,8 +684,9 @@ class PublicLogTests(SimpleTestCase):
     """What a composed build prints is safe to publish in a public log."""
 
     def setUp(self):
-        self.compose = code((WORKFLOWS / "compose.yml").read_text())
-        self.jobs = [steps(job) for job in jobs(workflow("compose.yml")).values()]
+        names = ("compose.yml", "extensions.yml")
+        self.compose = "\n".join(code((WORKFLOWS / name).read_text()) for name in names)
+        self.jobs = [steps(job) for name in names for job in jobs(workflow(name)).values()]
         self.steps = [step for job in self.jobs for step in job]
 
     def test_the_composed_suite_prints_through_the_filter(self):

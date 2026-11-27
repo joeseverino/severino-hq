@@ -17,23 +17,17 @@
 # digest the job recorded in its run's `composition` artifact, signed by the
 # job for that pull request. A composition not proven leaves the rest proven.
 #
+# An extension's merge is proven by tools/pipeline/checked-on-host.sh, from
+# the same merged pull request (tools/pipeline/merged-pr.sh).
+#
 # The workflow that built the image is part of the tree compared, so what ran
 # on the pull request is what was merged. Needs GH_TOKEN able to read the
 # repository's pull requests and runs, a registry login and cosign.
 set -euo pipefail
 
-repo="$GITHUB_REPOSITORY"
 commit="${1:-$GITHUB_SHA}"
-not_proven() { echo "checked in full: $1" >&2; exit 0; }
-
-[[ "$commit" =~ ^[0-9a-f]{40}$ ]] || not_proven "the commit is not a full SHA"
-merged="$(gh api "repos/$repo/commits/$commit/pulls" \
-  --jq '[.[] | select(.merged_at != null and .base.ref == "main")][0] | "\(.number) \(.head.sha)"' 2>/dev/null || true)"
-read -r pr head <<<"$merged" || true
-[[ "${pr:-}" =~ ^[0-9]+$ && "${head:-}" =~ ^[0-9a-f]{40}$ ]] || not_proven "no merged pull request carries this commit"
-
-tree="$(gh api "repos/$repo/git/commits/$commit" --jq .tree.sha 2>/dev/null || true)"
-[[ "$tree" =~ ^[0-9a-f]{40}$ ]] || not_proven "the commit's tree could not be read"
+# shellcheck source=tools/pipeline/merged-pr.sh
+. "$(dirname -- "$0")/merged-pr.sh"
 
 last="$(gh api "repos/$repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha=$head&per_page=1" \
   --jq '.workflow_runs[0] | "\(.id) \(.conclusion // "")"' 2>/dev/null || true)"

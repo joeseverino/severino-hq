@@ -212,17 +212,57 @@ registration alone: the code saving it sets `audit_said` on the row
 written. `record_event` is for an act that changes no row: a sign-in, an
 export, a refusal.
 
-Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
-names nothing about the extension:
+Every extension's workflows are the same, because they name nothing about
+the extension. A pull request asks the host to check it, and spends only the
+seconds the dispatch takes:
 
 ```yaml
+# .github/workflows/pull-request.yml
+on:
+  pull_request:
 jobs:
+  host:
+    runs-on: ubuntu-26.04
+    environment:
+      name: host-checks
+      deployment: false
+    permissions: {}
+    steps:
+      - uses: joeseverino/severino-hq/.github/actions/check-on-host@main
+        with:
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
+```
+
+A push to `main` admits, running the checks itself only where the host did
+not already pass the merged tree:
+
+```yaml
+# .github/workflows/admit-plugin.yml
+on:
+  push:
+    branches: [main]
+jobs:
+  proof:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      gates: ${{ steps.proof.outputs.gates }}
+    steps:
+      - id: proof
+        uses: joeseverino/severino-hq/.github/actions/proven-on-pr@main
   checks:
+    needs: proof
+    if: needs.proof.outputs.gates != 'passed'
     uses: joeseverino/severino-hq/.github/workflows/plugin-checks.yml@main
   admit:
     name: Admit
-    if: github.event_name != 'pull_request'
-    needs: checks
+    needs: [proof, checks]
+    if: >-
+      !cancelled() && needs.proof.result == 'success' &&
+      (needs.checks.result == 'success' || needs.checks.result == 'skipped')
     runs-on: ubuntu-26.04
     environment: admission
     permissions:
@@ -234,6 +274,11 @@ jobs:
           app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.HQ_APP_KEY }}
 ```
+
+The app's key sits on two environments: `admission`, limited to `main`, for
+the job that signs, and `host-checks`, for the job that dispatches, which
+checks out no code. An extension repository's ruleset requires the check
+`Severino HQ · Checks` from HQ's app.
 
 The extension's identity is declared once, by the package:
 `tools/pipeline/plugin_identity.py` reads the distribution from `pyproject.toml` and
@@ -270,9 +315,9 @@ host's typed `hq_sdk`, with django-stubs pointed at
 `hq.config.settings_typecheck`, the host's settings with that package
 installed.
 
-In CI it runs against host `main`, or the host branch named like the
-extension's branch when one exists
-([Coordinated changes](#coordinated-changes)).
+In CI it runs in the host's **Check extensions** (`extensions.yml`), against
+host `main`, or the host branch named like the extension's branch when one
+exists ([Coordinated changes](#coordinated-changes)).
 
 ### Renaming a capability
 
@@ -356,7 +401,7 @@ The policy is `policy/plugin-admission-v1.json`, written from
 
 | Evidence | Produced by |
 | --- | --- |
-| The extension contract and package tests, and a secret scan | `plugin-checks.yml` |
+| The extension contract and package tests, and a secret scan | the host's **Check extensions** on the pull request, or `plugin-checks.yml` at admission when that is unproven |
 | A dependency lock that matches `pyproject.toml` | the admission action |
 | An audit of every locked dependency with no known vulnerability | the admission action |
 | A CycloneDX SBOM of the wheel and its locked runtime dependencies, exported from its lock by uv, dev groups left out | the admission action |
@@ -364,6 +409,31 @@ The policy is `policy/plugin-admission-v1.json`, written from
 Each id the policy lists is produced by one step or job, named beside it in
 `AdmissionEvidenceTests`, since Cordon's evidence step marks every listed id as
 passed.
+
+An admission stands on its pull request's checks the way a host merge does
+(`tools/pipeline/checked-on-host.sh`, through the `proven-on-pr`
+action). The merged pull request's head must be the pushed commit's exact
+tree, and the host's last **Check extensions** run of that head, dispatched on
+host `main`, must have passed. Anything less runs `plugin-checks.yml` in full,
+and a run by hand always does. So a merge spends only the admission itself:
+the lock check, the audit, the SBOM and the OIDC signature.
+
+What that proof rests on:
+
+- Extension code runs only in the job that holds a token that can read the
+  extensions and nothing else, in containers with none of the job's
+  credentials. Its output is sealed as Compose's is: every name the set holds
+  is masked, and what a check, build or suite prints is age-sealed for the
+  operator.
+- The workflow holds no identity token and no registry write. The one write
+  is a checks token for the extension's repository, minted in a job that runs
+  no extension code, to report the result on the commit.
+- A dispatch names only a commit, so a forged one can at most check that
+  commit and say so on it. It cannot admit or sign. A run on a host branch,
+  whose workflow anyone who can push there could edit, never stands for a
+  merge: only a run on `main` does, and its title names the head it checked.
+- The proof is bound to the tree: a merge whose tree differs from the head the
+  host passed, as when `main` moved underneath it, checks in full.
 
 The extension's admission signs its statement with GitHub OIDC through
 Sigstore. Cordon verifies the bundle against the exact repository and workflow
@@ -413,14 +483,17 @@ input that names no extension.
 
 The token lasts an hour and can only start a workflow here. The app's key is
 the only credential an extension repository holds, as a secret on an `admission`
-environment limited to `main`. A deploy still waits for a person's approval in
+environment limited to `main`, and on a `host-checks` environment for the
+pull request job that starts its checks here. A deploy still waits for a person's approval in
 the `production` environment, which no app can give.
 
 A dispatch that fails fails the admission, where it happened. So nothing is
 missed silently, and no schedule backs it up.
 
 ```
-merge an extension → its CI admits the wheel and publishes the bundle
+an extension pull request → the host's Check extensions checks and composes it
+                          → HQ's check on its head says the result
+merge it → its admission reuses that proof, then signs the wheel and publishes the bundle
                → the admission dispatches the host's composition
                → build → verify → scan → publish → approve → deploy
                → HQ marks the extension's commit live and comments on its pull request
@@ -471,29 +544,36 @@ A change that needs both the host and an extension (a `PLUGIN_API_VERSION` bump,
 lands as branches with the same name in each repository, verified together
 before either merges:
 
-- An extension pull request's `plugin-checks.yml` resolves the host ref to the
-  host branch of the same name when one exists, and to `main` otherwise. An
-  explicit `hq-ref` input wins.
-- The host pull request's composition builds each extension's same-named branch
-  into a candidate image and runs the composed checks and suite in it. The
-  candidate is verify-only: unadmitted wheels, no lock, a local tag, never
-  published, signed or deployed.
-- Extensions without such a branch are reused from their verified admissions.
-  The app's Contents read covers reading the branches.
+- An extension pull request's `check-on-host` action dispatches the host's
+  **Check extensions** on the host branch of the same name when one exists, and
+  on `main` otherwise. Only a run on `main` stands for the merge, so an
+  extension merged before its host half checks in full at admission.
+- Both kinds of pull request check and compose the same way
+  (`extensions.yml`): each extension on the change's branch at that commit,
+  every other at its default branch, each checked against the host, then every
+  one built from source into a candidate image on the host's image, where the
+  composed suite runs and the image boots. The candidate is verify-only:
+  unadmitted wheels, no lock, a local tag, never published, signed or
+  deployed. The app's Contents and Pull requests read cover finding and
+  reading the branches.
+- A host pull request with such a branch composes nothing from the admitted
+  set in Build HQ: the candidate stands for it.
 - On a checkout, every step that composes the set picks an extension's local
   branch of the same name the same way
   ([The extension set](Development.md#the-extension-set)).
-- Beside composing, in a job of its own, the host pull request runs its own
-  `plugin:check` against every extension in the set, from its same-named branch
-  or else its default branch. So a host change that breaks an extension fails
-  the pull request rather than the next admission. Which extension failed is
-  only in the sealed failure logs.
+- Every host pull request runs its own `plugin:check` against every extension
+  in the set, from its same-named branch or else its default branch, in that
+  job beside Build HQ. So a host change that breaks an extension fails the pull
+  request rather than the next admission. Which extension failed is only in the
+  sealed failure logs.
 - The host's Test job runs the same check, `test:plugin-check`, on
   `examples/extension`, a synthetic package of its own. So a host change that
   breaks the check itself (a test it runs that reads a host dev dependency)
   fails there, before anything is composed, and on a fork's pull request too.
 
-Merge the host first; each extension then checks and admits against `main`.
+Merge the host first; each extension's pull request then checks against
+`main` (a new push, or a re-run of its **Check on the host** job), and its
+merge admits on that proof.
 
 ## Contract boundary
 

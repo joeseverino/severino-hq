@@ -1,0 +1,39 @@
+name: Proven on its pull request
+description: >-
+  Whether the host already checked and composed the tree an extension's push
+  to main carries, on the pull request that merged it. An admission runs the
+  checks again only when it did not.
+
+# tools/pipeline/checked-on-host.sh, from this action's own copy of
+# the host, so the caller checks out nothing. Unproven is the safe answer: an
+# error here leaves `gates` empty, and the admission checks in full.
+
+outputs:
+  gates:
+    description: "`passed` when the host's last check of the merged pull request's head, on main, passed and the head is this commit's tree."
+    value: ${{ steps.proof.outputs.gates }}
+  pr:
+    description: The pull request that proved it.
+    value: ${{ steps.proof.outputs.pr }}
+
+runs:
+  using: composite
+  steps:
+    - name: Find the pull request that proved this tree
+      id: proof
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        HOST_REPOSITORY: ${{ github.action_repository }}
+      run: |
+        set -uo pipefail
+        script="$GITHUB_ACTION_PATH/../../../tools/pipeline/checked-on-host.sh"
+        if ! proof="$("$script" "$HOST_REPOSITORY")"; then
+          echo "::notice title=Checked in full::The proof could not be read, so the admission checks in full."
+          exit 0
+        fi
+        printf '%s\n' "$proof" | tee -a "$GITHUB_OUTPUT"
+        pr="$(printf '%s\n' "$proof" | sed -n 's/^pr=//p')"
+        if [ -n "$pr" ]; then
+          echo "Proven on #$pr: the host checked and composed this exact tree, so the admission does not check it again." >> "$GITHUB_STEP_SUMMARY"
+        fi
