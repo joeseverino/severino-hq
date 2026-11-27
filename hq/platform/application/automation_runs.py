@@ -299,6 +299,26 @@ def other_profiles(profile: str) -> Q:
     return Q(resource__kind=OPERATION_KIND) & ~Q(resource__spec__privilege="" if profile == READ_PROFILE else profile)
 
 
+def claimant(action: str, privilege: str | None) -> str:
+    """The profile of the worker that claims a scan or a run of a playbook
+    whose privilege is ``privilege``: the read profile's takes the scans."""
+
+    return READ_PROFILE if action == OperationRequest.Action.SCAN or not privilege else privilege
+
+
+def run_profile(operation: OperationRequest) -> str:
+    """The profile of the worker that claims ``operation``, a scan or a run."""
+
+    privilege = (operation.resource.spec or {}).get("privilege") if operation.resource is not None else None
+    return claimant(operation.action, privilege)
+
+
+def _playbook_profile(resource: ManagedResource) -> str:
+    """The profile of the logins a playbook's runs go through."""
+
+    return claimant(OperationRequest.Action.RUN, (resource.spec or {}).get("privilege"))
+
+
 def runner_reaches() -> frozenset[tuple[str, str]]:
     """Each machine and profile the worker has a login for, as its newest scan said."""
 
@@ -608,12 +628,12 @@ def _enqueue_run(
     released: bool = False,
 ) -> tuple[OperationRequest, bool]:
     def prepare() -> Prepared:
+        resource = record()
         # A run no worker will take would wait for nothing: the finding that
         # says so (``automation_findings``) carries how to set one up.
-        untaken = automation_standing().cannot("run", now=timezone.now())
+        untaken = automation_standing(_playbook_profile(resource)).cannot("run", now=timezone.now())
         if untaken:
             raise PolicyError(untaken)
-        resource = record()
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
         # A claim whose lease ran out is ended or put back first, by the rule

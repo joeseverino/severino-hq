@@ -35,6 +35,7 @@ from .routes import reverse
 from .tone import Tone, Toned
 lazy from .app_update_approval import PULLED, PULLED_KIND, RECEIPT, RECEIPT_KIND
 lazy from .automation_adoption import playbook_titles
+lazy from .automation_runs import run_profile
 lazy from .cadence import automation_standing
 lazy from .containers import stacks
 lazy from .entity_links import entity_link
@@ -483,17 +484,17 @@ def seen_as_runs(operations: QuerySet, now: datetime | None = None) -> QuerySet:
     return operations.annotate(seen=run_seen_state(now or timezone.now()), title=_run_title())
 
 
-def untaken() -> str:
-    """What a run or scan that waits is waiting for, in a sentence, while no
-    playbook worker reports to take it; "" while one does."""
+def _untaken(operation: OperationRequest, seen: JobState, said: dict[str, str]) -> str:
+    """What a run or scan that waits is waiting for, in a sentence, while the
+    playbook worker that takes it does not report; "" while it does, or
+    for anything else. ``said`` keeps each profile's, so a list asks once."""
 
-    return automation_standing().cannot("", now=timezone.now())
-
-
-def _untaken_of(seen: Iterable[JobState]) -> str:
-    """``untaken``, asked only where a run waits."""
-
-    return untaken() if JobState.QUEUED in seen else ""
+    if seen != JobState.QUEUED or operation.action not in _LISTED:
+        return ""
+    profile = run_profile(operation)
+    if profile not in said:
+        said[profile] = automation_standing(profile).cannot("", now=timezone.now())
+    return said[profile]
 
 
 def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None) -> list[WorkRun]:
@@ -503,8 +504,7 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
     found = list(operations)
     who = asked_by(OperationRequest, found)
     now = now or timezone.now()
-    # Only a run or a scan waits on the playbook worker; the controller takes the rest.
-    said = _untaken_of(JobState(operation.seen) for operation in found if operation.action in _LISTED)
+    said: dict[str, str] = {}
     return [
         _run_row(
             operation,
@@ -512,7 +512,7 @@ def run_rows(operations: Iterable[OperationRequest], now: datetime | None = None
             operation.title,
             now,
             who.get(str(operation.pk), NOBODY),
-            untaken=said if operation.action in _LISTED else "",
+            untaken=_untaken(operation, JobState(operation.seen), said),
         )
         for operation in found
     ]
@@ -529,7 +529,7 @@ def run_of(operation_id: str, now: datetime | None = None) -> tuple[WorkRun, Ope
         return None
     who = asked_by(OperationRequest, (found,)).get(str(found.pk), NOBODY)
     seen = JobState(found.seen)
-    return _run_row(found, seen, found.title, now, who, untaken=_untaken_of((seen,))), found
+    return _run_row(found, seen, found.title, now, who, untaken=_untaken(found, seen, {})), found
 
 
 def run_url(operation_id: str) -> str:
@@ -588,14 +588,16 @@ def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
         )
     )
     now = timezone.now()
-    said = _untaken_of(JobState(seen) for source, _pk, seen, *_rest in page if source == RUN)
+    said: dict[str, str] = {}
     built: list[WorkRun] = []
     for source, pk, seen, _created, title, _lead in page:
         by = who[source].get(str(pk), NOBODY)
         if source == JOB:
             built.append(job_run(jobs[pk], title, by))
         else:
-            built.append(_run_row(runs[pk], JobState(seen), title, now, by, untaken=said))
+            built.append(
+                _run_row(runs[pk], JobState(seen), title, now, by, untaken=_untaken(runs[pk], JobState(seen), said))
+            )
     return built
 
 

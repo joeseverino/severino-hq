@@ -1,21 +1,20 @@
-"""HQ's playbook worker, absent: never seen once a playbook source exists, or not seen within its timer's interval.
+"""One of HQ's playbook workers, absent: never seen once a playbook source exists, or not seen within its timer's interval.
 
-No scan is asked for and each run is refused while this stands, and this is what says how
-to set the worker up, in docs/Deployment.md's order, since HQ cannot read why
+The read profile's worker absent, no scan is asked for and each run is
+refused; another profile's, each run as that profile is. This says how to
+set the worker up, in docs/Deployment.md's order, since HQ cannot read why
 the host declined to start one.
 """
 
 from typing import Any
 
-lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KIND
-
-from .finding_model import Finding, FindingEstate, FindingRule, opens
+from .finding_model import Finding, FindingEstate, FindingRule, matter_key, opens
 from .finding_steps import Do, Run
 from .security import Principal
 from .tone import Tone
 from .unit_findings import HQ_HOST, WORKER_READ, stopped_reporting, unit_causes
-lazy from .cadence import WorkerStanding, automation_standing
-lazy from .infrastructure import declared_resources
+lazy from .automation_runs import READ_PROFILE
+lazy from .automation_workers import ProfileWorker, profile_workers
 lazy from .problems import About, problems_by_part
 lazy from .routes import reverse
 
@@ -41,59 +40,61 @@ _START = Run(
 
 
 def worker_problems(principal: Principal) -> tuple[dict[str, Any], ...]:
-    """That HQ's playbook worker is absent, as the open problem
+    """That one of HQ's playbook workers is absent, as each open problem
     ``principal`` may read, for a page about a playbook's work
     (``partials/_problems.html``). It is about no record with a page, so it is
     found by its queue item's key (``findings.finding_key``)."""
 
-    key = f"finding:{RULE}:"
-    return tuple(item for _part, item in problems_by_part({RULE: About(keys=(key,))}, principal))
-
-
-def _standing() -> WorkerStanding | None:
-    """HQ's playbook worker's standing, or None for an HQ that never had a
-    playbook source and never saw a worker: nobody set automation up there,
-    so its absence is nothing to raise."""
-
-    worker = automation_standing()
-    if worker.seen_at is None and not any(resource.kind == SOURCE_KIND for resource in declared_resources()):
-        return None
-    return worker
+    keys = tuple(matter_key(RULE, "", worker.profile) for worker in profile_workers())
+    return tuple(item for _part, item in problems_by_part({RULE: About(keys=keys)}, principal))
 
 
 def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
-    worker = _standing()
-    if worker is None or not worker.cannot("scan", now=estate.now):
-        return ()
+    """The read profile's worker absent, which leaves every playbook waiting;
+    else each other profile's worker absent alone."""
+
+    absent = [worker for worker in profile_workers() if worker.standing.cannot("", now=estate.now)]
+    # The read profile's worker comes first, and its absence is every other's.
+    if absent and absent[0].profile == READ_PROFILE:
+        absent = absent[:1]
+    return tuple(_worker_absent(estate, worker) for worker in absent)
+
+
+def _worker_absent(estate: FindingEstate, worker: ProfileWorker) -> Finding:
     # The page whose scans and runs it holds, where its setup is shown.
     playbooks = opens("Open playbooks", reverse("control_plane:playbooks"))
-    if worker.seen_at is None:
-        return (
-            Finding(
-                rule=RULE,
-                subject="",
-                read_capabilities=WORKER_READ,
-                title="Playbooks are not set up",
-                severity=Tone.ATTENTION,
-                explanation="Playbook scans and runs are refused.",
-                evidence=(("Last seen", "never"),),
-                steps=(*_ENTRY, _START),
-                primary=playbooks,
-                follows=unit_causes(estate, AUTOMATION_UNIT),
-            ),
-        )
-    return (
-        stopped_reporting(
-            estate,
-            worker.seen_at,
+    read = worker.profile == READ_PROFILE
+    named = "Playbooks" if read else f"The {worker.profile} playbook worker"
+    explanation = (
+        "Playbook scans and runs are refused."
+        if read
+        else f"Playbook runs as the {worker.profile} profile are refused."
+    )
+    if worker.standing.seen_at is None:
+        return Finding(
             rule=RULE,
-            unit=AUTOMATION_UNIT,
-            title="Playbooks stopped reporting",
-            explanation="Playbook scans and runs are refused.",
-            severity=Tone.SERIOUS,
+            subject="",
+            part=worker.profile,
+            read_capabilities=WORKER_READ,
+            title="Playbooks are not set up" if read else f"{named} has never reported",
+            severity=Tone.ATTENTION,
+            explanation=explanation,
+            evidence=(("Last seen", "never"),),
+            steps=(*_ENTRY, _START) if read else (_START,),
             primary=playbooks,
-            steps=(_START,),
-        ),
+            follows=unit_causes(estate, AUTOMATION_UNIT),
+        )
+    return stopped_reporting(
+        estate,
+        worker.standing.seen_at,
+        rule=RULE,
+        unit=AUTOMATION_UNIT,
+        part=worker.profile,
+        title=f"{named} stopped reporting",
+        explanation=explanation,
+        severity=Tone.SERIOUS,
+        primary=playbooks,
+        steps=(_START,),
     )
 
 
@@ -108,8 +109,8 @@ RULES: tuple[FindingRule, ...] = (
         operator_action=f"Add an automation entry to {HOST_CONFIGURATION}, then run {HQ_HOST} automation as root.",
         no_help_reason="HQ cannot change its own machine's setup.",
         bars={
-            Tone.SERIOUS: "playbooks stopped reporting",
-            Tone.ATTENTION: "playbooks are not set up",
+            Tone.SERIOUS: "playbooks stopped reporting, or one profile's worker did",
+            Tone.ATTENTION: "playbooks are not set up, or one profile's worker has never reported",
         },
     ),
 )

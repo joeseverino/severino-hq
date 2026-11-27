@@ -17,7 +17,7 @@ from ..security import Capability, Principal
 from .procedures import APP, RESTART_RUN, Supply, manifest, run_payload
 
 OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
-HEARTBEAT = "automation-heartbeat"
+HEARTBEAT = "automation.read-heartbeat"
 RUNS = ["automation.operation:run", "automation.source:scan"]
 
 
@@ -44,8 +44,22 @@ class ArrivalTests(TestCase):
             ]
         )
 
-        self.assertIsNotNone(automation_standing().seen_at)
+        self.assertIsNotNone(automation_standing("read").seen_at)
         self.assertFalse(controller_standing().known)
+
+    def test_a_claim_notes_the_worker_of_the_profile_it_names_alone(self):
+        from ..cadence import automation_standing
+
+        bridge_client.call(
+            "claim",
+            app=bridge_client.worker(),
+            controller_id="example-worker",
+            capability=["automation.operation:run"],
+            profile="example.admin",
+        )
+
+        self.assertIsNotNone(automation_standing("example.admin").seen_at)
+        self.assertIsNone(automation_standing("read").seen_at)
 
     def test_the_controllers_claim_notes_the_controller_and_not_the_worker(self):
         from ..cadence import automation_standing, controller_standing
@@ -53,7 +67,7 @@ class ArrivalTests(TestCase):
         bridge_client.call("claim", controller_id="example-controller")
 
         self.assertTrue(controller_standing().known)
-        self.assertIsNone(automation_standing().seen_at)
+        self.assertIsNone(automation_standing("read").seen_at)
 
 
 class LeaseTests(TestCase):
@@ -62,7 +76,7 @@ class LeaseTests(TestCase):
 
     def setUp(self):
         def resource(key: str) -> ManagedResource:
-            return declare(key, "automation.source")
+            return declare(key, "automation.operation", {"privilege": ""})
 
         self.claim = OperationRequest.objects.create(
             resource=resource("example-app"),
@@ -87,10 +101,10 @@ class LeaseTests(TestCase):
     def test_a_live_lease_keeps_it_heard_and_its_end_leaves_it_silent(self):
         from ..cadence import automation_standing
 
-        self.assertFalse(automation_standing().silent)
+        self.assertFalse(automation_standing("read").silent)
 
         OperationRequest.objects.filter(pk=self.claim.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
-        self.assertTrue(automation_standing().silent)
+        self.assertTrue(automation_standing("read").silent)
 
     def test_its_standing_reads_the_work_once(self):
         from django.db import connection
@@ -99,7 +113,7 @@ class LeaseTests(TestCase):
         from ..cadence import automation_standing
 
         with CaptureQueriesContext(connection) as asked:
-            automation_standing()
+            automation_standing("read")
 
         work = [query for query in asked if "control_plane_operationrequest" in query["sql"]]
         self.assertEqual(len(work), 1)

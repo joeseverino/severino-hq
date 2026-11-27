@@ -22,6 +22,7 @@ from hq.platform.application.automation_sources import (
     playbook_table,
     standing,
 )
+from hq.platform.application.automation_workers import profile_workers, workers_table
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
@@ -71,6 +72,7 @@ class PlaybooksView(PageMixin, TemplateView):
             # HQ's playbook worker absent, with how to set it up: about no
             # record with a page, so found by its key.
             problems=worker_problems(self.principal),
+            workers=workers_table(profile_workers()),
         )
         return context
 

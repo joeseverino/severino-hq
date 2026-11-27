@@ -95,6 +95,9 @@ row in the flow.
   {% elif work.renderers %}
     {% data_table work.renderers_table %}
   {% endif %}
+  {% if work.workers %}
+    {% data_table work.workers_table %}
+  {% endif %}
 {% aside %}{% if work.jobs and work.read_at and not work.unread %}{% include "partials/_reading_age.html" with at=work.read_at only %}{% endif %}
 {% endsection %}
 

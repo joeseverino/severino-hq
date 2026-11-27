@@ -370,7 +370,7 @@ class PlaybooksPageTests(TestCase):
         self.assertFalse({_adopt(newest.pk), _reject(newest.pk)} & posts)
 
     def worker_gone(self, seen=None):
-        """HQ's playbook worker holds no run, and was last seen ``seen``
+        """HQ's playbook workers hold no run, and were last seen ``seen``
         ago, or never when not given."""
 
         from datetime import timedelta
@@ -382,7 +382,7 @@ class PlaybooksPageTests(TestCase):
         now = timezone.now()
         work = OperationRequest.objects.filter(action__in=("scan", "run"))
         work.filter(state=OperationRequest.State.CLAIMED).update(lease_expires_at=now - timedelta(minutes=1))
-        heartbeat = UpstreamReading.objects.filter(key="automation-heartbeat")
+        heartbeat = UpstreamReading.objects.filter(key__startswith="automation.", key__endswith="-heartbeat")
         if seen is None:
             heartbeat.delete()
             work.update(claimed_at=None)
@@ -417,6 +417,29 @@ class PlaybooksPageTests(TestCase):
 
         self.assertEqual(self.setup_commands(self.page()), "")
 
+    def test_each_profiles_worker_says_whether_it_reports_and_the_machines_it_reaches(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from hq.platform.application.cadence import automation_heartbeat
+        from hq.platform.application.machines import machine_catalog
+        from hq.platform.core.example_estate.automation import PROFILES
+        from hq.platform.core.models import UpstreamReading
+
+        self.worker_gone(seen=timedelta(hours=3))
+        quiet, *heard = PROFILES[1], PROFILES[0], PROFILES[2]
+        for profile in heard:
+            UpstreamReading.objects.filter(key=automation_heartbeat(profile)).update(observed_at=timezone.now())
+
+        rows = [row.words for row in elements(self.page(), "tr")]
+        machine = machine_catalog()[0].name
+        for profile, state in ((quiet, "silent"), *((profile, "online") for profile in heard)):
+            with self.subTest(profile=profile):
+                (row,) = [row for row in rows if row.startswith(profile)]
+                self.assertIn(state, row.casefold())
+                self.assertIn(machine, row)
+
     def test_a_run_waiting_while_no_worker_arrives_reads_not_started_with_the_setup(self):
         self.worker_gone()
         waiting = OperationRequest.objects.get(action="run", state=OperationRequest.State.QUEUED)
@@ -424,7 +447,7 @@ class PlaybooksPageTests(TestCase):
         html = self.page(reverse("jobs:run", kwargs={"pk": waiting.pk}))
         self.assertIn("Not started", text(html))
         # What it waits for, and that it starts by itself once that comes.
-        self.assertIn("Starts when a playbook worker reports", text(html))
+        self.assertIn("Starts when a playbook worker", text(html))
         self.assertIn("hq-host automation", self.setup_commands(html))
         jobs = text(self.page(reverse("jobs:list")))
         self.assertIn("Not started", jobs)

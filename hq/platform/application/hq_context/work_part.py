@@ -19,6 +19,7 @@ from ..tables import Cell, DataTable, Piece, TableColumn
 from ..tone import Tone
 from ..ui import counted
 lazy from .. import outbound_work
+lazy from ..automation_workers import ProfileWorker, profile_workers, workers_table
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
 lazy from ..routes import reverse
@@ -86,6 +87,8 @@ class Work:
     # Why the units could not be read, in a sentence; "" when they were.
     unread: str = ""
     renderers_unread: str = ""
+    # HQ's playbook workers, one per privilege profile.
+    workers: tuple[ProfileWorker, ...] = ()
 
     @property
     def services(self) -> tuple[WorkUnit, ...]:
@@ -105,6 +108,10 @@ class Work:
     @property
     def renderers_table(self) -> DataTable:
         return DataTable.of("Credentials refresh", _RENDERER_COLUMNS, self.renderers)
+
+    @property
+    def workers_table(self) -> DataTable:
+        return workers_table(self.workers)
 
 
 def _unit(job: WorkUnit) -> Cell:
@@ -172,6 +179,7 @@ def _work() -> Work:
         unread=unread,
         renderers_unread=renderers_unread,
         scheduled=_on_a_cadence(),
+        workers=profile_workers(),
     )
 
 
@@ -398,6 +406,7 @@ def work_json(work: Work) -> dict[str, Any]:
         "credentials_unread": work.renderers_unread,
         "credentials": [_plain(item) for item in work.renderers],
         "scheduled": [_scheduled_json(item) for item in work.scheduled],
+        "playbook_workers": [_worker_json(worker) for worker in work.workers],
     }
 
 
@@ -410,4 +419,14 @@ def _scheduled_json(item: Scheduled) -> dict[str, Any]:
         "result": item.result,
         "next_due": iso(item.next_due),
         "recent": [dot.tip for dot in item.runs.dots] if item.runs else [],
+    }
+
+
+def _worker_json(worker: ProfileWorker) -> dict[str, Any]:
+    return {
+        "profile": worker.profile,
+        "state": worker.standing.state.label,
+        "seen_at": iso(worker.standing.seen_at),
+        "claimed_at": iso(worker.standing.claimed_at),
+        "machines": list(worker.machines),
     }

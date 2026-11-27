@@ -56,6 +56,7 @@ from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
 from .moments import duration
+from .projection import read_once
 from .read_requests import ForcedRead, connection_providers, due_reads, forced_kinds, forced_reads
 from .record_errors import Sentence
 from .refusal_codes import Code
@@ -64,6 +65,7 @@ from .tone import Absent, Tone, Toned
 from .ui import ended
 lazy from . import outbound_work
 lazy from .adoption import manages_through, observes_only
+lazy from .automation_runs import READ_PROFILE, claimant
 lazy from .facts import stored_snapshots
 lazy from .inbound_events import covers
 
@@ -227,6 +229,8 @@ class WorkerStanding:
     named: Sentence = CONTROLLER_NAMED
     # What never heard from means of it.
     unheard: WorkerState = WorkerState.NOT_CONFIGURED
+    # When it last took work, for a worker that claims it.
+    claimed_at: datetime | None = None
 
     @property
     def known(self) -> bool:
@@ -294,12 +298,12 @@ def controller_standing(now: datetime | None = None) -> WorkerStanding:
     return WorkerStanding(seen_at=seen_at, silent=silent, here=here)
 
 
-# HQ's playbook worker's arrival, a reading rather than a file beside the
-# controller's: the findings and the queue that say it is absent are derived
-# from rows (``derivations``), so a row is what moves them when it arrives.
+# HQ's playbook workers' arrivals, one per privilege profile, each a reading
+# rather than a file beside the controller's: the findings and the queue that
+# say one is absent are derived from rows (``derivations``), so a row is what
+# moves them when it arrives.
 AUTOMATION = "automation"
-AUTOMATION_HEARTBEAT = readings.heartbeat(AUTOMATION)
-# The host starts the worker this long after the last one ended, as well as at
+# The host starts the workers this long after the last ended, as well as at
 # its doorbell. deploy/systemd/severino-hq-automation.timer must hold the same
 # value (tested).
 AUTOMATION_FLOOR = timedelta(minutes=15)
@@ -309,42 +313,85 @@ AUTOMATION_SILENT_AFTER = 2 * AUTOMATION_FLOOR
 # A worker claims until nothing waits, so one pass claims several times, and
 # a write a minute says all an age is worded in.
 _AUTOMATION_NOTED_EVERY = timedelta(minutes=1)
-# The work only HQ's playbook worker claims.
+# The work only HQ's playbook workers claim.
 AUTOMATION_WORK = (OperationRequest.Action.SCAN, OperationRequest.Action.RUN)
 
 
-def note_automation() -> None:
-    """Record that HQ's playbook worker reached HQ, as each of its claims
-    arrives, so a worker that finds nothing to take still counts as seen.
+def _automation(profile: str) -> str:
+    """What the arrival of the worker lent ``profile``'s logins is noted as (``readings.note``)."""
+
+    return f"{AUTOMATION}.{profile}"
+
+
+def automation_heartbeat(profile: str) -> str:
+    """The reading that holds when the worker lent ``profile``'s logins last arrived."""
+
+    return readings.heartbeat(_automation(profile))
+
+
+def note_automation(profile: str) -> None:
+    """Record that the playbook worker lent ``profile``'s logins reached HQ,
+    as each of its claims arrives, so a worker that finds nothing to take
+    still counts as seen.
 
     Written only by the bridge's claim over the root-only socket, never by a
     page. It holds a moment and nothing else, so it names no secret.
     """
 
-    readings.note(AUTOMATION, every=_AUTOMATION_NOTED_EVERY)
+    readings.note(_automation(profile), every=_AUTOMATION_NOTED_EVERY)
 
 
-def automation_standing() -> WorkerStanding:
-    """HQ's playbook worker's last arrival: its heartbeat, or its newest
-    claim of a scan or a run. Silent once two of its timer's floors pass with
-    no arrival, unless it still holds a run's lease. Unlike the controller,
-    one never seen is absent: a scan or run asked of it waits for nothing, so
-    each is refused while it stands (``cannot``)."""
+def _automation_claims() -> dict[str, tuple[datetime | None, datetime | None]]:
+    """Each profile's worker's newest claim, and the last of its live leases
+    to run out, read with every other profile's in one query a projection."""
+
+    def load() -> dict[str, tuple[datetime | None, datetime | None]]:
+        found: dict[str, tuple[datetime | None, datetime | None]] = {}
+        rows = (
+            OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
+            .values("action", "resource__spec__privilege")
+            .annotate(
+                newest=Max("claimed_at"),
+                leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED)),
+            )
+        )
+        for row in rows:
+            profile = claimant(row["action"], row["resource__spec__privilege"])
+            held = found.get(profile, (None, None))
+            found[profile] = (_later(held[0], row["newest"]), _later(held[1], row["leased"]))
+        return found
+
+    return read_once("cadence.automation_claims", load)
+
+
+def _later(one: datetime | None, other: datetime | None) -> datetime | None:
+    return max((moment for moment in (one, other) if moment is not None), default=None)
+
+
+def automation_standing(profile: str) -> WorkerStanding:
+    """The last arrival of the playbook worker lent ``profile``'s logins: its
+    heartbeat, or its newest claim of the scans or runs it takes. Silent once
+    two of its timer's floors pass with no arrival, unless it still holds a
+    run's lease. Unlike the controller, one never seen is absent: a scan or
+    run asked of it waits for nothing, so each is refused while it stands
+    (``cannot``)."""
 
     now = present()
-    work = OperationRequest.objects.filter(action__in=AUTOMATION_WORK)
-    # The last lease to run out decides whether any is still held.
-    found = work.aggregate(
-        newest=Max("claimed_at"), leased=Max("lease_expires_at", filter=Q(state=OperationRequest.State.CLAIMED))
+    # The read profile's worker always runs once automation is set up; another
+    # runs once a connection lends its profile a login.
+    named, unheard = (
+        (PLAYBOOK_WORKER_NAMED, WorkerState.NOT_CONFIGURED)
+        if profile == READ_PROFILE
+        else (f"{PLAYBOOK_WORKER_NAMED} for the {profile} profile", WorkerState.UNHEARD)
     )
-    claimed, leased = found["newest"], found["leased"]
-    seen = [moment for moment in (readings.heard(AUTOMATION), claimed) if moment is not None]
+    claimed, leased = _automation_claims().get(profile, (None, None))
+    seen = [moment for moment in (readings.heard(_automation(profile)), claimed) if moment is not None]
     if not seen:
-        return WorkerStanding(seen_at=None, silent=False, named=PLAYBOOK_WORKER_NAMED)
+        return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard)
     seen_at = max(seen)
     holding = leased is not None and not passed(leased, now=now)
     silent = not holding and passed(seen_at + AUTOMATION_SILENT_AFTER, now=now)
-    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=PLAYBOOK_WORKER_NAMED)
+    return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=named, claimed_at=claimed)
 
 
 def newest_reading() -> datetime | None:
