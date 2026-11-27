@@ -580,3 +580,49 @@ class FindingInvestigationTests(TestCase):
         form = self.client.get(url).context["form"]
         self.assertEqual(form.initial["hosts"], [self.MACHINE])
         self.assertNotIn("parameters.service_unit", form.initial)
+
+    def test_a_full_filesystem_opens_the_run_on_its_mount(self):
+        from typing import Annotated
+
+        from pydantic import StringConstraints
+
+        from hq.platform.application.contracts import Closed
+
+        class Input(Closed):
+            mount: Annotated[str, StringConstraints(pattern=r"^/[A-Za-z0-9/_.-]*$")]
+
+        self.supply(
+            manifest(id=self.PLAYBOOK, effect="read", input_type=Input, investigates=("filesystem-nearly-full",))
+        )
+
+        (url,) = self.offered()
+        form = self.client.get(url).context["form"]
+        self.assertEqual(form.initial["hosts"], [self.MACHINE])
+        self.assertEqual(form.initial["parameters.mount"], "/")
+
+    def test_a_job_on_hqs_machine_is_looked_into_on_that_machine(self):
+        """A worker that stopped reporting is about no machine; the one its unit runs on is the one read."""
+
+        from hq.domains.control_plane.models import ProviderInventory
+
+        unit = "severino-hq-events.service"
+        inventory = ProviderInventory.objects.get(kind="host.unit")
+        inventory.records = [
+            *inventory.records,
+            {
+                "unit": unit,
+                "load": "loaded",
+                "active": "active",
+                "sub": "running",
+                "read_at": inventory.records[0]["read_at"],
+            },
+        ]
+        inventory.save(update_fields=["records"])
+        self.supply(
+            manifest(id=self.PLAYBOOK, effect="read", input_type=self.input, investigates=("event-channel-silent",))
+        )
+
+        (url,) = self.offered()
+        form = self.client.get(url).context["form"]
+        self.assertEqual(form.initial["hosts"], [self.MACHINE])
+        self.assertEqual(form.initial["parameters.service_unit"], unit)

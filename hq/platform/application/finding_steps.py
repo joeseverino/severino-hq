@@ -6,7 +6,6 @@ without loading every detector.
 """
 
 import re
-import shlex
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Annotated, Any, Literal
@@ -81,12 +80,6 @@ class ByHand:
             return ()
         escaped = re.sub(r'(["\\$`])', r"\\\1", command.strip())
         return (cls(label, f'ssh {machine} "sudo {escaped}"', why, machine, notes),)
-
-    @classmethod
-    def journal(cls, machine: str, label: str, unit: str, notes: tuple[str, ...] = ()) -> tuple[ByHand, ...]:
-        """The step that reads a background job's log on its machine."""
-
-        return cls.on(machine, label, f"journalctl -u {shlex.quote(unit)} -n 50 --no-pager", Why.NOT_GRANTED, notes)
 
 
 @dataclass(frozen=True, slots=True)

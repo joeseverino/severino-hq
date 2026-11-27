@@ -14,8 +14,8 @@ from datetime import datetime
 from hq.domains.control_plane.observations.r2 import BACKUP_KIND
 
 from . import unit_timers
-from .finding_model import Finding, FindingEstate, FindingRule
-from .finding_steps import ByHand, Do, Why
+from .finding_model import Finding, FindingEstate, FindingRule, LookInto
+from .finding_steps import Do
 from .freshness import missed
 from .moments import duration, moment, when
 from .projection import read_once
@@ -25,7 +25,7 @@ lazy from .connections import connection_rows
 lazy from .derivations import passed
 lazy from .entity_links import entity_link
 lazy from .facts import stored_snapshots
-lazy from .unit_findings import unit_causes
+lazy from .unit_findings import unit_causes, unit_machine
 
 RULE = "offsite-backup-late"
 PROVIDER = "r2"
@@ -120,20 +120,13 @@ def _late(estate: FindingEstate) -> tuple[Finding, ...]:
                     ("Allowed age", _ALLOWED),
                     *((("Copies kept", counted(copy.copies, "copy", "copies")),) if copy.copies else ()),
                 ),
-                fixes=(
-                    (
-                        ByHand(
-                            "Read the backup's last runs",
-                            f"sudo journalctl -u {BACKUP_UNIT} -n 50 --no-pager",
-                            Why.NOT_GRANTED,
-                        ),
-                    )
-                    if copy.manages
-                    else (Do("Set manages to 1 on the connection's item, so the controller uploads each archive"),)
-                ),
+                fixes=()
+                if copy.manages
+                else (Do("Set manages to 1 on the connection's item, so the controller uploads each archive"),),
                 observed_at=copy.read_at,
                 reads=BACKUP_KIND,
                 follows=unit_causes(estate, BACKUP_UNIT),
+                look_into=LookInto(machine=unit_machine(estate, BACKUP_UNIT), service_unit=BACKUP_UNIT),
             )
         )
     return tuple(found)

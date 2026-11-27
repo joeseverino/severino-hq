@@ -125,27 +125,15 @@ def _evidence(row: RebootState) -> tuple[tuple[str, str], ...]:
 
 
 def _steps(node: TopologyNode, row: RebootState) -> tuple[ByHand, ...]:
-    waits = (
-        ByHand.on(node.label, "See what waits on the restart", "cat /run/reboot-required.pkgs", Why.NOT_GRANTED)
-        if row.waiting
-        else ()
-    )
+    # What waits on it and when it is due are its evidence already.
     if row.scheduled:
-        return (
-            *waits,
-            *ByHand.on(
-                node.label, "See what is scheduled", "shutdown --show", Why.NOT_GRANTED, ("shutdown -c cancels it.",)
-            ),
-        )
-    return (
-        *waits,
-        *ByHand.on(
-            node.label,
-            "Schedule the restart for a quiet hour",
-            "shutdown -r 03:00",
-            Why.NOT_GRANTED,
-            ("HQ reads the time back and shows it here.",),
-        ),
+        return ByHand.on(node.label, "Cancel it where it is not wanted", "shutdown -c", Why.NOT_GRANTED)
+    return ByHand.on(
+        node.label,
+        "Schedule the restart for a quiet hour",
+        "shutdown -r 03:00",
+        Why.NOT_GRANTED,
+        ("HQ reads the time back and shows it here.",),
     )
 
 

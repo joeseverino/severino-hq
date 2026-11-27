@@ -303,8 +303,9 @@ its bars.
 
 Both a floor and a share must be crossed: a share alone flags a large disk with
 plenty left, and a floor alone flags every small partition, such as a 1 GiB
-`/boot`, for good. Its steps show the mount's space with `df -h`, then what
-fills it with `du -xh --max-depth=1`.
+`/boot`, for good. Where it names one filesystem, a playbook that
+investigates it is opened on that mount (`LookInto`, [Declaring a
+playbook](Architecture.md#declaring-a-playbook)).
 
 `host.reboot` is whether the machine waits on a restart
 (`SEVERINO_HOST_REBOOT`), one record: whether `/run/reboot-required` is
@@ -334,9 +335,8 @@ read fails only when no edge answered.
 controller's machine node for `host.reboot` and on the machine an edge's
 connection reaches for `host.edge_reboot`.
 It says since when, for which packages, and when the restart is scheduled.
-Its steps read the package list, then schedule the restart with
-`shutdown -r 03:00`, or, when one is scheduled, show it with
-`shutdown --show`, which `shutdown -c` cancels.
+Its step schedules the restart with `shutdown -r 03:00`, or, when one is
+scheduled, cancels it with `shutdown -c`.
 
 ## Facts about a subject
 

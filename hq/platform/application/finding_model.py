@@ -54,6 +54,26 @@ def matter_key(rule: str, about: str, part: str = "") -> str:
 
 
 @dataclass(frozen=True, slots=True)
+class LookInto:
+    """What a read-only playbook that investigates a finding is run with: the
+    machine, where its subject is none, and each input HQ fills by its name
+    where the playbook declares one (docs/Architecture.md, "Declaring a
+    playbook"). A value is left empty where the finding names several."""
+
+    machine: str = ""
+    # A systemd service by its exact name, its ``.service`` suffix included.
+    service_unit: str = ""
+    # A filesystem by where it is mounted.
+    mount: str = ""
+
+    @property
+    def inputs(self) -> dict[str, str]:
+        """The inputs it fills, by the name a playbook declares each under."""
+
+        return {name: value for name, value in (("service_unit", self.service_unit), ("mount", self.mount)) if value}
+
+
+@dataclass(frozen=True, slots=True)
 class Notice:
     """What makes a notice new: the occurrence it tells of, such as the day of
     the last loaded leg session or the commit on its way to production.
@@ -164,8 +184,8 @@ class Finding:
     # What kind of matter it is, as its owner heads a list of them; several
     # of one family from one source fold under it in the queue.
     family: str = ""
-    # Playbook context, derived from the observed service and adopted source.
-    service_unit: str = field(default="", kw_only=True)
+    # Where and on what a playbook that investigates it runs.
+    look_into: LookInto = field(default=LookInto(), kw_only=True)
     # How the work HQ does on it now stands (a press's run under way), with
     # its page: its row says it and asks again until that work ends, so it
     # says where it stands without a refresh.
@@ -348,6 +368,7 @@ class Said(TypedDict):
     title: str
     explanation: RequiredText
     fixes: NotRequired[tuple[Advice, ...]]
+    look_into: NotRequired[LookInto]
 
 
 def per_connection(

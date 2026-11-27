@@ -1509,12 +1509,16 @@ revision or repository.
 
 A read-only playbook may declare `investigates` with the finding rule names it
 helps explain. Needs you offers its existing Run command when the adopted
-playbook can reach the finding's machine and the reader may run it. The link
+playbook can reach the finding's machine and the reader may run it: its
+subject, or for a finding about something on a machine (a controller, a
+connection, one of HQ's own jobs) the machine its detector names. The link
 names the finding. Opening the form reads that finding again for the current
-reader and selects the machine. When it identifies one systemd service, HQ
-fills a declared `service_unit` input that accepts its exact name. Multiple
-services leave that field for the reader to fill. The form still validates
-every input and a run still goes through the canonical capability.
+reader and selects the machine. Where the finding names one of each, HQ fills
+the declared inputs that accept its exact value: `service_unit`, a systemd
+service by its full name, and `mount`, a filesystem by where it is mounted
+(`finding_model.LookInto`). A finding that names several leaves the field for
+the reader to fill. The form still validates every input and a run still goes
+through the canonical capability.
 
 ### Checking a repository of playbooks
 

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from hq.domains.control_plane.models import RefusedReport
 
 from .cadence import CONTROLLER_REFRESH
-from .finding_model import Finding, FindingEstate, cannot_run_commands
+from .finding_model import Finding, FindingEstate, LookInto, cannot_run_commands
 from .finding_steps import Advice, Does
 from .freshness import LAST_READ, freshness
 from .moments import when
@@ -182,7 +182,7 @@ def stated[R: ReadingRow](estate: FindingEstate, row: type[R]) -> Iterator[tuple
 class OnEachMachine[R: ReadingRow]:
     """A detector that says one thing per machine about the rows of its reading
     it picks: one finding, with each picked row's evidence and steps in turn,
-    a command on that machine HQ cannot run."""
+    and what a playbook that investigates it looks into where it picks one."""
 
     rule: str
     row: type[R]
@@ -191,8 +191,8 @@ class OnEachMachine[R: ReadingRow]:
     title: Callable[[TopologyNode, tuple[R, ...]], str]
     explanation: Callable[[tuple[R, ...]], str]
     evidence: Callable[[R], Iterable[tuple[str, str]]]
-    fixes: Callable[[TopologyNode, R], Iterable[Advice]]
-    service_unit: Callable[[R], str] | None = None
+    fixes: Callable[[TopologyNode, R], Iterable[Advice]] = lambda _node, _row: ()
+    look_into: Callable[[R], LookInto] | None = None
 
     def __call__(self, estate: FindingEstate) -> tuple[Finding, ...]:
         found = []
@@ -214,7 +214,7 @@ class OnEachMachine[R: ReadingRow]:
                     no_help_reason=cannot_run_commands(node.label),
                     observed_at=reading.taken,
                     reads=self.row.KIND,
-                    service_unit=self.service_unit(picked[0]) if self.service_unit and len(picked) == 1 else "",
+                    look_into=self.look_into(picked[0]) if self.look_into and len(picked) == 1 else LookInto(),
                 )
             )
         return tuple(found)

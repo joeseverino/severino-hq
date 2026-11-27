@@ -24,6 +24,7 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    LookInto,
     cannot_run_commands,
 )
 from .finding_steps import ByHand, Do, Fix, Why
@@ -208,18 +209,11 @@ def _run_again(
     )
 
 
-def _journal(node: TopologyNode, renderings: tuple[Rendering, ...]) -> tuple[ByHand, ...]:
-    return tuple(
-        step
-        for rendering in renderings
-        if (unit := RENDERER_UNITS.get(rendering.renderer))
-        for step in ByHand.journal(
-            node.label,
-            "See why" + _job(rendering, renderings),
-            unit,
-            ("Look for the line with event=secrets.render.failed. The lines above it say what was refused.",),
-        )
-    )
+def _look_into(renderings: tuple[Rendering, ...]) -> LookInto:
+    """The refresh job's unit, where the renderings name one."""
+
+    units = {unit for rendering in renderings if (unit := RENDERER_UNITS.get(rendering.renderer))}
+    return LookInto(service_unit=next(iter(units)) if len(units) == 1 else "")
 
 
 def _why(rendering: Rendering) -> str:
@@ -270,8 +264,9 @@ def _failing(estate: FindingEstate) -> tuple[Finding, ...]:
                         ("Last refreshed", when(rendering.confirmed_at, estate.now)),
                     )
                 ),
-                fixes=_journal(node, failed) + _run_again(node, failed, "Run it again"),
+                fixes=_run_again(node, failed, "Run it again"),
                 no_help_reason=cannot_run_commands(node.label),
+                look_into=_look_into(failed),
             )
         )
     return tuple(found)
@@ -332,20 +327,9 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                     *(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
                     ("Due", f"Every {duration(RENDER_EVERY)}, in full every {duration(FULL_READ_EVERY)}"),
                 ),
-                fixes=tuple(
-                    step
-                    for rendering in stale
-                    if (unit := RENDERER_UNITS.get(rendering.renderer))
-                    for step in ByHand.on(
-                        node.label,
-                        "See when it last ran and is next due" + _job(rendering, stale),
-                        f"systemctl list-timers {unit.removesuffix('.service')}.timer",
-                        Why.NOT_GRANTED,
-                    )
-                )
-                + _journal(node, stale)
-                + _run_again(node, stale, "Run it now"),
+                fixes=_run_again(node, stale, "Run it now"),
                 no_help_reason=cannot_run_commands(node.label),
+                look_into=_look_into(stale),
             )
         )
     return tuple(found)

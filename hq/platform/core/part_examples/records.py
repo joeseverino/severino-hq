@@ -846,16 +846,16 @@ def opened_problems():
                     fixes=(
                         *ByHand.on(
                             "example-host-01",
-                            "See what waits on the restart",
-                            "cat /run/reboot-required.pkgs",
+                            "Schedule the restart for a quiet hour",
+                            "shutdown -r 03:00",
                             Why.NOT_GRANTED,
                         ),
                         *ByHand.on(
                             "example-host-01",
-                            "See when",
-                            "shutdown --show",
+                            "Cancel it",
+                            "shutdown -c",
                             Why.NOT_GRANTED,
-                            ("shutdown -c cancels it.",),
+                            ("HQ reads the time back and shows it here.",),
                         ),
                     ),
                 ),

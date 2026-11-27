@@ -96,17 +96,6 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertNotIn("skipped-by-a-sweep", rules)
         self.assertNotIn("never-observed", rules)
 
-    def test_the_controller_is_looked_at_with_commands_that_paste(self):
-        from ..controller_findings import _controller_steps
-
-        self.assertEqual(
-            [step.command for step in _controller_steps("lab-1")],
-            [
-                'ssh lab-1 "sudo systemctl status severino-hq-controller.service --no-pager"',
-                'ssh lab-1 "sudo journalctl -u severino-hq-controller.service -n 50 --no-pager"',
-            ],
-        )
-
     def test_a_shared_ability_does_not_guess_between_two_controllers(self):
         old = (self.now - timedelta(days=3)).isoformat()
         topology = Topology(

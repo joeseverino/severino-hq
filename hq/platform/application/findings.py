@@ -304,13 +304,16 @@ def _permitted(capability: str, principal: Principal) -> tuple[bool, Effect | No
 def _playbooks(
     finding: Finding, subject: TopologyNode | None, principal: Principal
 ) -> tuple[list[Does], list[ActionLink]]:
-    """Adopted fixes and read-only investigations for this rule and machine."""
+    """Adopted fixes and read-only investigations for this rule and machine:
+    its subject, or the one it names to look into where its subject is no machine."""
 
     fixes: list[Does] = []
     investigations: list[ActionLink] = []
-    if subject is None or subject.kind != MACHINE_KIND:
+    machine = normalized_hostname(
+        finding.look_into.machine or (subject.label if subject is not None and subject.kind == MACHINE_KIND else "")
+    )
+    if not machine:
         return fixes, investigations
-    machine = normalized_hostname(subject.label)
     for manifest in automation_runs.playbooks_for(finding.rule, machine):
         name = automation_runs.capability_name(manifest.id)
         if finding.rule not in manifest.investigates:

@@ -21,6 +21,7 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    LookInto,
     cannot_run_commands,
     matter_key,
 )
@@ -225,6 +226,12 @@ def machine_units(estate: FindingEstate) -> Iterator[tuple[TopologyNode, tuple[U
 WORKER_READ = (str(Capability.READ),)
 
 
+def unit_machine(estate: FindingEstate, unit: str) -> str:
+    """The machine whose units include ``unit``, by its name; "" where none read does."""
+
+    return next((node.label for node, units in machine_units(estate) if any(each.unit == unit for each in units)), "")
+
+
 def unit_causes(estate: FindingEstate, unit: str) -> tuple[str, ...]:
     """The findings a worker's silence follows from, on the machine whose
     units include ``unit``, the one that runs it: that unit failed, or it or
@@ -254,8 +261,7 @@ def stopped_reporting(
     fixes: tuple[Fix, ...] = (),
 ) -> Finding:
     """The one finding for a worker on HQ's machine, run by ``unit``, that
-    stopped reporting: when it was last seen and how to read why, beneath its
-    unit's own failure."""
+    stopped reporting: when it was last seen, beneath its unit's own failure."""
 
     return Finding(
         rule=rule,
@@ -266,12 +272,10 @@ def stopped_reporting(
         severity=severity,
         explanation=explanation,
         evidence=(("Last seen", when(seen_at, now=estate.now)),),
-        fixes=(
-            *fixes,
-            ByHand("Read why it stopped", f"sudo journalctl -u {shlex.quote(unit)} -n 50 --no-pager", Why.NOT_GRANTED),
-        ),
+        fixes=fixes,
         primary=primary,
         follows=unit_causes(estate, unit),
+        look_into=LookInto(machine=unit_machine(estate, unit), service_unit=unit),
     )
 
 
@@ -334,20 +338,18 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                 fixes=tuple(
                     step
                     for unit in failed
-                    for step in (
-                        *ByHand.journal(node.label, f"See why {unit.named} failed", unit.unit),
-                        *on_unit(
-                            "infrastructure.resource.restart",
-                            unit.unit,
-                            ByHand.on(
-                                node.label,
-                                f"Start {unit.named} again",
-                                f"systemctl restart {shlex.quote(unit.unit)}",
-                                Why.NOT_GRANTED,
-                            ),
+                    for step in on_unit(
+                        "infrastructure.resource.restart",
+                        unit.unit,
+                        ByHand.on(
+                            node.label,
+                            f"Start {unit.named} again",
+                            f"systemctl restart {shlex.quote(unit.unit)}",
+                            Why.NOT_GRANTED,
                         ),
                     )
                 ),
+                look_into=LookInto(service_unit=failed[0].unit if len(failed) == 1 else ""),
                 no_help_reason=cannot_run_commands(node.label),
                 # A job cannot start without a unit it requires, so its failure
                 # follows from that unit not being set up.
@@ -553,24 +555,9 @@ def _stalled_finding(
                 ("Last ran", when(timer.last_trigger_at, now)),
             )
         ),
-        fixes=tuple(
-            step
-            for timer in timers
-            for step in (
-                *ByHand.on(
-                    node.label,
-                    f"See when {timer.named} last ran and is next due",
-                    f"systemctl list-timers {shlex.quote(timer.unit)}",
-                    Why.NOT_GRANTED,
-                ),
-                *(
-                    ByHand.journal(node.label, "See what the job it starts last did", timer.activates)
-                    if timer.activates
-                    else ()
-                ),
-            )
-        ),
         no_help_reason=cannot_run_commands(node.label),
+        # The job a timer starts, whose state and log say why it is not running.
+        look_into=LookInto(service_unit=timers[0].activates if len(timers) == 1 else ""),
     )
 
 
@@ -583,7 +570,7 @@ _restarting = OnEachMachine(
     rule="unit-restarting",
     row=UnitState,
     picked=lambda unit: bool(unit.unit) and unit.looping,
-    service_unit=lambda unit: unit.unit,
+    look_into=lambda unit: LookInto(service_unit=unit.unit),
     severity=lambda _looping: Tone.SERIOUS,
     title=lambda node, looping: (
         f"{looping[0].named} keeps restarting on {node.label}"
@@ -602,17 +589,14 @@ _restarting = OnEachMachine(
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
         ("How it last ended", _ended(unit)),
     ),
-    fixes=lambda node, unit: (
-        *ByHand.journal(node.label, f"See why {unit.named} keeps stopping", unit.unit),
-        *on_unit(
-            "infrastructure.resource.reset_failed",
-            unit.unit,
-            ByHand.on(
-                node.label,
-                "Once it is fixed, clear its restart count",
-                f"systemctl reset-failed {shlex.quote(unit.unit)}",
-                Why.NOT_GRANTED,
-            ),
+    fixes=lambda node, unit: on_unit(
+        "infrastructure.resource.reset_failed",
+        unit.unit,
+        ByHand.on(
+            node.label,
+            "Once it is fixed, clear its restart count",
+            f"systemctl reset-failed {shlex.quote(unit.unit)}",
+            Why.NOT_GRANTED,
         ),
     ),
 )
@@ -646,13 +630,6 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                             [UNREAD_REASONS.get(reason, "they could not be read") for reason in reasons], "and"
                         )
                     )
-                ),
-                fixes=ByHand.on(
-                    node.label,
-                    "See whether systemd answers for HQ's jobs",
-                    "systemctl list-units 'severino-hq-*' --all --no-pager",
-                    Why.NOT_GRANTED,
-                    ("If that works and this stays, deploy HQ.",),
                 ),
                 no_help_reason=cannot_run_commands(node.label),
             )

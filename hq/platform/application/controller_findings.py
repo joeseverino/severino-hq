@@ -17,6 +17,7 @@ from .finding_model import (
     Finding,
     FindingEstate,
     FindingRule,
+    LookInto,
     Said,
     cannot_run_commands,
     fact_values,
@@ -333,24 +334,17 @@ def _controller_stopped(estate: FindingEstate, machine: str, controller: str, ki
             ("Not read", ", ".join(sorted(_many(kind) for kind in kinds))),
             *((_when(LAST_READ, last),) if last else ()),
         ),
-        fixes=(_read_again("all"), *_controller_steps(machine)),
+        fixes=(_read_again("all"),),
         no_help_reason=cannot_run_commands(machine),
         affected_scopes=tuple(sorted(kinds)),
+        look_into=_controller(machine),
     )
 
 
-def _controller_steps(machine: str) -> tuple[ByHand, ...]:
-    """How the owner looks at the controller on its machine."""
+def _controller(machine: str) -> LookInto:
+    """The controller's unit on its machine, which a playbook that investigates its finding reads."""
 
-    return (
-        *ByHand.on(
-            machine,
-            "Check the controller is running",
-            f"systemctl status {CONTROLLER_UNIT} --no-pager",
-            Why.NOT_GRANTED,
-        ),
-        *ByHand.journal(machine, "Read its log", CONTROLLER_UNIT),
-    )
+    return LookInto(machine=machine, service_unit=CONTROLLER_UNIT)
 
 
 def _keep_live(node: TopologyNode) -> Does:
@@ -644,7 +638,7 @@ def _keeps_failing(node: TopologyNode, unfinished: tuple[str, ...], machine: str
     return {
         "title": f"Work through {node.label} keeps failing",
         "explanation": "The controller retries it every few minutes, and each try has failed.",
-        "fixes": ByHand.journal(machine, "Read the controller's log", CONTROLLER_UNIT),
+        "look_into": _controller(machine),
     }
 
 
@@ -680,24 +674,22 @@ def _connections_lost(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 fixes=(_read_again(), *_refresh_steps(node.label)),
                 no_help_reason=cannot_run_commands(node.label),
+                # The refresh job is what reports them.
+                look_into=LookInto(machine=node.label, service_unit=SECRETS_UNIT),
             )
         )
     return tuple(found)
 
 
 def _refresh_steps(machine: str) -> tuple[Fix, ...]:
-    """How the owner runs the refresh job again on its machine and reads what it wrote."""
+    """How the owner runs the refresh job again on its machine."""
 
     unit = SECRETS_UNIT
-    return (
-        *on_unit(
-            "infrastructure.resource.start",
-            unit,
-            ByHand.on(machine, "Run the refresh job now", f"systemctl start {unit}", Why.NOT_GRANTED),
-            intent="Run the refresh job now",
-        ),
-        *ByHand.journal(machine, "Read the refresh job's log", unit),
-        *_controller_steps(machine),
+    return on_unit(
+        "infrastructure.resource.start",
+        unit,
+        ByHand.on(machine, "Run the refresh job now", f"systemctl start {unit}", Why.NOT_GRANTED),
+        intent="Run the refresh job now",
     )
 
 
@@ -722,8 +714,8 @@ def _report_refused(estate: FindingEstate) -> tuple[Finding, ...]:
                 ("Reason", refusal.detail),
                 ("Last refused", when(refusal.refused_at, estate.now)),
             ),
-            fixes=_controller_steps(node.label),
             no_help_reason=cannot_run_commands(node.label),
+            look_into=_controller(node.label),
         )
         for node, held in refusals(estate)
         for refusal in held
