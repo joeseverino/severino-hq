@@ -407,7 +407,7 @@ describe("a listener that reconnects", () => {
     const hub = env.HUB.getByName("example-counted");
     await broadcast(named("delivery-first"), hub);
     const { last_event_id: first } = (await listen(0, hub)).opening;
-    for (let sent = 1; sent <= LOG_EVENTS + 1; sent++) await broadcast(named(`delivery-${sent}`), hub);
+    await Promise.all(Array.from({ length: LOG_EVENTS + 1 }, (_, sent) => broadcast(named(`delivery-${sent + 1}`), hub)));
 
     const { opening } = await listen(first, hub);
 

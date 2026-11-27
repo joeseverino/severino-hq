@@ -655,7 +655,7 @@ ROW_ACTIONS = Example(
                     (Cell("example-01"),),
                     actions=(
                         PageAction._built(
-                            label="Read", url="/example/1/status/", method="post", value="read", field="status"
+                            label="Read", url="/example/1/status/", method="post", sends={"status": "read"}
                         ),
                         PageAction._built(label="Delete", url="/example/1/delete/", danger=True),
                     ),

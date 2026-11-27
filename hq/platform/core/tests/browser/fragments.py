@@ -248,7 +248,7 @@ def _posted(request):
 def offer_of(url, value=""):
     """A press as an offer carries it, for a page drawn without HQ's commands."""
 
-    return PageAction._built(label=value, url=url, method="post", value=value)
+    return PageAction._built(label=value, url=url, method="post", sends={"action": value})
 
 
 def _row(key):

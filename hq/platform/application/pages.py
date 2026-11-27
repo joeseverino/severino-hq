@@ -222,6 +222,8 @@ class PageAction:
     def _built(cls, **values: Any) -> PageAction:
         """One with the fields only ``command`` and ``of`` set, past the link's rule."""
 
+        if unknown := values.keys() - {each.name for each in dataclasses.fields(cls)}:
+            raise TypeError(f"PageAction has no field {', '.join(sorted(unknown))}")
         action = object.__new__(cls)
         for each in dataclasses.fields(cls):
             if each.name in values:
