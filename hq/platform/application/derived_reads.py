@@ -37,7 +37,7 @@ lazy from .path_records import HopRow, ObservedPart, PathRecord, RoutePart
 lazy from .paths import path_to
 lazy from .plugins import checked_cards
 lazy from .projection import iso
-lazy from .reading_records import ReadingItem, ReadingRecord
+lazy from .reading_records import ReadingItem, ReadingRecord, RecordItem, record_filter
 lazy from .record_parts import CheckPart, MeasurementPart
 lazy from .record_saves import row
 lazy from .relationship_records import JoinedReadingPart, RelationshipsRecord
@@ -372,18 +372,38 @@ def list_readings(*, provider: str | None = None, limit: int = 50) -> dict[str, 
     return page_of(kinds, limit, each=lambda kind: _reading(kind, rows.get(kind)))
 
 
+def _stored(kind: str, row: ProviderInventory | None) -> list[dict[str, Any]]:
+    """The records ``row`` holds of ``kind``, as its schema admits them; none of a kind HQ withholds."""
+
+    spec = OBSERVATIONS[kind]
+    stored = row.records if row is not None and isinstance(row.records, list) and not spec.withheld else []
+    return [spec.admitted(record) for record in stored if isinstance(record, dict)]
+
+
 def get_reading(kind: str) -> ReadingRecord:
     """One reading kind with its stored records, as its schema admits them."""
 
-    spec = OBSERVATIONS.get(kind)
-    if spec is None:
+    if kind not in OBSERVATIONS:
         raise RecordNotFound("No reading is of that type.")
     row = _rows((kind,)).get(kind)
-    stored = row.records if row is not None and isinstance(row.records, list) and not spec.withheld else []
-    return {
-        **_reading(kind, row),
-        "items": [spec.admitted(record) for record in stored if isinstance(record, dict)],
-    }
+    return {**_reading(kind, row), "items": _stored(kind, row)}
+
+
+def list_reading_records(
+    *, kind: str | None = None, where: dict[str, Any] | None = None, limit: int = 50
+) -> dict[str, Any]:
+    """Every record of one reading kind, or of every kind, that ``where``'s
+    field values keep, as its schema admits it."""
+
+    kinds = [kind] if kind else [name for name, spec in OBSERVATIONS.items() if not spec.withheld]
+    rows = _rows(kinds)
+    found: list[RecordItem] = [
+        {"kind": each, "record": record}
+        for each in kinds
+        for record in _stored(each, rows.get(each))
+        if not where or record_filter(each).keeps(record, where)
+    ]
+    return page_of(found, limit)
 
 
 # ----- Credentials ------------------------------------------------------------

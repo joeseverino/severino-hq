@@ -14,6 +14,7 @@ from difflib import get_close_matches
 from typing import Any, get_args
 
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError as DjangoValidationError
+from pydantic_core import PydanticCustomError
 from pydantic_core.core_schema import ErrorType
 
 from hq.platform.core.rules import RULE
@@ -96,6 +97,13 @@ def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:
     """Pydantic's ``extra_forbidden`` shape, for a field no Pydantic type refused."""
 
     return [{**_EXTRA, "loc": [field]} for field in fields]
+
+
+def misnamed(name: str) -> PydanticCustomError:
+    """The error of a field sent under a name its input does not take, naming
+    the field ``name`` that would take it in its place."""
+
+    return PydanticCustomError("misnamed", "is not a known field; send it as {name}", {"name": name})
 
 
 def _unknown_as_extra(error: Mapping[str, Any]) -> Mapping[str, Any]:

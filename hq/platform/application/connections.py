@@ -55,7 +55,7 @@ lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
 lazy from .path_records import HopRow
 lazy from .projection import read_once
-lazy from .reading_records import ReadingItem, ReadingRecord, ReadingRow
+lazy from .reading_records import ReadingItem, ReadingRecord, ReadingRow, RecordItem, RecordQuery
 lazy from .resource_refusals import READINGS
 
 
@@ -641,6 +641,14 @@ def resources() -> tuple[ResourceSpec, ...]:
             identifier="kind",
             web_route="control_plane:connections",
             record_type=ReadingRecord,
+        ),
+        ResourceSpec(
+            "reading.records",
+            "Reading records",
+            "Each record a reading holds, of one type or every type, filtered by its own fields.",
+            Capability.READ,
+            listing=ListRead(derived_reads.list_reading_records, RecordQuery, RecordItem),
+            web_route="control_plane:connections",
         ),
         ResourceSpec(
             "credentials",

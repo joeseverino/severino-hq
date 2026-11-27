@@ -587,6 +587,7 @@ class _UnreadableQuery(QueryRefusal):
 # int() never meets its digit limit; a plus, a space, an underscore or another
 # script's digits stays text.
 _COUNT = re.compile(r"-?[0-9]{1,18}")
+_MEMBER = re.compile(r"(?P<field>[A-Za-z_][A-Za-z0-9_]*)\[(?P<member>[^\[\]]+)\]")
 
 
 def _counts(schema: Mapping[str, Any]) -> bool:
@@ -741,14 +742,17 @@ def _selection(raw: str | None) -> list[str] | None:
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
     """One resource's records, narrowed by the query its schema checks."""
 
-    filters: dict[str, str] = {}
+    filters: dict[str, Any] = {}
     for key, values in request.GET.lists():
-        if len(values) != 1:
+        # An object's member is sent as ``field[member]``, the document's deepObject style.
+        found = _MEMBER.fullmatch(key)
+        into, place = (filters.setdefault(found["field"], {}), found["member"]) if found else (filters, key)
+        if len(values) != 1 or not isinstance(into, dict) or place in into:
             return _fail(
                 f"Query field {key!r} may appear only once.",
                 code=Code.INVALID_INPUT,
             )
-        filters[key] = values[0]
+        into[place] = values[0]
     fields = _selection(filters.pop(RESERVED_QUERY_FIELD, None))
     return _ok(list_application_resource(name, filters, principal=request.principal, strict=False, fields=fields))
 

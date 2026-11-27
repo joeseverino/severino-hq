@@ -569,11 +569,13 @@ class _Builder:
             schema = {**query["$defs"][alias], **{key: value for key, value in schema.items() if key != "$ref"}}
         # What the field's type names beyond itself (a nested definition) is a schema component.
         definitions = {key: value for key, value in query.get("$defs", {}).items() if key != alias}
+        # An object is sent member by member, as ``field[member]=value``.
+        whole = any(said.get("type") == "object" for said in (schema, *schema.get("anyOf", ())))
         parameter = _query_parameter(
             field,
             self.components.hoist({**schema, "$defs": definitions}),
             required=required,
-            style="form",
+            style="deepObject" if whole else "form",
             explode=True,
         )
         return self.parameter(alias, parameter) if alias else parameter
