@@ -41,7 +41,7 @@ type Source func(ctx context.Context) (Stream, error)
 // runs, and an event carries no truth: HQ answers it by reading with its own
 // connection. Each time it begins reading, its first start included, it
 // tells HQ it reconnected, so HQ reads again whatever it missed while it was
-// not reading, as the listener does: nothing is replayed.
+// not reading: Docker and systemd keep no log to resume from.
 type Watcher struct {
 	// Sources are read together: one that ends ends the read, which begins
 	// again with every source.

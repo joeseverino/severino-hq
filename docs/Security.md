@@ -723,7 +723,18 @@ path from the public internet. Setting it up is
   compared in constant time, and tagged with the token's SHA-256. An event
   goes only to the sockets tagged with the token the Worker holds now, and
   closes every other, so a rotation evicts a socket opened with the old
-  token, which a hibernated socket would otherwise outlive.
+  token, which a hibernated socket would otherwise outlive. A socket of
+  another token reaching the Durable Object is closed at once.
+- The Durable Object logs each event it sends in its SQLite storage, under an
+  id that only grows: the contract's members of the event (provider, event,
+  subject, delivery id, time), the names the socket already carries, never a
+  body. It keeps a window of the newest by count and by age (`LOG_EVENTS`
+  and `LOG_AGE_MS` in `worker/src/hub.ts`), cut from the oldest end, so an
+  id it holds has every event after it. A listener that reconnects presents the last id it handled (`Last-Event-ID`, a number) and
+  is sent exactly the events after it; one whose id the log no longer holds,
+  or that presents none, is told so and HQ reads everything again. Only a
+  socket of the current token is sent the log, so the log adds nothing a
+  socket could not already hear.
 - Every event a verified request carries is forwarded, one HQ takes or not,
   so a provider's test event shows on Events; HQ records one it does not
   take as ignored and reads nothing for it. An event forwards its names alone
@@ -778,9 +789,11 @@ HQ's side of the socket is `severino-hq-listener.service`
   the tailnet. The unit starting it holds no more than the controller's, to
   load that table.
 - It sends nothing on the socket but pings. What it hears is held to the
-  contract's `InboundArrival`; anything else is dropped. A reconnect makes HQ
-  read again every reading the Worker's providers name, at most once a
-  minute, so a gap is repaired by reading and nothing is replayed.
+  contract's `InboundArrival`; anything else is dropped. It holds the id of
+  the last event HQ took, in memory, and presents it on each reconnect. Only
+  when the Worker no longer holds every event after it, or the listener has
+  just started, does HQ read again every reading the Worker's providers
+  name, at most once a minute.
 
 `severino-hq-events.service` tells HQ of a container's change on its host
 and of each start job systemd ended there, as the contract's `HostJobResult`

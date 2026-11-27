@@ -2,12 +2,14 @@ package runtime
 
 import (
 	"context"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -35,8 +37,11 @@ const (
 // the connection names; it sends nothing on the socket but the protocol's
 // pings; what it hears is held to the contract's InboundArrival before it is
 // posted, and an event carries only names, which HQ answers by reading with
-// its own credentials. A gap in the socket is repaired by HQ reading again
-// on each reconnect, so nothing is buffered across one.
+// its own credentials. It holds the id of the last event HQ took and presents
+// it on each reconnect, a number in a header beside the token, and the
+// Worker's Hub sends the events after it from its log; only when the log no
+// longer holds every one does HQ read everything again. Nothing outlives the
+// process, so a listener that starts presents no id and HQ reads again.
 type Listener struct {
 	// URL is the Worker's socket (wss://), Token its bearer.
 	URL   string
@@ -52,6 +57,26 @@ type Listener struct {
 	Ping, PongWait time.Duration
 	Burst          Burst
 	Reconnect
+	// held is the id of the last event HQ took, zero before the Hub names one.
+	held int64
+}
+
+// lastEventID is the header a listener presents held in, as Server-Sent
+// Events name it (worker/src/hub.ts LAST_EVENT_ID).
+const lastEventID = "Last-Event-ID"
+
+// opening is the Hub's first message on a socket (worker/src/hub.ts
+// Opening): the newest id its log holds, and whether the events after the id
+// presented follow.
+type opening struct {
+	LastEventID int64 `json:"last_event_id"`
+	Resumed     bool  `json:"resumed"`
+}
+
+// logged is each message after it: one event under its id in the Hub's log.
+type logged struct {
+	ID      int64          `json:"id"`
+	Arrival jsontext.Value `json:"arrival"`
 }
 
 // NewListener is the listener for an events connection.
@@ -73,23 +98,32 @@ func (l *Listener) Run(ctx context.Context) {
 	l.Reconnect.Run(ctx, l.Log, "event socket lost", "listener.reconnect", l.session)
 }
 
-// session is one connection: HQ is told it reconnected, then hears each event
-// in batches, and that the socket still answers, until either side fails. A
-// ping unanswered ends it, so a batch with no events says the socket
+// session is one connection: HQ is told it is listening, and to read again
+// when the Hub could not send what followed the id held, then hears each
+// event in batches, and that the socket still answers, until either side
+// fails. A ping unanswered ends it, so a batch with no events says the socket
 // answered within the last two pings.
 func (l *Listener) session(ctx context.Context) error {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	header := http.Header{"Authorization": {"Bearer " + l.Token.Reveal()}}
+	if l.held > 0 {
+		header.Set(lastEventID, strconv.FormatInt(l.held, 10))
+	}
 	// The library closes the handshake's body itself (Dial's documentation).
 	conn, _, err := websocket.Dial(ctx, l.URL, &websocket.DialOptions{ //nolint:bodyclose // see above
 		HTTPClient: l.Client,
-		HTTPHeader: http.Header{"Authorization": {"Bearer " + l.Token.Reveal()}},
+		HTTPHeader: header,
 	})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = conn.CloseNow() }()
 	conn.SetReadLimit(listenerReadLimit)
+	opened, err := l.opening(ctx, conn)
+	if err != nil {
+		return err
+	}
 
 	post := func(batch InboundBatch) error {
 		batch.Source = InboundSourceWorker
@@ -101,9 +135,16 @@ func (l *Listener) session(ctx context.Context) error {
 		}
 		return nil
 	}
-	if err := post(InboundBatch{Reconnected: true}); err != nil {
+	if err := post(InboundBatch{Reconnected: !opened.Resumed}); err != nil {
 		return err
 	}
+	if !opened.Resumed {
+		// HQ reads everything again, so what the log held is HQ's already.
+		l.held = opened.LastEventID
+	}
+	// through is the id of the last event heard, which HQ has taken once the
+	// batch that holds it is posted.
+	through := l.held
 
 	heard := make(chan []byte)
 	go func() {
@@ -145,7 +186,13 @@ func (l *Listener) session(ctx context.Context) error {
 		case <-ctx.Done():
 			return context.Cause(ctx)
 		case data := <-heard:
-			event, err := ReadArrival(data)
+			var message logged
+			if err := jsonv2.Unmarshal(data, &message, jsonv2.RejectUnknownMembers(true)); err != nil {
+				l.Log.Warn("event dropped", slog.String("event", "listener.unreadable"), slog.Any("error", err))
+				continue
+			}
+			through = message.ID
+			event, err := ReadArrival(message.Arrival)
 			if err != nil {
 				l.Log.Warn("event dropped", slog.String("event", "listener.unreadable"), slog.Any("error", err))
 				continue
@@ -158,7 +205,24 @@ func (l *Listener) session(ctx context.Context) error {
 		if err := post(InboundBatch{Events: burst.Take()}); err != nil {
 			return err
 		}
+		l.held = through
 	}
+}
+
+// opening reads the Hub's first message, which a Hub answering its socket
+// sends at once.
+func (l *Listener) opening(ctx context.Context, conn *websocket.Conn) (opening, error) {
+	var opened opening
+	read, stop := context.WithTimeout(ctx, l.PongWait)
+	defer stop()
+	_, data, err := conn.Read(read)
+	if err != nil {
+		return opened, err
+	}
+	if err := jsonv2.Unmarshal(data, &opened, jsonv2.RejectUnknownMembers(true)); err != nil {
+		return opened, fmt.Errorf("the Hub's opening: %w", err)
+	}
+	return opened, nil
 }
 
 // ErrUnknownProvider is an event of a provider HQ takes no events from, which

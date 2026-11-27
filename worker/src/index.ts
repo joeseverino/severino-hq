@@ -21,6 +21,9 @@
 //   time), never its body, so a valid sender can only make HQ re-read with
 //   its own credentials. An event outside the bridge contract's bounds (a
 //   name or delivery id empty or too long) is answered 400 and never sent.
+// - The Hub logs each event it sends, its names alone as the socket carries
+//   them, for a day at most, so a listener that reconnects is sent what it
+//   missed. Only a socket of the current token is sent the log.
 // - Every secret is a Worker secret, named by the route that uses it.
 // - A request is logged as its method, path and status alone, never a header
 //   or the body.
@@ -111,8 +114,8 @@ async function webhook(request: Request, env: Env, route: Route): Promise<Respon
     };
   });
   const within = events.filter(withinContract);
-  // Answered whether or not a listener is connected: a listener re-reads on
-  // every reconnect, which covers what it missed.
+  // Answered whether or not a listener is connected: the Hub logs each
+  // event, which a listener that reconnects is sent.
   for (const event of within) await hub(env).broadcast(event);
   return answer(within.length === events.length ? 202 : 400);
 }
