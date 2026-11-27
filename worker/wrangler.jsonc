@@ -30,6 +30,12 @@
       }
     ]
   },
+  "analytics_engine_datasets": [
+    {
+      "binding": "ANSWERS",
+      "dataset": "hq_events"
+    }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,

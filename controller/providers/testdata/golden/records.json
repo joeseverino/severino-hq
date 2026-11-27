@@ -255,6 +255,14 @@
   "cloudflare.worker": [
     {
       "account_id": "example",
+      "answers": [
+        {
+          "last_hour": 1,
+          "requests": 1,
+          "route": "example",
+          "status": 1
+        }
+      ],
       "connection_ref": "example",
       "cpu_time_p50_us": 1,
       "cpu_time_p99_us": 1,

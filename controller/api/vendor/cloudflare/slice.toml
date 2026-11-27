@@ -30,10 +30,12 @@ worker-deployments-list-deployments = ["workers_deployment"]
 worker-script-list-workers = ["workers_script-response"]
 zones-get = ["zones_zone"]
 
-# A Worker is read for its name, its deployment and each version's number
-# and tag; its code, bindings and settings are never decoded.
+# A Worker is read for its name, its deployment and each version's number,
+# tag and the Analytics Engine datasets it binds; its code, its other
+# bindings and its settings are never decoded.
 [keep]
-workers_Version = ["id", "number", "annotations"]
+workers_Version = ["id", "number", "annotations", "bindings"]
+workers_binding_item = ["workers_binding_kind_analytics_engine"]
 workers_deployment = ["id", "created_on", "versions"]
 workers_script-response = ["id"]
 

@@ -24,6 +24,7 @@ from hq.platform.application.entity_links import provider_label
 from hq.platform.application.pages import Page
 from hq.platform.core import source
 
+from .observations.cloudflare import ANSWERS_DATASET
 from .provider_adapters import INBOUND
 lazy from .bridge_contract import contract
 
@@ -62,6 +63,9 @@ SETTINGS = {
     "limits": {"cpu_ms": 1000},
     "exports": {"Hub": {"type": "durable-object", "storage": "sqlite"}},
     "durable_objects": {"bindings": [{"name": "HUB", "class_name": "Hub"}]},
+    # One data point per request the Worker answers, which the cloudflare.worker
+    # reading counts by route and status.
+    "analytics_engine_datasets": [{"binding": "ANSWERS", "dataset": ANSWERS_DATASET}],
     # Every request is logged, by the Worker's own line of its method, path
     # and status: invocation logs keep the request's headers, and Cloudflare
     # documents no redaction of them in Workers Logs. Issues groups the

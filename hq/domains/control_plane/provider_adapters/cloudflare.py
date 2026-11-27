@@ -718,6 +718,13 @@ SHARED = (
         "validates a declared CAA record with it and both sides take the content apart "
         "with it.",
     ),
+    SharedValue(
+        "WorkerAnswersDataset",
+        (readings.ANSWERS_DATASET,),
+        "The Analytics Engine dataset HQ's events Worker writes each request it answers to, "
+        "its route's path the first blob and its status the first double. The controller "
+        "counts it for a Worker whose serving version binds it.",
+    ),
 )
 
 # The connection this provider's credential arrives through, beside its kinds:

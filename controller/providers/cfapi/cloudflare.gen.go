@@ -823,6 +823,21 @@ func (e TunnelTunnelType) Valid() bool {
 	}
 }
 
+// Defines values for WorkersBindingKindAnalyticsEngineType.
+const (
+	AnalyticsEngine WorkersBindingKindAnalyticsEngineType = "analytics_engine"
+)
+
+// Valid indicates whether the value is a known member of the WorkersBindingKindAnalyticsEngineType enum.
+func (e WorkersBindingKindAnalyticsEngineType) Valid() bool {
+	switch e {
+	case AnalyticsEngine:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ZonesType.
 const (
 	Full      ZonesType = "full"
@@ -2217,12 +2232,41 @@ type WorkersVersion struct {
 		WorkersTriggeredBy string `json:"workers/triggered_by,omitempty"`
 	} `json:"annotations,omitempty"`
 
+	// Bindings List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.
+	Bindings WorkersBindings `json:"bindings,omitempty"`
+
 	// ID Version identifier.
 	ID string `json:"id"`
 
 	// Number The integer version number, starting from one.
 	Number int `json:"number"`
 }
+
+// WorkersBindingItem A binding to allow the Worker to communicate with resources.
+type WorkersBindingItem struct {
+	union json.RawMessage
+}
+
+// WorkersBindingKindAnalyticsEngine defines model for workers_binding_kind_analytics_engine.
+type WorkersBindingKindAnalyticsEngine struct {
+	// Dataset The name of the dataset to bind to.
+	Dataset string `json:"dataset"`
+
+	// Name A JavaScript variable name for the binding.
+	Name WorkersBindingName `json:"name"`
+
+	// Type The kind of resource that the binding provides.
+	Type WorkersBindingKindAnalyticsEngineType `json:"type"`
+}
+
+// WorkersBindingKindAnalyticsEngineType The kind of resource that the binding provides.
+type WorkersBindingKindAnalyticsEngineType string
+
+// WorkersBindingName A JavaScript variable name for the binding.
+type WorkersBindingName = string
+
+// WorkersBindings List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.
+type WorkersBindings = []WorkersBindingItem
 
 // WorkersDeployment defines model for workers_deployment.
 type WorkersDeployment struct {
@@ -2611,6 +2655,71 @@ func (t PagesEnvVars_AdditionalProperties) MarshalJSON() ([]byte, error) {
 }
 
 func (t *PagesEnvVars_AdditionalProperties) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsWorkersBindingKindAnalyticsEngine returns the union data inside the WorkersBindingItem as a WorkersBindingKindAnalyticsEngine
+func (t WorkersBindingItem) AsWorkersBindingKindAnalyticsEngine() (WorkersBindingKindAnalyticsEngine, error) {
+	var body WorkersBindingKindAnalyticsEngine
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkersBindingKindAnalyticsEngine overwrites any union data inside the WorkersBindingItem as the provided WorkersBindingKindAnalyticsEngine
+func (t *WorkersBindingItem) FromWorkersBindingKindAnalyticsEngine(v WorkersBindingKindAnalyticsEngine) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"analytics_engine"}`))
+	t.union = b
+	return err
+}
+
+// MergeWorkersBindingKindAnalyticsEngine performs a merge with any union data inside the WorkersBindingItem, using the provided WorkersBindingKindAnalyticsEngine
+func (t *WorkersBindingItem) MergeWorkersBindingKindAnalyticsEngine(v WorkersBindingKindAnalyticsEngine) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"type":"analytics_engine"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkersBindingItem) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := runtime.JSONUnmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t WorkersBindingItem) ValueByDiscriminator() (any, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "analytics_engine":
+		return t.AsWorkersBindingKindAnalyticsEngine()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t WorkersBindingItem) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *WorkersBindingItem) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

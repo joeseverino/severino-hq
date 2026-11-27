@@ -93,14 +93,31 @@ class WorkerVersionRecord(ObservationRecord):
     tag: str = ""
 
 
-# A count the invocations part reads: the controller holds it behind a
-# pointer, so a part refused or not read sends none and a zero is a zero.
+# The Analytics Engine dataset HQ's events Worker writes one data point to for
+# each request it answers: the route's path its first blob and only index,
+# the status its first double.
+ANSWERS_DATASET = "hq_events"
+
+
+class WorkerAnswersRecord(ObservationRecord):
+    """How many requests to one route the Worker answered with one status."""
+
+    route: str
+    status: int
+    # Over the last day, and the last hour of it.
+    requests: int
+    last_hour: int
+
+
+# A count a part reads: the controller holds it behind a pointer, so a part
+# refused or not read sends none and a zero is a zero.
 _INVOCATIONS = Field(default=None, json_schema_extra={"x-go-type-skip-optional-pointer": False})
 
 
 class WorkerRecord(ObservationRecord):
     """One Worker script and the deployment serving it, with what Workers
-    analytics counted of it over the last day."""
+    analytics counted of it over the last day and, for a version that binds
+    HQ's answers dataset, its answers by route and status."""
 
     connection_ref: str = ""
     account_id: str = ""
@@ -113,6 +130,7 @@ class WorkerRecord(ObservationRecord):
     # CPU time per invocation, in microseconds.
     cpu_time_p50_us: float | None = _INVOCATIONS
     cpu_time_p99_us: float | None = _INVOCATIONS
+    answers: tuple[WorkerAnswersRecord, ...] | None = _INVOCATIONS
 
 
 class AccessPolicyRecord(ObservationRecord):
@@ -266,7 +284,12 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Worker",
         WorkerRecord,
         requires=(Cloudflare.WORKERS_SCRIPTS_READ, Cloudflare.ACCOUNT_ANALYTICS_READ),
-        parts=(ReadingPart("invocations", "Worker invocations", (Cloudflare.ACCOUNT_ANALYTICS_READ,)),),
+        parts=(
+            ReadingPart("invocations", "Worker invocations", (Cloudflare.ACCOUNT_ANALYTICS_READ,)),
+            # The Analytics Engine SQL API takes the same permission
+            # (x-api-token-group of analytics-engine-sql-query-post).
+            ReadingPart("answers", "Worker answers by route", (Cloudflare.ACCOUNT_ANALYTICS_READ,)),
+        ),
         title=lambda record: str(record.get("name", "")),
         relation="Runs on Worker",
         at=lambda record: str(record.get("deployed_at", "") or ""),

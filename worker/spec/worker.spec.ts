@@ -393,6 +393,20 @@ describe("a listener of the release before the log", () => {
 describe("a request's log", () => {
   afterEach(() => vi.restoreAllMocks());
 
+  it("counts each answer by its route and status alone, a refused signature among them", async () => {
+    const counted = vi.spyOn(env.ANSWERS, "writeDataPoint");
+
+    await listen();
+    await deliver({ event: "push", payload: push, id: "delivery-counted" });
+    await deliver({ event: "push", payload: push, id: "delivery-refused", signature: null });
+
+    expect(counted.mock.calls).toStrictEqual([
+      [{ indexes: [routes.socket], blobs: [routes.socket], doubles: [101] }],
+      [{ indexes: [github.path], blobs: [github.path], doubles: [202] }],
+      [{ indexes: [github.path], blobs: [github.path], doubles: [401] }],
+    ]);
+  });
+
   it("is its method, path and status alone, never a header", async () => {
     const logged = vi.spyOn(console, "log").mockImplementation(() => {});
 

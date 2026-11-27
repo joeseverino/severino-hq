@@ -26,7 +26,7 @@
 //   missed. Only a socket of the current token is sent the log.
 // - Every secret is a Worker secret, named by the route that uses it.
 // - A request is logged as its method, path and status alone, never a header
-//   or the body.
+//   or the body, and counted in Analytics Engine by its path and status alone.
 import routes from "./generated/routes.json";
 import { bearer, Hub, tag, withinContract, type InboundEvent } from "./hub";
 import { verify } from "./verify";
@@ -133,6 +133,10 @@ export default {
     // The one record a request leaves in Workers Logs, whose invocation logs
     // are off since they keep the request's headers, the bearer among them.
     console.log({ method: request.method, path, status: response.status });
+    // What HQ counts the Worker's answers by, a refused signature among them.
+    // The path is the index, so sampling keeps a quiet route's answers whole,
+    // and it is always a route's: the Worker runs for its routes alone.
+    env.ANSWERS.writeDataPoint({ indexes: [path], blobs: [path], doubles: [response.status] });
     return response;
   },
 } satisfies ExportedHandler<Env>;

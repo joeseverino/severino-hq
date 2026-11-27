@@ -3,7 +3,10 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
@@ -11,8 +14,9 @@ import (
 
 // workerRoutes answer as Cloudflare's API reference shows List Workers, List
 // Deployments and Get Worker Version: two Workers, the first deployed at one
-// version tagged by its deploy.
-func workerRoutes(graphql http.HandlerFunc) map[string]http.HandlerFunc {
+// version tagged by its deploy and binding HQ's answers dataset among its
+// other bindings.
+func workerRoutes(graphql, sql http.HandlerFunc) map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
 		"GET /accounts": answer([]any{map[string]any{"id": "acct"}}),
 		"GET /accounts/acct/workers/scripts": answer([]any{
@@ -30,9 +34,36 @@ func workerRoutes(graphql http.HandlerFunc) map[string]http.HandlerFunc {
 		"GET /accounts/acct/workers/workers/example-events/versions/ver-7": answer(map[string]any{
 			"id": "ver-7", "number": 7, "created_on": "2026-01-09T18:29:00Z", "urls": []any{},
 			"annotations": map[string]any{"workers/tag": "0123456789abcdef0123456789abcdef", "workers/triggered_by": "upload"},
+			"bindings": []any{
+				map[string]any{"type": "durable_object_namespace", "name": "HUB", "class_name": "Hub"},
+				map[string]any{"type": "secret_text", "name": "GITHUB_WEBHOOK_SECRET"},
+				map[string]any{"type": "analytics_engine", "name": "ANSWERS", "dataset": "hq_events"},
+			},
 		}),
 		"GET /accounts/acct/workers/scripts/example-quiet/deployments": answer(map[string]any{"deployments": []any{}}),
 		"POST /graphql": graphql,
+		"POST /accounts/acct/analytics_engine/sql": sql,
+	}
+}
+
+// uninvoked answers the Workers analytics query with no Worker invoked.
+func uninvoked(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]any{"accounts": []any{map[string]any{"workersInvocationsAdaptive": []any{}}}}}})
+}
+
+// answers answers an Analytics Engine query as its FORMAT JSON shape in
+// Cloudflare's spec (analytics-engine_JsonFormatResponse), keeping the query.
+func answers(asked *string, rows ...map[string]any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		query, _ := io.ReadAll(r.Body)
+		*asked = string(query)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"meta": []any{
+				map[string]any{"name": "route", "type": "String"}, map[string]any{"name": "status", "type": "Float64"},
+				map[string]any{"name": "requests", "type": "UInt64"}, map[string]any{"name": "last_hour", "type": "UInt64"},
+			},
+			"data": rows, "rows": len(rows),
+		})
 	}
 }
 
@@ -54,7 +85,8 @@ func TestWorkersReadDeploymentsAndInvocations(t *testing.T) {
 			}},
 		}}}}})
 	}
-	r, _ := newCloudflare(t, workerRoutes(graphql))
+	var query string
+	r, _ := newCloudflare(t, workerRoutes(graphql, answers(&query)))
 	records, err := r.cloudflareWorkers(t.Context())
 	if err != nil || len(records) != 2 {
 		t.Fatalf("%v %+v", err, records)
@@ -76,12 +108,41 @@ func TestWorkersReadDeploymentsAndInvocations(t *testing.T) {
 	}
 }
 
+// A Worker whose serving version binds HQ's answers dataset carries its count
+// of each route and status over the day and its last hour, weighed for
+// sampling; one binding none was never counted, so it claims no answers.
+func TestWorkersAnswersAreCountedForAVersionBindingTheDataset(t *testing.T) {
+	var query string
+	r, _ := newCloudflare(t, workerRoutes(uninvoked, answers(&query,
+		map[string]any{"route": "/github", "status": 202, "requests": 118, "last_hour": 0},
+		map[string]any{"route": "/github", "status": 401, "requests": 9, "last_hour": 9},
+	)))
+	records, err := r.cloudflareWorkers(t.Context())
+	if err != nil || len(records) != 2 {
+		t.Fatalf("%v %+v", err, records)
+	}
+	events, quiet := records[0].(runtime.CloudflareWorkerRecord), records[1].(runtime.CloudflareWorkerRecord)
+	want := []runtime.CloudflareWorkerWorkerAnswersRecord{
+		{Route: "/github", Status: 202, Requests: 118},
+		{Route: "/github", Status: 401, Requests: 9, LastHour: 9},
+	}
+	if events.Answers == nil || !slices.Equal(*events.Answers, want) || quiet.Answers != nil {
+		t.Errorf("%+v %+v", events.Answers, quiet.Answers)
+	}
+	// The dataset, then the hour, the day and the minute read, as Unix seconds.
+	for _, named := range []string{"FROM hq_events", "_sample_interval", "toDateTime(1768042800)", "toDateTime(1767960000)", "toDateTime(1768046400)"} {
+		if !strings.Contains(query, named) {
+			t.Errorf("%q lacks %q", query, named)
+		}
+	}
+}
+
 // Analytics refused is the invocations part refused: the Workers still read,
 // and none of them claims a count.
 func TestWorkersInvocationsRefusedIsARefusedPart(t *testing.T) {
 	r, _ := newCloudflare(t, workerRoutes(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"data": nil, "errors": []any{map[string]any{"message": "Authentication error"}}})
-	}))
+	}, answers(new(string))))
 	ledger := &refusals{}
 	records, err := r.cloudflareWorkers(context.WithValue(t.Context(), refusalKey{}, ledger))
 	if err != nil || len(records) != 2 {
@@ -91,6 +152,28 @@ func TestWorkersInvocationsRefusedIsARefusedPart(t *testing.T) {
 		t.Errorf("%+v", events)
 	}
 	if len(ledger.entries) != 1 || ledger.entries[0].Part != runtime.PartInvocations || ledger.entries[0].Refusal != runtime.FailureClassPermission {
+		t.Fatalf("%+v", ledger.entries)
+	}
+}
+
+// The SQL API refuses in plain text, 403 for any credential it will not take
+// (analytics-engine_Forbidden): the answers part refused, its reason in its
+// words, while the rest of the Worker still reads.
+func TestWorkersAnswersRefusedIsARefusedPart(t *testing.T) {
+	r, _ := newCloudflare(t, workerRoutes(uninvoked, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, "Authorization error")
+	}))
+	ledger := &refusals{}
+	records, err := r.cloudflareWorkers(context.WithValue(t.Context(), refusalKey{}, ledger))
+	if err != nil || len(records) != 2 {
+		t.Fatalf("%v %+v", err, records)
+	}
+	if events := records[0].(runtime.CloudflareWorkerRecord); events.Answers != nil || events.Requests == nil || len(events.Versions) != 1 {
+		t.Errorf("%+v", events)
+	}
+	if len(ledger.entries) != 1 || ledger.entries[0].Part != runtime.PartAnswers || ledger.entries[0].Refusal != runtime.FailureClassPermission || !strings.Contains(ledger.entries[0].Reason, "Authorization error") {
 		t.Fatalf("%+v", ledger.entries)
 	}
 }

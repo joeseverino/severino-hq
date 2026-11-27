@@ -3645,7 +3645,7 @@
         "type": "object"
       },
       "CloudflareWorkerRecord": {
-        "description": "One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day.",
+        "description": "One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day and, for a version that binds HQ's answers dataset, its answers by route and status.",
         "properties": {
           "connection_ref": {
             "default": "",
@@ -3707,10 +3707,45 @@
             ],
             "default": null,
             "x-go-type-skip-optional-pointer": false
+          },
+          "answers": {
+            "items": {
+              "$ref": "#/components/schemas/CloudflareWorkerWorkerAnswersRecord"
+            },
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null,
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "CloudflareWorkerWorkerAnswersRecord": {
+        "description": "How many requests to one route the Worker answered with one status.",
+        "properties": {
+          "route": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "requests": {
+            "type": "integer"
+          },
+          "last_hour": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "route",
+          "status",
+          "requests",
+          "last_hour"
         ],
         "type": "object"
       },
@@ -6867,6 +6902,7 @@
           "",
           "access",
           "acl_management",
+          "answers",
           "apps",
           "avatar",
           "branch_rules",
@@ -6907,6 +6943,7 @@
           "PartWhole",
           "PartAccess",
           "PartACLManagement",
+          "PartAnswers",
           "PartApps",
           "PartAvatar",
           "PartBranchRules",
@@ -7524,6 +7561,16 @@
         ],
         "type": "object",
         "description": "How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to."
+      },
+      "WorkerAnswersDataset": {
+        "type": "string",
+        "description": "The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.",
+        "enum": [
+          "hq_events"
+        ],
+        "x-enum-varnames": [
+          "WorkerAnswersDatasetHQEvents"
+        ]
       }
     }
   }

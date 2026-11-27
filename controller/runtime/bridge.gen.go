@@ -663,6 +663,7 @@ func (e ReadProfile) Valid() bool {
 const (
 	PartACLManagement     ReadingPartName = "acl_management"
 	PartAccess            ReadingPartName = "access"
+	PartAnswers           ReadingPartName = "answers"
 	PartApps              ReadingPartName = "apps"
 	PartAvatar            ReadingPartName = "avatar"
 	PartBranchRules       ReadingPartName = "branch_rules"
@@ -707,6 +708,8 @@ func (e ReadingPartName) Valid() bool {
 	case PartACLManagement:
 		return true
 	case PartAccess:
+		return true
+	case PartAnswers:
 		return true
 	case PartApps:
 		return true
@@ -1433,6 +1436,21 @@ func (e UnpinnedPathKind) Valid() bool {
 	}
 }
 
+// Defines values for WorkerAnswersDataset.
+const (
+	WorkerAnswersDatasetHQEvents WorkerAnswersDataset = "hq_events"
+)
+
+// Valid indicates whether the value is a known member of the WorkerAnswersDataset enum.
+func (e WorkerAnswersDataset) Valid() bool {
+	switch e {
+	case WorkerAnswersDatasetHQEvents:
+		return true
+	default:
+		return false
+	}
+}
+
 // Acknowledgement Django's answer to a report; the controller reads only ok.
 type Acknowledgement struct {
 	OK                   bool           `json:"ok"`
@@ -1763,18 +1781,27 @@ type CloudflareTunnelTunnelIngressRecord struct {
 	Service  string `json:"service,omitempty"`
 }
 
-// CloudflareWorkerRecord One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day.
+// CloudflareWorkerRecord One Worker script and the deployment serving it, with what Workers analytics counted of it over the last day and, for a version that binds HQ's answers dataset, its answers by route and status.
 type CloudflareWorkerRecord struct {
-	AccountID     string                                `json:"account_id,omitempty"`
-	ConnectionRef string                                `json:"connection_ref,omitempty"`
-	CPUTimeP50Us  *float32                              `json:"cpu_time_p50_us,omitempty"`
-	CPUTimeP99Us  *float32                              `json:"cpu_time_p99_us,omitempty"`
-	DeployedAt    string                                `json:"deployed_at,omitempty"`
-	DeploymentID  string                                `json:"deployment_id,omitempty"`
-	Errors        *int                                  `json:"errors,omitempty"`
-	Name          string                                `json:"name"`
-	Requests      *int                                  `json:"requests,omitempty"`
-	Versions      []CloudflareWorkerWorkerVersionRecord `json:"versions,omitempty"`
+	AccountID     string                                 `json:"account_id,omitempty"`
+	Answers       *[]CloudflareWorkerWorkerAnswersRecord `json:"answers,omitempty"`
+	ConnectionRef string                                 `json:"connection_ref,omitempty"`
+	CPUTimeP50Us  *float32                               `json:"cpu_time_p50_us,omitempty"`
+	CPUTimeP99Us  *float32                               `json:"cpu_time_p99_us,omitempty"`
+	DeployedAt    string                                 `json:"deployed_at,omitempty"`
+	DeploymentID  string                                 `json:"deployment_id,omitempty"`
+	Errors        *int                                   `json:"errors,omitempty"`
+	Name          string                                 `json:"name"`
+	Requests      *int                                   `json:"requests,omitempty"`
+	Versions      []CloudflareWorkerWorkerVersionRecord  `json:"versions,omitempty"`
+}
+
+// CloudflareWorkerWorkerAnswersRecord How many requests to one route the Worker answered with one status.
+type CloudflareWorkerWorkerAnswersRecord struct {
+	LastHour int    `json:"last_hour"`
+	Requests int    `json:"requests"`
+	Route    string `json:"route"`
+	Status   int    `json:"status"`
 }
 
 // CloudflareWorkerWorkerVersionRecord defines model for CloudflareWorkerWorkerVersionRecord.
@@ -3347,6 +3374,9 @@ type Verification struct {
 	IntervalSeconds int `json:"interval_seconds"`
 	TimeoutSeconds  int `json:"timeout_seconds"`
 }
+
+// WorkerAnswersDataset The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.
+type WorkerAnswersDataset string
 
 // AnalyticsParams defines parameters for Analytics.
 type AnalyticsParams struct {

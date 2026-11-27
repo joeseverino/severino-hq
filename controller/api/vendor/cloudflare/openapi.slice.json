@@ -3470,6 +3470,9 @@
        }
       }
      },
+     "bindings": {
+      "$ref": "#/components/schemas/workers_bindings"
+     },
      "id": {
       "description": "Version identifier.",
       "type": "string",
@@ -3484,6 +3487,105 @@
     "required": [
      "id",
      "number"
+    ]
+   },
+   "workers_binding_item": {
+    "description": "A binding to allow the Worker to communicate with resources.",
+    "type": "object",
+    "discriminator": {
+     "mapping": {
+      "ai": "#/components/schemas/workers_binding_kind_ai",
+      "ai_search": "#/components/schemas/workers_binding_kind_ai_search",
+      "ai_search_namespace": "#/components/schemas/workers_binding_kind_ai_search_namespace",
+      "analytics_engine": "#/components/schemas/workers_binding_kind_analytics_engine",
+      "artifacts": "#/components/schemas/workers_binding_kind_artifacts",
+      "assets": "#/components/schemas/workers_binding_kind_assets",
+      "browser": "#/components/schemas/workers_binding_kind_browser",
+      "d1": "#/components/schemas/workers_binding_kind_d1",
+      "data_blob": "#/components/schemas/workers_binding_kind_data_blob",
+      "dispatch_namespace": "#/components/schemas/workers_binding_kind_dispatch_namespace",
+      "durable_object_namespace": "#/components/schemas/workers_binding_kind_durable_object_namespace",
+      "flagship": "#/components/schemas/workers_binding_kind_flagship",
+      "hyperdrive": "#/components/schemas/workers_binding_kind_hyperdrive",
+      "images": "#/components/schemas/workers_binding_kind_images",
+      "inherit": "#/components/schemas/workers_binding_kind_inherit",
+      "json": "#/components/schemas/workers_binding_kind_json",
+      "k2": "#/components/schemas/workers_binding_kind_k2",
+      "kv_namespace": "#/components/schemas/workers_binding_kind_kv_namespace",
+      "media": "#/components/schemas/workers_binding_kind_media",
+      "messaging": "#/components/schemas/workers_binding_kind_messaging",
+      "mtls_certificate": "#/components/schemas/workers_binding_kind_mtls_certificate",
+      "pipelines": "#/components/schemas/workers_binding_kind_pipelines",
+      "plain_text": "#/components/schemas/workers_binding_kind_plain_text",
+      "queue": "#/components/schemas/workers_binding_kind_queue",
+      "r2_bucket": "#/components/schemas/workers_binding_kind_r2_bucket",
+      "ratelimit": "#/components/schemas/workers_binding_kind_ratelimit",
+      "secret_key": "#/components/schemas/workers_binding_kind_secret_key",
+      "secret_text": "#/components/schemas/workers_binding_kind_secret_text",
+      "secrets_store_secret": "#/components/schemas/workers_binding_kind_secrets_store_secret",
+      "send_email": "#/components/schemas/workers_binding_kind_send_email",
+      "service": "#/components/schemas/workers_binding_kind_service",
+      "text_blob": "#/components/schemas/workers_binding_kind_text_blob",
+      "vectorize": "#/components/schemas/workers_binding_kind_vectorize",
+      "version_metadata": "#/components/schemas/workers_binding_kind_version_metadata",
+      "vpc_network": "#/components/schemas/workers_binding_kind_vpc_network",
+      "vpc_service": "#/components/schemas/workers_binding_kind_vpc_service",
+      "wasm_module": "#/components/schemas/workers_binding_kind_wasm_module",
+      "workflow": "#/components/schemas/workers_binding_kind_workflow"
+     },
+     "propertyName": "type"
+    },
+    "oneOf": [
+     {
+      "$ref": "#/components/schemas/workers_binding_kind_analytics_engine"
+     }
+    ]
+   },
+   "workers_binding_kind_analytics_engine": {
+    "type": "object",
+    "properties": {
+     "dataset": {
+      "description": "The name of the dataset to bind to.",
+      "type": "string",
+      "example": "some_dataset",
+      "x-auditable": true
+     },
+     "name": {
+      "$ref": "#/components/schemas/workers_binding_name"
+     },
+     "type": {
+      "description": "The kind of resource that the binding provides.",
+      "type": "string",
+      "enum": [
+       "analytics_engine"
+      ],
+      "x-auditable": true
+     }
+    },
+    "required": [
+     "name",
+     "type",
+     "dataset"
+    ]
+   },
+   "workers_binding_name": {
+    "description": "A JavaScript variable name for the binding.",
+    "type": "string",
+    "example": "myBinding",
+    "x-auditable": true
+   },
+   "workers_bindings": {
+    "description": "List of bindings attached to a Worker. You can find more about bindings on our docs: https://developers.cloudflare.com/workers/configuration/multipart-upload-metadata/#bindings.",
+    "type": "array",
+    "items": {
+     "$ref": "#/components/schemas/workers_binding_item"
+    },
+    "example": [
+     {
+      "name": "MY_ENV_VAR",
+      "text": "my_data",
+      "type": "plain_text"
+     }
     ]
    },
    "workers_deployment": {
