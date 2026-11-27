@@ -9,7 +9,7 @@ from django.views.generic.edit import DeletionMixin, ModelFormMixin
 
 from hq.platform.application.markup_testing import elements, select, with_class
 from hq.platform.application.routes import routed
-from hq.platform.core.tests.test_part_tags import _catalog_templates
+from hq.platform.core.tests.test_part_catalog import catalog_templates
 
 FRAME = "form_page.html"
 CARD = f"{FRAME}#form_card"
@@ -84,7 +84,7 @@ class FormCatalogTests(SimpleTestCase):
         """The browser survey reads the parts through the catalog: the card
         with fields and with none, and a query form."""
 
-        entries = _catalog_templates()
+        entries = catalog_templates()
         cards = [name for name, template in entries.items() if CARD in template]
         self.assertGreaterEqual(len(cards), 2, "add a form/* entry with fields and one with none")
         self.assertTrue([name for name, template in entries.items() if 'method="get"' in template])

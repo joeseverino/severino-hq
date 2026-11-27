@@ -834,4 +834,5 @@ present_tag.__wrapped__ = Part(  # type: ignore[attr-defined]  # a function's at
     function=present,
     public=True,
     example=tags.PRESENT,
+    states=tags.PRESENT_STATES,
 )

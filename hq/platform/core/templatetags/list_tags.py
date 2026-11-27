@@ -284,8 +284,8 @@ LINE_LIST = line_list.__wrapped__ = Part(  # type: ignore[attr-defined]  # a fun
     `{% line_list values as value %}…{% endline_list %}`, with `kind=` one of the list's kinds where
     the body draws each `li`. No count decides how many show. Its first three size the column and
     wrap with it. The rest ask the column for nothing and show as many as the line they end has room
-    for, each whole, and the row opens only when one is cut. A list folded at a fixed number behind
-    `row-more` is refused (`test_template_line_lists`).
+    for, each whole, and the row opens only when one is cut. No list is folded at a fixed number
+    behind `row-more`.
     """,
     ordered={"values": Option(required=True, about="The parts, each drawn by the body as the name after `as`.")},
     options={

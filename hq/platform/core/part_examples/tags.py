@@ -518,8 +518,7 @@ CHANGE_TABLE_STATES = {
 
 CONTROL_LABEL_STATES = {
     # A control label ({% control_label %}) with no control, naming the answer
-    # that follows it; the filter bar above draws it for its controls
-    # (CatalogTests in test_part_tags).
+    # that follows it; the filter bar above draws it for its controls.
     "states": Example(
         '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
         "<p><strong>Example provider</strong></p>{% endcard %}"
@@ -884,6 +883,11 @@ ENTITY_STATES = {
 PRESENT = Example(
     "{% present repo.release %}<code>{{ repo.release }}</code>{% endpresent %}", context={"repo": {"release": "v1.4.2"}}
 )
+PRESENT_STATES = {
+    # A value that is not there is the one missing mark; a zero is a value.
+    "missing": Example(PRESENT.template, context={"repo": {"release": ""}}),
+    "zero": Example(PRESENT.template, context={"repo": {"release": 0}}),
+}
 
 
 REFERENCE = Example(

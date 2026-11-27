@@ -190,7 +190,7 @@ FACTS_STATES = {
         },
     ),
     # Facts ({% facts %}) in each layout and with each option; a new layout
-    # or option of the tags comes with an entry here (CatalogTests in test_part_tags). A
+    # or option of the tags comes with an entry here. A
     # zero beside a linked count stands on its value's line, as the Agents
     # card's counts do.
     # Values a domain object words (``Answer``), as a container's Upgrade card

@@ -157,8 +157,8 @@ slotted(
         was sent when it is bound. Its ids carry the row's key, so none is drawn twice. A region that
         holds an editor's link is a region of the page (`data-fragment`, its id from its label). So with
         script the link, the form and its Cancel are answered there through `fragment.js`'s own paths.
-        The form posts `next`, the page with the editor closed. *Gate:*
-        `hq/platform/core/tests/test_row_editor.py`.
+        The form posts `next`, the page with the editor closed. *Gate:* `part/row-editor-open`, and
+        `test_part_refusals.py` for a value its form lacks.
         """,
         classes=("row-editor",),
         about="The way into a row's editor, and the editor itself under the row where the page's address opens it.",

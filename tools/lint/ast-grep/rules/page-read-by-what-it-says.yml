@@ -15,8 +15,7 @@
 # A part's own tests are this rule's ignores: the catalog and the browser
 # probes, each template tag's tests (test_*_tag.py, test_*_tags.py), each rule
 # over template source (test_template_*.py, test_architecture_*.py), the
-# shared markup, table, row, form and print gate tests, and the table
-# contract an extension's check runs. cell-read-by-its-text is the narrower
+# shared markup, row controls and print gate tests. cell-read-by-its-text is the narrower
 # rule for these ignores. An extension's check runs this rule over its
 # package's tests, which read a page through the same reader, exported from
 # hq_sdk.testing.
@@ -40,12 +39,7 @@ ignores:
   - "hq/platform/core/tests/test_*_tag.py"
   - "hq/platform/core/tests/test_*_tags.py"
   - "hq/platform/core/tests/test_template_*.py"
-  - "hq/platform/core/tests/test_table_contract.py"
-  - "hq/platform/core/tests/test_table_rows.py"
   - "hq/platform/core/tests/test_row_controls.py"
-  - "hq/platform/core/tests/test_row_editor.py"
-  - "hq/platform/core/tests/test_form_partial.py"
-  - "hq/platform/core/tests/test_post_button.py"
   - "hq/platform/core/tests/test_print_gate.py"
   - "hq/platform/application/tests/test_architecture_*.py"
   - "hq/platform/application/tests/test_shared_markup.py"
