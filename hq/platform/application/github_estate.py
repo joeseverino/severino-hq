@@ -464,8 +464,8 @@ class Repository:
             return None
         return head != deployed
 
-    def expiring(self, *, within_days: int = ARTIFACT_ATTENTION_DAYS.value) -> list[dict[str, Any]]:
-        """Admission artifacts that lapse within ``within_days``, soonest first.
+    def expiring(self, names: Collection[str]) -> list[dict[str, Any]]:
+        """The artifacts called one of ``names`` that lapse within ``ARTIFACT_ATTENTION_DAYS``, soonest first.
 
         Each admission run uploads its own under one name, and Compose reads the
         newest run's, so a name lapses when the last of its artifacts does.
@@ -475,14 +475,14 @@ class Repository:
         for item in self.record.get("artifacts") or ():
             when = moment(item.get("expires_at", ""))
             name = item.get("name", "")
-            if when is None or "admission" not in name:
+            if when is None or name not in names:
                 continue
             if name not in last or last[name][0] < when:
                 last[name] = (when, item)
         found = []
         for when, item in sorted(last.values(), key=lambda pair: pair[0]):
             days = days_until(when)
-            if days <= within_days:
+            if days <= ARTIFACT_ATTENTION_DAYS.value:
                 found.append({**item, "days": max(days, 0)})
         return found
 

@@ -8,6 +8,7 @@ import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import PurePosixPath
 from typing import Any
 
 from hq.domains.control_plane.observations.github import JobFailure
@@ -36,6 +37,7 @@ from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
 from .ui import counted, ended
+lazy from .plugins import installed_plugins
 lazy from .projects import projects_by_repository, repository_key
 
 PROJECTS = "hq.projects"
@@ -238,8 +240,16 @@ def _alerts(repo: Repository) -> Iterator[Said]:
 
 
 def _lapsing(repo: Repository) -> Iterator[Said]:
-    for artifact in repo.expiring():
+    # Compose reads each composed extension's ``admission-<id>`` from its own
+    # repository, so no other artifact keeps anything in the build.
+    composed = {
+        f"admission-{manifest.id}": manifest
+        for manifest in installed_plugins()
+        if repository_key(manifest.source_repository) == repository_key(repo.name)
+    }
+    for artifact in repo.expiring(composed):
         days = artifact["days"]
+        workflow = PurePosixPath(composed[artifact["name"]].source_workflow).name
         finding = _about(
             repo,
             LAPSING,
@@ -248,7 +258,7 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
             severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS.value else Tone.ATTENTION,
             explanation="Run its admission again to keep it in the build.",
             evidence=(("Lapses in", counted(days, "day")),),
-            primary=opens("Open actions", f"{repo.url}/actions"),
+            primary=opens("Open workflow", f"{repo.url}/actions/workflows/{workflow}"),
         )
         yield finding, f"{repo.short}'s admission was due to lapse in {days} days"
 
@@ -363,7 +373,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _each(_lapsing),
         operator_action="Run the extension's admission workflow again on GitHub.",
-        no_help_reason="HQ cannot tell which workflow makes the artifact.",
+        no_help_reason=CANNOT_WRITE,
         bars={
             Tone.SERIOUS: f"an admission artifact lapses within {ARTIFACT_SERIOUS_DAYS}",
             Tone.ATTENTION: f"an admission artifact lapses within {ARTIFACT_ATTENTION_DAYS}",
