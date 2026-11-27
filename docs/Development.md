@@ -50,7 +50,9 @@ the rest live, so no doc copies it:
 
 `mise run test --at <ref> <label>...` runs this tree's test files,
 uncommitted work included, on `<ref>`'s code. Reach for it to show that a new
-test fails on the old code, or that a failure was already there. The ref is
+test, written where no walk (a Part's example, a seed, the OpenAPI contract, a
+finding's or capability's example) reaches the class it holds, fails on the
+old code, or that a failure was already there. The ref is
 the code before the fix, so a fix's test is proven with `--at <fix>^`.
 `mise tasks info test` says what `--at`, `--keep` and `--go` take, and how a
 shell suite's path is run.
