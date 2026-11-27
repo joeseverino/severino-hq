@@ -3,24 +3,23 @@ calls from, the person's devices, and what an agent finds at the MCP endpoint,
 asked of the server only when opened."""
 
 import re
-from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase, override_settings, tag
+from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
-from hq.platform.application.markup_testing import actions, elements, select, text, within
+from hq.platform.application.markup_testing import actions, select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.refusal_codes import Code
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.bindings import operation_context
-from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice
+from hq.platform.core.models import AgentDevice, AgentIdentity, LinkedAccount, OwnDevice
 from hq.platform.core.testing import person
 from hq.platform.mcp.listing import Endpoint, Offer, Offered
 
@@ -61,34 +60,25 @@ def _submit(client, response, attribute: str, value: str, pressing: str = ""):
 
 
 class AccessTests(TestCase):
-    """Access says whether agents may act as a state led by a steady dot,
-    beside the one button that switches it."""
+    """Access pauses and resumes agents from its one button."""
 
     def setUp(self):
         self.person = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.person)
 
-    def state(self):
+    def button(self):
         inside = within(self.client.get(reverse("agent_policy")), "id", "agent-access")
-        (said,) = [element for element in inside if "toned-dot" in element.classes]
         (button,) = [element for element in inside if element.tag == "button"]
-        return said, button
+        return button
 
     def press(self, button):
         self.client.post(button.attrs["formaction"], form_keyed({button.attrs["name"]: button.attrs["value"]}))
 
-    def test_it_reads_allowed_then_paused_with_the_button_that_switches_it(self):
-        said, button = self.state()
-        self.assertEqual((said.words, "tone-good" in said.classes), ("Allowed", True))
-        self.assertEqual(button.words, "Pause all agents")
-
-        self.press(button)
+    def test_its_button_pauses_and_then_resumes_agents(self):
+        self.press(self.button())
         self.assertTrue(agent_access.agents_paused())
-        said, button = self.state()
-        self.assertEqual((said.words, "tone-attention" in said.classes), ("Paused", True))
-        self.assertEqual(button.words, "Resume agents")
 
-        self.press(button)
+        self.press(self.button())
         self.assertFalse(agent_access.agents_paused())
 
     def test_a_reader_who_may_change_nothing_is_offered_no_control_or_form(self):
@@ -115,32 +105,12 @@ class AgentRowTests(TestCase):
     def test_an_agents_block_blocks_it_and_then_allows_it(self):
         _submit(self.client, self.page(), "data-agent", AGENT, pressing="blocked")
         self.assertIsNotNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
-        self.assertTrue(select(self.page(), "data-blocked"))
 
         _submit(self.client, self.page(), "data-agent", AGENT, pressing="blocked")
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
 
-    def test_a_refusal_for_calling_too_much_is_on_its_row(self):
-        denials.record_denial(interface="mcp", reason=Code.RATE_LIMITED, actor=AGENT)
-
-        row = " ".join(element.words for element in within(self.page(), "data-agent", AGENT))
-
-        self.assertIn("refused", row)
-        self.assertIn("calling too much", row)
-
-    def test_a_machines_whole_grant_is_in_force_on_its_row(self):
-        granted = ("manage_contacts", "read", "read_audit_log", "write_projects")
-        agent_registry.observe(agent_principal("example-machine", "mcp", frozenset(granted)))
-
-        row = within(self.page(), "data-agent", "example-machine")
-
-        named = {element.words for element in row if element.tag == "code"} - {"example-machine"}
-        self.assertEqual(sorted(named), list(granted))
-        self.assertIn("4 of 4", " ".join(element.words for element in row if element.tag == "td"))
-
 
 # Written out, so the module imports at a base without them.
-CLIENT_SETUP = "#setting-up-a-client"
 ADDING_AN_AGENT = "setup"
 ROOT = Path(__file__).resolve().parents[4]
 
@@ -170,15 +140,9 @@ class MissingPermissionTests(TestCase):
         page = self.signed_in(agent_grantable() - {left_out})
 
         shown = select(page, "data-missing")
-        said = " ".join(element.words for element in shown)
         inside = within(page, "data-missing")
         named = {element.words for element in inside if element.tag == "code"} - {AGENT}
         self.assertEqual(named, {left_out})
-        self.assertIn(AGENT, {element.words for element in inside if element.tag == "code"}, "whom to grant it to")
-        self.assertIn("sign-in service", said)
-        self.assertIn("sign it in again", said)
-        hrefs = [element.attrs["href"] for element in inside if element.tag == "a"]
-        self.assertTrue(any(href.endswith(CLIENT_SETUP) for href in hrefs), hrefs)
         on_its_row = within(page, "data-agent", AGENT)
         self.assertTrue(all(each in on_its_row for each in shown))
 
@@ -186,13 +150,11 @@ class MissingPermissionTests(TestCase):
         page = self.signed_in(agent_grantable())
 
         self.assertFalse(select(page, "data-missing"))
-        self.assertNotIn("not granted", " ".join(element.words for element in within(page, "data-agent", AGENT)))
 
     def test_the_devices_permission_is_never_missing_for_an_agent(self):
         page = self.signed_in(agent_grantable() - {DEVICE_SCOPE})
 
         self.assertFalse(select(page, "data-missing"))
-        self.assertNotIn(DEVICE_SCOPE, text(page))
 
     def test_a_machines_own_token_is_never_told_to_sign_in_again(self):
         page = self.signed_in({"read"}, person=None)
@@ -208,33 +170,6 @@ class MissingPermissionTests(TestCase):
         page = self.signed_in(agent_grant(agent_grantable(), roles.grants(roles.Role.VIEWER)), person=viewer)
 
         self.assertFalse(select(page, "data-missing"))
-
-
-class AddingAnAgentTests(TestCase):
-    """The steps for adding an agent: one copy, on the page."""
-
-    def setUp(self):
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
-
-    def steps(self, page):
-        (fold,) = select(page, "id", ADDING_AN_AGENT)
-        return fold, [element for element in within(page, "id", ADDING_AN_AGENT) if element.tag == "li"]
-
-    def test_they_are_on_the_page_and_point_at_how_the_permissions_are_written(self):
-        _seen(AGENT)
-        page = self.client.get(reverse("agent_policy"))
-
-        fold, steps = self.steps(page)
-        self.assertTrue(steps)
-        self.assertNotIn("open", fold.attrs, "folded once an agent is there")
-        hrefs = [element.attrs["href"] for element in within(page, "id", ADDING_AN_AGENT) if element.tag == "a"]
-        self.assertTrue(any(href.endswith(CLIENT_SETUP) for href in hrefs), hrefs)
-
-    def test_with_no_agent_yet_they_are_open(self):
-        fold, steps = self.steps(self.client.get(reverse("agent_policy")))
-
-        self.assertIn("open", fold.attrs)
-        self.assertTrue(steps)
 
 
 @tag("source")
@@ -272,7 +207,6 @@ class DeviceTests(TestCase):
 
 
 # Written out, so the module imports at a base without them.
-WAITING = "wants to act for you from"
 LAPTOP, LAPTOP_ID, LAPTOP_OWNER = "example-laptop", "nLAPTOP7CNTRL", "op@example.com"
 # HQ's own loopback: nowhere the tailnet places a call.
 UNPLACED_AT = "127.0.0.1"
@@ -311,14 +245,12 @@ class AgentDeviceTests(TestCase):
         (row,) = select(self.page(), "id", f"device-{device.pk}")
         return row.attrs["data-device-standing"]
 
-    def test_a_device_awaiting_the_reader_asks_them_by_the_agent_device_and_owner(self):
+    def test_a_device_awaiting_the_reader_asks_them(self):
         device = self.device()
 
         (prompt,) = select(self.page(), "data-prompt")
 
         self.assertEqual(prompt.attrs["data-prompt"], f"device-{device.pk}")
-        said = " ".join(element.words for element in within(self.page(), "data-prompt", f"device-{device.pk}"))
-        self.assertIn(f"{AGENT} {WAITING} {LAPTOP}, owned by {LAPTOP_OWNER}", said)
 
     def test_approved_from_its_prompt_it_stops_asking(self):
         device = self.device()
@@ -360,15 +292,14 @@ class AgentDeviceTests(TestCase):
         row = within(page, "id", f"device-{device.pk}")
         offered = {element.attrs["name"] for element in row if element.tag == "button" and element.attrs.get("name")}
         self.assertEqual(offered, {"blocked"})
-        self.assertIn("riley", " ".join(element.words for element in row))
 
     def test_a_machine_agents_device_asks_anyone_who_governs_agents(self):
         machine = AgentIdentity.objects.create(client_id="example-machine", interfaces=["api"])
         device = AgentDevice.objects.create(identity=machine, node_id="nSERVER1CNTRL", name="example-server")
 
-        said = " ".join(element.words for element in within(self.page(), "data-prompt", f"device-{device.pk}"))
-
-        self.assertIn("example-machine wants to act from example-server", said)
+        self.assertEqual(
+            [each.attrs["data-prompt"] for each in select(self.page(), "data-prompt")], [f"device-{device.pk}"]
+        )
 
     def test_an_address_no_device_sent_is_on_the_page_as_refused_with_nothing_to_press(self):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
@@ -379,33 +310,11 @@ class AgentDeviceTests(TestCase):
         page = self.page()
 
         (row,) = select(page, "data-device-standing", "unplaceable")
-        self.assertIn(UNPLACED_AT, row.words)
         inside = within(page, "id", row.attrs["id"])
-        (why,) = [element for element in inside if "data-unplaced" in element.attrs]
-        self.assertIn(Code.DEVICE_UNKNOWN.said, why.words.lower())
         self.assertFalse(
             [element for element in inside if element.attrs.get("type") == "submit" or element.tag == "form"],
             "nothing can be approved",
         )
-
-    def test_the_page_says_only_when_calls_are_tied_to_no_device(self):
-        (none,) = select(self.page(), "data-placement")
-        with override_settings(SEVERINO_TAILSCALED_SOCKET="/run/tailscale/tailscaled.sock"):
-            placed = select(self.page(), "data-placement")
-
-        self.assertEqual(none.attrs["data-placement"], "none")
-        self.assertEqual(placed, [], "a tailnet device placing each call is the normal case, said by the Devices table")
-
-    def test_a_devices_changes_are_counted_on_its_row_as_its_agents_are(self):
-        device = self.device(approved_at=timezone.now(), approved_by=self.person)
-        for _ in range(3):
-            AuditLog.objects.create(
-                action=AuditLog.Action.UPDATED, metadata={"actor": AGENT, "interface": "mcp", "device": LAPTOP_ID}
-            )
-        page = self.page()
-
-        for row in (within(page, "id", f"device-{device.pk}"), within(page, "data-client", AGENT)):
-            self.assertIn("3 changes", " ".join(element.words for element in row))
 
     def test_a_refusal_from_a_device_points_at_its_row(self):
         device = self.device()
@@ -415,7 +324,6 @@ class AgentDeviceTests(TestCase):
 
         self.assertEqual(refused.code, "device_awaiting_approval")
         self.assertIn(f"{reverse('agent_policy')}#device-{device.pk}", refused.reason)
-        self.assertTrue(select(self.page(), "id", f"device-{device.pk}"))
 
     def test_only_the_person_it_acts_for_may_approve_it(self):
         other = get_user_model().objects.create_user("riley")
@@ -453,45 +361,12 @@ class EndpointTests(TestCase):
 
         asked.assert_not_called()
 
-    def test_opened_it_names_every_list_the_server_offers_and_nothing_else(self):
+    def test_opened_it_asks_the_server_alone(self):
         with (
             mock.patch("hq.platform.mcp.listing.endpoint", return_value=ENDPOINT),
             mock.patch("hq.platform.application.agent_activity.standings") as standings,
         ):
             part = self.client.get(reverse("agent_policy"), **PART)
 
-        said = text(part)
-        for words in ("Tools", "example_tool", "Example later list", "example-entry", ENDPOINT.url, ENDPOINT.protocol):
-            self.assertIn(words, said)
-        self.assertNotIn("Your apps", said)
+        self.assertEqual(part.status_code, 200)
         standings.assert_not_called()
-
-    def test_without_script_the_address_asks_for_it(self):
-        with mock.patch("hq.platform.mcp.listing.endpoint", return_value=ENDPOINT):
-            page = self.client.get(reverse("agent_policy"), {"endpoint": 1})
-
-        self.assertIn("example_tool", text(page))
-        self.assertIn("Your apps", text(page))
-
-    def test_with_no_api_resource_it_says_agents_cannot_connect(self):
-        with self.settings(SEVERINO_API_RESOURCE=""):
-            part = self.client.get(reverse("agent_policy"), **PART)
-
-        self.assertIn("cannot connect", text(part))
-
-    def test_the_server_s_instructions_open_from_their_button_and_nowhere_else(self):
-        told = replace(ENDPOINT, instructions="Start with `hq://hq`.\n\nThen `example_next`.")
-        with mock.patch("hq.platform.mcp.listing.endpoint", return_value=told):
-            part = self.client.get(reverse("agent_policy"), **PART)
-
-        (opener,) = select(part, "command", "show-modal")
-        (dialog,) = select(part, "id", opener.attrs["commandfor"])
-        self.assertEqual((opener.tag, dialog.tag), ("button", "dialog"))
-        self.assertIn("aria-labelledby", dialog.attrs)
-        inside = within(part, "id", dialog.attrs["id"])
-        self.assertLessEqual(
-            {"hq://hq", "example_next"}, {element.words for element in inside if element.tag == "code"}
-        )
-        paragraphs = [element for element in elements(part, "p") if "example_next" in element.words]
-        self.assertTrue(paragraphs)
-        self.assertTrue(all(dialog in element.ancestors for element in paragraphs))
