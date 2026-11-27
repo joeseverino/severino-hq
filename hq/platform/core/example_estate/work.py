@@ -9,6 +9,8 @@ from hq.domains.content.content_sync import sync_content_index
 from hq.domains.content.models import ContentItem
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.observations.github import (
+    ALLOWANCE_KIND,
+    CODE_SCANNING,
     DEPENDENCY_RUN_KIND,
     PULL_REQUEST_KIND,
     REPOSITORY_KIND,
@@ -21,6 +23,7 @@ from hq.domains.jobs.models import Job
 from hq.platform.application import outbound_work
 from hq.platform.application.adoption import adopt_discovered
 from hq.platform.application.conditions import READY
+from hq.platform.application.freshness import cadence
 from hq.platform.application.images import ImageRef
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sweep import ADOPT
@@ -355,6 +358,27 @@ def _watched():
 
 # The login the example estate's update run opens its pull requests as.
 UPDATER = "example-hq[bot]"
+
+
+def readings_aged():
+    """The update run's reading past its tolerance, the hourly allowance
+    failing on its last try, and code scanning closed to the App on every
+    repository but HQ's: each standing the Controller page lists a reading in."""
+
+    late = cadence(DEPENDENCY_RUN_KIND).stale_after + timedelta(hours=3)
+    ProviderInventory.objects.filter(kind=DEPENDENCY_RUN_KIND).update(observed_at=timezone.now() - late)
+    store(ALLOWANCE_KIND, reachable=False, observed_at=None, error="GitHub did not answer in time.")
+    closed = [
+        {
+            "part": CODE_SCANNING.name,
+            "refusal": "",
+            "reason": f"GitHub 403 for /repos/example/{name}/code-scanning/alerts",
+            "scope": f"example/{name}",
+            "connection_ref": GITHUB,
+        }
+        for name in REPOSITORIES[1:]
+    ]
+    ProviderInventory.objects.filter(kind=REPOSITORY_KIND).update(refused_parts=closed)
 
 
 def _store_repositories(records: list[dict]) -> None:

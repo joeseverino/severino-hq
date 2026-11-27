@@ -189,6 +189,15 @@ def _short_release() -> None:
     example_estate.work.worker_image_missing()
 
 
+def _readings_aged(owner) -> None:
+    """The example estate with a reading out of date, one failing and one
+    read with a part refused, so each standing the Controller page lists a
+    reading in is drawn."""
+
+    _estate(owner)
+    example_estate.work.readings_aged()
+
+
 def _glance_aged(owner) -> None:
     """The example estate as the dashboard finds it after nobody looked for a
     while: the machine's reading due again, nothing asked yet."""
@@ -318,6 +327,7 @@ SEEDS: dict[str, Seed] = {
     # The same on a fresh install, so the dashboard's Needs you card holds what it raises.
     "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
+    "readings-aged": Seed(_readings_aged, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
