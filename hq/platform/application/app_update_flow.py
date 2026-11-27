@@ -18,7 +18,7 @@ from .app_updates import Managed, UpdateKind, UpdateState, of_app, update_state
 from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
 from .card_items import Answer
 from .containers import containers
-from .github_estate import check_step, repositories
+from .github_estate import check_state, check_step, repositories
 from .labels import dotted
 from .moments import when
 from .projection import read_once
@@ -33,8 +33,6 @@ lazy from .work_runs import run_row, standing_of
 
 # How a step stands, by the tone its answer is said in.
 _STATES = {Tone.GOOD: DONE, Tone.ATTENTION: RUNNING, Tone.SERIOUS: FAILED}
-# The checks as a whole, by the summary state the read gives them.
-_CHECKS = {"success": ("Passed", DONE), "pending": ("Running", RUNNING), "failure": ("Failing", FAILED)}
 # A step waiting on the steps before it, said in the words its declaration gives.
 WAITING = Read(Standing(IDLE))
 # The kinds of update HQ moves through its steps; the rest a person moves by hand.
@@ -143,7 +141,8 @@ def _checks(state: UpdateState) -> Read | None:
         return None
     if (update := state.update) is None:
         return WAITING
-    word, at = _CHECKS.get(str(update.checks.get("state") or ""), ("None reported", IDLE))
+    said = str(update.checks.get("state") or "")
+    word, at = check_state(said) if said else ("None reported", IDLE)
     parts = tuple(map(check_step, update.check_runs))
     passed = f"{sum(part.done for part in parts)} of {len(parts)} passed" if parts else ""
     return Read(Standing(at, note=passed or update.checks_said.why, word=word), parts)

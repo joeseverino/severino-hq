@@ -43,7 +43,7 @@ lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_stan
 lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
-lazy from hq.platform.application.github_estate import repositories, repository_for
+lazy from hq.platform.application.github_estate import check_state, repositories, repository_for
 lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
 lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile, standing
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
@@ -140,7 +140,8 @@ def _repository(row) -> tuple[Cell, ...]:
     else:
         found = [Cell("Not read yet", muted=True)] if row["repository_url"] else []
     if row["repository"] and row["repository"].failing:
-        found.append(Cell("Checks failing", tone="serious"))
+        failed = check_state("failure")
+        found.append(Cell(f"Checks {failed.word.lower()}", tone=failed.tone))
     return tuple(found)
 
 

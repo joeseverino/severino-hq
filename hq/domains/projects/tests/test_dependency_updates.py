@@ -132,7 +132,7 @@ class UpdatesSurfaceTests(TestCase):
         listed = [element.attrs["href"] for element in within(response, "id", "updates") if element.tag == "a"]
         self.assertEqual(listed, [UPDATE["url"], estate.UNANSWERED["url"]])
         self.assertIn(LONG_TITLE, text(response))
-        self.assertIn("Checks failing", text(response))
+        self.assertIn("Checks failed", text(response))
         self.assertIn("no fixed version yet", text(response))
         # A person's pull request is listed with the others, never as an update.
         self.assertIn(estate.BUMP["url"], hrefs(response))

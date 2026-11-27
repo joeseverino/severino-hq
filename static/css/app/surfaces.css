@@ -167,6 +167,10 @@
   /* A fold drawn as one line inside another part's line ({% section line=True %}). */
   .section-line > summary { padding-block: calc((var(--target-min) - 1lh) / 2); }
   .section-line[open] > summary { margin-bottom: var(--space-2); }
+  /* Its rows (a step's checks) are a full target apart, and a row's leading
+     mark keeps a column of its own, so it never ends a line its words wrap from. */
+  .section-line > .stack-list { row-gap: calc(var(--target-min) - 1lh); }
+  .section-line > .stack-list > li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); }
   /* Among a row's buttons ({% button_row %}) it is one of their items while
      closed, and opens onto a line of its own the row's whole width. */
   .form-actions > .section-fold { flex: 0 1 auto; margin: 0; }

@@ -193,10 +193,6 @@
 .step-list .muted { display: block; margin-top: var(--space-1); }
 /* A step's parts (a declared workflow's checks, its apps) each run on one line: its name, its state, its detail. */
 .step-list .stack-list .muted { display: inline; margin-top: 0; }
-/* A part's mark keeps a column of its own, so it never ends a line its name
-   wraps from, and each row is a full target apart from the next. */
-.step-list .section-line .stack-list { row-gap: calc(var(--target-min) - 1lh); }
-.step-list .section-line .stack-list > li { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--space-3); }
 
 /* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
    so its title starts at the edge every other card's heading starts at. The

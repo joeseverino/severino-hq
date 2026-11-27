@@ -18,6 +18,7 @@ from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing, StandingAnswer
 from .describe import Describe
 from .entity_links import EntityLink, declared_link, provider_label
 from .labels import dotted, lower_first
+from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_sequences
 
@@ -145,7 +146,7 @@ class Sequence:
             f"{at.title} {lower_first(at.line)}" if at is not yours else "",
             f"{yours.title}: {lower_first(yours.standing.label)}" if yours else "",
         )
-        return " ".join(f"{line.rstrip('.')}." for line in lines if line)
+        return " ".join(ended(line) for line in lines if line)
 
 
 @dataclass(frozen=True, slots=True)
