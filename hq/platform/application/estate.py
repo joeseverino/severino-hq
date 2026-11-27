@@ -22,7 +22,7 @@ lazy from hq.domains.control_plane.names import in_zone
 from .action_links import read_link
 from .card_items import Counted, Kpi
 from .certificate_expiry import serving
-from .connection_lifecycle import Lifecycle, probed, standing
+from .connection_lifecycle import Lifecycle
 from .drawings import Dot, Dots
 from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
@@ -36,8 +36,7 @@ from .ui import DomainOverview
 from .workflow_contracts import ActionLink
 lazy from . import connections, derived_reads, services, zones
 lazy from .connection_catalog import connection_total
-lazy from .connections import connection_rows
-lazy from .credential_sight import credential_sight
+lazy from .connections import connection_rows, connection_standing, credential_refusals
 lazy from .estate_records import EstateFigure
 lazy from .facts import Subject, inventory_about, readings
 lazy from .infrastructure import enabled_resources
@@ -160,25 +159,14 @@ def connection_states() -> tuple[ConnectionState, ...]:
     return read_once("estate.connections", _connections)
 
 
-def refused_connections() -> dict[str, str]:
-    """Connection ref to the provider's reason, for each refused credential."""
-
-    return {item.ref: item.detail for item in connection_states() if item.state == Lifecycle.REVOKED}
-
-
 def _connections() -> tuple[ConnectionState, ...]:
     """Connections that did not answer, whose provider refused the credential, or that their controller stopped reporting."""
 
-    refused = {found.provider: found.credential_refusal for found in credential_sight() if found.credential_refusal}
     found = []
     for row in connection_rows():
-        state = standing(
-            probed(reachable=row.reachable, was_probed=row.probed),
-            unreported=row.unreported_at is not None,
-            refused=row.provider in refused,
-        )
+        state = connection_standing(row)
         if state in _TROUBLED:
-            detail = refused[row.provider] if state == Lifecycle.REVOKED else row.detail
+            detail = credential_refusals()[row.provider] if state == Lifecycle.REVOKED else row.detail
             found.append(ConnectionState(row.connection_ref, state, detail))
     return tuple(sorted(found, key=lambda item: item.ref))
 

@@ -4,7 +4,7 @@ from dataclasses import replace
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.markup_testing import text
@@ -297,7 +297,6 @@ class ConnectionRegistrationTests(TestCase):
             discovered = command_center("capital", principal=FINANCE, include_live_connections=True)
 
         self.assertEqual(discovered["connections"][0].label, "Capital One")
-        self.assertEqual(discovered["connections"][0].badges, ("healthy",))
 
     def test_two_letter_query_matches_word_starts_not_word_middles(self):
         with host_only():
@@ -558,7 +557,7 @@ class ConnectionWorkspaceTests(SignedInTestCase):
         self.assertNotContains(response, "Does not say where its secret is kept")
 
     def test_a_connection_with_a_key_must_say_where_it_is_kept(self):
-        for model in ("scoped", "coarse", "rejected", "unknown"):
+        for model in ("scoped", "coarse", "unknown"):
             with self.subTest(model), self.assertRaisesRegex(ImproperlyConfigured, "secret_store"):
                 self.page_for(model)
 
@@ -569,7 +568,7 @@ class ConnectionWorkspaceTests(SignedInTestCase):
             with self.subTest(unsaid), self.assertRaises(ValueError) as refused:
                 ConnectionInstance(**made, credential_model=unsaid)
             # The refusal names the field and every value it takes.
-            for word in ("credential_model", "scoped", "coarse", "none", "rejected", "unknown"):
+            for word in ("credential_model", "scoped", "coarse", "none", "unknown"):
                 self.assertIn(word, str(refused.exception))
 
 
@@ -598,11 +597,6 @@ class GrantEvidenceTests(TestCase):
     def test_every_pair_of_declarations_has_one_answer(self):
         scoped = self.ability(required_scopes=("a:read",), grant="scoped")
         cases = {
-            # A rejected credential proves nothing, whatever the ability asked.
-            (
-                scoped,
-                self.instance(credential_model="rejected", scopes_known=True, granted_scopes=("a:read",)),
-            ): "revoked",
             # Keyless on either side: nothing to prove.
             (self.ability(grant="none"), self.instance(credential_model="coarse")): "not_applicable",
             (self.ability(), self.instance(credential_model="none")): "not_applicable",
@@ -629,47 +623,15 @@ class GrantEvidenceTests(TestCase):
         state, missing = self.evidence(scoped, self.instance(scopes_known=True, granted_scopes=("a:read",)))
         self.assertEqual((state, missing), ("missing", ("b:write",)))
 
-    def test_authority_and_lifecycle_follow_the_evidence(self):
-        from datetime import timedelta
-
-        from django.utils import timezone
-
-        from hq.platform.application.connection_catalog import (
-            ConnectionAbilityState,
-            connection_authority,
-            connection_lifecycle,
-        )
-
-        def states(*evidence):
-            return tuple(
-                ConnectionAbilityState(self.ability(), available=True, missing_scopes=(), action=None, evidence=item)
-                for item in evidence
-            )
+    def test_authority_follows_the_evidence(self):
+        from hq.platform.application.connection_catalog import connection_authority
 
         self.assertEqual(connection_authority(()), "none")
-        self.assertEqual(connection_authority(states("verified")), "proven")
-        self.assertEqual(connection_authority(states("verified", "coarse")), "whole_account")
-        self.assertEqual(connection_authority(states("verified", "undeclared")), "undeclared")
-        self.assertEqual(connection_authority(states("unverified", "unknown")), "unknown")
-        self.assertEqual(connection_authority(states("verified", "missing")), "missing")
-
-        now = timezone.now()
-        fresh = self.instance(observed_at=now - timedelta(minutes=5))
-        old = self.instance(observed_at=now - timedelta(hours=30))
-        life = lambda instance, authority: connection_lifecycle(instance, authority, now=now)  # noqa: E731
-        self.assertEqual(life(self.instance(credential_model="rejected"), "proven"), "revoked")
-        self.assertEqual(life(self.instance(), "proven"), "configured")
-        with override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=12 * 60 * 60):
-            self.assertEqual(life(old, "proven"), "stale")
-        # How old a reading may get is its kind's cadence: a public registry's
-        # stands for days.
-        self.assertEqual(life(replace(old, kind="registry.domain"), "proven"), "ready")
-        self.assertEqual(life(fresh, "missing"), "unauthorized")
-        self.assertEqual(life(self.instance(status="serious", observed_at=now), "proven"), "unreachable")
-        self.assertEqual(life(self.instance(status="neutral", observed_at=now), "proven"), "configured")
-        self.assertEqual(life(fresh, "proven"), "ready")
-        self.assertEqual(life(fresh, "whole_account"), "ready")
-        self.assertEqual(life(fresh, "undeclared"), "reachable")
+        self.assertEqual(connection_authority(("verified",)), "proven")
+        self.assertEqual(connection_authority(("verified", "coarse")), "whole_account")
+        self.assertEqual(connection_authority(("verified", "undeclared")), "undeclared")
+        self.assertEqual(connection_authority(("unverified", "unknown")), "unknown")
+        self.assertEqual(connection_authority(("verified", "missing")), "missing")
 
     def test_a_keyless_instance_cannot_also_report_grants(self):
         spec = ConnectionSpec(
@@ -692,15 +654,13 @@ class GrantEvidenceTests(TestCase):
 
         by_ref = {item["label"]: item for item in _standing(READER) if item["family"] == "infrastructure.controllers"}
 
-        # A login key is the whole machine: named as such, and ready.
+        # A login key is the whole machine, and named as such.
         self.assertEqual(by_ref["a-ssh"]["credential_model"], "coarse")
         self.assertEqual(by_ref["a-ssh"]["authority"], "whole_account")
-        self.assertEqual(by_ref["a-ssh"]["lifecycle"], "ready")
         self.assertTrue(all(a["evidence"] == "coarse" for a in _abilities(by_ref["a-ssh"])))
-        # A scoped token nobody has asked about: reachable, with the debt named.
+        # A scoped token nobody has asked about, with the debt named.
         self.assertEqual(by_ref["a-cloudflare_dns"]["credential_model"], "scoped")
         self.assertEqual(by_ref["a-cloudflare_dns"]["authority"], "undeclared")
-        self.assertEqual(by_ref["a-cloudflare_dns"]["lifecycle"], "reachable")
         self.assertTrue(all(a["evidence"] == "unverified" for a in _abilities(by_ref["a-cloudflare_dns"])))
 
     def test_keyless_gateways_prove_themselves_without_a_credential(self):

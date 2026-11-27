@@ -16,7 +16,6 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, create_model
 
-from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS
@@ -35,11 +34,12 @@ from .action_links import (
 )
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .conditions import DRIFTED, holding
-from .connection_catalog import ConnectionGroup, connection_catalog
+from .connection_catalog import CONTROLLER_CONNECTIONS, ConnectionGroup, connection_catalog
+from .connection_lifecycle import STATE_FACT
 from .connections import ConnectionLink, ConnectionSpec
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
-from .entity_links import entity_link, kind_label, node_name, record_name
+from .entity_links import entity_link, kind_label, node_name, provider_label, record_name
 from .infrastructure import ResourceState, declared_resources, resource_health
 from .integration_validation import required_capability_names
 from .json_schemas import as_written
@@ -285,7 +285,7 @@ def _connection_nodes(
         _declared_ability_nodes(group, nodes, principal, read)
         for connection in group.connections:
             instance = connection.instance
-            node = _connection_node(group, instance, spec_actions, connection_url)
+            node = _connection_node(group, connection, spec_actions, connection_url)
             nodes[node.id] = node
             if instance.controller_id:
                 _controller_edge(group, instance, node, connection_url, nodes, edges, principal)
@@ -318,7 +318,8 @@ def _declared_ability_nodes(group, nodes, principal, read: Mapping[str, datetime
         )
 
 
-def _connection_node(group, instance, spec_actions, connection_url) -> TopologyNode:
+def _connection_node(group, connection, spec_actions, connection_url) -> TopologyNode:
+    instance = connection.instance
     link = entity_link("connection", instance.label)
     return TopologyNode(
         id=Kind.CONNECTION.of(f"{group.spec.name}:{instance.id}"),
@@ -326,12 +327,13 @@ def _connection_node(group, instance, spec_actions, connection_url) -> TopologyN
         label=instance.label,
         # Called by the service it reaches, as every other mention of it is.
         name=link.label if link.label != instance.label else "",
-        subtitle=CONNECTION_LABELS.get(instance.kind, group.spec.label),
+        subtitle=provider_label(instance.kind) if group.spec.name == CONTROLLER_CONNECTIONS else group.spec.label,
         provider=instance.kind,
         connection_ref=instance.connection_ref,
         controller_id=instance.controller_id,
-        status=instance.status,
-        status_label=instance.status_label,
+        status=connection.lifecycle.tone,
+        status_label=connection.lifecycle.label,
+        facts=((STATE_FACT, connection.lifecycle),),
         detail=instance.detail,
         # The connection's row on the connections page, unless its
         # spec routes it to a page of its own.
@@ -366,12 +368,12 @@ def _target_edges(instance, connection, nodes, edges) -> None:
             target, kind=Kind.TARGET, read_capabilities=connection.read_capabilities, through=instance.label
         )
         _named_by(nodes, node)
-        relation = edge_between(connection_id, node.id, "reaches", status=instance.status)
+        relation = edge_between(connection_id, node.id, "reaches", status=connection.status)
         edges[relation.id] = relation
         # A target that is also a declaration using this connection.
         resource_id = Kind.RESOURCE.of(target.resource_key)
         if target.resource_key and resource_id in nodes:
-            relation = edge_between(connection_id, resource_id, "used_by", status=instance.status)
+            relation = edge_between(connection_id, resource_id, "used_by", status=connection.status)
             edges[relation.id] = relation
 
 
@@ -385,7 +387,7 @@ def _dependency_edges(instance, connection, nodes, edges) -> None:
             node = _link_node(dependency, kind=Kind.DEPENDENCY, read_capabilities=connection.read_capabilities)
             _named_by(nodes, node)
             target_id = node.id
-        relation = edge_between(connection_id, target_id, "used_by", status=instance.status)
+        relation = edge_between(connection_id, target_id, "used_by", status=connection.status)
         edges[relation.id] = relation
 
 

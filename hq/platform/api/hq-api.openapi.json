@@ -4498,7 +4498,7 @@
             "type": "string"
           },
           "evidence": {
-            "description": "How HQ knows whether it holds: `verified`, `coarse`, `not_applicable`, `unverified`, `undeclared`, `unknown`, `missing` or `revoked`.",
+            "description": "How HQ knows whether it holds: `verified`, `coarse`, `not_applicable`, `unverified`, `undeclared`, `unknown` or `missing`.",
             "type": "string"
           },
           "grant": {
@@ -9460,7 +9460,7 @@
                 "type": "null"
               }
             ],
-            "description": "What sort of credential it is, `scoped`, `coarse`, `none` or `rejected`, the last for one the service refused; null when that is not known."
+            "description": "What sort of credential it is, `scoped`, `coarse` or `none`; null when that is not known."
           },
           "dependencies": {
             "description": "What the connection depends on.",
@@ -9526,7 +9526,7 @@
             "description": "The latest audit entry about it; null for none."
           },
           "lifecycle": {
-            "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `ready`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
+            "description": "Where it is in its life: `configured`, `unprobed`, `reachable`, `unreachable`, `unauthorized`, `stale`, `revoked` or `unreported`.",
             "type": "string"
           },
           "observed_at": {

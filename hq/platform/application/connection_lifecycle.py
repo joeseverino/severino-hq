@@ -1,10 +1,8 @@
 """Where a connection is in its life: the one vocabulary every view says it in.
 
-A reading, a catalog view, a connections-page row and the estate's own count
-each arrive at a state from different evidence, and say it in these words.
-Two facts outrank whatever the evidence says: a connection its controller no
-longer reports has no current reading at all, and a credential the service
-refused is refused whatever a probe found. ``standing`` holds that order.
+Every surface that says how a connection stands reads it from
+``connections.connection_standing``, which composes the evidence through
+``standing`` here, once per projection.
 """
 
 from .references import Kind
@@ -20,7 +18,6 @@ class Lifecycle(TonedChoices):
     CONFIGURED = "configured", Tone.NEUTRAL, "Added"
     UNPROBED = "unprobed", Tone.NEUTRAL, "Not tested"
     REACHABLE = "reachable", Tone.GOOD, "Working"
-    READY = "ready", Tone.GOOD, "Working"
     UNREACHABLE = "unreachable", Tone.SERIOUS, "Not answering"
     UNAUTHORIZED = "unauthorized", Tone.SERIOUS, "Permission missing"
     STALE = "stale", Tone.ATTENTION, "Out of date"
@@ -39,6 +36,9 @@ ATTENTION = frozenset(state for state in Lifecycle if state.tone.acted_on)
 # moment), and the id prefix of the node that stands in for a connection no
 # controller reports.
 UNREPORTED_FACT = f"connection-{Lifecycle.UNREPORTED}"
+# The fact a connection's topology node carries its state in, for the findings
+# that read the node.
+STATE_FACT = "connection-state"
 UNREPORTED_NODE = Kind.CONNECTION.of(f"{Lifecycle.UNREPORTED}:")
 
 
@@ -50,11 +50,31 @@ def probed(*, reachable: bool, was_probed: bool) -> Lifecycle:
     return Lifecycle.REACHABLE if was_probed else Lifecycle.UNPROBED
 
 
-def standing(found: Lifecycle, *, unreported: bool = False, refused: bool = False) -> Lifecycle:
-    """``found``, unless the connection is unreported or its credential refused."""
+def standing(
+    found: Lifecycle | None,
+    *,
+    stale: bool = False,
+    authority: str = "none",
+    unreported: bool = False,
+    refused: bool = False,
+) -> Lifecycle:
+    """One state from everything known of a connection, most telling first.
+
+    ``found`` is what its last probe found (``probed``), None when nothing was
+    ever observed. A connection its controller no longer reports has no current
+    reading at all, and a credential the service refused is refused whatever a
+    probe found. An old observation is stale before it is anything else,
+    because every later claim rests on it, and missing access
+    (``connection_catalog.connection_authority``) fails closed ahead of
+    reachability.
+    """
 
     if unreported:
         return Lifecycle.UNREPORTED
     if refused:
         return Lifecycle.REVOKED
-    return found
+    if found is None:
+        return Lifecycle.CONFIGURED
+    if stale:
+        return Lifecycle.STALE
+    return Lifecycle.UNAUTHORIZED if authority == "missing" else found

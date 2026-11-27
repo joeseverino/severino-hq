@@ -21,7 +21,8 @@ from .infrastructure import (
 )
 from .locate import index_of, join_endpoint, split_endpoint
 from .projection import projection_scope, read_once
-lazy from .connections import connection_rows
+lazy from .connection_lifecycle import WORKING
+lazy from .connections import connection_rows, connection_standing
 
 
 def name_context(hostname: str) -> NameContext:
@@ -118,7 +119,7 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
     reported = [
         connection
         for connection in _connection_rows()
-        if connection.provider in public and connection.reachable and connection.probed
+        if connection.provider in public and connection_standing(connection) in WORKING
     ]
     zones = {normalized_hostname(zone) for connection in reported for zone in connection.reaches if zone}
     return tuple(sorted(zones)), bool(reported)

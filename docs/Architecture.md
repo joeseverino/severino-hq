@@ -690,8 +690,12 @@ and when an extension's instance leaves its provider.
 A permission is something proven. An ability declares how its authority is
 proven, and an instance reports the credential observed. HQ derives
 per-ability evidence and a per-connection lifecycle from the two. It fails
-closed on a missing or rejected grant, and names an undeclared one rather than
-counting it as authorized.
+closed on a missing grant, and names an undeclared one rather than counting it
+as authorized. Every page, count, finding and answer says a connection's state
+through one function: `connections.connection_standing` for a connection a
+controller reports (its probe, its age, a credential its service refused, and
+whether it is still reported), `connection_catalog.instance_standing` for an
+extension's instance, both composed by `connection_lifecycle.standing`.
 
 The controller's connection providers carry their credential model beside the
 providers, so reach a sweep reports is never mistaken for permission. The

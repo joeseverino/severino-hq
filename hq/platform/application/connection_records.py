@@ -11,7 +11,7 @@ from hq.domains.control_plane.reading_parts import RefusedPart
 from . import finding_steps, findings
 from .answer_fields import AsRead, DateTime, ObservedAt
 from .connection_catalog import AUTHORITY_LABELS, EVIDENCE_LABELS
-from .connection_contracts import CREDENTIAL_MODELS, GRANT_MODELS, ConnectionFact, ConnectionLink
+from .connection_contracts import GRANT_MODELS, ConnectionFact, ConnectionLink
 from .connection_lifecycle import Lifecycle
 from .connection_reach import NETWORK_LABELS
 from .credential_sight import SightState
@@ -305,10 +305,7 @@ class ConnectionStandingRecord(ConnectionStandingRow):
     ]
     credential_model: Annotated[
         str | None,
-        Describe(
-            f"What sort of credential it is, {listed(CREDENTIAL_MODELS)}, the last for one the service refused; "
-            "null when that is not known."
-        ),
+        Describe(f"What sort of credential it is, {listed(GRANT_MODELS)}; null when that is not known."),
     ]
     scopes_known: Annotated[
         bool,

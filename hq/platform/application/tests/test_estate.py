@@ -25,7 +25,6 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from .. import readings
 from ..attention import infrastructure
 from ..command_center import command_center
-from ..connection_lifecycle import Lifecycle
 from ..estate import cards, estate_reading, overview
 from ..findings import finding_key
 from ..glance import dashboard_panels
@@ -298,23 +297,6 @@ class EstateCardTests(TestCase):
 
         for url in (reverse("control_plane:machines"), reverse("control_plane:services"), reverse("zones:index")):
             self.assertIn(url, hrefs(response))
-
-    def test_a_refused_credential_is_said_as_refused(self):
-        from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL
-
-        ProviderConnection.objects.all().delete()
-        connection("cloudflare_api", "example-cf")
-        store(
-            "cloudflare.pages_project",
-            reachable=False,
-            refusal=CREDENTIAL_REFUSAL,
-            error="Invalid API token",
-        )
-
-        with projection_scope():
-            found = estate_reading().connections
-
-        self.assertEqual([(item.ref, item.state) for item in found], [("example-cf", Lifecycle.REVOKED)])
 
 
 class EdgeCertificateExpiryTests(TestCase):

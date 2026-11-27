@@ -31,7 +31,8 @@ from .tailnet import TAILNET_KIND
 from .tailnet_presence import Presence, tailnet_presence
 from .tone import Tone, Toned
 lazy from . import connections, derived_reads, readings
-lazy from .connections import connection_rows
+lazy from .connection_lifecycle import WORKING
+lazy from .connections import connection_rows, connection_standing
 lazy from .entity_links import entity_link
 lazy from .facts import Subject, snapshots_of
 lazy from .infrastructure import declared_machines, enabled_resources
@@ -252,7 +253,7 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
     resources, device_keys = _resources_by_host()
     # A declared machine counts on its own; declaring one is a deliberate act.
     names = set(containers) | set(reached) | set(services) | set(resources) | set(declared) | set(present)
-    answered = {connection.connection_ref for connection in connections if connection.reachable}
+    answered = {connection.connection_ref for connection in connections if connection_standing(connection) in WORKING}
     aliases = same_machine(index, addresses, connections, present)
     canonical = sorted(names - set(aliases))
     hq_names = hq_hostnames()

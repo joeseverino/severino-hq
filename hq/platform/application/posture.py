@@ -155,7 +155,7 @@ def _scope(inputs) -> Reading:
     def named(found: tuple) -> str:
         return ", ".join(sorted({connection.instance.label for _group, connection in found}))
 
-    missing = having("missing", "revoked")
+    missing = having("missing")
     broad = tuple(pair for pair in having("coarse") if pair[1].instance.kind in scoped)
     whole = tuple(pair for pair in having("coarse") if pair[1].instance.kind not in scoped)
     if missing or broad:

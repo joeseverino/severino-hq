@@ -10,6 +10,7 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from hq.platform.core.testing import operator
 
@@ -34,7 +35,12 @@ def family(status: str = "good"):
     """A family only infrastructure management may read, with one instance in ``status``, and its provider."""
 
     instance = ConnectionInstance(
-        "example-infra", "Example infrastructure", "example", status, status.title(), credential_model="none"
+        "example-infra",
+        "Example infrastructure",
+        "example",
+        status,
+        credential_model="none",
+        observed_at=timezone.now(),
     )
     provider = mock.Mock(return_value=(instance,))
     spec = ConnectionSpec(

@@ -30,11 +30,10 @@ from .connection_catalog import (
     serialize_ability,
 )
 from .connection_contracts import UNKNOWN_CREDENTIAL, ConnectionInstance
-from .connection_lifecycle import WORKING, Lifecycle, standing
+from .connection_lifecycle import WORKING, Lifecycle
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import ConnectionSecurityPosture, connection_security_posture
 from .connection_setup import ProviderSetup, guide_url, setups
-from .connections import connection_rows
 from .credential_mint import CredentialFix, credential_fixes
 from .credential_sight import PART_SOURCE, ProviderSight, Sight, fed_kinds, read_through, sight_by_connection
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
@@ -42,7 +41,7 @@ from .entity_links import EntityLink, entity_link
 from .facts import records_for_connection
 from .freshness import freshness
 from .json_schemas import as_written
-from .moments import moment, when
+from .moments import moment
 from .path_model import ServicePath
 from .paths import hq_path
 from .posture import estate_inputs, guide, posture
@@ -114,8 +113,6 @@ class ConnectionRow:
     used_for: str = ""
     # How many problems are open about it, and the queue showing only those.
     problems: int = 0
-    # When its controller's report came with no connections at all.
-    unreported_at: datetime | None = None
 
     @property
     def problems_url(self) -> str:
@@ -172,14 +169,7 @@ class ConnectionRow:
 
     @property
     def lifecycle(self) -> Lifecycle:
-        """The connection's lifecycle, with what its readings found folded in,
-        so the state cannot disagree with the readings beside it."""
-
-        return standing(
-            Lifecycle(self.connection.lifecycle),
-            unreported=self.unreported_at is not None,
-            refused=self.sight is not None and bool(self.sight.credential_refusal),
-        )
+        return self.connection.lifecycle
 
     @property
     def state_label(self) -> str:
@@ -195,11 +185,6 @@ class ConnectionRow:
     def state_line(self) -> str:
         """The one line under the state word, or ""."""
 
-        if self.lifecycle == Lifecycle.UNREPORTED:
-            observed = self.instance.observed_at
-            return f"Last reported {when(observed)}" if observed else ""
-        if self.lifecycle != self.connection.lifecycle:
-            return ""
         missing = self._permissions_missing
         if missing:
             return counted(missing, "permission missing", "permissions missing")
@@ -224,10 +209,9 @@ class ConnectionRow:
             instance,
             ConnectionStandingRecord,
             credential_model=None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
-            # How it stands is its row's lifecycle, never the bare probe beneath it.
             status=self.lifecycle.tone,
             status_label=self.state_label,
-            lifecycle=connection.lifecycle,
+            lifecycle=self.lifecycle,
             authority=connection.authority,
             actions=connection.actions,
             reads=[_read(read) for read in self.reads],
@@ -462,9 +446,6 @@ def _rows(
     pending: dict[str, datetime],
 ) -> tuple[tuple[ConnectionRow, ...], tuple[ProviderSight, ...]]:
     sights, unconnected = sight_by_connection(controller_refs)
-    unreported = {
-        (row.controller_id, row.connection_ref): row.unreported_at for row in connection_rows() if row.unreported_at
-    }
     fixes = credential_fixes()
     events = last_activity(connection.instance.connection_ref for group in groups for connection in group.connections)
     reach = connection_reach(
@@ -492,7 +473,6 @@ def _rows(
                     reach=reach.get(ref),
                     used_for=used_for.get(group.spec.name, ""),
                     problems=open_problems.get(entity_link("connection", connection.instance.label).url, 0),
-                    unreported_at=unreported.get((connection.instance.controller_id, ref)),
                 )
             )
         # Within its group, a connection that needs a person comes first.

@@ -26,7 +26,8 @@ from hq.platform.core.testing import SignedInTestCase, declare, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 
 from ..connection_catalog import AUTHORITY_LABELS, CONTROLLER_CONNECTIONS, connection_catalog
-from ..connections import connection_readings, connections_for, reachable_through
+from ..connection_lifecycle import Lifecycle
+from ..connections import connections_for, reachable_through
 from ..derivation_testing import frozen
 from ..derivations import counting
 from ..provider_choices import container, zone
@@ -98,14 +99,8 @@ class RecordingTests(TestCase):
 
         sweep({**A_DNS_TOKEN, "ok": False, "detail": "Token is not valid."})
 
-        reading = connection_readings()[0]
-        self.assertEqual(reading.status, "unreachable")
-        self.assertEqual(reading.detail, "Token is not valid.")
-
-    def test_an_unprobed_connection_is_not_a_broken_one(self):
-        sweep({**A_PORTAINER, "probed": False, "detail": "No probe."})
-
-        self.assertEqual(connection_readings()[0].status, "unprobed")
+        (row,) = ProviderConnection.objects.all()
+        self.assertEqual(row.detail, "Token is not valid.")
 
     def test_a_connection_without_a_ref_is_skipped_rather_than_stored(self):
         sweep({"connection_ref": " ", "provider": "portainer"}, A_PORTAINER)
@@ -215,7 +210,7 @@ class DerivationTests(TestCase):
         refs = [ref for ref, _ in container(NameContext())["connection_ref"]]
         labels = dict(container(NameContext())["connection_ref"])
         self.assertEqual(refs, ["a-portainer", "a-broken-one"])
-        self.assertIn("(unreachable)", labels["a-broken-one"])
+        self.assertIn(f"({Lifecycle.UNREACHABLE.label.lower()})", labels["a-broken-one"])
 
     def test_menus_are_empty_before_the_first_sweep(self):
         """And the fields stay typeable. An empty menu is a smaller failure
@@ -247,19 +242,11 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertEqual(groups[0].spec.name, CONTROLLER_CONNECTIONS)
         self.assertTrue(groups[0].connections)
 
-    def test_a_probed_whole_account_credential_is_ready(self):
+    def test_a_probed_whole_account_credential_says_so(self):
         sweep(A_PORTAINER)
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        (row,) = [
-            row
-            for _purpose, rows in response.context["connections"].purposes
-            for row in rows
-            if row.instance.connection_ref == "a-portainer"
-        ]
-        # Reached and proven: the lifecycle rather than the raw probe result.
-        self.assertEqual(row.lifecycle, "ready")
         self.assertContains(response, A_PORTAINER["endpoint"])
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
