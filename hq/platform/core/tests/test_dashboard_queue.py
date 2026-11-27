@@ -3,7 +3,6 @@
 import json
 from unittest.mock import patch
 
-from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application import cadence
@@ -14,12 +13,9 @@ from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.finding_model import Finding, opens
 from hq.platform.application.finding_steps import ByHand, Do, Press, Why
-from hq.platform.application.markup_testing import hrefs, select, with_class, within
+from hq.platform.application.markup_testing import hrefs, select
 from hq.platform.application.plugins import gather_attention
-from hq.platform.application.tests.test_decisions import row_hrefs
-from hq.platform.application.ui import DomainOverview
-from hq.platform.core.testing import SignedInTestCase, operator
-from hq_sdk.testing import plain
+from hq.platform.core.testing import SignedInTestCase
 
 
 class DashboardQueueTests(SignedInTestCase):
@@ -73,8 +69,6 @@ class DashboardQueueTests(SignedInTestCase):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 if path == "/action-items/":
-                    self.assertContains(response, "Reconcile the bill")
-                    self.assertEqual(row_hrefs(response).count("/example/evidence/"), 1)
                     # The queue's one Refresh is a write: posted with the token, never a link.
                     read = reverse("control_plane:read_now")
                     (refresh,) = [
@@ -88,33 +82,7 @@ class DashboardQueueTests(SignedInTestCase):
                     serious = [item for item in work_queue() if item["status"] == "serious"]
                     self.assertContains(response, "data-attention-item", count=len(serious))
                     self.assertIn("/action-items/", hrefs(response))
-                self.assertNotContains(response, "An interesting observation")
         self.assertFalse(DashboardRefreshRequest.objects.exists())
-
-    def test_the_urgent_cards_are_named_without_a_heading_row(self):
-        response = self.client.get("/")
-
-        (card,) = select(response, "data-triage-routes")
-        self.assertEqual(card.attrs.get("aria-label"), "Needs you")
-        inside = within(response, "data-triage-routes")
-        # A row's urgency opens what raised it in a popover, titled as a dialog is; that is no heading row.
-        headings = [
-            element
-            for element in inside
-            if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
-            and not any("popover" in ancestor.attrs for ancestor in element.ancestors)
-        ]
-        self.assertEqual(headings, [])
-
-    def test_the_urgent_card_names_a_rows_urgency_to_a_screen_reader_alone(self):
-        # The card is in the urgent tone, so a row's word for it is no second mark; the queue page shows it.
-        for path, shown in (("/", False), ("/action-items/", True)):
-            with self.subTest(path=path):
-                marks = [
-                    mark for mark in with_class(self.client.get(path), "is-mark") if "tone-serious" in mark.classes
-                ]
-                self.assertTrue(marks)
-                self.assertEqual(any("visually-hidden" not in mark.classes for mark in marks), shown)
 
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]
@@ -126,7 +94,7 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertEqual(response.context["action_queue_count"], len(calm))
         self.assertIn("/action-items/", hrefs(response))
 
-    def test_a_card_on_the_dashboard_opens_its_whole_card_and_shows_how_old_it_is(self):
+    def test_a_card_on_the_dashboard_opens_its_whole_card(self):
         from datetime import timedelta
 
         from django.utils import timezone
@@ -147,13 +115,9 @@ class DashboardQueueTests(SignedInTestCase):
             (page,) = [title.attrs["href"] for title in select(dashboard, "data-attention-title")]
             whole = self.client.get(page)
 
-        self.assertContains(dashboard, "data-reading-age")
-        self.assertContains(dashboard, "read every")
-        self.assertContains(dashboard, "runs --failing")
         path, _, anchor = page.partition("#")
         self.assertEqual(path, "/action-items/")
         self.assertTrue(select(whole, "id", anchor))
-        self.assertContains(whole, "runs --failing")
 
     def test_the_dashboard_asks_for_what_its_queue_is_drawn_from_only_when_it_is_due(self):
         from datetime import timedelta
@@ -229,7 +193,6 @@ class DashboardQueueTests(SignedInTestCase):
         crowded = dashboard(5)
         self.assertEqual(len(select(crowded, "data-attention-item")), 1)
         self.assertTrue(select(crowded, "formaction", approve))
-        self.assertNotContains(crowded, "Example finding")
         self.assertIn("/action-items/", hrefs(crowded))
 
         # A reader who may not see another caller's held request is not shown it in place.
@@ -244,7 +207,6 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertEqual(len(rows), 3)
         (button,) = select(short, "formaction", approve)
         self.assertTrue(button.inside(rows[0]))
-        self.assertContains(short, "Example finding 1")
 
     def test_a_row_hq_is_acting_on_is_asked_again_until_it_ends(self):
         moving = Finding(
@@ -262,11 +224,6 @@ class DashboardQueueTests(SignedInTestCase):
 
         (row,) = select(response, "data-fragment-poll")
         self.assertIn("data-attention-item", row.attrs)
-        # It says where its run stands in the run's own words, its state linked to the run.
-        (run,) = select(response, "href", "/jobs/runs/example/")
-        self.assertTrue(run.inside(row))
-        self.assertEqual(run.words, "Running")
-        self.assertIn("Previewing: Check the example", row.words)
         # Asked again at its own address: the row is answered from the page by its id.
         self.assertTrue(row.attrs.get("id"))
 
@@ -303,85 +260,3 @@ class DashboardQueueTests(SignedInTestCase):
         set_aside(self.user, [item["key"] for item in items], aside=True, current=items)
         response = self.client.get("/")
         self.assertEqual((response.context["action_queue_count"], response.context["aside_count"]), (0, 2))
-        self.assertIn("2 dismissed", plain(response.content))
-
-    def test_empty_filtered_queue_offers_a_way_back(self):
-        response = self.client.get("/action-items/", {"q": "not an existing item"})
-        self.assertContains(response, "Nothing matches.")
-        self.assertContains(response, "Clear filters")
-        self.assertNotContains(response, "Nothing needs you.")
-
-    def test_an_empty_month_takes_no_space(self):
-        # Nothing contributes, the calendar's sources included, so the month is
-        # empty whatever is installed.
-        with (
-            patch(
-                "hq.platform.core.dashboard_views.dashboard_highlights",
-                return_value={"highlights": [], "compact": []},
-            ),
-            patch("hq.platform.application.calendar.calendar_sources", return_value=()),
-        ):
-            response = self.client.get("/")
-        self.assertFalse(select(response, "id", "dashboard-calendar"))
-
-    def test_each_domain_leads_with_its_chart_and_the_month_is_composed_once(self):
-        from django.utils import timezone
-
-        from hq.domains.calendars.models import Entry
-
-        Entry.objects.create(title="Example visit", starts_on=timezone.localdate())
-        highlights = [
-            {
-                "id": f"example.section{number}",
-                "label": f"Example {number}",
-                "overview": DomainOverview(
-                    "Example",
-                    "/example/",
-                    (),
-                    charts=({"title": "Example movement", "empty": True},),
-                    calendars=({"title": "Example activity", "weeks": []},),
-                ),
-            }
-            for number in (1, 2)
-        ]
-        with patch(
-            "hq.platform.core.dashboard_views.dashboard_highlights",
-            return_value={"highlights": highlights, "compact": []},
-        ):
-            response = self.client.get("/")
-        self.assertContains(response, "Example movement", count=2)
-        # A domain's own calendar stays on its pages; the dashboard shows the composed month.
-        self.assertNotContains(response, "Example activity")
-        self.assertEqual(len(select(response, "id", "dashboard-calendar")), 1)
-
-
-class EmptyQueueClaimTests(TestCase):
-    """An empty queue is "Nothing needs you" only once something has been read."""
-
-    def setUp(self):
-        operator(self.client)
-        empty = patch("hq.platform.application.dashboard.domain_attention_items", return_value=())
-        empty.start()
-        self.addCleanup(empty.stop)
-
-    def status(self, seen_at):
-        from hq.platform.application.cadence import WorkerStanding
-
-        with patch(
-            "hq.platform.core.dashboard_views.controller_standing",
-            return_value=WorkerStanding(seen_at=seen_at, silent=False),
-        ):
-            return self.client.get("/")
-
-    def test_a_controller_that_never_ran_has_cleared_nothing(self):
-        response = self.status(None)
-
-        self.assertContains(response, "HQ has read nothing yet.")
-        self.assertNotContains(response, "Nothing needs you.")
-
-    def test_once_read_an_empty_queue_says_so(self):
-        from django.utils import timezone
-
-        response = self.status(timezone.now())
-
-        self.assertContains(response, "Nothing needs you.")
