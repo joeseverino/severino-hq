@@ -144,8 +144,8 @@ def _name(row: Any, *, starts: bool) -> Cell:
     if sight is not None and sight.sights:
         age = (Cell(piece=reading_age(sight.age), dot=True),) if sight.age else ()
         lines.append(Cell(sight.summary, muted=True, parts=age))
-    if row.fix and (mark := _fix_mark(row.fix)):
-        lines.append(Cell(status=mark))
+    if row.fix and row.fix.expiring and not row.fix.refused:
+        lines.append(Cell(status=StatusMark("Expires", row.fix.expiry, tone="attention", pill=False)))
     return replace(Cell.of(connection.name_link), lines=tuple(lines))
 
 
@@ -177,17 +177,6 @@ def _reached(row: Any) -> Cell | None:
         return None
     head, *rest = said
     return replace(head, muted=True, shows="narrow-more", parts=tuple(rest))
-
-
-def _fix_mark(fix: Any) -> StatusMark | None:
-    """What a credential lacks or when it lapses, in a word or two. A refused
-    one is said by the row's state and its refusal line."""
-
-    if fix.missing:
-        return StatusMark("Missing", counted(len(fix.missing), "permission"), tone="attention", pill=False)
-    if fix.refused:
-        return None
-    return StatusMark("Expires", fix.expiry, tone="attention", pill=False)
 
 
 def _name_below(row: Any) -> tuple[Below, ...]:
@@ -231,16 +220,17 @@ def _state(row: Any) -> Cell:
     """Its state in one word, and at most one plain line under it: since when,
     what is missing, or what happens next, then its open problems."""
 
-    instance = row.connection.instance
+    connection = row.connection
+    instance = connection.instance
     line = None
     if row.read_requested_at:
         line = Cell(f"Read asked {when(row.read_requested_at)}", muted=True, shows="narrow-more")
-    elif row.state_line:
+    elif said := connection.state_line:
         line = Cell(
-            row.state_line if not row.state_line_tone else "",
-            status=StatusMark(row.state_line, tone=row.state_line_tone, pill=False) if row.state_line_tone else None,
+            "" if connection.says_missing else said,
+            status=StatusMark(said, tone="serious", pill=False) if connection.says_missing else None,
             muted=True,
-            shows="more" if row.state_line_quiet else "narrow-more",
+            shows="more" if connection.state_line_quiet else "narrow-more",
         )
     elif row.changes_only and instance.observed_at:
         line = Cell(f"Checked {when(instance.observed_at)}", muted=True, shows="narrow-more")

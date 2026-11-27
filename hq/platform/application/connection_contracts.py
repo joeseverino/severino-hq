@@ -57,9 +57,8 @@ class ConnectionAbility:
     # Given as its value's string too, as an extension may write it.
     effect: Effect = Effect.READ
     required_scopes: tuple[str, ...] = ()
-    # Blank, or how authority is proven. Required scopes are ``scoped``; the
-    # other two are how an ability says, truthfully, that no scope check can
-    # exist.
+    # Blank, or how authority is proven. A keyless ability needs no scope; a
+    # whole-account one may still name what its account must hold.
     grant: GrantModel | Literal[""] = ""
     capability: str = ""
     # Resource kinds this ability governs. The relation is explicit because an
@@ -75,8 +74,8 @@ class ConnectionAbility:
         object.__setattr__(self, "effect", Effect(self.effect))
         if self.grant not in ("", *GRANT_MODELS):
             raise ValueError(f"Ability {self.name!r} has grant {self.grant!r}, none of {', '.join(GRANT_MODELS)}.")
-        if self.grant and (self.grant == "scoped") != bool(self.required_scopes):
-            raise ValueError(f"Ability {self.name!r} lists required scopes exactly when its grant is scoped.")
+        if self.grant == "none" and self.required_scopes:
+            raise ValueError(f"Ability {self.name!r} is keyless, so it requires no scope.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +113,8 @@ class ConnectionInstance:
     observed_at: datetime | None = None
     granted_scopes: tuple[str, ...] = ()
     scopes_known: bool = False
+    # What its service refused, for one that refuses rather than lists grants.
+    refused_scopes: tuple[str, ...] = ()
     ability_names: tuple[str, ...] = ()
     targets: tuple[ConnectionLink, ...] = ()
     dependencies: tuple[ConnectionLink, ...] = ()

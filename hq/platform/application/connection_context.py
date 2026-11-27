@@ -30,12 +30,12 @@ from .connection_catalog import (
     serialize_ability,
 )
 from .connection_contracts import UNKNOWN_CREDENTIAL, ConnectionInstance
-from .connection_lifecycle import WORKING, Lifecycle
+from .connection_lifecycle import Lifecycle
 from .connection_reach import ConnectionReach, connection_reach
 from .connection_security import ConnectionSecurityPosture, connection_security_posture
 from .connection_setup import ProviderSetup, guide_url, setups
-from .credential_mint import CredentialFix, credential_fixes
-from .credential_sight import ProviderSight, Sight, Standing, fed_kinds, read_through, sight_by_connection
+from .credential_mint import CredentialFix, connection_sights, credential_fixes
+from .credential_sight import ProviderSight, Sight, Standing, fed_kinds, read_through
 from .derived_reads import serialize_check, serialize_measurement, serialize_path, tally
 from .entity_links import EntityLink, entity_link
 from .facts import records_for_connection
@@ -53,7 +53,6 @@ from .request_path import joined
 from .security import Principal
 from .standards import Measurement
 from .tone import Tone
-from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from . import domains
 lazy from .connection_records import (
@@ -173,32 +172,6 @@ class ConnectionRow:
     @property
     def state_label(self) -> str:
         return self.lifecycle.label
-
-    @property
-    def _permissions_missing(self) -> int:
-        if self.sight is None or self.lifecycle not in WORKING:
-            return 0
-        return len(self.sight.missing)
-
-    @property
-    def state_line(self) -> str:
-        """The one line under the state word, or ""."""
-
-        missing = self._permissions_missing
-        if missing:
-            return counted(missing, "permission missing", "permissions missing")
-        return self.connection.state_line
-
-    @property
-    def state_line_quiet(self) -> bool:
-        return not self._permissions_missing and self.connection.state_line_quiet
-
-    @property
-    def state_line_tone(self) -> str:
-        """The tone of ``state_line``: a fault when a permission is missing,
-        else none, and the line reads as context."""
-
-        return Tone.SERIOUS if self._permissions_missing or self.connection.authority == "missing" else ""
 
     def as_dict(self) -> ConnectionStandingRecord:
         # Every ability and every sight is under ``reads`` or ``changes``, the
@@ -444,7 +417,7 @@ def _rows(
     principal: Principal,
     pending: dict[str, datetime],
 ) -> tuple[tuple[ConnectionRow, ...], tuple[ProviderSight, ...]]:
-    sights, unconnected = sight_by_connection(controller_refs)
+    sights, unconnected = connection_sights()
     fixes = credential_fixes()
     events = last_activity(connection.instance.connection_ref for group in groups for connection in group.connections)
     reach = connection_reach(

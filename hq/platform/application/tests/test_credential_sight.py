@@ -22,7 +22,8 @@ from hq.platform.application.markup_testing import text
 from hq.platform.core.testing import connection, operator
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
-from ..connections import _controller_contract
+from ..connection_catalog import CONTROLLER_CONNECTIONS
+from ..connections import _controller_contract, describe_connections
 from ..credential_sight import (
     NEVER_SWEPT,
     NOT_CONNECTED,
@@ -266,13 +267,20 @@ class PerConnectionSightTests(TestCase):
 
 
 class CanDoTests(TestCase):
-    def test_a_provider_can_do_every_reading_it_feeds(self):
-        abilities, by_provider_names = _controller_contract()
-        labels = {ability.name: ability.label for ability in abilities}
+    def test_a_provider_can_do_every_reading_it_feeds_with_the_permissions_it_declares(self):
+        _, by_provider_names = _controller_contract()
+        (family,) = (
+            found for found in describe_connections()["connections"] if found["name"] == CONTROLLER_CONNECTIONS
+        )
+        described = {ability["name"]: ability for ability in family["abilities"]}
 
         for kind, spec in OBSERVATIONS.items():
+            if not spec.provider:
+                continue
             self.assertIn(kind, by_provider_names[spec.provider])
-            self.assertEqual(labels[kind], spec.label)
+            self.assertEqual(described[kind]["label"], spec.label)
+            granted = (described[kind]["required_scopes"], described[kind]["grant"])
+            self.assertEqual(granted, (list(spec.requires), CONNECTION_CREDENTIALS.get(spec.provider)))
         self.assertIn("analytics.read", by_provider_names["cloudflare_api"])
 
     def test_ability_names_are_unique(self):

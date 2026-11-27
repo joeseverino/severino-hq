@@ -771,9 +771,9 @@ runs under a principal its spec permits, or in HQ's own derivation, whose
 results each reader sees only as far as `readable_by` allows. It reads local
 state, and never makes a network request because someone opened discovery.
 
-An instance may carry status, safe endpoint text, granted scope names, targets,
-dependencies and small facts. It never carries tokens, credentials,
-authorization headers, secret values or private URL parts. URL userinfo, query
+An instance may carry status, safe endpoint text, the scope names its service
+granted or refused, targets, dependencies and small facts. It never carries
+tokens, credentials, authorization headers, secret values or private URL parts. URL userinfo, query
 strings and fragments are rejected outright, rather than filtered by a list of
 secret parameter names.
 

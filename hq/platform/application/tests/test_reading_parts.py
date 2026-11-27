@@ -15,6 +15,8 @@ from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.reading_parts import clean_refused_parts, parts_of
 from hq.platform.core.testing import connection, declare
 
+from ..connection_context import connections_context
+from ..credential_mint import credential_fixes
 from ..credential_sight import PARTIAL, credential_sight
 from ..facts import unreadable_labels
 from ..findings import derive_findings
@@ -137,6 +139,17 @@ class PartlyRefusedReadingTests(TestCase):
             path = path_to("example.net")
 
         self.assertNotIn(PHRASE, path.gaps)
+
+    def test_a_part_refused_to_one_connection_is_missing_from_that_one_alone(self):
+        connection("cloudflare_api", "example-other")
+
+        with projection_scope():
+            fixes = credential_fixes()
+            rows = {row.instance.connection_ref: row for row in connections_context(principal=cli_principal()).rows}
+
+        for ref, lacks in (("example-api", (MISSING,)), ("example-other", ())):
+            redirect = next(state for state in rows[ref].connection.abilities if state.ability.name == REDIRECT)
+            self.assertEqual((fixes[ref].missing, redirect.missing_scopes), (lacks, lacks), ref)
 
 
 class NoConnectionTests(TestCase):

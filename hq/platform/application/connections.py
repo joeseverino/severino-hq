@@ -49,6 +49,7 @@ from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
+lazy from .credential_mint import connection_sights, held_scopes
 lazy from .credential_sight import credential_sight
 lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
@@ -203,8 +204,8 @@ def connection_rows() -> tuple:
 
 def connection_standings() -> Mapping[tuple[str, str], Lifecycle]:
     """How each reported connection stands, by ``(controller id, connection ref)``,
-    read once per projection. Its abilities declare no permission it could lack,
-    so its authority is never missing."""
+    read once per projection. A permission it lacks is said beside its state,
+    since the credential still reads the rest."""
 
     def build() -> dict[tuple[str, str], Lifecycle]:
         refused = credential_refusals()
@@ -366,17 +367,16 @@ def _controller_contract() -> tuple[tuple[ConnectionAbility, ...], dict[str, tup
 
     # Every reading a provider feeds is something its credential lets HQ see.
     for kind, reading in sorted(OBSERVATIONS.items()):
+        if not reading.provider:
+            continue
         abilities.append(
             ConnectionAbility(
                 name=kind,
                 label=reading.label,
-                summary=" ".join(
-                    (
-                        ended(f"Reads {reading.label}"),
-                        *((ended(f"Needs {', '.join(reading.requires)}"),) if reading.requires else ()),
-                    )
-                ),
+                summary=ended(f"Reads {reading.label}"),
                 effect=Effect.READ,
+                required_scopes=tuple(reading.requires),
+                grant=held.credential if (held := CONNECTION_KINDS.get(reading.provider)) else "",
             )
         )
         by_provider.setdefault(reading.provider, []).append(kind)
@@ -390,8 +390,10 @@ def _controller_instances(
     instances = []
     readings = connection_readings()
     name_controller = len({item.controller_id for item in readings}) > 1
+    sights, _ = connection_sights()
     for reading in readings:
         targets, dependencies = _depends(reading)
+        sight = sights.get(reading.connection_ref)
         instances.append(
             ConnectionInstance(
                 id=f"{reading.controller_id}:{reading.connection_ref}",
@@ -401,7 +403,12 @@ def _controller_instances(
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
-                ability_names=ability_names.get(reading.provider, ()),
+                # A reading another connection of its provider took is that one's.
+                ability_names=tuple(
+                    name
+                    for name in ability_names.get(reading.provider, ())
+                    if sight is None or name not in OBSERVATIONS or any(seen.kind == name for seen in sight.sights)
+                ),
                 targets=targets,
                 dependencies=dependencies,
                 facts=tuple(
@@ -424,6 +431,8 @@ def _controller_instances(
                 # credential this is comes from the provider's own model,
                 # declared once beside the providers.
                 credential_model=connection_credential(reading.provider),
+                granted_scopes=held_scopes(sight) if sight else (),
+                refused_scopes=sight.missing if sight else (),
             )
         )
     return tuple(instances)

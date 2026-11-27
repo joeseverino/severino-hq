@@ -28,7 +28,7 @@ from .moments import moment
 from .projection import read_once
 lazy from .connections import connection_rows
 lazy from .credential_findings import fix_steps
-lazy from .credential_sight import credential_sight
+lazy from .credential_sight import PARTIAL, READABLE, ProviderSight, sight_by_connection
 lazy from .facts import snapshots_of
 
 # How far ahead of expiry a credential is replaced.
@@ -250,7 +250,23 @@ def credential_fixes() -> dict[str, CredentialFix]:
     """Each reported connection's credential fix, by connection ref."""
 
     def load() -> dict[str, CredentialFix]:
-        sights = {found.provider: found for found in credential_sight()}
-        return {row.connection_ref: _fix(row, sights.get(row.provider)) for row in connection_rows()}
+        sights, _ = connection_sights()
+        return {row.connection_ref: _fix(row, sights.get(row.connection_ref)) for row in connection_rows()}
 
     return read_once("credential_fixes", load)
+
+
+def connection_sights() -> tuple[dict[str, ProviderSight], tuple[ProviderSight, ...]]:
+    """``sight_by_connection`` of every reported connection, once per projection."""
+
+    return read_once(
+        "credential_mint.sights",
+        lambda: sight_by_connection({row.connection_ref: row.provider for row in connection_rows()}),
+    )
+
+
+def held_scopes(sight: ProviderSight) -> tuple[str, ...]:
+    """Each permission a read through it proves its credential holds, sorted."""
+
+    read = (seen for seen in sight.sights if seen.state in (READABLE, PARTIAL))
+    return tuple(sorted({name for seen in read for name in seen.permissions if name not in seen.missing}))
