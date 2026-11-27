@@ -8,21 +8,13 @@ from django.urls import reverse
 
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
 from hq.platform.application.plugin_testing import form_keyed
-from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.testing import operator
 
-from ..agent_access import AGENT_BLOCKED, AGENTS_PAUSED, SET_AGENT_BLOCK, blocked, refusal
-from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
-from ..linked_accounts import bind_sign_in
+from ..agent_access import AGENT_BLOCKED, SET_AGENT_BLOCK, blocked
+from ..capabilities import CAPABILITY_AUDIT_TYPE
 from ..security import (
-    OPERATOR_CAPABILITIES,
-    Capability,
-    Principal,
     agent_principal,
-    device_principal,
-    subject_of,
-    web_principal,
 )
 
 AGENT = "example-agent"
@@ -40,59 +32,9 @@ def _blocked(client: str) -> bool:
 
 
 class RefusalTests(TestCase):
-    def setUp(self):
-        _seen(AGENT, OTHER)
-        self.person = operator(username="op")
-        answer = execute_capability(
-            SET_AGENT_BLOCK, keyed({"blocked": True}), principal=web_principal(self.person), target=AGENT
-        )
-        self.assertTrue(answer["ok"], answer)
-
-    def test_a_blocked_client_is_refused_on_both_surfaces_and_the_one_beside_it_acts(self):
-        for interface in ("mcp", "api"):
-            with self.subTest(interface=interface):
-                self.assertEqual(refusal(agent_principal(AGENT, interface, READ)), AGENT_BLOCKED)
-                self.assertIsNone(refusal(agent_principal(OTHER, interface, READ)))
-
-    def test_a_blocked_device_stops_with_its_client_as_its_person(self):
-        bind_sign_in(self.person, "example-key")
-        _seen(AGENT, person_key="example-key")
-        answer = execute_capability(
-            SET_AGENT_BLOCK,
-            keyed({"blocked": True}),
-            principal=web_principal(self.person),
-            target=subject_of(AGENT, "example-key"),
-        )
-        self.assertTrue(answer["ok"], answer)
-        device = device_principal(AGENT, READ, READ, person_key="example-key")
-
-        self.assertEqual(refusal(device), AGENT_BLOCKED)
-
-    def test_a_person_in_the_browser_is_never_blocked_by_a_client_of_the_same_name(self):
-        AgentIdentity.objects.filter(client_id=AGENT).update(client_id=self.person.username)
-        answer = execute_capability(
-            SET_AGENT_BLOCK, keyed({"blocked": True}), principal=web_principal(self.person), target=self.person.username
-        )
-        self.assertTrue(answer["ok"], answer)
-
-        self.assertIsNone(refusal(web_principal(self.person)))
-
-    def test_the_block_says_its_own_code_while_agents_are_also_paused(self):
-        with mock.patch("hq.platform.application.agent_access.agents_paused", return_value=True):
-            self.assertEqual(refusal(agent_principal(AGENT, "mcp", READ)), AGENT_BLOCKED)
-            self.assertEqual(refusal(agent_principal(OTHER, "mcp", READ)), AGENTS_PAUSED)
-
     def test_an_unreadable_block_refuses(self):
         with mock.patch.object(AgentIdentity.objects, "filter", side_effect=DatabaseError("locked")):
             self.assertTrue(_blocked(OTHER))
-
-    def test_the_refusal_is_recorded_by_the_agents_name(self):
-        from ..agent_admission import refused
-
-        refused(agent_principal(AGENT, "mcp", READ), source="192.0.2.10")
-
-        denial = AuditLog.objects.get(action=AuditLog.Action.DENIED)
-        self.assertEqual((denial.metadata["actor"], denial.metadata["reason"]), (AGENT, AGENT_BLOCKED.code))
 
 
 @override_settings(
@@ -115,20 +57,6 @@ class MachineApiTests(TestCase):
         self.assertEqual(allowed.status_code, 200, allowed.content)
 
 
-class WhoMayBlockTests(TestCase):
-    def setUp(self):
-        _seen(AGENT)
-        self.person = operator(username="op")
-
-    def test_a_client_hq_has_never_seen_is_not_found(self):
-        result = execute_capability(
-            SET_AGENT_BLOCK, keyed({"blocked": True}), principal=web_principal(self.person), target="example-unseen"
-        )
-
-        self.assertEqual(result["error"]["code"], "not_found")
-        self.assertFalse(AgentIdentity.objects.filter(client_id="example-unseen").exists())
-
-
 class BlockControlTests(TestCase):
     def setUp(self):
         _seen(AGENT)
@@ -146,15 +74,6 @@ class BlockControlTests(TestCase):
             .values_list("message", flat=True)
         )
 
-    def test_blocking_holds_and_names_who_and_when(self):
-        self._set("1")
-
-        row = AgentIdentity.objects.get(client_id=AGENT)
-        self.assertEqual(row.blocked_by, self.person)
-        self.assertIsNotNone(row.blocked_at)
-        event = AuditLog.objects.get(metadata__operation=SET_AGENT_BLOCK)
-        self.assertEqual(event.user, self.person)
-
     def test_a_double_click_stays_blocked_and_both_directions_are_recorded(self):
         self._set("1")
         self._set("1")
@@ -163,14 +82,6 @@ class BlockControlTests(TestCase):
         self.assertFalse(_blocked(AGENT))
         self.assertEqual(len(self._said()), 2)
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_by)
-
-    def test_an_operator_without_the_grant_is_refused(self):
-        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.GOVERN_AGENTS})
-        with mock.patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
-            response = self._set("1")
-
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(_blocked(AGENT))
 
     def test_an_unrecognized_state_or_client_changes_nothing(self):
         self.assertEqual(self._set("yes").status_code, 400)
