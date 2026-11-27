@@ -7,7 +7,7 @@ how it is run against the container standard, with what it uses beside its
 limits. Each said once; the band above has its version and standing.
 {% endcomment %}
 {% if plan or state %}
-{% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
+{% section "Upgrade" id="upgrade" data_fragment=state.follows data_fragment_poll=state.follows|follow_every %}
   {% facts layout="band" %}
     {% if update %}
     {% fact "Pin" icon="deploy" %}

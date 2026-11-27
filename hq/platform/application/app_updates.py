@@ -505,6 +505,13 @@ class UpdateState:
         return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
 
     @property
+    def follows(self) -> bool:
+        """Whether its card asks again: a step of it is under way, or a check of its pull request is."""
+
+        live = self.standing is not None and self.standing.live
+        return live or any(run.get("status") != "completed" for run in (self.update.check_runs if self.update else ()))
+
+    @property
     def flow(self) -> tuple[FlowStep, ...]:
         """Its way to running, step by step (``app_update_flow``)."""
 
