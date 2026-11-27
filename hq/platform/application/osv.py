@@ -28,6 +28,20 @@ _PSEUDO = re.compile(
     r"^v[0-9]+\.(0\.0-|\d+\.\d+-([^+]*\.)?0\.)\d{14}-[A-Za-z0-9]+(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$"
 )
 
+# The ecosystem OSV's schema names for each package URL type it matches by URL.
+_ECOSYSTEMS = {
+    "golang": "Go",
+    "npm": "npm",
+    "pypi": "PyPI",
+    "maven": "Maven",
+    "cargo": "crates.io",
+    "gem": "RubyGems",
+    "nuget": "NuGet",
+    "composer": "Packagist",
+    "hex": "Hex",
+    "pub": "Pub",
+}
+
 
 class OSVReadError(Exception):
     """OSV could not be read, in words a person can act on."""
@@ -153,21 +167,51 @@ def detail(vulnerability_id: str) -> dict[str, Any]:
     return _get(f"/vulns/{quote(vulnerability_id, safe='')}")
 
 
+def _package(purl: str) -> tuple[str, str] | None:
+    """``(ecosystem, name)`` as OSV's schema names the package a package URL
+    does: a Go module path, an npm name with its scope, a Maven
+    ``groupId:artifactId``, a PEP 503 normalized PyPI name, a distribution's
+    source package under its release."""
+
+    query = query_of(purl)
+    parsed = _parsed(purl)
+    if query is None or parsed is None:
+        return None
+    if "ecosystem" in query["package"]:
+        return query["package"]["ecosystem"], query["package"]["name"]
+    kind, namespace, name, _version, _qualifiers = parsed
+    ecosystem = _ECOSYSTEMS.get(kind)
+    if ecosystem is None:
+        return None
+    if kind == "maven":
+        return ecosystem, f"{namespace}:{name}"
+    if kind == "pypi":
+        return ecosystem, re.sub(r"[-_.]+", "-", name).lower()
+    return ecosystem, f"{namespace}/{name}" if namespace else name
+
+
+def _names(entry: Mapping[str, Any], wanted: tuple[str, str]) -> bool:
+    """Whether an affected entry is about the package ``wanted`` names."""
+
+    package = entry.get("package") or {}
+    name = str(package.get("name", ""))
+    if wanted[0] == "PyPI":
+        name = re.sub(r"[-_.]+", "-", name).lower()
+    return (str(package.get("ecosystem", "")), name) == wanted
+
+
 def finding(vulnerability: Mapping[str, Any], purl: str, modified: str = "") -> dict[str, Any]:
-    """One vulnerability as it bears on one package: what fixes it, how bad."""
+    """One vulnerability as it bears on one package: what fixes it, how bad,
+    read from the affected entries about that package alone."""
 
     parsed = _parsed(purl)
-    kind, _namespace, name, installed, qualifiers = parsed or ("", "", purl, "", {})
+    kind, _namespace, name, installed, _qualifiers = parsed or ("", "", purl, "", {})
     _namespace = unquote(_namespace)
-    names = {name, qualifiers.get("upstream", "").partition("@")[0]} - {""}
+    wanted = _package(purl)
     fixed: list[str] = []
     severity = str((vulnerability.get("database_specific") or {}).get("severity") or "")
     for entry in vulnerability.get("affected") or ():
-        package = entry.get("package") or {}
-        if (
-            str(package.get("name", "")).rpartition("/")[2] not in names
-            and package.get("purl", "").partition("@")[0] != purl.partition("@")[0]
-        ):
+        if wanted is None or not _names(entry, wanted):
             continue
         severity = severity or str((entry.get("ecosystem_specific") or {}).get("severity") or "")
         fixed.extend(

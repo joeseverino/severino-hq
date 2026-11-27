@@ -86,7 +86,7 @@ class MatchTests(SimpleTestCase):
 
 
 class FindingTests(SimpleTestCase):
-    def test_a_finding_names_what_fixes_it_for_that_package(self):
+    def test_a_finding_names_what_fixes_it_for_that_package_alone(self):
         vulnerability = {
             "id": "GHSA-x",
             "summary": "bad",
@@ -94,10 +94,14 @@ class FindingTests(SimpleTestCase):
             "database_specific": {"severity": "HIGH"},
             "affected": [
                 {
-                    "package": {"name": "github.com/docker/cli"},
-                    "ranges": [{"events": [{"introduced": "0"}, {"fixed": "29.2.0"}]}],
+                    "package": {"ecosystem": "Go", "name": "github.com/docker/cli"},
+                    "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "29.2.0"}]}],
                 },
-                {"package": {"name": "github.com/other/thing"}, "ranges": [{"events": [{"fixed": "9.9.9"}]}]},
+                # Another module whose path ends the same way.
+                {
+                    "package": {"ecosystem": "Go", "name": "github.com/other/cli"},
+                    "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}, {"fixed": "9.9.9"}]}],
+                },
             ],
         }
 
@@ -106,6 +110,46 @@ class FindingTests(SimpleTestCase):
         self.assertEqual(found["package"], "github.com/docker/cli")
         self.assertEqual((found["installed"], found["fixed"], found["severity"]), ("v28.5.1", ("29.2.0",), "high"))
         self.assertEqual(found["url"], "https://osv.dev/vulnerability/GHSA-x")
+
+    def test_a_distribution_package_is_fixed_by_its_own_release_alone(self):
+        # DEBIAN-CVE-2024-45490 as api.osv.dev answers it: one source
+        # package fixed separately in each release, and another package.
+        vulnerability = {
+            "id": "DEBIAN-CVE-2024-45490",
+            "upstream": ["CVE-2024-45490"],
+            "modified": "2026-11-02T12:02:49.267001856Z",
+            "details": "An issue was discovered in libexpat before 2.6.3.",
+            "affected": [
+                {
+                    "package": {
+                        "ecosystem": "Debian:12",
+                        "name": "expat",
+                        "purl": "pkg:deb/debian/expat?arch=source&distro=bookworm",
+                    },
+                    "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.5.0-1+deb12u1"}]}],
+                },
+                {
+                    "package": {
+                        "ecosystem": "Debian:13",
+                        "name": "expat",
+                        "purl": "pkg:deb/debian/expat?arch=source&distro=trixie",
+                    },
+                    "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}, {"fixed": "2.6.2-2"}]}],
+                },
+                {
+                    "package": {
+                        "ecosystem": "Debian:12",
+                        "name": "libxmltok",
+                        "purl": "pkg:deb/debian/libxmltok?arch=source&distro=bookworm",
+                    },
+                    "ranges": [{"type": "ECOSYSTEM", "events": [{"introduced": "0"}]}],
+                },
+            ],
+        }
+
+        found = finding(vulnerability, "pkg:deb/debian/libexpat1@2.5.0-1?distro=debian-12&upstream=expat%402.5.0-1")
+
+        self.assertEqual((found["package"], found["fixed"]), ("libexpat1", ("2.5.0-1+deb12u1",)))
 
     def test_an_unrated_distribution_finding_stays_unrated(self):
         found = finding(
