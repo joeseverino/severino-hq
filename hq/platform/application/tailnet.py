@@ -16,7 +16,7 @@ from typing import Any
 from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
@@ -25,6 +25,7 @@ from .tone import Tone
 from .ui import ended
 lazy from . import connections
 lazy from .connections import connection_rows
+lazy from .entity_links import provider_label
 lazy from .facts import inventory_records
 lazy from .hq_self import scoped_served_port, site_label
 lazy from .infrastructure import enabled_resources
@@ -687,12 +688,13 @@ def _service_ports() -> tuple[_ServicePort, ...]:
 
     found = []
     for row in connection_rows():
-        label = CONNECTION_LABELS.get(row.provider, "")
-        if not label or points_at_host(row.endpoint):
+        if row.provider not in CONNECTION_KINDS or points_at_host(row.endpoint):
             continue
         host, port = split_endpoint(row.endpoint)
         if host and port.isdigit():
-            found.append(_ServicePort(row.connection_ref, row.controller_id, host, int(port), label))
+            found.append(
+                _ServicePort(row.connection_ref, row.controller_id, host, int(port), provider_label(row.provider))
+            )
     return tuple(found)
 
 
@@ -721,7 +723,7 @@ class _PortNamer:
         if port == self.hq_port and any(target.runs_hq for target in targets):
             return site_label()
         if any(self.opens(target, port) for target in targets):
-            return CONNECTION_LABELS["ssh"]
+            return provider_label("ssh")
         for target in targets:
             for running in sorted(target.containers, key=lambda item: item.name):
                 if port in running.ports:
