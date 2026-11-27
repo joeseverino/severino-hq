@@ -657,13 +657,32 @@ def standing_word(state: str) -> str:
     return next((seen.label for seen, stands in STANDS.items() if stands == state), "")
 
 
+# Each change to a container the host's watcher asks Docker for
+# (``DockerFilters`` in controller/host/hostevents), by Docker's action, as a
+# page says it.
+_CONTAINER_CHANGES = {
+    "start": "started",
+    "die": "stopped",
+    "destroy": "removed",
+    "oom": "out of memory",
+    "health_status: healthy": "healthy",
+    "health_status: unhealthy": "unhealthy",
+    "health_status: starting": "starting",
+}
+
+
 def held_note(handoff: Mapping[str, str], since: datetime | None) -> str:
     """What a held run waits on: each unit it handed off to, on its machine,
-    then what each Compose project's containers on HQ's own machine did
-    since ``since``, by the name of each event HQ stored. Only HQ's machine
-    tells HQ of its containers, so an app elsewhere shows nothing."""
+    then what each container of a Compose project on HQ's own machine did
+    since ``since``, from the events HQ stored. Only HQ's machine tells HQ of
+    its containers, so an app elsewhere shows nothing. A unit is named
+    without its instance, which names the revision the card already shows
+    and, as a commit's full hash, cannot wrap."""
 
-    waits = get_text_list([f"{unit} on {machine}" for machine, unit in handoff.items()], "and")
+    named = {
+        machine: unit.partition("@")[0] if "@" in unit else unit.rpartition(".")[0] for machine, unit in handoff.items()
+    }
+    waits = get_text_list([f"{name} on {machine}" for machine, name in named.items()], "and")
     here = own_machine()
     if here is None or since is None:
         return f"Waiting on {waits}"
@@ -674,9 +693,10 @@ def held_note(handoff: Mapping[str, str], since: datetime | None) -> str:
     stack = stacks()
     done: dict[str, list[str]] = {}
     for subject, event in heard.values_list("subject", "event"):
-        if app := stack.get((here.name, subject)):
-            done.setdefault(app, []).append(event.removeprefix(prefix))
-    return dotted(f"Waiting on {waits}", *(f"{app}: {', '.join(events)}" for app, events in done.items()))
+        if (here.name, subject) in stack:
+            action = event.removeprefix(prefix)
+            done.setdefault(subject, []).append(_CONTAINER_CHANGES.get(action, action))
+    return dotted(f"Waiting on {waits}", *(f"{name}: {', '.join(said)}" for name, said in done.items()))
 
 
 def _run_row(
