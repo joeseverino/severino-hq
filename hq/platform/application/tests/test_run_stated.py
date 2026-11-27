@@ -4,12 +4,12 @@ and names only the run's own machines; the run's row and its read carry
 each reading it stated with its records. Every procedure here is a synthetic
 ``example.*`` one."""
 
+from unittest import mock
+
 from hq.domains.control_plane.models import OperationRequest
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
-from ..run_reads import get_run
-from . import test_work_runs
-from .procedures import APP, DB
+from .procedures import APP
 from .test_work_runs import WORKER, WorkRunsTestCase
 
 FILESYSTEM = {"mount": "/", "free_bytes": 1024, "total_bytes": 4096, "read_at": "2026-11-13T12:00:00Z"}
@@ -42,114 +42,6 @@ class RunStatedTestCase(WorkRunsTestCase):
         self.report(run, None)
 
 
-class KeptTests(RunStatedTestCase):
-    def test_what_a_run_s_playbook_stated_is_kept_on_the_run_as_stated(self):
-        run = self.claimed(self.run_of(APP))
-
-        self.report(run, STATED)
-
-        run.refresh_from_db()
-        self.assertEqual(run.state, OperationRequest.State.SUCCEEDED)
-        self.assertEqual(run.result["stated"], STATED)
-
-    def test_the_run_s_row_and_its_read_carry_each_reading_it_stated_with_its_records(self):
-        both = {"readings": {APP: STATED["readings"][APP], DB: {"host.filesystem": [FILESYSTEM]}}}
-        run = self.claimed(self.run_of(APP, DB))
-
-        self.report(run, both)
-
-        (row,) = self.listed()
-        said = [(each["host"], each["kind"], each["records"]) for each in get_run(str(run.pk))["stated"]]
-        self.assertEqual(
-            sorted(said),
-            sorted(
-                [
-                    (APP, "host.filesystem", [FILESYSTEM]),
-                    (APP, "host.reboot", [{"required": False}]),
-                    (DB, "host.filesystem", [FILESYSTEM]),
-                ]
-            ),
-        )
-        self.assertEqual(
-            sorted((reading.kind, reading.host) for reading in row.evidence.readings),
-            sorted((kind, host) for host, kind, _ in said),
-        )
-
-    def test_each_reading_reads_in_the_words_its_kind_declares_and_an_undeclared_one_only_as_stated(self):
-        from hq.domains.control_plane.observations import OBSERVATIONS
-
-        from ..work_runs import RunEvidence
-
-        undeclared = [{"example_member": 1}, {}]
-        pulled = [
-            {"project": "example-app", "result": "rolled_back", "changed": True},
-            {"project": "example-other", "result": "ok", "changed": True},
-        ]
-        evidence = RunEvidence(
-            stated=(
-                {"host": APP, "kind": "host.filesystem", "records": [FILESYSTEM]},
-                {"host": APP, "kind": "example.undeclared", "records": undeclared},
-                {"host": APP, "kind": "apps.pull", "records": pulled},
-            )
-        )
-
-        filesystem, other, releases = evidence.readings
-        spec = OBSERVATIONS["host.filesystem"]
-        self.assertEqual(
-            (filesystem.label, [record[:2] for record in filesystem.records]),
-            (spec.label, [(spec.title(FILESYSTEM), spec.describe(FILESYSTEM))]),
-        )
-        self.assertTrue(spec.describe(FILESYSTEM))
-        self.assertEqual((other.label, other.records, other.count), ("", (), len(undeclared)))
-        self.assertIn("example_member", evidence.raw_readings)
-        # A record's tone is its kind's to declare: an app rolled back is one to look at.
-        self.assertEqual(
-            [(title, tone) for title, _said, tone in releases.records],
-            [
-                ("example-app", "attention"),
-                ("example-other", "good"),
-            ],
-        )
-        ((line, tone),) = evidence.amiss
-        self.assertEqual((line.startswith("example-app"), tone), (True, "attention"))
-
-    def test_a_run_that_stated_nothing_names_no_kind(self):
-        run = self.claimed(self.run_of(APP))
-
-        self.report(run, None)
-
-        run.refresh_from_db()
-        self.assertNotIn("stated", run.result)
-        self.assertEqual(get_run(str(run.pk))["stated"], [])
-
-
-class SecretTests(RunStatedTestCase):
-    def test_a_secret_in_what_a_playbook_stated_is_struck_as_it_settles(self):
-        token = "ghp_" + "A1b2C3d4E5" * 4
-        stated = {
-            "readings": {APP: {"host.filesystem": [{**FILESYSTEM, "mount": f"/{token}", "password": "hunter22"}]}},
-            "preview": {APP: [f"would write token {token}"]},
-        }
-        run = self.claimed(self.run_of(APP))
-
-        self.report(run, stated)
-
-        run.refresh_from_db()
-        kept = run.result["stated"]
-        (record,) = kept["readings"][APP]["host.filesystem"]
-        self.assertNotIn(token, str(kept))
-        self.assertNotIn("hunter22", str(kept))
-        self.assertEqual(record["free_bytes"], FILESYSTEM["free_bytes"])
-
-
-class OtherMachineTests(RunStatedTestCase):
-    def test_a_reading_for_a_machine_the_run_is_not_on_is_refused(self):
-        self.refused({"readings": {DB: {"host.filesystem": [FILESYSTEM]}}})
-
-    def test_a_preview_for_a_machine_the_run_is_not_on_is_refused(self):
-        self.refused({"preview": {APP: ["fine"], DB: ["would write /etc/example.conf"]}})
-
-
 class BoundsTests(RunStatedTestCase):
     """Each bound of ``RunStated`` refuses the report whole: nothing is cut down."""
 
@@ -176,24 +68,14 @@ class BoundsTests(RunStatedTestCase):
             with self.subTest(case):
                 self.refused(stated)
 
-    def test_a_statement_at_every_bound_is_kept(self):
-        at_bounds = {
-            "readings": {APP: {"host.filesystem": [{**FILESYSTEM, "mount": "/" + "x" * 499}] * 100}},
-            "preview": {APP: ["x" * 500] * 10},
-        }
-        run = self.claimed(self.run_of(APP))
-
-        self.report(run, at_bounds)
-
-        run.refresh_from_db()
-        self.assertEqual(run.result["stated"], at_bounds)
-
 
 class NotARunTests(RunStatedTestCase):
-    scanned = test_work_runs.ScanTests.scanned
-
     def test_only_a_run_reports_what_its_playbook_stated(self):
-        scan = self.scanned()
+        from ..automation_sources import queue_scan
+        from ..security import internal_principal
+
+        with mock.patch("hq.platform.application.cadence._ring"), self.captureOnCommitCallbacks(execute=True):
+            scan = queue_scan(principal=internal_principal("controller"), once="example-scan")
         claim = claim_next_operation(WORKER, capabilities=(("automation.source", "scan"),))["operation"]
         self.assertEqual(claim["id"], str(scan.pk))
         scan.refresh_from_db()

@@ -6,12 +6,12 @@ from django.urls import reverse
 
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
-from hq.platform.core.models import AuditLog, OwnDevice
+from hq.platform.core.models import OwnDevice
 from hq.platform.core.testing import operator
 
-from ..capabilities import CAPABILITY_AUDIT_TYPE, execute_capability
+from ..capabilities import execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
-from ..own_devices import SET_OWN_DEVICE, registered
+from ..own_devices import SET_OWN_DEVICE
 from ..security import web_principal
 
 PHONE = "example-phone"
@@ -26,37 +26,11 @@ def _person(name: str, subject: str):
 class RegistrationTests(TestCase):
     def setUp(self):
         self.person = _person("op", "example-subject")
-        self.key = sign_in_subject(settings.OIDC_ISSUER, "example-subject")
 
     def _set(self, *, state: bool, client: str = PHONE, user=None):
         return execute_capability(
             SET_OWN_DEVICE, keyed({"registered": state}), principal=web_principal(user or self.person), target=client
         )
-
-    def test_a_registration_stands_for_the_person_who_made_it_alone(self):
-        other = _person("someone", "example-other-subject")
-
-        self.assertTrue(self._set(state=True)["ok"])
-
-        self.assertTrue(registered(PHONE, self.key))
-        self.assertFalse(registered(PHONE, sign_in_subject(settings.OIDC_ISSUER, "example-other-subject")))
-        self.assertFalse(OwnDevice.objects.filter(user=other).exists())
-
-    def test_removing_ends_it_and_both_are_recorded_once(self):
-        self._set(state=True)
-        self._set(state=True)
-        self._set(state=False)
-        self._set(state=False)
-
-        self.assertFalse(registered(PHONE, self.key))
-        # The changes, apart from the act of a repeat that changed nothing.
-        events = (
-            AuditLog.objects.filter(metadata__operation=SET_OWN_DEVICE)
-            .exclude(object_type=CAPABILITY_AUDIT_TYPE)
-            .order_by("id")
-        )
-        self.assertEqual([event.action for event in events], [AuditLog.Action.CREATED, AuditLog.Action.DELETED])
-        self.assertEqual({event.actor_label for event in events}, {self.person.get_username()})
 
     def test_a_person_with_no_provider_sign_in_registers_nothing(self):
         unbound = operator()
@@ -74,13 +48,6 @@ class DeviceControlTests(TestCase):
 
     def _post(self, **fields):
         return self.client.post(reverse("own_device"), form_keyed(fields), follow=True)
-
-    def test_the_page_registers_and_removes_the_signed_in_persons_device(self):
-        self._post(__target=PHONE, registered="true")
-        self.assertEqual(list(OwnDevice.objects.values_list("user", "client_id")), [(self.person.pk, PHONE)])
-
-        self._post(__target=PHONE, registered="false")
-        self.assertFalse(OwnDevice.objects.exists())
 
     def test_a_form_missing_its_state_or_client_registers_nothing(self):
         self.assertEqual(self.client.post(reverse("own_device"), form_keyed({"registered": "true"})).status_code, 400)

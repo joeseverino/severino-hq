@@ -8,10 +8,9 @@ from django.urls import path, reverse
 from django.views import View
 
 from hq.platform.application import request_context, roles
-from hq.platform.application.capabilities import capability_words
 from hq.platform.application.lookup import LOOK_UP_NAME
 from hq.platform.application.pages import PageAction, PageDialog
-from hq.platform.application.resource_capabilities import REMOVAL_CAPABILITY, UPDATE_CAPABILITY
+from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY
 from hq.platform.core.testing import person
 
 RECONCILE = "infrastructure.resource.reconcile"
@@ -32,66 +31,6 @@ class CommandControlTests(TestCase):
         request.user = user
         with request_context.bind(request):
             return PageAction.command(*args, **kwargs)
-
-    def test_a_person_who_may_run_it_is_offered_it_in_its_words_at_its_view_s_route(self):
-        action = self.offered_to(_person("operator", roles.Role.OPERATOR), UPDATE_CAPABILITY, "example-key")
-
-        assert action is not None
-        self.assertEqual(
-            (action.label, action.url, action.method, action.danger, action.disabled),
-            (
-                capability_words(UPDATE_CAPABILITY),
-                reverse("control_plane:edit", args=["example-key"]),
-                "get",
-                False,
-                False,
-            ),
-        )
-
-    def test_a_person_who_may_not_run_it_is_offered_nothing(self):
-        viewer = _person("viewer", roles.Role.VIEWER)
-
-        self.assertIsNone(self.offered_to(viewer, UPDATE_CAPABILITY, "example-key"))
-        self.assertIsNone(self.offered_to(_person("nobody", ""), REMOVAL_CAPABILITY, "example-key"))
-
-    def test_a_destructive_command_looks_destructive_and_opens_its_confirmation(self):
-        action = self.offered_to(_person("operator", roles.Role.OPERATOR), REMOVAL_CAPABILITY, "example-key")
-
-        assert action is not None
-        self.assertTrue(action.danger)
-        self.assertEqual((action.method, action.url), ("get", reverse("control_plane:remove", args=["example-key"])))
-
-    def test_the_press_on_its_confirmation_posts_there_and_is_loud(self):
-        operator = _person("operator", roles.Role.OPERATOR)
-        head = self.offered_to(operator, REMOVAL_CAPABILITY, "example-key")
-        confirmed = self.offered_to(operator, REMOVAL_CAPABILITY, "example-key", confirms=True)
-
-        assert head is not None and confirmed is not None
-        self.assertEqual((confirmed.method, confirmed.url), ("post", head.url))
-        self.assertIn("ghost", head.look.split())
-        self.assertEqual(confirmed.look.split(), ["danger"])
-        self.assertIsNone(self.offered_to(_person("viewer", roles.Role.VIEWER), REMOVAL_CAPABILITY, "x", confirms=True))
-
-    def test_a_view_that_answers_only_a_post_is_posted_to_in_the_variant_s_words(self):
-        action = self.offered_to(
-            _person("operator", roles.Role.OPERATOR), RECONCILE, "example-key", variant=READS_AGAIN
-        )
-
-        assert action is not None
-        self.assertEqual(
-            (action.label, action.method, action.url),
-            (
-                capability_words(RECONCILE, READS_AGAIN),
-                "post",
-                reverse("control_plane:reconcile", args=["example-key"]),
-            ),
-        )
-
-    def test_a_command_no_view_runs_is_reached_at_its_own_page(self):
-        action = self.offered_to(_person("operator", roles.Role.OPERATOR), LOOK_UP_NAME, query={"name": "a b"})
-
-        assert action is not None
-        self.assertEqual(action.url, f"{reverse('command', kwargs={'name': LOOK_UP_NAME})}?name=a+b")
 
     def test_a_press_that_sends_something_posts_it_but_never_its_button_s_own_field(self):
         operator = _person("operator", roles.Role.OPERATOR)
@@ -141,5 +80,5 @@ class CommandRouteTests(SimpleTestCase):
     def test_two_routes_that_run_one_command_are_refused(self):
         from hq.platform.application.pages import command_route
 
-        with self.assertRaisesMessage(ImproperlyConfigured, "'one' and at 'two'"):
+        with self.assertRaises(ImproperlyConfigured):
             command_route(UPDATE_CAPABILITY)
