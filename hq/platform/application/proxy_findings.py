@@ -12,17 +12,14 @@ from .finding_steps import Does
 from .references import Kind
 from .tone import Tone
 lazy from . import uploads
-lazy from .hq_self import hq_hostnames
 lazy from .infrastructure import enabled_resources
 lazy from .resource_operations import ALLOW_UPLOADS
-lazy from .service_declarations import declarations
 
 
 def _refusing(_estate: FindingEstate) -> tuple[Finding, ...]:
     """Each proxy declared for one of HQ's names whose body limit is below the largest request HQ takes."""
 
-    declared = declarations().declared
-    serving = {claim.resource_key for name in hq_hostnames() for claim in declared.get(name, {}).get("proxy", ())}
+    serving = uploads.proxies_in_front()
     if not serving:
         return ()
     needed = uploads.proxy_body_mib()

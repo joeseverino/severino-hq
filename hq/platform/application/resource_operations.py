@@ -713,8 +713,8 @@ def allow_uploads(
 
     resource = _resource_for_operation(current_key)
     field = PROVIDERS[resource.kind].body_limit
-    if not field:
-        raise PolicyError("This record sets no largest request.")
+    if not field or resource.key not in uploads.proxies_in_front():
+        raise PolicyError("This record is no proxy in front of HQ.")
     spec = {**resource.spec, field: uploads.proxy_body_mib()}
     saved = save_managed_resource(
         ManagedResourceCommand(key=resource.key, kind=resource.kind, spec=spec, enabled=resource.enabled),

@@ -53,6 +53,19 @@ class ProxyInFrontOfHQTests(TestCase):
         with projection_scope():
             self.assertEqual(estate_findings(principal=EVERYTHING, rule="proxy-refuses-uploads"), ())
 
+    def test_the_press_leaves_a_proxy_in_front_of_something_else_as_it_is(self):
+        from ..resource_operations import ALLOW_UPLOADS
+
+        managing_everything()
+        spec = {"domain_names": ["app.example.com"], "forward_scheme": "http", "forward_host": "192.0.2.11"}
+        declare("example-other", "npm.proxy_host", {**spec, "forward_port": 80, "client_max_body_size": 1})
+
+        answer = execute_capability(
+            ALLOW_UPLOADS, {"idempotency_key": "once"}, principal=mcp_principal(), target="example-other"
+        )
+        self.assertFalse(answer["ok"], answer)
+        self.assertEqual(ManagedResource.objects.get(key="example-other").spec["client_max_body_size"], 1)
+
 
 MIB = 1024 * 1024
 DOCUMENT = Upload(max_bytes=MIB)

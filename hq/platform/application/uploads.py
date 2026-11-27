@@ -23,6 +23,8 @@ from .command_fields import Upload, upload_of
 from .forms import FileField
 from .integrations import held_graph
 from .routes import routed
+lazy from .hq_self import hq_hostnames
+lazy from .service_declarations import declarations
 
 MIB = 1024 * 1024
 # What a post carries beside its files: the multipart framing and the form's
@@ -121,3 +123,11 @@ def proxy_body_mib() -> int:
     """The body limit, in MiB, a proxy in front of HQ needs to let every request HQ takes through."""
 
     return math.ceil(largest_request() / MIB)
+
+
+def proxies_in_front() -> frozenset[str]:
+    """The keys of the proxy records declared for one of HQ's names, which
+    must let through every request HQ takes."""
+
+    declared = declarations().declared
+    return frozenset(claim.resource_key for name in hq_hostnames() for claim in declared.get(name, {}).get("proxy", ()))
