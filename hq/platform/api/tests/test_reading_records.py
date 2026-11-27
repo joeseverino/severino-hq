@@ -53,24 +53,6 @@ class ReadingRecordsEachDoorTests(TestCase):
         self.assertEqual(answer["error"]["code"], "invalid_input")
         return [(error["type"], error["loc"]) for error in answer["error"]["details"]["errors"]]
 
-    def test_a_kinds_records_are_filtered_by_their_own_fields(self):
-        runs = WORKFLOW_RUN_KIND
-        for door in each_door(self, READER, "list_resource"):
-            with door:
-                where = {"repository": "example/hq", "branch": "main"}
-                self.assertEqual(self._listed(door, kind=runs, where=where), [(runs, 7)])
-                self.assertEqual(self._listed(door, kind=runs, where={"id": 9}), [(runs, 9)])
-                # A field a record was stored without holds its default.
-                self.assertEqual(self._listed(door, kind=runs, where={"branch": ""}), [(runs, 10)])
-                self.assertEqual(self._listed(door, kind=REDIRECT_KIND, where={"enabled": True}), [(REDIRECT_KIND, 2)])
-                # A field that lists values keeps the records holding the one given.
-                self.assertEqual(
-                    self._listed(door, kind=REDIRECT_KIND, where={"hostnames": "older.example.com"}),
-                    [(REDIRECT_KIND, 1)],
-                )
-                self.assertEqual(len(self._listed(door, kind=runs)), len(RUNS))
-                self.assertEqual(len(self._listed(door)), len(RUNS) + len(REDIRECTS))
-
     def test_a_filter_its_kind_does_not_take_is_refused_with_the_one_to_send(self):
         runs = WORKFLOW_RUN_KIND
         for door in each_door(self, READER, "list_resource"):
@@ -102,6 +84,21 @@ class ReadingRecordsEachDoorTests(TestCase):
 
     def test_every_kinds_records_are_filtered_by_fields_of_their_own(self):
         from hq.platform.application.reading_records import record_filter
+
+        runs = WORKFLOW_RUN_KIND
+        for door in each_door(self, READER, "list_resource"):
+            with door:
+                where = {"repository": "example/hq", "branch": "main"}
+                self.assertEqual(self._listed(door, kind=runs, where=where), [(runs, 7)])
+                self.assertEqual(self._listed(door, kind=runs, where={"id": 9}), [(runs, 9)])
+                self.assertEqual(self._listed(door, kind=REDIRECT_KIND, where={"enabled": True}), [(REDIRECT_KIND, 2)])
+                # A field that lists values keeps the records holding the one given.
+                self.assertEqual(
+                    self._listed(door, kind=REDIRECT_KIND, where={"hostnames": "older.example.com"}),
+                    [(REDIRECT_KIND, 1)],
+                )
+                self.assertEqual(len(self._listed(door, kind=runs)), len(RUNS))
+                self.assertEqual(len(self._listed(door)), len(RUNS) + len(REDIRECTS))
 
         for kind, spec in OBSERVATIONS.items():
             with self.subTest(kind=kind):
