@@ -279,8 +279,7 @@ def resources() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "hq",
             "HQ",
-            "HQ itself: its release and branch, machine and container, background jobs, "
-            "what it reads and open problems.",
+            "HQ itself: its release and branch, machine and container, units, what it reads and open problems.",
             Capability.READ,
             listing=ListRead(read_hq, EmptyQuery, Problem),
             web_route="hq_self",

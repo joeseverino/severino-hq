@@ -418,10 +418,10 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         UNIT_KIND,
         "host",
-        "Background jobs",
+        "HQ units",
         HostUnitRecord,
         title=lambda record: str(record.get("title") or record.get("unit", "")),
-        relation="Background jobs on",
+        relation="HQ units on",
     ),
     ObservationSpec(
         TAILNET_LOCK_KIND,

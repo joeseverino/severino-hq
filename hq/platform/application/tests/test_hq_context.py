@@ -256,7 +256,7 @@ class ProjectionTests(TestCase):
         found = self.context()
 
         self.assertEqual(found.work.jobs, ())
-        self.assertIn("could not read HQ's background jobs: no answer from systemd", found.work.unread)
+        self.assertIn("could not read HQ's units: no answer from systemd", found.work.unread)
         self.assertEqual([item.name for item in found.work.renderers], ["hq"])
 
     def test_a_reading_past_its_cadence_is_out_of_date(self):
@@ -521,7 +521,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("hq_self"))
 
-        self.assertContains(response, "HQ could not read HQ&#x27;s background jobs.")
+        self.assertContains(response, "HQ could not read HQ&#x27;s units.")
 
     def test_the_machine_page_says_hq_is_up_to_date(self):
         estate()

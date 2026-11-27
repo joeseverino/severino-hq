@@ -102,7 +102,7 @@ class Work:
 
     @property
     def jobs_table(self) -> DataTable:
-        return DataTable.of("Jobs", _JOB_COLUMNS, self.jobs)
+        return DataTable.of("Units", _JOB_COLUMNS, self.jobs)
 
     @property
     def scheduled_table(self) -> DataTable:
@@ -203,7 +203,7 @@ def _unread(snapshot: Any, noun: str) -> str:
 
 
 def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
-    unread = _unread(snapshot, "HQ's background jobs")
+    unread = _unread(snapshot, "HQ's units")
     if unread:
         return (), unread
     # A service another package installs is in the reading for its restarts

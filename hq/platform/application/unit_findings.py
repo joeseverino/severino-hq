@@ -318,7 +318,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"{failed[0].named} failed on {node.label}"
                     if len(failed) == 1
-                    else f"{counted(len(failed), 'background job', 'background jobs')} failed on {node.label}"
+                    else f"{counted(len(failed), 'HQ unit', 'HQ units')} failed on {node.label}"
                 ),
                 severity=Tone.ATTENTION if all(unit.unit in scheduled for unit in failed) else Tone.SERIOUS,
                 # What HQ's own program said as the run failed, where one unit
@@ -474,7 +474,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 title=(
                     f"{absent[0].named} is not set up on {node.label}"
                     if len(absent) == 1
-                    else f"{counted(len(absent), 'background job', 'background jobs')} are not set up on {node.label}"
+                    else f"{counted(len(absent), 'HQ unit', 'HQ units')} are not set up on {node.label}"
                 ),
                 severity=Tone.SERIOUS,
                 explanation=sentence,
@@ -641,14 +641,14 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _cannot_check(node: TopologyNode) -> str:
-    return f"HQ cannot check the background jobs on {node.label}"
+    return f"HQ cannot check its units on {node.label}"
 
 
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         FAILED,
-        "Background job failed",
+        "HQ unit failed",
         Tone.SERIOUS,
         _failed,
         gathered=True,
@@ -661,7 +661,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         NOT_INSTALLED,
-        "Background job not set up",
+        "HQ unit not set up",
         Tone.SERIOUS,
         _absent,
         gathered=True,
@@ -702,12 +702,12 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "unit-state-unread",
-        "Background jobs not checked",
+        "HQ units not checked",
         Tone.ATTENTION,
         _unread,
         gathered=True,
         operator_action="Check that systemd answers on the controller's machine. If it does and this stays, deploy HQ.",
         no_help_reason=cannot_run_commands(),
-        bars={Tone.ATTENTION: "HQ cannot read whether its background jobs run"},
+        bars={Tone.ATTENTION: "HQ cannot read whether its units run"},
     ),
 )

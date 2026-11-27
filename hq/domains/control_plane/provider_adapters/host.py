@@ -34,7 +34,7 @@ def _unit_identity(spec: dict[str, Any]) -> tuple[str, ...]:
 
 UNIT = ProviderSpec(
     readings.UNIT_KIND,
-    "A background job HQ's release installs on HQ's machine, which HQ can start, restart, enable or clear.",
+    "A systemd unit HQ's release installs on HQ's machine, which HQ can start, restart, enable or clear.",
     HostUnitSpec,
     actions={
         # Nothing converges and nothing runs unasked: a deploy stops some of
