@@ -121,8 +121,9 @@ type Providers interface {
 	Execute(context.Context, Resource, string, bool) (Result, error)
 	Connections(context.Context, []string) ([]ConnectionRecord, error)
 	// Inventory reads the kinds named (every one with none) and reports each
-	// of carry as carried, asking nothing of its provider.
-	Inventory(ctx context.Context, only, carry []ResourceKind) (Inventory, error)
+	// of carry as carried, asking nothing of its provider. A pass told forced
+	// reads of a kind's subjects reads only those of it (Told).
+	Inventory(ctx context.Context, only, carry []ResourceKind, told []ForcedRead) (Inventory, error)
 	AnalyticsSites(context.Context) ([]AnalyticsSiteIdentity, error)
 	Analytics(context.Context, []AnalyticsSiteIdentity, []AnalyticsWindow) (AnalyticsReadings, error)
 	Glance(context.Context, GlancePlan) (GlanceObservations, error)

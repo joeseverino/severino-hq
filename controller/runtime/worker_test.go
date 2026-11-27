@@ -136,7 +136,7 @@ func (p *fakeProviders) Connections(_ context.Context, carry []string) ([]Connec
 	i := min(p.ProbeCalls-1, len(p.Rounds)-1)
 	return append([]ConnectionRecord{}, p.Rounds[i]...), nil
 }
-func (p *fakeProviders) Inventory(_ context.Context, only, _ []ResourceKind) (Inventory, error) {
+func (p *fakeProviders) Inventory(_ context.Context, only, _ []ResourceKind, _ []ForcedRead) (Inventory, error) {
 	p.Only = only
 	return Inventory{}, nil
 }

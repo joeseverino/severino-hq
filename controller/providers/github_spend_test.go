@@ -2,7 +2,6 @@ package providers
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -25,19 +24,20 @@ import (
 // many requests GitHub counted against the installation for it.
 func repositorySweep(t *testing.T, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
 	t.Helper()
-	return toldSweep(t.Context(), t, h, held...)
+	return toldSweep(t, h, nil, held...)
 }
 
-// toldSweep is repositorySweep for the pass ctx tells (runtime.Telling).
-func toldSweep(ctx context.Context, t *testing.T, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
+// toldSweep is repositorySweep for a pass told forced (runtime.Told).
+func toldSweep(t *testing.T, h *githubHarness, forced []runtime.ForcedRead, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
 	t.Helper()
+	h.r.told = forced
 	done := h.r.BeginSnapshot()
 	defer done()
 	h.mu.Lock()
 	before := h.counted
 	h.mu.Unlock()
 	controller := NewController(h.r, runtime.ControllerRegistry{GithubRepositories: runtime.GitHubRepositoriesPlan{Held: held}})
-	report := controller.readKind(ctx, h.r.readers[string(runtime.ResourceKindGitHubRepository)])
+	report := controller.readKind(t.Context(), h.r.readers[string(runtime.ResourceKindGitHubRepository)])
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if spent := h.r.GitHubSpent(); spent != h.counted-before {
@@ -132,11 +132,11 @@ func TestAnEventsPassReadsOnlyItsRepository(t *testing.T) {
 	first, _ := repositorySweep(t, h)
 	held := heldAfter(t, first)
 	app, other := repositoryReads(h, "example/app"), repositoryReads(h, "example/other")
-	told := runtime.Telling(t.Context(), []runtime.ForcedRead{{
+	told := []runtime.ForcedRead{{
 		Kind: runtime.ResourceKindGitHubOpenPullRequest, Subject: "example/other",
 		Kinds: []runtime.ResourceKind{runtime.ResourceKindGitHubOpenPullRequest, runtime.ResourceKindGitHubRepository, runtime.ResourceKindGitHubWorkflowRun},
-	}})
-	report, spent := toldSweep(told, t, h, held...)
+	}}
+	report, spent := toldSweep(t, h, told, held...)
 	if got := carried(report); !report.OK || len(got) != 1 || got[0] != "example/app" {
 		t.Fatalf("the told repository is read and the other carried: %v %+v", got, report)
 	}

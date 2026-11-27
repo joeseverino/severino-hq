@@ -326,7 +326,7 @@ func (r *Registry) githubRead(ctx context.Context) githubPass {
 	}
 	// A pass an event asked for reads in full the repositories it names, and
 	// any HQ holds no record of, and carries the rest unprobed.
-	told := runtime.Told(ctx, runtime.ResourceKindGitHubRepository)
+	told := runtime.Told(r.told, runtime.ResourceKindGitHubRepository)
 	reads := func(name string) bool { _, isHeld := held[name]; return !isHeld || slices.Contains(told, name) }
 	probed := names
 	if told != nil {

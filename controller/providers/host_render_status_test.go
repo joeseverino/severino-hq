@@ -135,7 +135,7 @@ func TestHostRenderStatusIsReadOnlyWhereTheLauncherNamesADocument(t *testing.T) 
 	absent := filepath.Join(t.TempDir(), "absent.json")
 	for configured, want := range map[string]bool{"": false, "example=" + absent: true} {
 		controller := &Controller{Registry: New(runtime.Environment{RenderStatus: configured}, supplied(), &fakeHTTP{}), Declared: declared}
-		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
+		inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

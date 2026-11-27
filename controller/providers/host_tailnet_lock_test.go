@@ -43,7 +43,7 @@ func lockInventory(t *testing.T, path string) runtime.KindReport {
 	kind := runtime.ResourceKindHostTailnetLock
 	declared := runtime.ControllerRegistry{Observations: map[string]string{string(kind): "host"}}
 	controller := &Controller{Registry: New(runtime.Environment{TailnetLock: path}, supplied(), &fakeHTTP{}), Declared: declared}
-	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
+	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
