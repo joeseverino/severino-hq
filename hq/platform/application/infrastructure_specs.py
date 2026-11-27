@@ -25,7 +25,7 @@ from .cadence import CONTROLLER_REFRESH
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
 from .contracts import Effect
 from .integration_specs import CapabilitySpec, ListFilter, ListRead, ResourceSpec, typed_keys
-from .labels import adding
+from .labels import adding, lower_first, one
 from .managed_records import ManagedResourceListed, ManagedResourceRecord, ManagedResourceRow
 from .policy_fixes import request_empty_groups_removal
 from .records import EDIT, KEPT
@@ -48,7 +48,7 @@ def _acting(action: str) -> tuple[str, ...]:
 def _acted_on(action: str) -> str:
     """What ``action`` acts on, in words: the labels of the kinds that run it."""
 
-    return get_text_list([PROVIDERS[kind].label.lower() for kind in _acting(action)], "or")
+    return get_text_list([lower_first(PROVIDERS[kind].label) for kind in _acting(action)], "or")
 
 
 def capabilities() -> tuple[CapabilitySpec, ...]:
@@ -174,18 +174,21 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                     "Refuse a record switched off in HQ, or one its kind cannot do this to.",
                     "Queue it once for the controller, which does it outside this request.",
                 ),
-                label=f"{action.label} a {_acted_on(action)}",
+                label=said.format(one(_acted_on(action))),
                 verb=action.label,
             )
-            for action, summary, effect in (
+            # Each command's label is a sentence about what it acts on (``{}``).
+            for action, said, summary, effect in (
                 (
                     OperationRequest.Action.RESTART,
-                    "Restart a container, or a background job of HQ's own.",
+                    "Restart {}",
+                    "Restart a container, or one of HQ's units.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 (
                     OperationRequest.Action.START,
-                    "Start a container, or a background job of HQ's own.",
+                    "Start {}",
+                    "Start a container, or one of HQ's units.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 # A stop takes the thing away from whoever uses it until someone
@@ -193,17 +196,20 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
                 # person's is confirmed on a page of its own.
                 (
                     OperationRequest.Action.STOP,
+                    "Stop {}",
                     "Stop the container through Portainer; it stays down until it is started.",
                     Effect.DESTRUCTIVE,
                 ),
                 (
                     OperationRequest.Action.RESET_FAILED,
-                    "Clear the failure systemd holds against one of HQ's background jobs.",
+                    "Clear the failure of {}",
+                    "Clear the failure systemd holds against one of HQ's units.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
                 (
                     OperationRequest.Action.ENABLE,
-                    "Have one of HQ's background jobs start at boot.",
+                    "Enable {}",
+                    "Have one of HQ's units start at boot.",
                     Effect.INFRASTRUCTURE_CHANGE,
                 ),
             )

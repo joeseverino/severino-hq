@@ -45,7 +45,7 @@ UNIT = ProviderSpec(
         "reset-failed": applies(),
         "enable": applies(),
     },
-    label="Background job",
+    label="HQ unit",
     readout=lambda spec, status: (("Unit", spec.get("unit", ""), status.get("unit", "")),),
     _from_record=_unit_from_record,
     # A service of the machine's own, read because systemd restarted it, is

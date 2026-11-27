@@ -28,9 +28,19 @@ def field_label(name: str, title: str | None = None) -> str:
 
 def one(noun: str) -> str:
     """``noun`` after its indefinite article, as a command names what it acts
-    on: "an asset", "a receipt"."""
+    on: "an asset", "a receipt", "an HQ unit", "a unit".
 
-    return f"{'an' if noun[:1].lower() in 'aeiou' else 'a'} {noun}"
+    The article follows the first sound: an acronym is read letter by letter,
+    and a "u" sounded "you" (a consonant, then a vowel: "unit", "user") takes "a"."""
+
+    first = noun.split(maxsplit=1)[0] if noun.strip() else ""
+    if first[1:2].isupper():
+        vowel = first[:1].upper() in "AEFHILMNORSX"
+    else:
+        word = first.lower()
+        you = word[:1] == "u" and word[1:2] not in "aeiou" and word[2:3] in tuple("aeiou")
+        vowel = word[:1] in tuple("aeiou") and not you
+    return f"{'an' if vowel else 'a'} {noun}"
 
 
 # What a form that changes a record it already holds is submitted by.
