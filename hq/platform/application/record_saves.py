@@ -246,7 +246,6 @@ def linked_saver(
     """
 
     records = records_of(resource)
-    keyword = TARGET_KINDS[records.target].keyword
 
     def stored(current: Any) -> dict[str, Any]:
         record = found(load(records.model), refusals, {records.lookup: current})
@@ -259,11 +258,8 @@ def linked_saver(
         principal: Principal,
         expected_updated_at: str | None = None,
         sent: frozenset[str] | None = None,
-        **target: Any,
+        current: Any = None,
     ) -> dict[str, Any]:
-        if set(target) - {keyword}:
-            raise TypeError(f"{records.noun} is saved by {keyword}.")
-        current = target.get(keyword)
         with transaction.atomic():
             record = _saved(records, command, principal, current, expected_updated_at, sent, refusals, links)
             done = "created" if current is None else "updated"
@@ -285,6 +281,7 @@ def linked_saver(
         return annotations
 
     save.__annotate__ = annotate
+    TARGET_KINDS[records.target].binds(save)
     return save
 
 

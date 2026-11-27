@@ -6,7 +6,19 @@ from annotationlib import Format
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, fields as dataclass_fields, is_dataclass, replace
 from functools import cache
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAliasType, Union, get_args, get_origin, is_typeddict
+from types import FunctionType
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Literal,
+    TypeAliasType,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    is_typeddict,
+)
 
 from django.db.models import BigIntegerField, Q
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, create_model
@@ -37,6 +49,28 @@ class TargetKind:
     keyword: str
     coerce: Callable[[Any], Any]
     pattern: str = ""
+
+    def binds[H: Callable[..., Any]](self, handler: H) -> H:
+        """``handler``, written for any kind with its target as ``current``,
+        taking it as this kind's keyword instead, so Python itself refuses any
+        other keyword and its signature names the one it takes."""
+
+        function = cast("FunctionType", handler)
+        function.__code__ = function.__code__.replace(
+            co_varnames=tuple(self._named(name) for name in function.__code__.co_varnames)
+        )
+        function.__kwdefaults__ = {self._named(name): value for name, value in (function.__kwdefaults__ or {}).items()}
+        declared = function.__annotate__
+
+        def annotate(wanted: Format) -> dict[str, Any]:
+            found = annotationlib.call_annotate_function(declared, wanted) if declared else {}
+            return {self._named(name): hint for name, hint in found.items()}
+
+        function.__annotate__ = annotate
+        return handler
+
+    def _named(self, name: str) -> str:
+        return self.keyword if name == "current" else name
 
 
 # What an integer target may be sent as besides a number: the digits of an
