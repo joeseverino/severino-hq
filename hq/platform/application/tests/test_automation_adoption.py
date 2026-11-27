@@ -10,6 +10,7 @@ the way a scan's does: HQ's ask, the worker's claim, and its report.
 """
 
 from contextlib import suppress
+from copy import deepcopy
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -201,27 +202,38 @@ class AdoptTests(AdoptionTestCase):
         notes = " ".join(capability_spec("automation.example.check.run").execution_notes)
         self.assertIn("`apps.pull`", notes)
 
-    def test_a_change_is_settled_only_by_a_read_of_its_targets_at_its_revision(self):
-        def at_revision(found: dict[str, Any]) -> dict[str, Any]:
+    def test_a_change_is_settled_and_verified_only_by_a_read_of_its_targets_at_its_revision(self):
+        from ..automation_runs import operation_registry
+
+        def at_revision(found: dict[str, Any], **terms: Any) -> dict[str, Any]:
             found["declaration"]["inputs"] = {"revision": {"pattern": "^[0-9a-f]{40}$", "max_length": 40}}
             found["roles"][0]["argument_spec"]["options"] = {
-                "revision": {"type": "str", "required": True, "description": "The commit."}
+                "revision": {"type": "str", "required": True, "description": "The commit.", **terms}
             }
             return found
 
+        # Its play asserts nothing once it hands off: the read that settles it does.
         apply = at_revision(procedure("apply", effect="infrastructure_change", settled_by="example.last"))
+        apply["verification"] = []
+        # The read may also be run with no revision, which it says in words of its own.
+        last = at_revision(procedure("last"), required=False, default="", description="The pull's commit.")
+        silent = deepcopy(last)
+        last["verification"] = ["Every app is proven at the revision."]
         cases = {
             "a read of this commit": procedure("other"),
             "a read": at_revision(procedure("last", effect="infrastructure_change")),
             "the same kinds of target": at_revision(procedure("last", target_kinds=["example.edge"])),
             "its revision input": procedure("last"),
+            "a read that asserts": silent,
         }
-        for number, (case, last) in enumerate(cases.items()):
+        for number, (case, read) in enumerate(cases.items()):
             with self.subTest(case):
-                said = self.refused(self.adopt(self.proposed(catalog(apply, last)), key=f"example-settle-{number}"))
+                found = self.proposed(catalog(apply, read))
 
+                said = self.refused(self.adopt(found, key=f"example-settle-{number}", playbook="example.apply"))
                 self.assertIn("settled_by", said)
-        self.assertTrue(self.adopt(self.proposed(catalog(apply, at_revision(procedure("last")))))["adopted"])
+        self.assertTrue(self.adopt(self.proposed(catalog(apply, last)))["adopted"])
+        self.assertEqual(operation_registry()["example.apply"].verification, ("Every app is proven at the revision.",))
 
     def test_a_procedure_s_inputs_are_its_role_s_argument_spec_bounded_by_its_sidecar(self):
         bounded = procedure("check", inputs={"unit": {"pattern": "^[a-z]+$", "max_length": 8}})

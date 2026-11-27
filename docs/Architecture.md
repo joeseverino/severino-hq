@@ -1082,7 +1082,10 @@ never a change to its record's state.
 A playbook that starts a long unit and leaves it running ends at once,
 stating a hand-off (`RunStated.handoff`: each of its machines to the unit's
 name). Its procedure names the read that settles it (`settled_by`: a read of
-the same commit, target kinds and `revision` input, held at adoption). HQ
+the same commit and target kinds that takes every revision its `revision`
+input takes, held at adoption). Since the read's report is the run's, its
+post_tasks are the change's verification, after any of the change's own, so
+a change that hands off before its work is done states none of its own. HQ
 holds the run claimed, the hand-off on its result, under a lease its
 declaration's `timeout_seconds` bounds from the claim, which no worker renews
 (`controller._hold`). It then settles it from that read alone, asked as HQ

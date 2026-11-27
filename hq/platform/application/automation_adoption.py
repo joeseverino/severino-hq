@@ -415,11 +415,21 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
     found: dict[str, AdoptedProcedure] = {}
     unadoptable: dict[str, _Unadoptable] = {}
     sidecars: dict[str, str] = {}
+    # What each playbook's play asserts after its work, by its id: also the
+    # verification of a change it settles (``settled_by``), whose run HQ
+    # holds until this read reports.
+    asserted = {
+        scanned["declaration"]["id"]: tuple(scanned["verification"])
+        for scanned in proposal.procedures
+        if isinstance(scanned["declaration"], dict) and isinstance(scanned["declaration"].get("id"), str)
+    }
     for scanned in proposal.procedures:
         name = scanned["sidecar"]
         declared = scanned["declaration"].get("id") if isinstance(scanned["declaration"], dict) else None
         problems = list(scanned["problems"])
-        procedure = None if problems else _procedure(proposal, scanned, objects, used[name], shared, problems)
+        procedure = (
+            None if problems else _procedure(proposal, scanned, objects, used[name], shared, asserted, problems)
+        )
         if problems or procedure is None:
             unadoptable[name] = _Unadoptable(
                 declared if isinstance(declared, str) else name,
@@ -442,8 +452,9 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
 
 def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure]) -> str:
     """Why the read ``procedure`` names to settle it cannot, or "": it is a
-    read of this catalog, on the same kinds of target, taking the same
-    revision input, so HQ can ask it of the held run's machines at its revision."""
+    read of this catalog, on the same kinds of target, taking every revision
+    its revision input takes, so HQ can ask it of the held run's machines at
+    its revision. Whether the read requires one, and its words, are its own."""
 
     if procedure.settled_by is None:
         return ""
@@ -452,7 +463,9 @@ def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure
         return f"Its sidecar's settled_by names {procedure.settled_by}, which is no read of this commit."
     if read.target_kinds != procedure.target_kinds:
         return f"Its sidecar's settled_by names {read.id}, which runs on other kinds of target."
-    if REVISION_INPUT not in procedure.inputs or read.inputs.get(REVISION_INPUT) != procedure.inputs[REVISION_INPUT]:
+    given, taken = procedure.inputs.get(REVISION_INPUT), read.inputs.get(REVISION_INPUT)
+    takes = ("type", "elements", "choices", "bound")
+    if given is None or taken is None or taken.model_dump(include=set(takes)) != given.model_dump(include=set(takes)):
         return f"Its sidecar's settled_by names {read.id}, which does not take its {REVISION_INPUT} input."
     return ""
 
@@ -470,13 +483,16 @@ def _procedure(
     objects: Mapping[str, str],
     used: set[str],
     shared: Mapping[str, str],
+    asserted: Mapping[str, tuple[str, ...]],
     problems: list[str],
 ) -> AdoptedProcedure | None:
-    """The playbook ``scanned`` as HQ would adopt it, with each problem that
-    keeps it from being adopted added to ``problems``."""
+    """The playbook ``scanned`` as HQ would adopt it, verified by its own
+    post_tasks and those of the read that settles it (``asserted``), with
+    each problem that keeps it from being adopted added to ``problems``."""
 
     try:
         declaration = ProcedureDeclaration.model_validate_json(json.dumps(scanned["declaration"]))
+        settling = asserted.get(declaration.settled_by, ()) if declaration.settled_by else ()
         problems.extend(
             f"Its sidecar's readings names {kind}, which is no reading HQ declares."
             for kind in declaration.readings
@@ -488,7 +504,7 @@ def _procedure(
             playbook=scanned["playbook"],
             title=scanned["title"],
             preconditions=tuple(scanned["preconditions"]),
-            verification=tuple(scanned["verification"]),
+            verification=(*scanned["verification"], *settling),
             inputs=inputs,
             revision=proposal.revision,
             files={path: objects[path] for path in sorted(used) if path in objects},
