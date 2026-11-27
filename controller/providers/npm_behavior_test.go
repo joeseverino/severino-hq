@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -300,20 +301,20 @@ func TestNPMProxyHostRecordIsTyped(t *testing.T) {
 
 // A proxy host's body limit reaches NPM as nginx's own directive, ahead of
 // the advanced config, and is read back out of it as the field again, in
-// whichever unit nginx was given it.
+// whichever unit nginx was given it, 0 as nginx's any size.
 func TestNPMBodyLimitIsNginxsDirective(t *testing.T) {
 	for _, c := range []struct {
-		limit    int
+		limit    *int
 		advanced string
-	}{{0, ""}, {0, "gzip on;"}, {64, ""}, {257, "gzip on;\nproxy_read_timeout 90s;"}} {
+	}{{nil, ""}, {nil, "gzip on;"}, {new(0), ""}, {new(64), ""}, {new(257), "gzip on;\nproxy_read_timeout 90s;"}} {
 		spec := NPMProxyHostSpec{ClientMaxBodySize: c.limit, AdvancedConfig: c.advanced}
-		if limit, advanced := npmSplitAdvanced(npmAdvanced(spec)); limit != c.limit || advanced != c.advanced {
-			t.Errorf("%+v read back as %d %q", c, limit, advanced)
+		if limit, advanced := npmSplitAdvanced(npmAdvanced(spec)); !reflect.DeepEqual(limit, c.limit) || advanced != c.advanced {
+			t.Errorf("%+v read back as %v %q", c, limit, advanced)
 		}
 	}
-	for written, mib := range map[string]int{"16M": 16, "2g": 2048, "512k": 1, "1048577": 2} {
-		if limit, advanced := npmSplitAdvanced("gzip on;\n  client_max_body_size " + written + ";\n"); limit != mib || advanced != "gzip on;\n" {
-			t.Errorf("%s read as %d %q", written, limit, advanced)
+	for written, mib := range map[string]int{"16M": 16, "2g": 2048, "512k": 1, "1048577": 2, "0": 0} {
+		if limit, advanced := npmSplitAdvanced("gzip on;\n  client_max_body_size " + written + ";\n"); limit == nil || *limit != mib || advanced != "gzip on;\n" {
+			t.Errorf("%s read as %v %q", written, limit, advanced)
 		}
 	}
 	server := newNPMServer(t)

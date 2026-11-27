@@ -21331,12 +21331,19 @@
             "type": "string"
           },
           "client_max_body_size": {
-            "default": 0,
-            "description": "In MB. 0 keeps Nginx Proxy Manager's own limit.",
-            "maximum": 9223372036854775807,
-            "minimum": 0,
-            "title": "Largest request",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 9223372036854775807,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "In MB, 0 for any size. Blank keeps Nginx Proxy Manager's own limit.",
+            "title": "Largest request"
           },
           "domain_names": {
             "description": "One per line.",

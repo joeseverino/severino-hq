@@ -20,7 +20,7 @@ type NPMProxyHostSpec struct {
 	AccessListID        int      `json:"access_list_id"`
 	CertificateID       int      `json:"certificate_id"`
 	AdvancedConfig      string   `json:"advanced_config"`
-	ClientMaxBodySize   int      `json:"client_max_body_size"`
+	ClientMaxBodySize   *int     `json:"client_max_body_size"`
 	HSTSEnabled         bool     `json:"hsts_enabled"`
 	HSTSSubdomains      bool     `json:"hsts_subdomains"`
 	TrustForwardedProto bool     `json:"trust_forwarded_proto"`
@@ -89,7 +89,7 @@ type NPMProxyHostRecord struct {
 	BlockExploits         bool              `json:"block_exploits"`
 	AccessListID          int               `json:"access_list_id"`
 	AdvancedConfig        string            `json:"advanced_config"`
-	ClientMaxBodySize     int               `json:"client_max_body_size"`
+	ClientMaxBodySize     *int              `json:"client_max_body_size"`
 	HSTSEnabled           bool              `json:"hsts_enabled"`
 	HSTSSubdomains        bool              `json:"hsts_subdomains"`
 	TrustForwardedProto   bool              `json:"trust_forwarded_proto"`

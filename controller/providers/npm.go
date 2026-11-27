@@ -252,12 +252,13 @@ func npmDesired(spec NPMProxyHostSpec, domains []string) npmProxyHostRequest {
 var npmBodyLimit = regexp.MustCompile(`(?im)^[ \t]*client_max_body_size[ \t]+(\d+)([kmg]?)[ \t]*;[ \t]*(?:\r?\n|$)`)
 
 // npmAdvanced is the advanced config NPM is given for spec: its body limit
-// in MiB, nginx's m, then what the spec holds as advanced config.
+// in MiB, nginx's m, where it sets one (0 lets any size through, as nginx
+// reads it), then what the spec holds as advanced config.
 func npmAdvanced(spec NPMProxyHostSpec) string {
-	if spec.ClientMaxBodySize <= 0 {
+	if spec.ClientMaxBodySize == nil {
 		return spec.AdvancedConfig
 	}
-	line := fmt.Sprintf("client_max_body_size %dm;", spec.ClientMaxBodySize)
+	line := fmt.Sprintf("client_max_body_size %dm;", *spec.ClientMaxBodySize)
 	if spec.AdvancedConfig == "" {
 		return line
 	}
@@ -265,22 +266,23 @@ func npmAdvanced(spec NPMProxyHostSpec) string {
 }
 
 // npmSplitAdvanced is the body limit an advanced config sets, in MiB rounded
-// up (0 for none), and the config without that directive.
-func npmSplitAdvanced(config string) (int, string) {
+// up (nil for none, and 0, as nginx reads it, for any size), and the config
+// without that directive.
+func npmSplitAdvanced(config string) (*int, string) {
 	at := npmBodyLimit.FindStringSubmatchIndex(config)
 	if at == nil {
-		return 0, config
+		return nil, config
 	}
 	size, err := strconv.Atoi(config[at[2]:at[3]])
 	if err != nil {
-		return 0, config
+		return nil, config
 	}
 	per := map[string]int{"": 1 << 20, "k": 1 << 10, "m": 1, "g": 0}[strings.ToLower(config[at[4]:at[5]])]
 	mib := size * 1024
 	if per > 0 {
 		mib = (size + per - 1) / per
 	}
-	return mib, config[:at[0]] + config[at[1]:]
+	return &mib, config[:at[0]] + config[at[1]:]
 }
 
 // npmHeld is the request that would leave a proxy host as NPM holds it.

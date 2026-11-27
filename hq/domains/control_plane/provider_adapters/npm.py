@@ -1,5 +1,6 @@
 """Nginx Proxy Manager: the proxy hosts HQ declares. The controller reads and writes them."""
 
+import math
 import re
 from typing import Annotated, Any, Literal
 
@@ -24,14 +25,33 @@ from ..provider_spec import (
 )
 from .contracts import IngressPolicy, ServedCertificate
 
-# Nginx's directive for the largest request body.
-_BODY_LIMIT = re.compile(r"^\s*client_max_body_size\b", re.IGNORECASE | re.MULTILINE)
+# Nginx's directive for the largest request body, with the comment lines
+# just above it, which say what it is for. The controller's npmBodyLimit reads
+# the same directive.
+_BODY_LIMIT = re.compile(
+    r"(?:^[ \t]*#.*\n)*^[ \t]*client_max_body_size[ \t]+(\d+)([kmg]?)[ \t]*;[ \t]*(?:\n|\Z)",
+    re.IGNORECASE | re.MULTILINE,
+)
+# Bytes in each of nginx's units.
+_UNITS = {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3}
+
+
+def body_limit(config: str) -> tuple[int, str] | None:
+    """The body limit nginx's directive in ``config`` sets, in MiB rounded up
+    (0, as nginx reads it, for any size), and the config without it; ``None``
+    where it sets none."""
+
+    found = _BODY_LIMIT.search(config)
+    if found is None:
+        return None
+    size = math.ceil(int(found[1]) * _UNITS[found[2].lower()] / 1024**2)
+    return size, (config[: found.start()] + config[found.end() :]).strip("\n")
 
 
 def _no_body_limit(value: str) -> str:
     # The controller writes the spec's own field as this directive, and nginx
     # refuses a config that sets it twice.
-    if _BODY_LIMIT.search(value):
+    if body_limit(value) is not None:
         raise ValueError
     return value
 
@@ -140,13 +160,13 @@ class NPMProxyHostSpec(ProviderModel):
         description="Passed through as-is. Usually blank.",
         json_schema_extra={"contentMediaType": "text/x-nginx-conf"},
     )
-    client_max_body_size: int = Field(
-        default=0,
+    client_max_body_size: int | None = Field(
+        default=None,
         ge=0,
         # The controller holds it as Go's int, as it does the access list id.
         le=2**63 - 1,
         title="Largest request",
-        description="In MB. 0 keeps Nginx Proxy Manager's own limit.",
+        description="In MB, 0 for any size. Blank keeps Nginx Proxy Manager's own limit.",
     )
     hsts_enabled: Annotated[bool, Describe("", api="Whether the proxy sends Strict-Transport-Security.")] = False
     hsts_subdomains: Annotated[bool, Describe("", api="Whether that header covers every subdomain.")] = False
@@ -187,7 +207,7 @@ def _from_record(record: dict[str, Any]) -> dict[str, Any]:
         "block_exploits": bool(record.get("block_exploits")),
         "access_list_id": record.get("access_list_id") or 0,
         "advanced_config": record.get("advanced_config") or "",
-        "client_max_body_size": record.get("client_max_body_size") or 0,
+        "client_max_body_size": record.get("client_max_body_size"),
         "hsts_enabled": bool(record.get("hsts_enabled")),
         "hsts_subdomains": bool(record.get("hsts_subdomains")),
         "trust_forwarded_proto": bool(record.get("trust_forwarded_proto")),
