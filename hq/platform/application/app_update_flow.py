@@ -103,7 +103,9 @@ def _ran(operation: OperationRequest, *, ended: str = "") -> Standing:
     if standing.state != FAILED and not ended:
         return standing
     task, said = run.stopped
-    lines = (f"At “{task}”" if task else "", said, *(line for line, _tone in run.evidence.amiss))
+    # A note worded from its readings says their records to act on already.
+    amiss = () if said == run.evidence.told else run.evidence.amiss
+    lines = (f"At “{task}”" if task else "", said, *(line for line, _tone in amiss))
     return Standing(FAILED, dotted(*lines), since=standing.since, word=ended or standing.label, url=standing.url)
 
 

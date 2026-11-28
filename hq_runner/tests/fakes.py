@@ -274,7 +274,6 @@ def pending(
     timeout: int = 300,
     effect: str = "infrastructure_change",
     privilege: str = PRIVILEGE,
-    verification: Iterable[str] = (),
 ) -> dict[str, Any]:
     """A claimed run as the bridge's claim answers it."""
 
@@ -311,7 +310,6 @@ def pending(
                 "hosts": [],
                 "effect": effect,
                 "privilege": privilege,
-                "verification": list(verification),
             },
             "observed": {},
         },

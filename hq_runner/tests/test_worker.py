@@ -194,10 +194,10 @@ class SuccessTests(PassTestCase):
 
 
 class ResultTests(PassTestCase):
-    """A run that succeeded says what its playbook found or did, never only that it ended."""
+    """A run that succeeded says the result its playbook stated."""
 
     def test_the_result_a_playbook_states_with_set_stats_is_its_report_s_message(self):
-        bridge = fakes.Bridge(fakes.pending(verification=["The service answers"]))
+        bridge = fakes.Bridge(fakes.pending())
 
         self.work(bridge, fakes.Runner([*fakes.WELL[:-1], fakes.STATED]))
 
@@ -213,13 +213,6 @@ class ResultTests(PassTestCase):
         self.work(bridge, fakes.Runner([stated]))
 
         self.assertEqual(self.only_report(bridge)["message"], "example-a: One; example-b: Two")
-
-    def test_a_playbook_that_states_none_reports_what_its_record_says_shows_it_worked(self):
-        bridge = fakes.Bridge(fakes.pending(verification=["The service answers", "Its port is open."]))
-
-        self.work(bridge, fakes.Runner(fakes.WELL))
-
-        self.assertEqual(self.only_report(bridge)["message"], "The service answers. Its port is open.")
 
     def test_a_secret_in_a_stated_result_never_reaches_the_report(self):
         stated = json.loads(json.dumps(fakes.STATED))

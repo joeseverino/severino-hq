@@ -75,8 +75,6 @@ class Run:
     timeout_seconds: int
     # The privilege profile every login of the run is.
     profile: str = READ_PROFILE
-    # What its record says shows it worked, each a sentence without its stop.
-    verification: tuple[str, ...] = ()
     # A preview: Ansible's check mode, which HQ alone asks for (``RunInput.check``).
     check: bool = False
 
@@ -190,13 +188,8 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
         parameters=dict(parameters),
         timeout_seconds=timeout,
         profile=login,
-        verification=tuple(each for each in _list(spec.get("verification")) if isinstance(each, str) and each.strip()),
         check=check,
     )
-
-
-def _list(value: Any) -> list[Any]:
-    return value if isinstance(value, list) else []
 
 
 def _reached(host: str, login: str, reach: Reach) -> Target:

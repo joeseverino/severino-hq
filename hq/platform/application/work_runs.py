@@ -6,6 +6,7 @@ much work has run.
 """
 
 import json
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -33,8 +34,9 @@ from .projection import Combined, read_once
 from .quoted import Quoted
 from .routes import reverse
 from .tone import Tone, Toned
+from .ui import counted
+lazy from . import automation_adoption
 lazy from .app_update_approval import PULLED, PULLED_KIND, RECEIPT, RECEIPT_KIND
-lazy from .automation_adoption import playbook_titles
 lazy from .automation_runs import run_profile
 lazy from .cadence import automation_standing
 lazy from .containers import stacks
@@ -198,17 +200,40 @@ class RunEvidence:
 
         return tuple(_worded(str(each["kind"]), str(each["host"]), each["records"]) for each in self.stated)
 
+    def _toned(self, *tones: Tone) -> tuple[tuple[str, Tone], ...]:
+        return tuple(
+            (dotted(title, said), Tone(tone))
+            for reading in self.readings
+            for title, said, tone in reading.records
+            if tone in tones
+        )
+
     @property
     def amiss(self) -> tuple[tuple[str, Tone], ...]:
         """Each record of its readings whose kind says it in a tone to act on,
         said in a line, with that tone."""
 
-        return tuple(
-            (dotted(title, said), Tone(tone))
-            for reading in self.readings
-            for title, said, tone in reading.records
-            if tone in (Tone.ATTENTION, Tone.SERIOUS)
-        )
+        return self._toned(Tone.ATTENTION, Tone.SERIOUS)
+
+    @property
+    def told(self) -> str:
+        """What its readings say it did, in a line: each record to act on,
+        else each its kind says in a good tone; "" where none says either."""
+
+        return "; ".join(line for line, _tone in self.amiss or self._toned(Tone.GOOD))
+
+    @property
+    def tallied(self) -> str:
+        """How its tasks ended, counted by outcome ("4 tasks: 2 ok and 2
+        skipped"); "" with none ended."""
+
+        counts = Counter(str(event.get("outcome") or "") for event in self.events)
+        ended = [(each, counts[each]) for each in TaskOutcome if each != TaskOutcome.STARTED and counts[each]]
+        if len(ended) == 1:
+            ((outcome, count),) = ended
+            return f"{counted(count, 'task')} {outcome}"
+        said = get_text_list([f"{count} {outcome}" for outcome, count in ended], "and")
+        return f"{counted(sum(count for _outcome, count in ended), 'task')}: {said}" if ended else ""
 
     @property
     def raw_readings(self) -> str:
@@ -355,7 +380,7 @@ def _run_title() -> Collate:
     operation = KT("input__operation")
     titled = (
         When(Exact(operation, Value(playbook)), then=Value(title))
-        for playbook, title in playbook_titles().items()
+        for playbook, title in automation_adoption.playbook_titles().items()
         if title
     )
     unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
@@ -377,7 +402,7 @@ def _shown_title(kind: str, title: str) -> str:
     author wrote it (``quoted.Quoted``), which SQL's copy of it
     (``_run_title``) is not; else ``title``."""
 
-    return playbook_titles().get(operation_of(kind)) or title
+    return automation_adoption.playbook_titles().get(operation_of(kind)) or title
 
 
 def _run_kind() -> Case:
@@ -725,6 +750,21 @@ def _run_row(
     )
     started, finished = operation.claimed_at, operation.completed_at
     held = claimed and HANDOFF in result
+    evidence = RunEvidence(
+        hosts=tuple(asked.get("hosts") or ()),
+        correlation=str(asked.get("correlation") or ""),
+        worker=operation.claimed_by if claimed else "",
+        lease_until=operation.lease_expires_at if claimed else None,
+        attempts=operation.attempt_count,
+        events=run_events(result),
+        stated=stated_readings(result),
+        expected=str(status.get("expected_fingerprint_sha256") or ""),
+        consumers=tuple(status.get("consumers") or ()),
+        # A run or a scan has a page of its own, where its record is.
+        raw=""
+        if operation.action in _LISTED or not result
+        else json.dumps(shown_result(result), indent=2, sort_keys=True, default=str),
+    )
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
@@ -743,28 +783,14 @@ def _run_row(
         if lapsed
         else ""
         if operation.state in UNENDED
-        else _said(operation, problem),
+        else _said(operation, problem, evidence),
         by=by,
         created_at=operation.created_at,
         started=started,
         finished=finished,
         # A lapsed run was last heard from when its lease ran out.
         duration=_seconds(started, finished or (operation.lease_expires_at if lapsed else now)),
-        evidence=RunEvidence(
-            hosts=tuple(asked.get("hosts") or ()),
-            correlation=str(asked.get("correlation") or ""),
-            worker=operation.claimed_by if claimed else "",
-            lease_until=operation.lease_expires_at if claimed else None,
-            attempts=operation.attempt_count,
-            events=run_events(result),
-            stated=stated_readings(result),
-            expected=str(status.get("expected_fingerprint_sha256") or ""),
-            consumers=tuple(status.get("consumers") or ()),
-            # A run or a scan has a page of its own, where its record is.
-            raw=""
-            if operation.action in _LISTED or not result
-            else json.dumps(shown_result(result), indent=2, sort_keys=True, default=str),
-        ),
+        evidence=evidence,
         effect=str((operation.resource.spec or {}).get("effect", "")),
     )
 
@@ -776,16 +802,20 @@ def _kind_of(action: str, procedure: str) -> str:
     return capability_name(procedure) if action == OperationRequest.Action.RUN else action
 
 
-def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
+def _said(operation: OperationRequest, problem: dict[str, Any] | None, evidence: RunEvidence) -> str:
     """How an ended operation went, in a sentence: the condition that says
-    what went wrong before its own message."""
+    what went wrong before its own message; one that ended well says what
+    its readings say it did, else the result its playbook stated, else how
+    its tasks ended."""
 
     result = operation.result or {}
-    said = result.get("message") or operation.reason
+    said = result.get("message") or ""
     if operation.state == OperationState.FAILED:
         active = holding(result.get("conditions"))
-        return Quoted((active[0].get("message") if active else "") or said)
-    return Quoted((problem.get("message") if problem else "") or said)
+        return Quoted((active[0].get("message") if active else "") or said or operation.reason)
+    if problem:
+        return Quoted(problem.get("message") or said or operation.reason)
+    return evidence.told or Quoted(said) or evidence.tallied or Quoted(operation.reason)
 
 
 def shown_result(result: dict[str, Any]) -> dict[str, Any]:

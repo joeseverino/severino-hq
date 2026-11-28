@@ -3,7 +3,6 @@ in the database, each row said in the words and tones a job is. Every
 procedure here is a synthetic ``example.*`` one."""
 
 from datetime import timedelta
-from types import SimpleNamespace
 from unittest import mock
 
 from django.test import TestCase
@@ -67,13 +66,13 @@ class OrderTests(WorkRunsTestCase):
         run of a playbook no longer adopted keeps its id."""
 
         restarted = self.run_of(APP)
-        adopted = (SimpleNamespace(id=RESTART, title="Restart a service"),)
-        with mock.patch("hq.platform.application.automation_adoption.procedures", return_value=adopted):
+        titles = "hq.platform.application.automation_adoption.playbook_titles"
+        with mock.patch(titles, return_value={RESTART: "Restart a service"}):
             (row,) = self.listed()
             (found,) = self.read(query="restart a serv")
             (machine_row,) = runs_on(APP)
         self.assertEqual((row.id, row.title, found["id"]), (str(restarted.pk), "Restart a service", str(restarted.pk)))
         self.assertEqual(machine_row.title, "Restart a service")
-        with mock.patch("hq.platform.application.automation_adoption.procedures", return_value=()):
+        with mock.patch(titles, return_value={}):
             (row,) = self.listed()
         self.assertIn(RESTART, row.title)

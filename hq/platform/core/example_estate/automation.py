@@ -478,11 +478,28 @@ def _events(host: str, events: tuple[tuple[str, str, str], ...]) -> list[dict[st
 
 
 # How the server's past runs ended, as their worker reported it: a playbook
-# that states no result is said by its verification, which it just held.
+# that states no result reports none.
 DONE = Ended(
     success=True,
-    message="The cache reports no entries.",
+    message="",
     events=(("Read what it holds", "ok", ""), ("Empty it", "changed", "Emptied."), ("Check it is empty", "ok", "")),
+)
+# A preview of it on the server, whose read warned that it could not examine a path.
+PREVIEWED = Ended(
+    success=True,
+    message="",
+    events=(
+        (
+            "Read what it holds",
+            "warned",
+            (
+                "Not all paths examined, check warnings for details; Skipped '/srv/example/cache' path due to "
+                "this access issue: '/srv/example/cache' is not a directory"
+            ),
+        ),
+        ("Empty it", "changed", ""),
+        ("Check it is empty", "skipped", ""),
+    ),
 )
 FAILED = Ended(
     success=False,
@@ -598,6 +615,7 @@ def runs(
         asker, carried_out, correlation = endings[index % len(endings)]
         ago = timedelta(days=2 + 3 * (count - 1 - index))
         _asked(first, server, asker, ago, carried_out, approver=approver, correlation=correlation)
+    _asked(first, server, person, timedelta(days=1), _reported(PREVIEWED), approver=approver, check=True)
     if others:
         _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED), approver=approver)
     # Now: one run working on the server, one waiting.
@@ -630,9 +648,18 @@ def _held(manifest, host, agent, owner) -> None:
 
 
 def _asked(
-    manifest, host, principal, ago, carried_out, *, approver: Principal | None, correlation="", parameters=None
+    manifest,
+    host,
+    principal,
+    ago,
+    carried_out,
+    *,
+    approver: Principal | None,
+    correlation="",
+    parameters=None,
+    check=False,
 ) -> None:
-    """One run of ``manifest`` on ``host``, asked for ``ago``, approved by
+    """One run of ``manifest`` on ``host`` (its preview where ``check``), asked for ``ago``, approved by
     ``approver`` where the ask waits for a person (left waiting without
     one), then carried out, each audit row it writes dated to the moment
     its step happened: the ask, the decision, the claim and the end."""
@@ -643,7 +670,12 @@ def _asked(
     door = doors.mcp() if principal.interface == MCP_INTERFACE else doors.request(f"/commands/{name}/")
     key = f"example-run-{manifest.id}-{host}-{int(ago.total_seconds())}"
     with stamped(lambda *_: {"created_at": at}), door:
-        asked = {"hosts": [host], "correlation": correlation, **({"parameters": parameters} if parameters else {})}
+        asked = {
+            "hosts": [host],
+            "correlation": correlation,
+            **({"parameters": parameters} if parameters else {}),
+            **({"check": True} if check else {}),
+        }
         answer = _ran(name, asked, principal=principal, key=key)
     queued = at
     if is_held(answer):
