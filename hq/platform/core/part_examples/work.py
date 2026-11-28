@@ -9,10 +9,17 @@ lazy from hq.platform.application.tables import Cell, DataTable, TableColumn
 lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
 
 
-def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "") -> dict:
+def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "", warnings: str = "") -> dict:
     """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
 
-    return {"host": host, "task": task, "outcome": outcome, "message": message, "tone": outcome_tone(outcome)}
+    return {
+        "host": host,
+        "task": task,
+        "outcome": outcome,
+        "message": message,
+        "warnings": warnings,
+        "tone": outcome_tone(outcome),
+    }
 
 
 _LONG_HOST = "example-machine-with-a-long-name-01.example.com"
@@ -35,10 +42,11 @@ def _example_runs():
                     _event("Check the example cache", "ok", host="example-02"),
                     _event(
                         "Find the example cache's files",
-                        "warned",
+                        "ok",
                         host="example-02",
-                        message="Not all paths examined, check warnings for details; Skipped '/srv/example/cache' "
-                        "path due to this access issue: '/srv/example/cache' is not a directory",
+                        message="Not all paths examined, check warnings for details",
+                        warnings="Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' "
+                        "is not a directory",
                     ),
                     _event("Restart every example service the cache feeds", "started"),
                 ),

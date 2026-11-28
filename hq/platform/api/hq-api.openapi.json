@@ -2263,6 +2263,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.warnings",
               "events.tone",
               "expected",
               "affected",
@@ -2947,6 +2948,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.warnings",
               "events.tone",
               "expected",
               "affected",
@@ -27987,7 +27989,7 @@
             "type": "string"
           },
           "outcome": {
-            "description": "How it ended, or `started` while it is under way: `started`, `ok`, `changed`, `warned`, `skipped`, `failed` or `unreachable`.",
+            "description": "How it ended, or `started` while it is under way: `started`, `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
             "type": "string"
           },
           "task": {
@@ -27997,6 +27999,10 @@
           "tone": {
             "description": "How its outcome is colored: `serious`, `attention`, `neutral` or `good`.",
             "type": "string"
+          },
+          "warnings": {
+            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none.",
+            "type": "string"
           }
         },
         "required": [
@@ -28004,6 +28010,7 @@
           "task",
           "outcome",
           "message",
+          "warnings",
           "tone"
         ],
         "type": "object"
@@ -28026,6 +28033,9 @@
           },
           "tone": {
             "$ref": "#/components/schemas/RunTask/properties/tone"
+          },
+          "warnings": {
+            "$ref": "#/components/schemas/RunTask/properties/warnings"
           }
         },
         "type": "object"

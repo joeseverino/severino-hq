@@ -1102,7 +1102,6 @@ const (
 	Skipped     RunEventOutcome = "skipped"
 	Started     RunEventOutcome = "started"
 	Unreachable RunEventOutcome = "unreachable"
-	Warned      RunEventOutcome = "warned"
 )
 
 // Valid indicates whether the value is a known member of the RunEventOutcome enum.
@@ -1119,8 +1118,6 @@ func (e RunEventOutcome) Valid() bool {
 	case Started:
 		return true
 	case Unreachable:
-		return true
-	case Warned:
 		return true
 	default:
 		return false
@@ -3172,6 +3169,9 @@ type RunEvent struct {
 	Message string          `json:"message"`
 	Outcome RunEventOutcome `json:"outcome"`
 	Task    string          `json:"task"`
+
+	// Warnings Each warning Ansible gave of the task, in one line; empty when it gave none.
+	Warnings string `json:"warnings"`
 }
 
 // RunEventOutcome defines model for RunEvent.Outcome.

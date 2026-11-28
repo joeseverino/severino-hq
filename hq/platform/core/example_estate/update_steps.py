@@ -83,7 +83,10 @@ def approval(owner, ended: str) -> None:
         "hosts": [MACHINE],
         "correlation": f"{repository}#{update['number']}@{update['head'][:12]}",
     }
-    events = [{"host": MACHINE, "task": task, "outcome": outcome, "message": said} for task, outcome, said in _REFUSED]
+    events = [
+        {"host": MACHINE, "task": task, "outcome": outcome, "message": said, "warnings": ""}
+        for task, outcome, said in _REFUSED
+    ]
     at = timezone.now() - timedelta(minutes=5)
 
     def record(resource, action, state, *, asked, result):

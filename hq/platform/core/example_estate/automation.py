@@ -468,13 +468,17 @@ class Ended:
 
     success: bool
     message: str
-    events: tuple[tuple[str, str, str], ...] = ()
+    # Each task, its outcome and what it said, then its warnings where it warned.
+    events: tuple[tuple[str, str, str] | tuple[str, str, str, str], ...] = ()
     # The readings its playbook stated on its machine, by kind (``RunStated``).
     readings: dict[str, list[dict[str, Any]]] | None = None
 
 
-def _events(host: str, events: tuple[tuple[str, str, str], ...]) -> list[dict[str, Any]]:
-    return [{"host": host, "task": task, "outcome": outcome, "message": said} for task, outcome, said in events]
+def _events(host: str, events: tuple[tuple[str, str, str] | tuple[str, str, str, str], ...]) -> list[dict[str, Any]]:
+    return [
+        {"host": host, "task": task, "outcome": outcome, "message": said, "warnings": warned}
+        for task, outcome, said, warned in ((*each, "")[:4] for each in events)
+    ]
 
 
 # How the server's past runs ended, as their worker reported it: a playbook
@@ -491,11 +495,9 @@ PREVIEWED = Ended(
     events=(
         (
             "Read what it holds",
-            "warned",
-            (
-                "Not all paths examined, check warnings for details; Skipped '/srv/example/cache' path due to "
-                "this access issue: '/srv/example/cache' is not a directory"
-            ),
+            "ok",
+            "Not all paths examined, check warnings for details",
+            "Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' is not a directory",
         ),
         ("Empty it", "changed", ""),
         ("Check it is empty", "skipped", ""),

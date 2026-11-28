@@ -66,6 +66,7 @@ class RunTask(TypedDict):
         str, Describe(ended(f"How it ended, or `{TaskOutcome.STARTED}` while it is under way: {listed(TaskOutcome)}"))
     ]
     message: Annotated[str, Describe("What the task said; empty when it said nothing.")]
+    warnings: Annotated[str, Describe("Each warning Ansible gave of the task, in one line; empty when it gave none.")]
     tone: Annotated[str, Describe(ended(f"How its outcome is colored: {listed(Tone)}"))]
 
 

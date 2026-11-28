@@ -1,6 +1,6 @@
 """A run's task outcomes, struck of secrets and held to the bridge's bounds, and what its playbook stated.
 
-An event takes four fields of what Ansible said, never its whole result, so
+An event takes five fields of what Ansible said, never its whole result, so
 what a module returned beside its message and its warnings never leaves the
 worker, and no program's output does. A task that polls with ``until:`` stands as started
 until it ends: a pass that goes again is no event. HQ strikes known
@@ -26,9 +26,6 @@ HIDDEN = "The task's output is hidden (no_log)."
 
 # A task under way on a machine, until its outcome takes its place (``Tasks``).
 STARTED = "started"
-# A task that ended well and warned (Ansible's ``warnings`` in its result),
-# which its message carries after its own.
-WARNED = "warned"
 # Ansible's host events, by the outcome each reports.
 _OUTCOMES = {
     "runner_on_start": STARTED,
@@ -65,9 +62,18 @@ class Event:
     task: str
     outcome: str
     message: str
+    # Each warning in Ansible's result, in one line: a fact beside the outcome,
+    # which stays what the task did.
+    warnings: str = ""
 
     def as_report(self) -> dict[str, str]:
-        return {"host": self.host, "task": self.task, "outcome": self.outcome, "message": self.message}
+        return {
+            "host": self.host,
+            "task": self.task,
+            "outcome": self.outcome,
+            "message": self.message,
+            "warnings": self.warnings,
+        }
 
 
 def learned(parameters: Mapping[str, Any]) -> frozenset[str]:
@@ -122,15 +128,21 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     if outcome == "ok" and result.get("changed") is True:
         outcome = "changed"
     warned = result.get("warnings")
-    warnings = [_one_line(each) for each in warned if isinstance(each, str)] if isinstance(warned, list) else []
-    if warnings and outcome in ("ok", "changed"):
-        outcome = WARNED
+    warnings = (
+        "; ".join(_one_line(each) for each in warned if isinstance(each, str)) if isinstance(warned, list) else ""
+    )
     # "censored" is Ansible's own stand-in for the result of a task marked no_log.
-    said = "; ".join(each for each in (_one_line(result.get("msg", "")), *warnings) if each)
-    message = HIDDEN if "censored" in result else strike(said, secrets)
+    hidden = "censored" in result
+    message = HIDDEN if hidden else strike(_one_line(result.get("msg", "")), secrets)
     host = strike(_one_line(data.get("host", "")), secrets)
     task = strike(_one_line(data.get("task", "")), secrets)
-    return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
+    return Event(
+        _clip(host, HOST_LIMIT),
+        _clip(task, TASK_LIMIT),
+        outcome,
+        _clip(message, MESSAGE_LIMIT),
+        "" if hidden else _clip(strike(warnings, secrets), MESSAGE_LIMIT),
+    )
 
 
 # How ansible-core 2.22 begins a line it prints as an error
@@ -397,8 +409,8 @@ def _result(result: Any, secrets: Collection[str]) -> str | None:
 
 
 # The tasks a run's progress keeps first when it has more than it can carry:
-# what is under way, and what changed a machine, warned or went wrong.
-_KEPT_FIRST = frozenset({STARTED, "changed", WARNED, "failed", "unreachable"})
+# what is under way, and what changed a machine or went wrong; and any that warned.
+_KEPT_FIRST = frozenset({STARTED, "changed", "failed", "unreachable"})
 
 
 class Tasks:
@@ -440,6 +452,9 @@ def bounded(events: Iterable[Event]) -> tuple[list[Event], int]:
     every = list(events)
     if len(every) <= EVENT_LIMIT:
         return every, 0
-    ranked = sorted(range(len(every)), key=lambda index: (every[index].outcome not in _KEPT_FIRST, index))
+    ranked = sorted(
+        range(len(every)),
+        key=lambda index: (every[index].outcome not in _KEPT_FIRST and not every[index].warnings, index),
+    )
     kept = sorted(ranked[:EVENT_LIMIT])
     return [every[index] for index in kept], len(every) - EVENT_LIMIT

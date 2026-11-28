@@ -60,8 +60,14 @@ def receipt(revision=MERGED, *, last=MERGED, ok=True, apps=()):
 
 def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
     return [
-        {"host": APP, "task": "Ask sudo whether the deploy login may start it", "outcome": "ok", "message": ""},
-        {"host": APP, "task": task, "outcome": "failed", "message": message},
+        {
+            "host": APP,
+            "task": "Ask sudo whether the deploy login may start it",
+            "outcome": "ok",
+            "message": "",
+            "warnings": "",
+        },
+        {"host": APP, "task": task, "outcome": "failed", "message": message, "warnings": ""},
     ]
 
 

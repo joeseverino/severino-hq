@@ -32,7 +32,7 @@ def renew(operation_id: str, *, controller_id: str = WORKER, lease_seconds: int 
 
 
 def event(outcome: str = "changed", *, host: str = APP, message: str = "Restarted.") -> dict:
-    return {"host": host, "task": "Restart the service", "outcome": outcome, "message": message}
+    return {"host": host, "task": "Restart the service", "outcome": outcome, "message": message, "warnings": ""}
 
 
 class LeasedRunTestCase(TestCase):

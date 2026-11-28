@@ -59,8 +59,6 @@ class TaskOutcome(Toned):
     STARTED = "started", JobState.RUNNING.tone
     OK = "ok", Tone.GOOD
     CHANGED = "changed", Tone.GOOD
-    # Ended well and warned, its message carrying the warnings.
-    WARNED = "warned", Tone.ATTENTION
     SKIPPED = "skipped", Tone.NEUTRAL
     FAILED = "failed", Tone.SERIOUS
     UNREACHABLE = "unreachable", Tone.SERIOUS
@@ -210,9 +208,14 @@ class RunEvidence:
     @property
     def amiss(self) -> tuple[tuple[str, Tone], ...]:
         """Each record of its readings whose kind says it in a tone to act on,
-        said in a line, with that tone."""
+        then each task's warnings, said in a line, with that tone."""
 
-        return self._toned(Tone.ATTENTION, Tone.SERIOUS)
+        warned = tuple(
+            (dotted(str(event.get("task") or ""), str(event["warnings"])), Tone.ATTENTION)
+            for event in self.events
+            if event.get("warnings")
+        )
+        return self._toned(Tone.ATTENTION, Tone.SERIOUS) + warned
 
     @property
     def told(self) -> str:
@@ -815,9 +818,13 @@ def shown_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
-    """A run's tasks so far from its result, in the order they started, each in its outcome's tone."""
+    """A run's tasks so far from its result, in the order they started, each in its outcome's tone,
+    with no warnings where its worker reported none."""
 
-    return tuple({**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get(RUN_EVENTS) or ())
+    return tuple(
+        {"warnings": "", **event, "tone": outcome_tone(event.get("outcome", ""))}
+        for event in result.get(RUN_EVENTS) or ()
+    )
 
 
 def stated_readings(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:

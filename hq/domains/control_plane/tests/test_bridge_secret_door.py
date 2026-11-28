@@ -28,7 +28,15 @@ EXAMPLES: dict[str, Any] = {
         "message": "Applied.",
     },
     "renew": {
-        "events": [{"host": "app.example.com", "task": "Restart", "outcome": "changed", "message": "Restarted."}]
+        "events": [
+            {
+                "host": "app.example.com",
+                "task": "Restart",
+                "outcome": "changed",
+                "message": "Restarted.",
+                "warnings": "",
+            }
+        ]
     },
     "connections": [
         {

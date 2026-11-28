@@ -1297,7 +1297,6 @@
               "started",
               "ok",
               "changed",
-              "warned",
               "failed",
               "skipped",
               "unreachable"
@@ -1306,6 +1305,11 @@
           "message": {
             "type": "string",
             "maxLength": 500
+          },
+          "warnings": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none."
           }
         },
         "additionalProperties": false,
@@ -1313,7 +1317,8 @@
           "host",
           "task",
           "outcome",
-          "message"
+          "message",
+          "warnings"
         ],
         "description": "One task on one machine: started while it is under way, else how it ended."
       },
