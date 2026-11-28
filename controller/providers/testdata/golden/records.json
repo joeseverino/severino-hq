@@ -564,7 +564,10 @@
             }
           ],
           "check_failed": true,
-          "image": "example"
+          "image": "example",
+          "outcome": "example",
+          "ended_at": "example",
+          "approved_by": "example"
         }
       ],
       "alerts": {

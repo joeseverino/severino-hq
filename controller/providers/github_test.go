@@ -546,7 +546,11 @@ func githubRepositoryRoutes() map[string]string {
 		api("/releases?per_page=1"):                `[{"tag_name":"v1.2.0","html_url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}]`,
 		api("/deployments?per_page=20"): `[{"id":21,"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","payload":{"image":"ghcr.io/example/app/composition@sha256:aaaa"}},
 			{"id":20,"environment":"production","sha":"9999","created_at":"2030-01-01T00:00:00Z","payload":""}]`,
-		api("/deployments/21/statuses?per_page=1"):           `[{"state":"success","log_url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","target_url":""}]`,
+		api("/deployments/21/statuses?per_page=10"): `[{"state":"success","description":"Deployment finished successfully.","log_url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","target_url":"","created_at":"2030-01-02T00:10:00Z"}]`,
+		api("/deployments/20/statuses?per_page=10"): `[{"state":"inactive","description":"","log_url":"https://github.com/example/app/actions/runs/2","target_url":"","created_at":"2030-01-02T00:10:00Z"},
+			{"state":"success","description":"` + deployed.DeployLiveCheckFailed.Description + `","log_url":"https://github.com/example/app/actions/runs/2","target_url":"","created_at":"2030-01-01T00:10:00Z"}]`,
+		api("/actions/runs/3/approvals"):                     `[{"state":"rejected","user":{"login":"octo"}},{"state":"approved","user":{"login":"example"}}]`,
+		api("/actions/runs/2/approvals"):                     `[]`,
 		api("/actions/jobs/77"):                              `{"id":77,"steps":[{"name":"Verify signature","conclusion":"success"},{"name":"Deploy","conclusion":"success"}]}`,
 		api("/code-scanning/alerts?state=open&per_page=100"): `[{"rule":{"security_severity_level":"high","severity":"error"}},{"rule":{"severity":"warning"}}]`,
 		api("/dependabot/alerts?state=open&per_page=100"): `[{"number":3,"html_url":"https://github.com/example/app/security/dependabot/3","dependency":{"package":{"ecosystem":"npm","name":"example-lib"},"manifest_path":"web/package.json"},
@@ -617,9 +621,9 @@ func TestADeploymentLiveWithACheckFailedSaysSo(t *testing.T) {
 	} {
 		routes := githubRepositoryRoutes()
 		status, _ := json.Marshal([]map[string]string{{"state": c.state, "description": c.description, "log_url": "", "target_url": ""}})
-		routes[githubFakeAPI+" /repos/example/app/deployments/21/statuses?per_page=1"] = string(status)
+		routes[githubFakeAPI+" /repos/example/app/deployments/21/statuses?per_page=10"] = string(status)
 		record, _ := readRepository(t, newGitHubHarness(t, routes, runtime.Environment{}))
-		if len(record.Deployments) != 1 || record.Deployments[0].CheckFailed != c.want {
+		if len(record.Deployments) == 0 || record.Deployments[0].CheckFailed != c.want {
 			t.Errorf("%q: read %+v, want check_failed %v", c.description, record.Deployments, c.want)
 		}
 	}
@@ -685,7 +689,8 @@ func TestGitHubRepositoryReading(t *testing.T) {
 			`{"connection_ref":"hq-app","repository":"example/app","id":6,"name":"CI","status":"completed","conclusion":"failure","event":"pull_request","branch":"bump","sha":"bbbb","url":"https://github.com/example/app/actions/runs/6","created_at":"2030-01-05T00:00:00Z","jobs":[{"name":"test","status":"completed","conclusion":"failure"}],"carried":false}]`},
 		{"waiting", record.Waiting[0].Environments, `["production"]`},
 		{"release", record.Release, `{"tag":"v1.2.0","url":"https://github.com/example/app/releases/v1.2.0","published_at":"2030-01-01T00:00:00Z"}`},
-		{"the newest deployment to each environment, with what its job verified", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}],"check_failed":false,"image":"ghcr.io/example/app/composition@sha256:aaaa"}]`},
+		{"production's releases, newest first, each with what its job verified, the outcome its deploy reported and who approved its run", record.Deployments, `[{"environment":"production","sha":"aaaa","created_at":"2030-01-02T00:00:00Z","state":"success","url":"https://github.com/example/app/actions/runs/3/job/77?pr=1","verified":[{"name":"Verify signature","conclusion":"success"}],"check_failed":false,"image":"ghcr.io/example/app/composition@sha256:aaaa","approved_by":"example"},` +
+			`{"environment":"production","sha":"9999","created_at":"2030-01-01T00:00:00Z","state":"inactive","url":"https://github.com/example/app/actions/runs/2","verified":[],"check_failed":true,"outcome":"live-check-failed","ended_at":"2030-01-01T00:10:00Z"}]`},
 		{"alerts by severity; a refused kind is absent, not zero", record.Alerts, `{"code_scanning":{"high":1,"warning":1},"dependabot":{"critical":1,"high":1}}`},
 		{"live artifacts, soonest first", record.Artifacts, `[{"name":"soon","expires_at":"2030-02-01T00:00:00Z","sha":"aaaa"},{"name":"late","expires_at":"2030-03-01T00:00:00Z","sha":"aaaa"}]`},
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
