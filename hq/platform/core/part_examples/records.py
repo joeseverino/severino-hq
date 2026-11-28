@@ -54,6 +54,8 @@ def _month_gone_by(month=date(2026, 1, 1)):
         1: CalendarEvent("example-timed", "Example timed line", datetime(month.year, month.month, 14, 15, tzinfo=UTC)),
         6: CalendarEvent("example-all-day", "Example all-day line", month.replace(day=15)),
         8: CalendarEvent("example-mark", "Example mark", month.replace(day=13), mark=True),
+        # A source's record with no title of its own.
+        3: CalendarEvent("example-untitled", "", month.replace(day=16)),
     }
     sources = tuple(
         ("Example", CalendarSource(f"example.series-{slot}", f"Example {slot}", _holding(entry), slot=slot))

@@ -1558,7 +1558,10 @@ A source keeps four rules:
   day and read by color.
 
 `ends` is exclusive, as in iCalendar: an all-day event over the 3rd to the 5th
-ends on the 6th. A timed event's `starts` is an aware datetime. `slot` keeps a
+ends on the 6th. A timed event's `starts` is an aware datetime. An event with
+no title is named by its `detail`, else "Untitled"; one whose range or state
+the calendar cannot draw raises where it is built under strict printing, and on
+a served page is logged and drawn at its start. `slot` keeps a
 color the domain's charts already use; otherwise the calendar deals one.
 
 The calendar page is the host's. An extension may place a host page in its own

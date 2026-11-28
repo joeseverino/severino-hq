@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from unittest import mock
 
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -74,7 +74,6 @@ class ContractTests(SimpleTestCase):
         aware = datetime(2026, 10, 1, 9, tzinfo=timezone.get_current_timezone())
         for kwargs in (
             {"id": "", "title": "x", "starts": TODAY},
-            {"id": "a", "title": " ", "starts": TODAY},
             {"id": "a", "title": "x", "starts": TODAY, "state": "maybe"},
             {"id": "a", "title": "x", "starts": datetime(2026, 10, 1, 9)},  # noqa: DTZ001 - a naive start is refused
             {"id": "a", "title": "x", "starts": TODAY, "ends": TODAY - timedelta(days=1)},
@@ -83,6 +82,24 @@ class ContractTests(SimpleTestCase):
         ):
             with self.subTest(**{k: str(v) for k, v in kwargs.items()}), self.assertRaises(ValueError):
                 CalendarEvent(**kwargs)
+
+    @override_settings(SEVERINO_STRICT_PRINT=False)
+    def test_on_a_served_page_what_a_source_read_is_drawn_at_its_start(self):
+        aware = datetime(2026, 10, 15, 9, tzinfo=timezone.get_current_timezone())
+        odd = lambda first, last: (  # noqa: E731
+            CalendarEvent("a", "Trip", TODAY, TODAY - timedelta(days=1)),
+            CalendarEvent("b", "Call", datetime(2026, 10, 14, 9)),  # noqa: DTZ001 - a naive start, as a source read it
+            CalendarEvent("c", "Visit", TODAY, aware),
+            CalendarEvent("d", "Dot", TODAY, TODAY + timedelta(days=3), mark=True),
+            CalendarEvent("e", "Maybe", TODAY, state="maybe"),
+        )
+        with self.assertLogs("severino.print", "ERROR"), _with(_domain([CalendarSource("example.odd", "Odd", odd)])):
+            day = calendar_day(TODAY, today=TODAY)
+        (drawn,) = (events for view, events in day.groups if view.id == "example.odd")
+        self.assertEqual(
+            sorted(event.title for event in drawn if event.covers(TODAY) and not event.span),
+            ["Call", "Dot", "Maybe", "Trip", "Visit"],
+        )
 
     def test_an_end_is_exclusive_as_in_icalendar(self):
         span = CalendarEvent("a", "Trip", TODAY, TODAY + timedelta(days=3))
