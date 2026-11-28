@@ -11,6 +11,8 @@ from hq.platform.application.moments import moment
 from hq.platform.application.quoted import Quoted
 from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
 
+from .provider_adapters import INBOUND
+
 
 def _event(item: dict[str, Any]) -> Cell:
     """The event by the provider's name for it, and who sent it. Plain text,
@@ -19,10 +21,17 @@ def _event(item: dict[str, Any]) -> Cell:
     return Cell(item["event"], lines=(Cell(item["provider_label"], muted=True),))
 
 
+def _subject(item: dict[str, Any]) -> str:
+    """The event's subject in the words its provider's declaration reads it in."""
+
+    spec = INBOUND.get(item["provider"])
+    return spec.worded(item["subject"]) if spec is not None else item["subject"]
+
+
 EVENT_COLUMNS = (
     TableColumn("Event", kind="identifier", cell=_event),
     # Text HQ did not write: shown as the provider wrote it, and never a link.
-    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(Quoted(item["subject"]), cut=True)),
+    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(Quoted(_subject(item)), cut=True)),
     TableColumn(
         "Made due", drop=3, cell=lambda item: Cell(", ".join(kind_label(kind) for kind in item["reads"]), muted=True)
     ),

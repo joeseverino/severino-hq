@@ -507,7 +507,10 @@ INBOUND = {
                 for result, kinds in JOB_ENDS.items()
             },
             DOCKER_CONTAINER: CONTAINER_CHANGED,
-        }
+        },
+        # A unit's event names it as systemd does; a container's name holds
+        # no escape, so it reads the same.
+        worded=lambda subject: SystemdName(subject).said,
     )
 }
 # The events severino-hq-events.service tells, and the ends of a job it tells,

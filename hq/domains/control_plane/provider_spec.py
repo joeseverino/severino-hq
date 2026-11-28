@@ -342,6 +342,9 @@ class InboundSpec:
     complete: tuple[str, ...] = ()
     # What an event's body says, by the event as ``events`` names it.
     facts: Mapping[str, EventFact] = field(default_factory=dict)
+    # An event's subject as a person reads it, from the provider's own name
+    # for it, which matching and asking keep.
+    worded: Callable[[str], str] = str
 
     def __post_init__(self) -> None:
         if not self.events or not all(self.events.values()):
