@@ -424,7 +424,6 @@ class InvalidRunTests(RunTestCase):
         self.refused(run_payload(playbook="site.yml"), "invalid_input")
 
         self.assertFalse(OperationRequest.objects.exists())
-        self.assertFalse(ManagedResource.objects.filter(kind=KIND).exists())
 
 
 class RetriedRunTests(RunTestCase):

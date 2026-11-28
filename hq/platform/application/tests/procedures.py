@@ -56,7 +56,7 @@ class Supply:
     """
 
     def __init__(self, test: TestCase, *manifests: OperationManifest) -> None:
-        self(*manifests)
+        self.manifests, self.generation, self.writes = manifests, "", bool(test.databases)
         # Only a test that may write has workers to note; one that may not runs nothing.
         if test.databases:
             from ..automation_runs import READ_PROFILE
@@ -79,11 +79,21 @@ class Supply:
         ):
             patcher.start()
             test.addCleanup(patcher.stop)
+        self(*manifests)
 
     def __call__(self, *manifests: OperationManifest) -> None:
         # Each supply a catalog of its own, as each adoption is, so what is
-        # derived per catalog is derived again.
+        # derived per catalog is derived again, its records among it.
         self.manifests, self.generation = manifests, f"supplied {next(_SUPPLIES)}"
+        if self.writes:
+            from hq.platform.core import bindings
+
+            from ..automation_adoption import ADOPT, derive_records
+            from ..security import internal_principal
+
+            hq = internal_principal("controller")
+            with bindings.audit_operation(operation=ADOPT, principal=hq):
+                derive_records(principal=hq)
 
     def know(self, *machines: Machine) -> None:
         self.machines = machines

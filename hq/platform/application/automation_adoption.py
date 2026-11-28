@@ -853,7 +853,8 @@ def derive_records(*, principal: Principal) -> None:
     """
 
     # Read from the newest catalog, an adoption in this transaction included.
-    named = {resource_key(manifest.id): manifest for manifest in operation_registry(catch_up()).values()}
+    catch_up()
+    named = {resource_key(manifest.id): manifest for manifest in operation_registry().values()}
     held = {record.key: record for record in ManagedResource.objects.select_for_update().filter(key__in=named)}
     for key, manifest in named.items():
         current, spec = held.get(key), pinned(manifest)

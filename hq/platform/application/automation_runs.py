@@ -50,7 +50,6 @@ lazy from .automation_sources import PLAYBOOKS
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
-lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import json_schema
 lazy from .labels import lower_first
 lazy from .moments import moment, since_when
@@ -311,29 +310,18 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
-    """The procedure's record, written as its manifest now says.
+def adopted_record(manifest: OperationManifest, *, settles: bool = False) -> ManagedResource:
+    """The procedure's record, locked, as the adopted catalog pins ``manifest``;
+    refused where it does not, as after an adoption that moved it, worded for
+    the read that ``settles`` a held run where it is one. Read, never written:
+    adoption writes it (``automation_adoption.derive_records``)."""
 
-    Written when a run is asked for, where a transaction, an actor and an audit
-    binding exist, never as the registry is composed in every process before
-    migrations. The read that settles it (``settled_by``) is written beside
-    it, under the same consent, since HQ asks that read itself.
-    """
-
-    if manifest.settled_by is not None and (settling := operation_registry().get(manifest.settled_by)) is not None:
-        record_of(settling, consented=consented)
-    key = resource_key(manifest.id)
-    current = ManagedResource.objects.select_for_update().filter(key=key).first()
-    spec = pinned(manifest)
-    if current is None or current.kind != OPERATION_KIND or current.spec != spec:
-        save_managed_resource(
-            ManagedResourceCommand(
-                key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
-            ),
-            consented=consented,
-            current_key=key if current else None,
-        )
-    return ManagedResource.objects.select_for_update().get(key=key)
+    resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
+    if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
+        if settles:
+            raise PolicyError("The read that settles this run is not the one adopted now.")
+        raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
+    return resource
 
 
 def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationRequest | None:
@@ -456,7 +444,7 @@ def queue_run(
 
     asked = {**bound, CHECK: True} if check else bound
     operation, queued = _enqueue_run(
-        partial(record_of, manifest, consented=consented), asked, consent(consented).principal, reason=reason
+        partial(adopted_record, manifest), asked, consent(consented).principal, reason=reason
     )
     return operation_asked(operation, queued=queued)
 
@@ -468,21 +456,14 @@ def queue_follow_up(
     """Queue the run another operation carries as its own next step, as that
     operation's requester and its approver, once for ``once``.
 
-    It writes no record: the run's record is the one written when the step
-    was approved (``record_of``), and one that no longer pins ``manifest``
-    refuses it, as an adoption since then does.
+    A record that no longer pins ``manifest`` refuses it, as an adoption
+    since the step was approved does.
     """
-
-    def record() -> ManagedResource:
-        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
-        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
-            raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
-        return resource
 
     acting = acting_for(asked)
     # Its rows are its requester's, under the operation that carried it.
     with own_operation(asked, operation=capability_name(manifest.id), principal=acting):
-        operation, _ = _enqueue_run(record, bound, acting, reason=asked.reason, once=once)
+        operation, _ = _enqueue_run(partial(adopted_record, manifest), bound, acting, reason=asked.reason, once=once)
     return operation
 
 
@@ -524,12 +505,7 @@ def queue_settling(held: OperationRequest) -> OperationRequest | None:
         SETTLES: str(held.pk),
     }
 
-    def record() -> ManagedResource:
-        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(settling.id)).first()
-        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(settling):
-            raise PolicyError("The read that settles this run is not the one adopted now.")
-        return resource
-
+    record = partial(adopted_record, settling, settles=True)
     principal = internal_principal(SCHEDULER)
     # Its rows are part of the held run's life, as HQ's own.
     with own_operation(held, operation=capability_name(settling.id), principal=principal):

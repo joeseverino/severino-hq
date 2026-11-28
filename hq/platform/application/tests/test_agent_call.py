@@ -121,6 +121,8 @@ class AgentDoorTests(TestCase):
 
     @LOOPBACK_ONLY
     def test_a_change_it_may_ask_for_is_held_for_a_person(self):
+        # The playbooks' records HQ wrote as it supplied them.
+        before = list(AuditLog.objects.values_list("pk", flat=True))
         answer, failed = _as_agent(CHANGE, "read", "manage_infrastructure")
 
         self.assertIsNone(failed)
@@ -129,7 +131,7 @@ class AgentDoorTests(TestCase):
         self.assertEqual((held.requested_actor, held.requested_interface), (AGENT, "mcp"))
         self.assertFalse(OperationRequest.objects.exists())
         self.assertTrue(AuditLog.objects.filter(actor=AGENT, interface="mcp").exists())
-        self.assertFalse(AuditLog.objects.exclude(actor=AGENT).exists())
+        self.assertFalse(AuditLog.objects.exclude(pk__in=before).exclude(actor=AGENT).exists())
 
     @LOOPBACK_ONLY
     def test_it_is_braked_as_an_agent_over_mcp_is(self):
