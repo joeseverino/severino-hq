@@ -13,6 +13,7 @@ from contextlib import ExitStack, closing
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
+from hq.platform.core.page_costs import data_rows
 from hq.platform.core.tests.browser.in_flight import InFlight
 from tools.perf import parse
 
@@ -201,7 +202,7 @@ def _asking_order(names: list[str], turn: int) -> list[str]:
 def _numbers(times: list[float | None], last: Answer) -> dict[str, Any]:
     known = [took for took in times if took is not None]
     p50, p95 = parse.percentiles(known) if known else (None, None)
-    rows = parse.data_rows(last.body.decode("utf-8", errors="replace"))
+    rows = data_rows(last.body.decode("utf-8", errors="replace"))
     return {
         "status": last.status,
         "p50_ms": p50,

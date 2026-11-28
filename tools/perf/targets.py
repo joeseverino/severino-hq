@@ -20,7 +20,7 @@ from pathlib import Path
 from hq.platform.application import http_read
 from hq.platform.core.tests.task import PREFIX, trusted_mise
 from tools.dev.extension_set import NAMED
-from tools.perf import parse
+from tools.perf import parse, runs
 lazy from hq.platform.core import seeds
 
 READY = "/health/ready/"
@@ -33,7 +33,6 @@ def shown_under(seed: str) -> dict[str, str]:
     return dict(seeds.get(seed).settings)
 
 
-PROBE = Path(__file__).with_name("queries_probe.py")
 # What each target's memory counts. A scratch server's is read from what tools/lib/measured reads
 # on the same system: on Linux each process's proportional set size and its swapped share
 # (smaps_rollup), so pages the processes share count once; elsewhere its macOS footprint, dirty,
@@ -48,7 +47,6 @@ SCRATCH_MEMORY = (
     else "footprint of the serving process"
 )
 IMAGE_MEMORY = "the container's anonymous memory"
-MARKER = "perf-queries "
 # A first boot migrates and seeds a new database; a later one finds it made.
 FIRST_BOOT_S = 900
 BOOT_S = 180
@@ -133,11 +131,17 @@ def run(command: list[str], *, env: dict[str, str] | None = None, cwd: Path | No
     return done.stdout
 
 
-def probe_counts(output: str) -> dict[str, dict[str, int] | None]:
-    for line in output.splitlines():
-        if line.startswith(MARKER):
-            return json.loads(line.removeprefix(MARKER))
-    raise NotMeasured(f"the query probe printed no counts: {output.strip()[-400:]!r}")
+def page_queries(output: str) -> dict[str, dict[str, int] | None]:
+    """Each page's queries from what `manage.py page_costs` printed, None for one that did not answer 200."""
+
+    lines = output.strip().splitlines()
+    walked = json.loads(lines[-1]) if lines else {}
+    if "pages" not in walked or walked.get("unread"):
+        raise NotMeasured(f"page_costs measured no page: {walked.get('unread') or output.strip()[-400:]!r}")
+    return {
+        page: {name: cost[name] for name in runs.QUERIES} if cost["status"] == 200 else None
+        for page, cost in walked["pages"].items()
+    }
 
 
 # Where a checkout names the extensions its scratch server composes: its
@@ -269,9 +273,7 @@ class Scratch:
         return parse.cookie(self._read("dev:session"))
 
     def queries(self, pages: list[str]) -> dict[str, dict[str, int] | None]:
-        env = self.env | {"PERF_PAGES": json.dumps(pages), "PERF_USER": USER}
-        code = PROBE.read_text(encoding="utf-8")
-        return probe_counts(self._read("manage:scratch", "--", "shell", "--no-imports", "-c", code, env=env))
+        return page_queries(self._read("manage:scratch", "--", "page_costs", *pages))
 
     def memory(self) -> int:
         """The serving processes' memory, as SCRATCH_MEMORY counts it: under the reloader, its worker alone."""
@@ -426,9 +428,7 @@ class Image:
         return parse.cookie(self._manage("dev_session", USER, env={"DJANGO_DEBUG": "1"}))
 
     def queries(self, pages: list[str]) -> dict[str, dict[str, int] | None]:
-        code = PROBE.read_text(encoding="utf-8")
-        env = {"PERF_PAGES": json.dumps(pages), "PERF_USER": USER}
-        return probe_counts(self._manage("shell", "--no-imports", "-c", code, env=env))
+        return page_queries(self._manage("page_costs", *pages))
 
     def memory(self) -> int:
         return parse.container_anon_bytes(self._docker("exec", self.name, "cat", "/sys/fs/cgroup/memory.stat"))

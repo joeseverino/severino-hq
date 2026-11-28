@@ -646,6 +646,12 @@ def page_capabilities(view: Callable[..., Any]) -> tuple[str, ...]:
 HEADER_PAGES = frozenset({"search", "action_items", "connection"})
 
 
+def listed_routes() -> tuple[str, ...]:
+    """The route of each page a reader finds by the navigation, in its order, or by the header."""
+
+    return tuple(dict.fromkeys((*(item.route for item in domain_navigation()), *sorted(HEADER_PAGES))))
+
+
 def unreached_pages() -> tuple[str, ...]:
     """Each page a reader could not find: one HQ frames, opened at an address
     that names no record, which neither the navigation nor the header lists
@@ -656,7 +662,7 @@ def unreached_pages() -> tuple[str, ...]:
     is asked of the composed routes, extensions' included, as HQ starts.
     """
 
-    listed = {item.route for item in domain_navigation()} | HEADER_PAGES
+    listed = set(listed_routes())
     return tuple(
         found.name or found.path
         for found in routed()
