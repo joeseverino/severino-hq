@@ -39,8 +39,8 @@ _MISSING = sentinel("_MISSING")
 _READ_SCOPE: ContextVar[dict[str, Any] | None] = ContextVar("hq_projection_read_scope", default=None)
 # Where a scope keeps what it was seeded with, apart from what it read since.
 _SEED = "projection.seed"
-# Where a scope that serves only reads made before writing keeps how many
-# writes its connection had made when it opened.
+# Where a scope that forgets what it read once its connection writes keeps
+# how many writes that connection had made when it last read.
 _WRITES = "projection.writes"
 
 
@@ -90,7 +90,7 @@ def serialized_reads[T](work: Callable[[], T]) -> T:
 
     The one way a capability runs (``capabilities``), so no handler derives
     the same thing twice. Each run reads afresh, a run again after a stale read
-    included, and once it writes it reads everything anew, so it never reads
+    included, and each write has it read everything anew, so it never reads
     a value it has just changed.
     """
 
@@ -112,12 +112,21 @@ def read_once[T](key: str, loader: Callable[[], T]) -> T:
     """Load once inside ``projection_scope``; behave normally outside one."""
 
     scope = _READ_SCOPE.get()
-    if scope is None or (_WRITES in scope and database.writes() != scope[_WRITES]):
+    if scope is None:
         return loader()
+    count = database.writes() if _WRITES in scope else None
+    if count != scope.get(_WRITES):
+        # A write since the last read: what was read may have changed, so it
+        # is read anew and shared again from here.
+        seed = scope[_SEED]
+        scope.clear()
+        scope.update({**seed, _SEED: seed, _WRITES: count})
     found = scope.get(key, _MISSING)
     if found is _MISSING:
         found = loader()
-        scope[key] = found
+        # A value a write landed in the middle of is not shared.
+        if count is None or database.writes() == count:
+            scope[key] = found
     return found
 
 
