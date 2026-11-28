@@ -251,6 +251,9 @@ jobs:
           STATUS: ${{ needs.deploy.outputs.status }}
           RESULT: ${{ needs.deploy.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # HQ's address, where its page of each release is; a repository
+          # with none set links the run alone.
+          HQ_URL: ${{ vars.HQ_URL }}
           ACTIONS_TOKEN: ${{ github.token }}
           # The Deploy job and its hq-host step, as GitHub's record of the run names them.
           DEPLOY_JOB: Deploy
@@ -295,8 +298,10 @@ jobs:
           production=$(jq -r .production <<<"$outcome")
           check_failed=$(jq -r .check_failed <<<"$outcome")
           echo "production=$production" >> "$GITHUB_OUTPUT"
-          jq -n --arg state "$state" --arg log "$RUN_URL" --arg description "$description" \
-            '{state: $state, log_url: $log, description: $description}' \
+          page="${HQ_URL:+${HQ_URL%/}/hq/releases/$COMMIT/}"
+          jq -n --arg state "$state" --arg log "$RUN_URL" --arg description "$description" --arg page "$page" \
+            '{state: $state, log_url: $log, description: $description}
+              + if $page == "" then {} else {environment_url: $page} end' \
             | gh api "repos/$GITHUB_REPOSITORY/deployments/$DEPLOYMENT/statuses" --input - --silent
           {
             echo "### $description"

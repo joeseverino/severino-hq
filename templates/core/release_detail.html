@@ -1,0 +1,29 @@
+{% extends "page.html" %}
+{% comment %}
+One release of HQ (`releases.ReleaseRecord`): GitHub's record of its
+deployment, and what HQ read of itself once it went live beside the release
+production ran before it. Those numbers move with load, so they are shown and
+raise nothing.
+{% endcomment %}
+{% block page %}
+{% layout %}
+{% section "Release" %}
+  {% facts label="Release" %}
+    {% fact "Commit" %}{% if release.commit_url %}{% entity release.commit_url|outside label=release.commit|slice:":7" code=True %}{% else %}<code>{{ release.commit|slice:":7" }}</code>{% endif %}{% endfact %}
+    {% fact "Outcome" tone=tone %}{% status release.outcome_said tone=tone pill=False %}{% endfact %}
+    {% fact "Deployed" %}{{ release.ended_at|default:release.created_at|when }}{% endfact %}
+    {% if release.run_url %}{% fact "Deploy run" %}{% entity release.run_url|outside label="Deploy" %}{% endfact %}{% endif %}
+    {% if release.approved_by %}{% fact "Approved by" value=release.approved_by %}{% endif %}
+    {% if release.image %}{% fact "Image" %}<code>{{ release.image|breakable }}</code>{% endfact %}{% endif %}
+    {% if release.previous %}{% fact "Previous release" %}<a href="{{ release.previous.url }}"><code>{{ release.previous.commit|slice:":7" }}</code></a>{% endfact %}{% endif %}
+  {% endfacts %}
+{% endsection %}
+{% section "Readings" %}
+  {% if release.readings or release.previous.readings %}
+  {% data_table readings %}
+  {% else %}
+  {% include "partials/_empty_state.html" with absent="no reading yet" only %}
+  {% endif %}
+{% endsection %}
+{% endlayout %}
+{% endblock %}

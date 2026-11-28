@@ -80,6 +80,7 @@ def _seed(owner):
         network.tailnet()
         work.repositories()
         work.units()
+        work.releases()
         events.told()
         work.jobs()
         records.calendar()

@@ -144,8 +144,9 @@ class DeployOutcomeTests(SimpleTestCase):
         outputs = dict(line.split("=", 1) for line in (self.fake / "output").read_text().splitlines())
         return done.returncode, outputs
 
-    def reported(self, outputs, result, commit=RELEASE):
-        """The Report step for a deploy that ended so: the status it posted, and its summary."""
+    def reported(self, outputs, result, commit=RELEASE, **more):
+        """The Report step for a deploy that ended so, with ``more`` set: the
+        status it posted, and its summary."""
         # Report reads the deploy job's outputs as its env names them, through the job's outputs.
         env = {}
         for name, value in self.report["env"].items():
@@ -163,7 +164,7 @@ class DeployOutcomeTests(SimpleTestCase):
             RUN_URL=f"{SERVER}/{REPOSITORY}/actions/runs/1",
             GH_TOKEN="example-token",
             ACTIONS_TOKEN="example-actions-token",
-            **env,
+            **env | more,
         )
         self.assertEqual(done.returncode, 0, done.stderr)
         # One status, which json.loads refuses to read as more.
@@ -279,6 +280,14 @@ class DeployOutcomeTests(SimpleTestCase):
         _, (_, summary) = self.ended(self.outcomes["not-deployed"]["exit"])
         self.assertNotIn("cosign verify", summary)
         self.assertNotIn("/compare/", summary)
+
+    def test_a_release_s_status_links_its_page_in_hq_where_hq_s_address_is_set(self):
+        posted, _ = self.reported({"status": "0"}, "success", HQ_URL="https://hq.example.com/")
+        self.assertEqual(posted["environment_url"], f"https://hq.example.com/hq/releases/{RELEASE}/")
+        self.assertEqual(posted["log_url"], f"{SERVER}/{REPOSITORY}/actions/runs/1")
+
+        posted, _ = self.reported({"status": "0"}, "success")
+        self.assertNotIn("environment_url", posted)
 
     def test_a_release_whose_check_failed_is_the_one_the_next_is_compared_with(self):
         _, (posted, _) = self.ended(self.outcomes["live-check-failed"]["exit"])

@@ -20,7 +20,7 @@ from .band import Tile
 from .release_part import Release, release, release_json, release_tile, repository as repository_of
 from .sight_part import KEYLESS, HqSight, sight, sight_json, sight_tile
 from .work_part import Renderer, Work, WorkUnit, work, work_json
-lazy from .. import automation_findings, backup_findings, hq_self, request_context
+lazy from .. import automation_findings, backup_findings, hq_self, releases, request_context
 lazy from ..controller_page import controller_keys
 lazy from ..entity_links import entity_link
 lazy from ..estate_records import Problem
@@ -285,4 +285,5 @@ def resources() -> tuple[ResourceSpec, ...]:
             web_route="hq_self",
             pass_principal=True,
         ),
+        *releases.resources(),
     )
