@@ -554,9 +554,10 @@ CUT_DECISIONS = (
 # left, a line past a clamp is not drawn, and what wraps by design (`wraps`,
 # figures.css: a row's own name, free text, a context line) and an opened row
 # are not counted. A name is held to its line where its table says so: by
-# `nowrap`, or in a short value's box (`cell-short`), as wide as the value
-# up to its share (`max-inline-size`, tables.css), which breaks at its seams
-# only once it is that wide.
+# `nowrap`, or up to its column's share (`--share`, tables.css), which it
+# breaks at its seams only once it is wider than (base.css). Its width whole
+# is its letters' on one line; its share is read off a ruler of that width
+# set in its cell.
 BROKEN_TOKENS = (
     "([tokens, wraps]) => {"
     + DESCRIBE
@@ -569,10 +570,8 @@ BROKEN_TOKENS = (
     const narrow = narrowBox(table);
     if (narrow || token.closest(wraps) || token.closest('tr:has(> * > [aria-expanded="true"])')) continue;
     const style = getComputedStyle(token);
-    const box = token.closest('.cell-short');
-    const held = box && box.getBoundingClientRect().width < parseFloat(getComputedStyle(box).maxInlineSize) - 1;
-    if (!held && !style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
     const lines = [];
+    let whole = 0;
     const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       for (let at = 0; at < node.length; at++) {
@@ -580,10 +579,20 @@ BROKEN_TOKENS = (
         range.setStart(node, at);
         range.setEnd(node, at + 1);
         const rect = [...range.getClientRects()].find((r) => r.width);
+        whole += rect ? rect.width : 0;
         if (rect && painted(node.parentElement, rect) && !lines.some((top) => Math.abs(top - rect.top) < rect.height / 2)) lines.push(rect.top);
       }
     }
-    if (lines.length > 1) found.push(`${describe(token.closest('td'))} breaks "${token.textContent.trim().slice(0, 40)}"`);
+    if (lines.length < 2) continue;
+    const ruler = document.createElement('span');
+    ruler.setAttribute('aria-hidden', 'true');
+    ruler.style.cssText = 'display: block; position: absolute; visibility: hidden; inline-size: var(--share)';
+    token.closest('td').append(ruler);
+    const share = ruler.getBoundingClientRect().width;
+    ruler.remove();
+    const held = whole <= share - 1;
+    if (!held && !style.whiteSpace.startsWith('nowrap') && style.textWrapMode !== 'nowrap') continue;
+    found.push(`${describe(token.closest('td'))} breaks "${token.textContent.trim().slice(0, 40)}"`);
   }
   return [...new Set(found)];
 }"""
@@ -952,20 +961,25 @@ CHECKS = {
         (BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]),
         table=True,
         reader_sees="a name broken across lines while its table had a column to let go",
-        # A short name its table holds on its line (`nowrap`) and something
-        # inside breaks anyway is found; one its table lets break at its
-        # seams, in a box too narrow to hold it, is not.
+        # A name its table holds on its line (`nowrap`) and something inside
+        # breaks anyway is found, and so is one no wider than its share drawn
+        # without its hold; one longer than its share, breaking at its seams
+        # in a column too narrow to hold it, is not.
         plants=(
             Plant(
-                '<table class="data-table" style="table-layout: fixed; inline-size: 12ch"><tbody><tr>'
+                '<div class="table-scroll" style="inline-size: 60rem"><table class="data-table"'
+                ' style="--columns: 9; grid-template-columns: repeat(3, 4ch)"><tbody><tr>'
                 + "".join(
-                    '<td style="padding: 0; overflow-wrap: anywhere"><div class="cell-short" style="display: inline">'
-                    f'<span class="token" style="white-space: {hold}"><span style="white-space: normal">{name}</span>'
-                    "</span></div></td>"
-                    for name, hold in (("example-held-name", "nowrap"), ("example-free-name", "normal"))
+                    f'<td style="padding: 0; overflow-wrap: anywhere"><span class="token" style="{hold}">'
+                    f'<span style="white-space: normal">{name}</span></span></td>'
+                    for name, hold in (
+                        ("example-held-name", "white-space: nowrap"),
+                        ("ex-am", "display: inline"),
+                        ("example-free-name-longer-than-its-share", ""),
+                    )
                 )
-                + "</tr></tbody></table>",
-                finds=('"example-held-name"',),
+                + "</tr></tbody></table></div>",
+                finds=('"example-held-name"', '"ex-am"'),
             ),
         ),
     ),

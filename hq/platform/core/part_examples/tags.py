@@ -865,9 +865,46 @@ def _queue_kind() -> DataTable:
     return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))
 
 
+def _identifiers() -> DataTable:
+    """Names beside a column of words that takes the room: hosts, hyphenated,
+    several to a cell, a dotted grant in code, and a sentence that names a
+    directive. Each is whole while its column's share holds it."""
+
+    return DataTable(
+        "Example identifiers",
+        (TableColumn("Connection"), TableColumn("Reaches"), TableColumn("Grant"), TableColumn("Note", css="key-col")),
+        tuple(
+            tables.Row(
+                (
+                    Cell(name, f"/example/{at}/", name=True),
+                    Cell(
+                        "example-host-01",
+                        "/example/host/",
+                        parts=tuple(
+                            Cell(host, f"/example/{host}/", dot=True)
+                            for host in ("example-lab-server", "ex-cloud-edge-01", "example-edge-02", "example-nas-01")
+                        ),
+                    ),
+                    Cell("example.read", readout=True),
+                    Cell(
+                        "An example policy refused a script that broke its require-trusted-types-for. "
+                        "directive, as an example sentence long enough to take the room it is offered.",
+                        role="prose",
+                    ),
+                )
+            )
+            for at, name in enumerate(("Example API", "Example tailnet"))
+        ),
+    )
+
+
 DATA_TABLE_STATES = {
     "kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()}),
     "queue": Example("{% data_table table %}", context=lambda: {"table": _queue_kind()}),
+    # Hosts in a column as narrow as the words beside it leave it, a dotted
+    # grant and a directive in a sentence: no name breaks at a hyphen or a
+    # dot while its share holds it whole.
+    "identifiers": Example("{% data_table table %}", context=lambda: {"table": _identifiers()}),
 }
 
 

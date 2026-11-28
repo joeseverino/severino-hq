@@ -91,16 +91,20 @@ pre code { background: transparent; padding: 0; color: inherit; }
    One that fits on its line moves to the next line whole; one longer than its
    line wraps at the seams the filter marks; a hyphenated part (`.whole`) or one
    with no seams breaks inside only when it alone is longer than its line. A
-   table lays out its own identifiers, a stack list's items included, which
-   are the cell's own lines (figures.css); code in a sentence in a cell (a `p`
-   or `li`, or a part of free text, `data-cell` data or prose) is laid out as
-   here. */
-:is(code, .token, .whole):not(pre *, td *, th *),
-:is(:is(td, th) :is(p, li:not(:is(.stack-list, .code-list) > li)), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
+   part that cuts it instead (a chip cut at its end, cuts.css) sets it inline.
+   What a row's toggle opens or cuts (its open line, its gist) lays out its
+   own identifiers (figures.css, cuts.css), except code in a sentence there. */
+:is(code, .token, .whole):not(pre *, tr.row-detail *, .row-gist *),
+:is(tr.row-detail, .row-gist) :is(p, li:not(:is(.stack-list, .code-list) > li), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
   /* As wide as what it says: a sized item is not stretched to its column,
      and still sits where its container aligns its items. */
   inline-size: fit-content;
+  /* In a table its column starts at it whole, up to the column's share
+     (`--share`, tables.css), so it breaks only where it alone is longer than
+     that, never while a column of words beside it takes the room. Outside a
+     table nothing sets a share and it asks nothing. */
+  min-inline-size: calc-size(max-content, min(size, var(--share)));
   /* Wrapped, it sits on its first line: an inline block's baseline is its
      last, which a row aligned on baselines would lift over the rows above.
      An engine without it sets the chip on its last line's baseline, still
@@ -109,11 +113,9 @@ pre code { background: transparent; padding: 0; color: inherit; }
   baseline-source: first;
 }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
-/* A row header's identifier is a box of its own, as a cell's is (tables.css):
-   WebKit leaves an inline chip's padding out of the width its column asks
-   for, so the name would run into the cell's padding. */
-th[scope=row] > code { display: inline-block; max-width: 100%; }
-:is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
+/* In a cell, a token among words (no `data-sole`) flows as they do, so the
+   word before it keeps its line; only its hyphenated parts stay whole. */
+:is(td, th) .token:not([data-sole]) { display: inline; }
 /* Where the filter lets a token break (line_breaks._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
    reader hears. */
