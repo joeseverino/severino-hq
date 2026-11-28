@@ -720,7 +720,9 @@ def held_note(handoff: Mapping[str, str], since: datetime | None) -> str:
         if (here.name, subject) in stack:
             action = event.removeprefix(prefix)
             done.setdefault(subject, []).append(_CONTAINER_CHANGES.get(action, action))
-    return dotted(f"Waiting on {waits}", *(f"{name}: {', '.join(said)}" for name, said in done.items()))
+    return dotted(
+        f"Waiting on {waits}", *(f"{name} so far: {get_text_list(said, 'and')}" for name, said in done.items())
+    )
 
 
 def _run_row(

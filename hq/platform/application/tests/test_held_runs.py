@@ -257,7 +257,7 @@ class HeldRunTests(TestCase):
         ):
             (row,) = run_rows(seen_as_runs(OperationRequest.objects.filter(pk=run.pk)))
 
-        for fact in (UNIT.partition("@")[0], APP, "example-web-1: started", "example-db-1: stopped"):
+        for fact in (UNIT.partition("@")[0], APP, "example-web-1 so far: started", "example-db-1 so far: stopped"):
             self.assertIn(fact, row.note)
         self.assertNotIn("example-other", row.note)
 
