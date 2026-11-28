@@ -296,6 +296,9 @@ jobs:
           app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
           app-private-key: ${{ secrets.HQ_APP_KEY }}
 
+      # Asked again in each job: GitHub passes no job output that holds a
+      # masked value, as the repository's name is (docs.github.com, workflow
+      # syntax, jobs.<job_id>.outputs).
       - name: Find the extension pull request
         id: pull
         env:

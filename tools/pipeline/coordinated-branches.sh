@@ -7,10 +7,12 @@
 #
 # A repository carrying BRANCH is a coordinated change: its extensions are
 # built from that commit instead of reusing their admission. With --commit,
-# the one repository whose open pull request has SHA as its head is the
-# change, and its base commit is written as base= for the secret scan of what
-# the pull request brings, and its name, which the set's mask hides, as name=
-# for the token that reports on it. Writes found=true|false to $GITHUB_OUTPUT. Needs
+# the one repository with a pull request whose head is SHA is the change, its
+# open one first, else the one that merged or closed while the check ran, so
+# every job of a run answers alike whenever it asks. Its base commit is
+# written as base= for the secret scan of what the pull request brings, and
+# its name, which the set's mask hides, as name= for the token that reports
+# on it. Writes found=true|false to $GITHUB_OUTPUT. Needs
 # GH_TOKEN able to read the extension repositories and their pull requests.
 set -euo pipefail
 
@@ -51,9 +53,11 @@ by_commit() {
     echo "::error::The extension commit is not a full SHA."
     exit 1
   fi
+  # GitHub lists a commit's open and merged pull requests, a squashed one's
+  # included (docs.github.com, list pull requests associated with a commit).
+  local headed="[.[] | select(.head.sha == \"$commit\")] | sort_by(.state != \"open\", .merged_at == null)"
   while read -r repository; do
-    if base=$(gh api "repos/$repository/commits/$commit/pulls" \
-      --jq "[.[] | select(.state == \"open\" and .head.sha == \"$commit\") | .base.sha][0] // empty" 2>"$error"); then
+    if base=$(gh api "repos/$repository/commits/$commit/pulls" --jq "$headed | .[0].base.sha // empty" 2>"$error"); then
       [ -n "$base" ] || continue
       printf '%s=%s\n' "$repository" "$commit" >>"$out"
       printf 'base=%s\nname=%s\n' "$base" "${repository#*/}" >>"$GITHUB_OUTPUT"
@@ -62,7 +66,7 @@ by_commit() {
     fi
   done < <(repositories)
   if [ "$(grep -c . "$out" || true)" -ne 1 ]; then
-    echo "::error title=No extension pull request::No one extension repository has an open pull request whose head is $commit."
+    echo "::error title=No extension pull request::No one extension repository has a pull request whose head is $commit."
     exit 1
   fi
   echo "found=true" >>"$GITHUB_OUTPUT"
