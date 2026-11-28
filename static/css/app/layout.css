@@ -57,6 +57,16 @@
   & > .section-head { grid-row: 1; }
   & > .section-body { grid-row: 2; }
 }
+/* A member grown past what a card holds, by what a reader opened (a fold, a
+   chart's data) or by a table of more rows than a card holds lines, would
+   stretch its partners into tall empty boxes, so while one is in a row the
+   row stops sharing its height and each member stands at its own (a pair's
+   member leaves its rows, since a subgrid always fills them). A table in a
+   closed fold draws nothing and counts for nothing. */
+:is(.two-col, .split, .section-flow, .domain-charts):has(> .section :is(details[open], tbody > tr:nth-child(9)):not(details:not([open]) *)) > .section:not(details) {
+  display: flex;
+  align-self: start;
+}
 
 /* What is not a section or a card (a fold, a paragraph) and a section holding
    a table of four columns or more (a month is seven days, not columns) take

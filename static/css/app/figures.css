@@ -297,6 +297,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
   --band-column-gap: var(--space-12);
   --band-rules: none;
   display: grid;
+  /* A band given more height than its facts (a section body stretched to its row) keeps its rows at its top, each value under its label. */
+  align-content: start;
   margin: 0 0 var(--stack-gap);
   /* With no edges there is no rim to clip, and a hovered fact's tint reaches into the gap. */
   overflow: visible;
