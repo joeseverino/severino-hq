@@ -127,21 +127,25 @@ def _observe_everything():
         )
 
 
-def connections():
+def _answering(ref, provider, endpoint, detail, reaches=()):
     # Each manages, as a set-up HQ's do, so every action is offered. Only a
     # controller applies one, and the estate has none.
-    def answering(ref, provider, endpoint, detail, reaches=()):
-        return {
-            "connection_ref": ref,
-            "provider": provider,
-            "endpoint": endpoint,
-            "manages": True,
-            "reaches": list(reaches),
-            "ok": True,
-            "probed": True,
-            "detail": detail,
-        }
+    return {
+        "connection_ref": ref,
+        "provider": provider,
+        "endpoint": endpoint,
+        "manages": True,
+        "reaches": list(reaches),
+        "ok": True,
+        "probed": True,
+        "detail": detail,
+    }
 
+
+def connections(*more):
+    """Each connection the controller reports, and ``more`` beside them."""
+
+    answering = _answering
     # Bound as the bridge binds a controller's report, so its rows name the controller.
     with doors.controller("connections"):
         report_connections(
@@ -165,9 +169,32 @@ def connections():
                 ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
                 answering(BACKUPS, "r2", "https://backups.example.com", "Bucket example-backups."),
+                *more,
             ],
             controller_id=CONTROLLER,
         )
+
+
+# A machine HQ knows that the playbook worker has no login to, and a shell
+# into a web host's account, whose sweep reads no Caddy route there.
+PRINTER = "office-printer"
+WEB_HOST = "web-host"
+
+
+def unreached():
+    """A printer on the LAN the playbook worker has no login to, so no
+    playbook is offered or said to run there; and two shell connections, the
+    machine's serving a Caddy route and the web host's serving none, so each
+    is said to change only what it does."""
+
+    ManagedResource.objects.create(
+        key=PRINTER, kind="machine", spec={"name": PRINTER, "role": "Printer", "addresses": ["10.100.200.50"]}
+    )
+    connections(_answering(WEB_HOST, "ssh", "203.0.113.20:22", "Host key matches.", [WEB_HOST]))
+    store(
+        "caddy.route",
+        {"connection_ref": SSH, "domain": f"status.{ZONE}", "upstream": "localhost:3001", "to_requested_host": False},
+    )
 
 
 def proxy():

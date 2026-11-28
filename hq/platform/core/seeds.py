@@ -176,6 +176,14 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _unreached(owner) -> None:
+    """The example estate with a machine the playbook worker has no login
+    to, and a second shell connection whose sweep reads no Caddy route."""
+
+    _estate(owner)
+    example_estate.infra.unreached()
+
+
 def _worker_image_missing(owner) -> None:
     """The example estate once a release stopped short on HQ's machine: the
     playbook worker's image is not there, so its unit failed and it stopped
@@ -353,6 +361,7 @@ SEEDS: dict[str, Seed] = {
     "unadoptable": Seed(_unadoptable, _SET_UP),
     "partly-adoptable": Seed(_partly_adoptable, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
+    "unreached": Seed(_unreached, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
     "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
