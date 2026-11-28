@@ -645,12 +645,14 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"id":3,"name":"lint","status":"in_progress","conclusion":null,"started_at":"2030-01-01T00:00:00Z","check_suite":{"id":30}}]}`
 	routes[api("/check-suites/60/check-runs?per_page=100")] = `{"check_runs":[{"id":61,"name":"test","status":"completed","conclusion":"failure","check_suite":{"id":60}}]}`
 	// As GitHub's GraphQL answers it: an Actions job, a job of GitHub's own
-	// dynamic run, a rerun, and a commit status.
+	// dynamic run, a job of a run dispatched to check another commit, a
+	// rerun, and a commit status.
 	routes[api("/pull_states")] = `{"data":{"repository":{"pullRequests":{"nodes":[
 		{"number":6,"mergeStateStatus":"BLOCKED","reviewDecision":"REVIEW_REQUIRED","statusCheckRollup":{"contexts":{"nodes":[
 			{"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"SUCCESS","startedAt":"2030-01-03T00:00:00Z","completedAt":"2030-01-03T00:04:00Z","url":"https://github.com/example/app/runs/41","checkSuite":{"workflowRun":{"event":"pull_request"}}},
 			{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"pull_request"}}},
 			{"__typename":"CheckRun","name":"update-graph","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"dynamic"}}},
+			{"__typename":"CheckRun","name":"report","status":"COMPLETED","conclusion":"FAILURE","startedAt":"2030-01-03T00:00:00Z","checkSuite":{"workflowRun":{"event":"workflow_dispatch","displayTitle":"Check extensions at cccc000000000000000000000000000000000000"}}},
 			{"__typename":"CheckRun","name":"test","status":"IN_PROGRESS","conclusion":null,"startedAt":"2030-01-03T01:00:00Z","checkSuite":{"workflowRun":{"event":"pull_request"}}},
 			{"__typename":"StatusContext","context":"example/scan","state":"ERROR","createdAt":"2030-01-03T00:02:00Z","targetUrl":"https://scan.example.com/42"}]}}},
 		{"number":5,"mergeStateStatus":"DRAFT","reviewDecision":null,"statusCheckRollup":null}]}}}}`
@@ -764,25 +766,44 @@ func TestRunsAndPullRequestsAreReadWithTheirRepository(t *testing.T) {
 	}
 }
 
-// A check run in the suite of one of GitHub's own dynamic runs (the
-// dependency graph's) fails no commit: no workflow of the repository owns it.
-func TestGitHubsOwnRunsFailNoCommit(t *testing.T) {
+// A check run in the suite of a run that says nothing of the commit it ran
+// at fails no commit: one of GitHub's own dynamic runs (the dependency
+// graph's), which no workflow of the repository owns, or a run dispatched to
+// check another commit, which reports on that one. A run dispatched by hand
+// that names no other commit is the branch's, as any run of it is.
+func TestRunsAsideFailNoCommit(t *testing.T) {
 	api := func(path string) string { return githubFakeAPI + " /repos/example/app" + path }
+	const head, older = "aaaa000000000000000000000000000000000000", "9999000000000000000000000000000000000000"
+	checked := func(id, suite int, sha string) string {
+		return fmt.Sprintf(`{"id":%d,"name":"Check extensions","display_title":"Check extensions at cccc000000000000000000000000000000000000","workflow_id":14,"check_suite_id":%d,"status":"completed","conclusion":"failure","event":"workflow_dispatch","head_branch":"main","head_sha":%q,"created_at":"2030-01-0%dT00:00:00Z"}`, id, suite, sha, id)
+	}
 	routes := githubRepositoryRoutes()
+	routes[api("/actions/workflows?per_page=100")] = `{"workflows":[{"id":11,"name":"CI","state":"active"},{"id":12,"name":"graph","state":"active"},{"id":14,"name":"Check extensions","state":"active"},{"id":15,"name":"Deploy","state":"active"}]}`
 	routes[api("/actions/runs?per_page=50")] = `{"workflow_runs":[
-		{"id":2,"name":"CI","workflow_id":11,"check_suite_id":20,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-02T00:00:00Z"},
-		{"id":4,"name":"Graph Update: uv in /packages/example","workflow_id":12,"check_suite_id":40,"status":"completed","conclusion":"failure","event":"dynamic","head_branch":"main","head_sha":"aaaa000000000000000000000000000000000000","created_at":"2030-01-04T00:00:00Z"},
+		{"id":2,"name":"CI","workflow_id":11,"check_suite_id":20,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"` + head + `","created_at":"2030-01-02T00:00:00Z"},
+		{"id":4,"name":"Graph Update: uv in /packages/example","workflow_id":12,"check_suite_id":40,"status":"completed","conclusion":"failure","event":"dynamic","head_branch":"main","head_sha":"` + head + `","created_at":"2030-01-04T00:00:00Z"},
 		{"id":5,"name":"Graph Update: uv in /packages/example","workflow_id":12,"check_suite_id":50,"status":"completed","conclusion":"failure","event":"dynamic","head_branch":"renovate/example-lib-2.x","head_sha":"eeee","created_at":"2030-01-04T00:00:00Z"}]}`
-	routes[api("/commits/aaaa000000000000000000000000000000000000/check-runs?per_page=100")] = `{"check_runs":[
+	routes[api("/actions/runs?branch=main&per_page=100")] = `{"workflow_runs":[` + checked(6, 60, head) + `,
+		{"id":8,"name":"Deploy","display_title":"Deploy ` + older + `","workflow_id":15,"status":"completed","conclusion":"failure","event":"workflow_dispatch","head_branch":"main","head_sha":"` + older + `","html_url":"https://github.com/example/app/actions/runs/8","created_at":"2030-01-05T00:00:00Z"},` +
+		checked(3, 70, older) + `,
+		{"id":2,"name":"CI","workflow_id":11,"check_suite_id":20,"status":"completed","conclusion":"success","event":"push","head_branch":"main","head_sha":"` + head + `","created_at":"2030-01-02T00:00:00Z"}]}`
+	routes[api("/commits/"+head+"/check-runs?per_page=100")] = `{"check_runs":[
 		{"id":1,"name":"test","status":"completed","conclusion":"success","started_at":"2030-01-02T00:00:00Z","check_suite":{"id":20}},
-		{"id":2,"name":"update-uv-graph","status":"completed","conclusion":"failure","started_at":"2030-01-04T00:00:00Z","check_suite":{"id":40}}]}`
+		{"id":2,"name":"update-uv-graph","status":"completed","conclusion":"failure","started_at":"2030-01-04T00:00:00Z","check_suite":{"id":40}},
+		{"id":3,"name":"Report on the extension pull request","status":"completed","conclusion":"failure","started_at":"2030-01-06T00:00:00Z","check_suite":{"id":60}}]}`
+	routes[api("/check-suites/70/check-runs?per_page=100")] = `{"check_runs":[{"id":71,"name":"Find the extension pull request","status":"completed","conclusion":"failure","check_suite":{"id":70}}]}`
 	routes[api("/commits/eeee/check-runs?per_page=100")] = `{"check_runs":[
 		{"id":9,"name":"build","status":"completed","conclusion":"success","check_suite":{"id":90}},
 		{"id":10,"name":"update-uv-graph","status":"completed","conclusion":"failure","check_suite":{"id":50}}]}`
-	record, _, pulls, _ := readPass(t, newGitHubHarness(t, routes, runtime.Environment{}))
+	record, runs, pulls, _ := readPass(t, newGitHubHarness(t, routes, runtime.Environment{}))
 
-	if record.Checks.State != "success" || slices.Contains(record.Checks.Names, "update-uv-graph") {
+	if record.Checks.State != "failure" || !slices.Equal(record.Checks.Failing, []string{"Deploy"}) || slices.Contains(record.Checks.Names, "update-uv-graph") {
 		t.Errorf("head commit checks %+v", record.Checks)
+	}
+	for _, run := range runs {
+		if run.Name == "Check extensions" {
+			t.Errorf("a run about another commit is the branch's: %+v", run)
+		}
 	}
 	pull := pulls[0].Checks
 	if pull == nil || pull.State != "success" || slices.Contains(record.PullRequestChecks, "update-uv-graph") {

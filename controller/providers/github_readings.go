@@ -548,8 +548,8 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 	if err != nil {
 		return record, runs, pulls, err
 	}
-	githubs := githubOwnSuites(slices.Concat(page.WorkflowRuns, read))
-	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, githubs); err != nil {
+	aside := githubAsideSuites(slices.Concat(page.WorkflowRuns, read))
+	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, aside); err != nil {
 		return record, runs, pulls, err
 	}
 	if runs, err = g.workflowRuns(ctx, branch, onBranch, page.WorkflowRuns, workflows.Workflows); err != nil {
@@ -560,7 +560,7 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 		return record, runs, pulls, err
 	}
 	pulls = githubPulls(g.c.ref, g.name, listed)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, pulls, githubs, githubWorkflowSuites(slices.Concat(page.WorkflowRuns, read)), layout); err != nil {
+	if record.PullRequestChecks, err = g.pullChecks(ctx, pulls, aside, githubWorkflowSuites(slices.Concat(page.WorkflowRuns, read)), layout); err != nil {
 		return record, runs, pulls, err
 	}
 	g.pullStates(ctx, pulls)
@@ -648,7 +648,7 @@ var githubPullRequestEvents = map[string]bool{"pull_request": true, "pull_reques
 
 // branchRuns is the newest run on branch of each active workflow, named as the
 // workflow is now, and the page of the branch's runs it read them from. A run
-// of a pull request or of GitHub's own is not the branch's. Where the page is
+// of a pull request, or one githubAside sets apart, is not the branch's. Where the page is
 // full, a workflow it misses (a weekly schedule behind a busy week) is read
 // alone.
 func (g *githubRepository) branchRuns(ctx context.Context, branch string, workflows []githubapi.Workflow) ([]githubapi.WorkflowRun, []githubapi.WorkflowRun, error) {
@@ -659,7 +659,7 @@ func (g *githubRepository) branchRuns(ctx context.Context, branch string, workfl
 	newest := map[int]githubapi.WorkflowRun{}
 	take := func(runs []githubapi.WorkflowRun) {
 		for _, run := range runs {
-			if _, seen := newest[run.WorkflowID]; !seen && run.Event != "dynamic" && !githubPullRequestEvents[run.Event] {
+			if _, seen := newest[run.WorkflowID]; !seen && !githubAside(run) && !githubPullRequestEvents[run.Event] {
 				newest[run.WorkflowID] = run
 			}
 		}
@@ -729,7 +729,7 @@ func (g *githubRepository) workflowRuns(ctx context.Context, branch string, onBr
 	chosen := slices.Clone(onBranch)
 	seen, branches := map[string]bool{}, map[string]bool{}
 	for _, run := range page {
-		if run.Event == "dynamic" || run.HeadBranch == "" || run.HeadBranch == branch {
+		if githubAside(run) || run.HeadBranch == "" || run.HeadBranch == branch {
 			continue
 		}
 		key := "name:" + run.Name

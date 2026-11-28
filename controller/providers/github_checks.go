@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"maps"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -25,13 +26,37 @@ type GitHubChecks struct {
 	Failures map[string]GitHubFailure `json:"failures,omitempty"`
 }
 
-// githubOwnSuites is the check suites of GitHub's own dynamic runs (the
-// dependency graph's, Copilot's), which no workflow file of the repository
-// owns, so their checks are not the repository's.
-func githubOwnSuites(runs []githubapi.WorkflowRun) map[int]bool {
+// githubNamedCommit is a full commit name in a run's title.
+var githubNamedCommit = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+
+// githubAside is whether a run says nothing of the commit it ran at: one of
+// GitHub's own dynamic runs (the dependency graph's, Copilot's), which no
+// workflow file of the repository owns, or a run dispatched to check another
+// commit, which reports on that commit. A dispatched run's title is its
+// run-name or its workflow's name, so a commit named there is the one it was
+// asked to check; a push's title is its commit message, which may name any
+// commit, so only a dispatch is read this way.
+func githubAside(run githubapi.WorkflowRun) bool {
+	if run.Event == "dynamic" {
+		return true
+	}
+	if run.Event != "workflow_dispatch" {
+		return false
+	}
+	for _, sha := range githubNamedCommit.FindAllString(run.DisplayTitle, -1) {
+		if sha != run.HeadSha {
+			return true
+		}
+	}
+	return false
+}
+
+// githubAsideSuites is the check suites of the runs githubAside sets apart,
+// whose checks are not the repository's word on the commit they ran at.
+func githubAsideSuites(runs []githubapi.WorkflowRun) map[int]bool {
 	suites := map[int]bool{}
 	for _, run := range runs {
-		if run.Event == "dynamic" && run.CheckSuiteID != 0 {
+		if githubAside(run) && run.CheckSuiteID != 0 {
 			suites[run.CheckSuiteID] = true
 		}
 	}
@@ -55,12 +80,12 @@ func githubWorkflowSuites(runs []githubapi.WorkflowRun) map[int]bool {
 // commit, failed. A workflow that runs on a schedule, by hand or for some
 // paths fails the branch until a run of it passes, whatever lands after it;
 // the count and the running are the head commit's.
-func (g *githubRepository) branchChecks(ctx context.Context, head string, newest []githubapi.WorkflowRun, githubs map[int]bool) (GitHubChecks, error) {
+func (g *githubRepository) branchChecks(ctx context.Context, head string, newest []githubapi.WorkflowRun, aside map[int]bool) (GitHubChecks, error) {
 	runs, err := g.checkRuns(ctx, head)
 	if err != nil {
-		return summarizeChecks(nil, githubs), err
+		return summarizeChecks(nil, aside), err
 	}
-	checks := summarizeChecks(runs, githubs)
+	checks := summarizeChecks(runs, aside)
 	// A check run in a workflow run's suite is that run's job, by the same id.
 	workflows := map[int]bool{}
 	for _, run := range newest {
@@ -69,12 +94,12 @@ func (g *githubRepository) branchChecks(ctx context.Context, head string, newest
 	failing, failures := map[string]bool{}, map[string]GitHubFailure{}
 	said := func(runs []githubapi.CheckRun) ([]string, error) {
 		jobs := []string{}
-		for _, run := range latestChecks(runs, githubs) {
+		for _, run := range latestChecks(runs, aside) {
 			if githubFailed[string(run.Conclusion)] {
 				jobs = append(jobs, run.Name)
 			}
 		}
-		return jobs, g.failures(ctx, runs, githubs, workflows, failures)
+		return jobs, g.failures(ctx, runs, aside, workflows, failures)
 	}
 	jobs, err := said(runs)
 	if err != nil {
@@ -118,8 +143,8 @@ var githubFailuresKept = api.MustLimit("GitHubRepositoryChecks", "properties", "
 // failures adds why each failing check of runs failed, by its name, until
 // githubFailuresKept are read: each check run in one of the workflows' suites
 // is that run's job, whose log says; any other says in its own output.
-func (g *githubRepository) failures(ctx context.Context, runs []githubapi.CheckRun, githubs, workflows map[int]bool, found map[string]GitHubFailure) error {
-	for _, run := range latestChecks(runs, githubs) {
+func (g *githubRepository) failures(ctx context.Context, runs []githubapi.CheckRun, aside, workflows map[int]bool, found map[string]GitHubFailure) error {
+	for _, run := range latestChecks(runs, aside) {
 		_, read := found[run.Name]
 		if len(found) >= githubFailuresKept || read || !githubFailed[string(run.Conclusion)] {
 			continue
@@ -162,17 +187,17 @@ func stated(failures map[string]GitHubFailure) map[string]GitHubFailure {
 }
 
 // checks is a commit's check runs, each standing as its last run did: a rerun
-// that passed is what the commit's state is. A check in a suite githubs holds
+// that passed is what the commit's state is. A check in a suite aside holds
 // is GitHub's own, and left out; one in a suite workflows holds is a job,
 // whose failure says why.
-func (g *githubRepository) checks(ctx context.Context, sha string, githubs, workflows map[int]bool) (GitHubChecks, error) {
+func (g *githubRepository) checks(ctx context.Context, sha string, aside, workflows map[int]bool) (GitHubChecks, error) {
 	runs, err := g.checkRuns(ctx, sha)
-	checks := summarizeChecks(runs, githubs)
+	checks := summarizeChecks(runs, aside)
 	if err != nil || workflows == nil {
 		return checks, err
 	}
 	failures := map[string]GitHubFailure{}
-	if err := g.failures(ctx, runs, githubs, workflows, failures); err != nil {
+	if err := g.failures(ctx, runs, aside, workflows, failures); err != nil {
 		return checks, err
 	}
 	checks.Failures = stated(failures)
@@ -239,12 +264,12 @@ func (g *githubRepository) jobsOf(ctx context.Context, run githubapi.WorkflowRun
 }
 
 // latestChecks is the last run of each check by name, in the order each name
-// first appears, leaving out any in a suite githubs holds.
-func latestChecks(runs []githubapi.CheckRun, githubs map[int]bool) []githubapi.CheckRun {
+// first appears, leaving out any in a suite aside holds.
+func latestChecks(runs []githubapi.CheckRun, aside map[int]bool) []githubapi.CheckRun {
 	latest := map[string]githubapi.CheckRun{}
 	order := []string{}
 	for _, run := range runs {
-		if githubs[run.CheckSuite.ID] {
+		if aside[run.CheckSuite.ID] {
 			continue
 		}
 		previous, seen := latest[run.Name]
@@ -262,8 +287,8 @@ func latestChecks(runs []githubapi.CheckRun, githubs map[int]bool) []githubapi.C
 	return found
 }
 
-func summarizeChecks(runs []githubapi.CheckRun, githubs map[int]bool) GitHubChecks {
-	latest := latestChecks(runs, githubs)
+func summarizeChecks(runs []githubapi.CheckRun, aside map[int]bool) GitHubChecks {
+	latest := latestChecks(runs, aside)
 	failing, names := map[string]bool{}, map[string]bool{}
 	running := 0
 	for _, run := range latest {
@@ -295,12 +320,12 @@ func summarizeChecks(runs []githubapi.CheckRun, githubs map[int]bool) GitHubChec
 // not update, and the images it moves where compose holds the repository's
 // Compose files, and answers the check names the newest pull request runs:
 // what a pull request is checked by, for the rules to require.
-func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubOpenPullRequestRecord, githubs, workflows map[int]bool, compose []string) ([]string, error) {
+func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubOpenPullRequestRecord, aside, workflows map[int]bool, compose []string) ([]string, error) {
 	for i := range pulls {
 		if pulls[i].Head == "" || !strings.HasPrefix(pulls[i].Branch, githubUpdateBranch) {
 			continue
 		}
-		checks, err := g.checks(ctx, pulls[i].Head, githubs, workflows)
+		checks, err := g.checks(ctx, pulls[i].Head, aside, workflows)
 		if err != nil {
 			return nil, err
 		}
@@ -330,7 +355,7 @@ func (g *githubRepository) pullChecks(ctx context.Context, pulls []GitHubOpenPul
 	if pulls[0].Checks != nil {
 		return pulls[0].Checks.Names, nil
 	}
-	checks, err := g.checks(ctx, pulls[0].Head, githubs, nil)
+	checks, err := g.checks(ctx, pulls[0].Head, aside, nil)
 	return checks.Names, err
 }
 

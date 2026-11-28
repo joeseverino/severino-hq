@@ -2388,6 +2388,9 @@ type WorkflowRun struct {
 	CheckSuiteID int    `json:"check_suite_id,omitempty"`
 	Conclusion   string `json:"conclusion"`
 	CreatedAt    string `json:"created_at"`
+
+	// DisplayTitle The event-specific title associated with the run or the run-name if set, or the value of `run-name` if it is set in the workflow.
+	DisplayTitle string `json:"display_title"`
 	Event        string `json:"event"`
 	HeadBranch   string `json:"head_branch"`
 
