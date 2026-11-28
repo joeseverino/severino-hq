@@ -54,6 +54,7 @@ class StreamTests(SignedInTestCase):
                         return response, said[-1]
             finally:
                 response.close()
+            self.fail(f"the stream ended before a change or a beat: {said}")
 
         return async_to_sync(opened)()
 

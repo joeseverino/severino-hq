@@ -392,9 +392,14 @@ class KeptCurrentTests(Remembering):
     def test_a_write_that_is_rolled_back_derives_nothing(self):
         with declared("test.kept.rolled", reads=(READING,)) as (register, calls):
             _read, keeper = self._asked(register)
-            with self.assertRaises(RuntimeError), transaction.atomic():
-                _write()
-                raise RuntimeError("undone")
+
+            def undone():
+                with transaction.atomic():
+                    _write()
+                    raise RuntimeError("undone")
+
+            with self.assertRaises(RuntimeError):
+                undone()
 
             self.assertEqual(keeper.turn(), set())
         self.assertEqual(len(calls), 1)
