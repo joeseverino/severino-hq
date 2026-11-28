@@ -254,6 +254,21 @@ class Measurement:
         return tuple(result for result in self.results if result.state == Standing.UNMET)
 
     @property
+    def short(self) -> tuple[CheckResult, ...]:
+        """The checks read and not met, on purpose or not: what ``met`` of
+        ``measured`` falls short by."""
+
+        return tuple(result for result in self.results if result.state not in (Standing.MET, Standing.UNAVAILABLE))
+
+    @property
+    def tone(self) -> Tone:
+        """The tone of ``met`` of ``measured``: good only when nothing falls short."""
+
+        if self.unmet:
+            return Tone.SERIOUS
+        return Tone.NEUTRAL if self.short else Tone.GOOD
+
+    @property
     def count_line(self) -> str:
         """ "5 of 7 met · not met: Tailnet lock is on · 1 not read yet": a count
         names what it is short of, and an unread check is not counted as unmet."""

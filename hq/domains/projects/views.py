@@ -3,7 +3,7 @@ from typing import override
 
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
-from django.utils.text import Truncator, slugify
+from django.utils.text import Truncator, get_text_list, slugify
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -495,8 +495,8 @@ def _access(subject) -> Cell:
 
 
 def _met(posture) -> Cell:
-    tone = "serious" if posture.unmet else "good"
-    mark = StatusMark(posture.met, "of", posture.measured, tone=tone, pill=False)
+    short = get_text_list([result.check.label for result in posture.short], "and")
+    mark = StatusMark(posture.met, "of", posture.measured, tone=posture.tone, pill=False, tip=short)
     return Cell(status=mark, sort=str(posture.met))
 
 
