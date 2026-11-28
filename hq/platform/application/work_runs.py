@@ -27,7 +27,7 @@ lazy from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
-from .automation_runs import capability_name, run_title
+from .automation_runs import CHECK, PREVIEW, capability_name, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
@@ -397,12 +397,14 @@ def _run_title() -> Collate:
     return Collate(Case(*acted, default=run, output_field=CharField()), "NOCASE")
 
 
-def _shown_title(kind: str, title: str) -> str:
+def _shown_title(kind: str, title: str, *, check: bool = False) -> str:
     """The work ``kind`` names as a page draws it: its playbook's title as the
     author wrote it (``quoted.Quoted``), which SQL's copy of it
-    (``_run_title``) is not; else ``title``."""
+    (``_run_title``) is not, else ``title``; a run in check mode
+    (``check``) as a preview of it."""
 
-    return automation_adoption.playbook_titles().get(operation_of(kind)) or title
+    shown = automation_adoption.playbook_titles().get(operation_of(kind)) or title
+    return f"{PREVIEW.title}: {shown}" if check else shown
 
 
 def _run_kind() -> Case:
@@ -768,7 +770,11 @@ def _run_row(
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
-        title=_shown_title(kind := _kind_of(operation.action, str(asked.get("operation") or "")), title),
+        title=_shown_title(
+            kind := _kind_of(operation.action, str(asked.get("operation") or "")),
+            title,
+            check=asked.get(CHECK) is True,
+        ),
         kind=kind,
         state=seen.value,
         word=word,
