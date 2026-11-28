@@ -272,7 +272,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 Project,
                 "slug",
-                ("name", "slug", "description", "technologies_used", "notes"),
+                ("description", "technologies_used", "notes"),
+                identifiers=("slug",),
                 title_field="name",
             ),
             web_route="projects:list",

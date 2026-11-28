@@ -66,13 +66,18 @@ _RANKED_SQL = """
     WHERE search_index_fts MATCH %s AND document.scope IN ({scopes})
 """
 
+# A hit's passage, cut from its body (column 2, after its title and its
+# identifiers) whichever column the match landed in: with no match there, its
+# body's first words.
+SNIPPET = "snippet(search_index_fts, 2, char(2), char(3), ' … ', 16)"
+
 # CROSS JOIN fixes the loop order: the match is walked once and each row is
 # probed against the few kept hits, rather than the match being reopened once
 # per kept hit.
 _SNIPPETS_SQL = """
     SELECT ranked.scope,
            ranked.object_id,
-           snippet(search_index_fts, 0, char(2), char(3), ' … ', 16)
+           {snippet}
     FROM search_index_fts
     CROSS JOIN (
         SELECT * FROM ({ranked}) WHERE position <= %s
@@ -149,7 +154,7 @@ class SQLiteFTS5Backend:
         expression = _fts_query(query)
         if not expression or not scopes:
             return {}
-        sql = _SNIPPETS_SQL.format(ranked=_ranked_sql(scopes))
+        sql = _SNIPPETS_SQL.format(snippet=SNIPPET, ranked=_ranked_sql(scopes))
         hits: dict[str, list[tuple[str, SnippetParts]]] = {}
         with connection.cursor() as cursor:
             cursor.execute(sql, [expression, *scopes, limit, expression])

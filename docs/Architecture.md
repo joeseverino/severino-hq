@@ -641,7 +641,14 @@ and a list falls back to primary-key order.
 
 `search_index.SearchDocument` is a derived projection. On SQLite an FTS5
 external-content table indexes it with Unicode tokenization and 2-, 3- and
-4-character prefix indexes. Triggers keep the FTS structure atomic with
+4-character prefix indexes. A row holds a record's title, its identifiers
+(`SearchDefinition.identifiers`: a slug, a path, an account's digits) and its
+words (`SearchDefinition.fields`) as three columns. A query matches any of
+them, and a hit's snippet is cut from its words alone, so an identifier is
+found and never shown as the passage that matched. A migration of
+`search_index` draws every row again from its record once every app has
+migrated (`search_index.apps.reproject`), since a migration's own models know
+only the schema of their moment. Triggers keep the FTS structure atomic with
 projection writes, and domain-model signals keep the projection atomic with the
 record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.

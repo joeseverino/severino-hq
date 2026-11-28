@@ -88,14 +88,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 DocumentationRecord,
                 "doc_id",
-                (
-                    "doc_id",
-                    "title",
-                    "system_service",
-                    "obsidian_path",
-                    "github_path",
-                    "notes",
-                ),
+                ("system_service", "notes"),
+                identifiers=("doc_id", "obsidian_path", "github_path"),
                 title_field="title",
                 badge_field="doc_id",
                 timestamp_field="last_reviewed",

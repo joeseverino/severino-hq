@@ -166,7 +166,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 Entry,
                 "uid",
-                ("title", "location", "notes"),
+                ("location", "notes"),
                 timestamp_field="starts_on",
                 title_field="title",
             ),

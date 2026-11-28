@@ -130,7 +130,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 Asset,
                 "slug",
-                ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
+                ("vendor", "category", "notes"),
+                identifiers=("slug", "serial_number"),
                 title_field="item_name",
                 timestamp_field="purchase_date",
             ),

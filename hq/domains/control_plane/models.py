@@ -12,7 +12,6 @@ from django.utils import timezone
 from pydantic import BaseModel
 
 from hq.domains.jobs.models import JobState
-from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.application.url_query import with_query
@@ -31,7 +30,7 @@ lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance_refresh import _panel_names
 lazy from hq.platform.application.security import subject_parts
 
-lazy from .providers import readout_rows, registry_label, resource_home, validate_spec
+lazy from .providers import registry_label, resource_home, validate_spec
 
 
 # Choices as callables, which Django reads on first use: the contracts live in
@@ -142,19 +141,6 @@ class ManagedResource(TimestampedModel):
     @property
     def kind_label(self) -> str:
         return registry_label(self.kind)
-
-    @property
-    def search_summary(self) -> str:
-        """The provider's readout as one line, else the kind's label."""
-
-        rows = dotted(
-            *(
-                f"{label}: {desired or observed}"
-                for label, desired, observed in readout_rows(self)
-                if desired or observed
-            )
-        )
-        return rows or self.kind_label
 
 
 def attempted_at(observed_at: datetime | None, updated_at: datetime) -> datetime:

@@ -218,11 +218,11 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 AuditLog,
                 "pk",
-                ("action", "object_type", "object_id", "object_repr", "operation_id", "message"),
+                ("message",),
+                identifiers=("action", "object_type", "object_id", "operation_id"),
                 title_field="search_title",
                 badge_field="type_label",
                 timestamp_field="created_at",
-                snippet_field="search_snippet",
             ),
             web_route="core:audit_list",
         ),

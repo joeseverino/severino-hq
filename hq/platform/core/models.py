@@ -51,13 +51,6 @@ def _model_plurals() -> dict[str, str]:
     }
 
 
-# A UUID, or a run of hex long enough to be a key or digest.
-_IDENTIFIER = re.compile(
-    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{16,}\b",
-    re.IGNORECASE,
-)
-
-
 def object_type_label(stored: str) -> str:
     """An audit row's object type as a person reads it.
 
@@ -285,14 +278,6 @@ class AuditLog(models.Model):
 
         subject = self.object_repr or self.type_label
         return f"{self.get_action_display()} {subject}".strip() if subject else self.summary
-
-    @property
-    def search_snippet(self) -> str:
-        """The object's type and the message's first line, with identifiers left out."""
-
-        first = next(iter((self.message or "").strip().splitlines()), "")
-        message = " ".join(_IDENTIFIER.sub("", first).split())[:160]
-        return dotted(self.type_label, message)
 
 
 class Pin(models.Model):

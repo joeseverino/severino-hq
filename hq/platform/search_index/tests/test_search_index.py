@@ -66,10 +66,10 @@ class IndexedSearchTests(TestCase):
         with connection.cursor() as cursor:
             cursor.execute("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'search_document_au'")
             (sql,) = cursor.fetchone()
-        self.assertIn("AFTER UPDATE OF body", sql)
-        self.assertIn("WHEN old.body IS NOT new.body", sql)
+        self.assertIn("WHEN old.title IS NOT new.title", sql)
+        self.assertIn("old.body IS NOT new.body", sql)
 
-        project = Project.objects.create(name="Lighthouse")
+        project = Project.objects.create(name="Example", description="Lighthouse")
         document = SearchDocument.objects.filter(scope="projects", object_id=project.slug)
         # An update that restates the body leaves the entry as it stands.
         document.update(body=document.get().body)
@@ -117,7 +117,7 @@ class IndexedSearchTests(TestCase):
 # reference the single statement over every scope reproduces hit for hit.
 _PER_SCOPE_REFERENCE_SQL = """
     SELECT document.object_id,
-           snippet(search_index_fts, 0, char(2), char(3), ' … ', 16)
+           {snippet}
     FROM search_index_fts AS search
     JOIN search_index_searchdocument AS document
       ON document.id = search.rowid
@@ -128,8 +128,10 @@ _PER_SCOPE_REFERENCE_SQL = """
 
 
 def _reference_hits(scope: str, query: str, limit: int) -> list:
+    from ..backends import SNIPPET
+
     with connection.cursor() as cursor:
-        cursor.execute(_PER_SCOPE_REFERENCE_SQL, [_fts_query(query), scope, limit])
+        cursor.execute(_PER_SCOPE_REFERENCE_SQL.format(snippet=SNIPPET), [_fts_query(query), scope, limit])
         return [(row[0], snippet_parts(row[1])) for row in cursor.fetchall()]
 
 
@@ -433,6 +435,25 @@ class GlobalSearchTests(TestCase):
         self.assertEqual(item["title"], record.title)
         self.assertEqual(item["badge"], record.doc_id)
         self.assertNotIn("\u2014", item["title"])
+
+    def test_a_snippet_is_cut_from_the_records_words_never_its_title_or_identifiers(self):
+        from hq.domains.docs_index.models import DocumentationRecord
+
+        DocumentationRecord.objects.create(
+            doc_id="rb-example-lighthouse",
+            title="Example lighthouse",
+            doc_type="runbook",
+            obsidian_path="Runbooks/example-lighthouse.md",
+            notes="Renew its certificate each month.",
+        )
+
+        for query, matched in (("lighthouse", ""), ("renew", "Renew")):
+            with self.subTest(query=query):
+                outcome = global_search(query, principal=OPERATOR)
+                group = next(g for g in outcome["groups"] if g["scope"] == "documentation")
+                (item,) = group["items"]
+                self.assertEqual("".join(text for text, _ in item["snippet"]), "Renew its certificate each month.")
+                self.assertEqual("".join(text for text, hit in item["snippet"] if hit), matched)
 
     def test_scopes_the_principal_lacks_are_omitted_not_empty(self):
         AuditLog.objects.create(action="login", object_type="user", message="hq login")

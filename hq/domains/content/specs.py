@@ -119,7 +119,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 ContentItem,
                 "slug",
-                ("title", "slug", "topic", "tags", "notes"),
+                ("topic", "tags", "notes"),
+                identifiers=("slug",),
                 timestamp_field="published_at",
                 title_field="title",
             ),

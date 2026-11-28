@@ -832,7 +832,11 @@ answers only its item's keys, and the API document types each item by it. HQ val
 that refuses any field it does not declare, query and handler compatibility, identifier contracts, and duplicate resources and
 search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
-`PluginIntegration.search`. A list's query subclasses
+`PluginIntegration.search`. A `SearchDefinition` names a record's title
+(`title_field`), what finds it and never shows under it (`identifiers`: a
+slug, a path, an account's digits) and the words a result's snippet is cut
+from (`fields`), each its own column of the index, from `PLUGIN_API_VERSION`
+33. A list's query subclasses
 `hq_sdk.resources.BoundedQuery` rather than declaring `limit` and `page`
 itself, so its schema carries the deployment's maximum and a larger ask is
 refused. A searched list types its `query` by `hq_sdk.resources.SearchText`,

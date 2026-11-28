@@ -151,7 +151,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 Receipt,
                 "pk",
-                ("original_filename", "vendor", "notes"),
+                ("notes",),
+                identifiers=("original_filename",),
                 timestamp_field="date",
             ),
             web_route="receipts:list",
