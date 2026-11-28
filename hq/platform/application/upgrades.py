@@ -74,10 +74,10 @@ class Plan:
     @property
     def recommended(self) -> bool:
         """Whether moving to the target is worth doing: it brings no known
-        vulnerability of its own and, where the running version has some,
-        fixes at least one. Everything that offers the move reads this."""
+        vulnerability of its own and, where the running version has one to act
+        on, fixes at least one. Everything that offers the move reads this."""
 
-        return not self.introduces and (bool(self.fixes) or not self.container.standing.known_vulnerabilities)
+        return not self.introduces and (bool(self.fixes) or not self.container.standing.actionable)
 
     @property
     def stateful(self) -> bool:
@@ -242,8 +242,7 @@ def _fixed(standing: Any, target: str, checked: Mapping[str, Any] | None) -> tup
             return True
         return after is not None and key in serious and key not in after
 
-    found = {str(item.get("id", "")): item for item in (*standing.unfixed, *standing.known_vulnerabilities)}
-    return ranked(item for item in found.values() if clear(item))
+    return ranked(item for item in standing.known_vulnerabilities if clear(item))
 
 
 def _brought(standing: Any, checked: Mapping[str, Any] | None) -> tuple[Mapping[str, Any], ...]:

@@ -268,7 +268,7 @@ class VulnerabilityTests(TestCase):
         self.assertEqual((standing.urgent, standing.state != VULNERABLE), ((), True))
         result = next(each for each in item("web").supply_chain.results if each.check.id == "no-urgent")
         self.assertTrue(result.met)
-        self.assertIn("No release fixes", result.reading.evidence)
+        self.assertIn(standing.unfixed_said, result.reading.evidence)
 
     def test_a_serious_vulnerability_is_urgent_once_the_newest_release_is_clear_of_it(self):
         estate()

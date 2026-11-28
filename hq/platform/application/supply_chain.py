@@ -51,7 +51,7 @@ def _no_urgent(container: Any) -> Reading:
         return Reading.unavailable(f"The packages of {standing.latest} have not been checked")
     if standing.unfixed:
         count = counted(len(standing.unfixed), "serious vulnerability", "serious vulnerabilities")
-        return Reading.met(f"No release fixes its {count} yet", limited=True)
+        return Reading.met(f"{count}, {standing.unfixed_said}", limited=True)
     return Reading.met()
 
 
