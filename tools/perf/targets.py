@@ -17,11 +17,13 @@ import subprocess
 import time
 from pathlib import Path
 
+from hq.config import serve
 from hq.platform.application import http_read
 from hq.platform.core.tests.task import PREFIX, trusted_mise
 from tools.dev.extension_set import NAMED
 from tools.perf import parse, runs
 lazy from hq.platform.core import seeds
+lazy from tools.gate import turn
 
 READY = "/health/ready/"
 USER = "operator"
@@ -81,10 +83,12 @@ class NotMeasured(Exception):
 def clean_env(**extra: str) -> dict[str, str]:
     """This environment without what the run set for itself, plus ``extra``."""
 
+    # The turn this run holds stays named, so a heavy task it starts (a tree's image:build) goes
+    # ahead inside it rather than waiting on it.
     kept = {
         name: value
         for name, value in os.environ.items()
-        if name not in _OURS and not name.startswith((PREFIX, "MISE_TASK_"))
+        if name == turn.HELD or (name not in _OURS and not name.startswith((PREFIX, "MISE_TASK_")))
     }
     return kept | extra
 
@@ -330,6 +334,29 @@ def _group_alive(group: int) -> bool:
     return True
 
 
+# The image serves on loopback alone (hq/config/serve.py LISTENS_AT), which a published port never
+# reaches, so perf hands its server the listener the port reaches, as the host's supervisor would:
+# from root, as the server requires, and done once the server closes the connection.
+PORT = 8000
+HANDOFF_SOCKET = "/run/hq-web/handoff.sock"
+_HAND = """
+import socket, sys, time
+door, port, deadline = sys.argv[1], int(sys.argv[2]), time.monotonic() + float(sys.argv[3])
+listener = socket.create_server(("0.0.0.0", port))
+while True:
+    try:
+        with socket.socket(socket.AF_UNIX) as connection:
+            connection.connect(door)
+            socket.send_fds(connection, [b"x"], [listener.fileno()])
+            connection.recv(1)
+        break
+    except (FileNotFoundError, ConnectionRefusedError):
+        if time.monotonic() > deadline:
+            sys.exit(f"nothing took a listener at {door}")
+        time.sleep(0.05)
+"""
+
+
 class Image:
     """A built image, run as image:verify:healthy runs it, seeded with a named data set."""
 
@@ -367,8 +394,17 @@ class Image:
         self._manage("seed_demo")
 
     def _published(self) -> str:
-        address = self._docker("port", self.name, "8000/tcp").split()[0]
+        address = self._docker("port", self.name, f"{PORT}/tcp").split()[0]
         return f"http://{address}"
+
+    def _serve(self, deadline_s: float) -> None:
+        """The started container's server handed its listener, and ready on the published port."""
+
+        self._docker(
+            "exec", "--user", "0", self.name, "python", "-c", _HAND, HANDOFF_SOCKET, str(PORT), str(deadline_s)
+        )
+        self.url = self._published()
+        wait_ready(self.url, deadline_s)
 
     def _gateway(self) -> str:
         """The address a published port's requests arrive from: Docker's bridge gateway."""
@@ -383,7 +419,9 @@ class Image:
                 "--name",
                 self.name,
                 "--publish",
-                "127.0.0.1::8000",
+                f"127.0.0.1::{PORT}",
+                "--env",
+                f"{serve.HANDOFF}={HANDOFF_SOCKET}",
                 "--env",
                 "DJANGO_SECRET_KEY=perf-only-container-key-0123456789abcdef0123456789abcdef",
                 "--env",
@@ -402,8 +440,7 @@ class Image:
                 self.image,
             )
             self.started = True
-            self.url = self._published()
-            wait_ready(self.url, FIRST_BOOT_S)
+            self._serve(FIRST_BOOT_S)
             self._seed()
         except BaseException:
             self.stop()
@@ -439,6 +476,5 @@ class Image:
         self._docker("stop", self.name)
         started = time.monotonic()
         self._docker("start", self.name)
-        self.url = self._published()
-        wait_ready(self.url, BOOT_S)
+        self._serve(BOOT_S)
         return (time.monotonic() - started) * 1000
