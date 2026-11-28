@@ -216,7 +216,7 @@ def serves_links(machine, relationships) -> tuple:
         own = hq_service(catalog=connections.machines_once())
         if own is not None:
             first = entity_link("service", own.hostname)
-            serves = [first, *(link for link in serves if link.label != first.label)]
+            serves = [first, *(link for link in serves if (link.kind, link.identity) != (first.kind, first.identity))]
     return tuple(dict.fromkeys(serves))
 
 
