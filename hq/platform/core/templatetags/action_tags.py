@@ -513,14 +513,6 @@ def newer_reading():
     return asks.NEWER_READING
 
 
-@register.filter
-def live(drawn, name):
-    """``{{ drawn|live:"estate" }}``: the ``data-fragment-live`` of a part
-    drawn from that read set (``core.live``) while ``drawn``, "" once it is not."""
-
-    return live_reads.region(name, bool(drawn)).get("fragment-live", "")
-
-
 @answers(register, takes_context=True)
 def live_stream(context):
     """``{% live_stream %}``: where the page hears what commits, from the
@@ -539,6 +531,21 @@ def show_newer():
     """``{% show_newer %}``: the link that loads a newer reading."""
 
     return asks.SHOW_NEWER
+
+
+def _read_set(name: str) -> str:
+    return name and live_reads.region(name) and name
+
+
+def live_region(
+    name: Annotated[str, Describe("The read set it is drawn from (`core.live`)."), Reads(_read_set)],
+    drawn: Annotated[Any, Describe("Whether it follows that set now.")] = True,
+    at: Annotated[str | None, Describe("Its own address; the page's own when empty.")] = None,
+):
+    """The hooks of a part of a page drawn from a read set (its Part's rules)."""
+
+    fetched = {} if at is None else {"data-fragment": at or True}
+    return html_attributes({"data-fragment-live": name if drawn else "", **fetched})
 
 
 def ask_button(
@@ -635,6 +642,19 @@ slotted(
         function=words,
         public=True,
         example='Press {% words "agent.access.set" %}.',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="live_region",
+        about="The hooks of a part of a page that is drawn again as what it is drawn from commits.",
+        rules="""
+        The one writer of `data-fragment-live`, through `page_parts.html_attributes` as a part's
+        `data_fragment_live` is; its set is one `core.live` declares (`hand_drawn`'s live-region shape).
+        """,
+        function=live_region,
+        example=Example('<div{% live_region "estate" at="" %}>An example line.</div>'),
     ),
     library=register,
 )

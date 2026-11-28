@@ -15,6 +15,7 @@ from django.urls import reverse
 
 from hq.platform.application.asks import DONE, QUEUED, Standing
 from hq.platform.application.pages import PageAction, PageVisit
+from hq.platform.application.visit_refresh import FOLLOWS
 from hq.platform.core import ahead
 from hq.platform.core.models import UpstreamReading
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent
@@ -192,7 +193,9 @@ def _asking_head_probe():
 def _visit_control(standing, **named):
     """The control a visit's view answers, its readings standing as ``standing``."""
 
-    return render_to_string("partials/_visit_refresh.html", {**named, "visit_standing": standing})
+    return render_to_string(
+        "partials/_visit_refresh.html", {**named, "visit_standing": standing, "visit_follows": FOLLOWS}
+    )
 
 
 # The readings a page asked for, under way, then landed.

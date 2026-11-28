@@ -30,7 +30,7 @@ waiting its turn says its state's word alone, which the head already holds.
 {% comment %}A region of the page only while the work is live; a job whose process stopped is not.{% endcomment %}
 {% with pk=job.pk|stringformat:"s" %}{% with anchor="job-"|add:pk %}
 {% if standing.live %}
-{% card element="div" css="job-progress" id=anchor busy=True data_fragment=True data_fragment_live="run" data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
+{% card element="div" css="job-progress" id=anchor busy=True data_fragment_live="run" data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
 {% else %}
 {% card element="div" css="job-progress" id=anchor data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
 {% endif %}

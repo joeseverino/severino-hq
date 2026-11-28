@@ -430,10 +430,11 @@ class UpdateState:
         return bool(flow.steps) and (flow.next is None or (at is not None and at.by == PERSON and at.live))
 
     @property
-    def follows(self) -> bool:
-        """Whether its card asks again: a step of its way, or a part of one, is under way."""
+    def follows(self) -> str:
+        """The read set its card is asked for again on while a step of its way,
+        or a part of one, is under way (``core.live``); "" while none is."""
 
-        return self.flow.live
+        return "estate" if self.flow.live else ""
 
     @property
     def flow(self) -> Sequence:

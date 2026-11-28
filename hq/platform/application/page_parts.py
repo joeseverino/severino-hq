@@ -17,6 +17,7 @@ from django.utils.text import slugify
 lazy from django.template.loader import render_to_string
 
 from hq.platform.core.held_values import format_html
+lazy from hq.platform.core import live
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
@@ -34,6 +35,10 @@ def html_attributes(named: Mapping[str, object]) -> SafeString:
     lazy object for, so a context processor's lazy False draws nothing and
     never ``="False"``. Every part with ``data_*`` options draws them here."""
 
+    if follows := named.get("data-fragment-live"):
+        # A part drawn from a read set core.live declares is a region of its page.
+        live.region(follows)
+        named = {"data-fragment": True} | named
     flags = {key: True if value else None for key, value in named.items() if isinstance(value, bool | None)}
     drawn = [(key, value) for key, value in (named | flags).items() if value is not None and value != ""]
     valued = "".join(

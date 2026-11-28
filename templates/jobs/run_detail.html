@@ -17,7 +17,7 @@ press, approval and merge that set it going, linking the whole chain.
 {% endcomment %}
 {% block content %}
 {% partialdef run_status inline %}
-<div data-fragment="" data-fragment-name="run_status"{% if following_run %} data-fragment-live="{{ following_run|live:"run" }}"{% endif %}>
+<div{% live_region "run" following_run at="" %} data-fragment-name="run_status">
 {% include "partials/_page_head.html" %}
 {% include "partials/_problems.html" with problems=problems %}
 {% layout %}

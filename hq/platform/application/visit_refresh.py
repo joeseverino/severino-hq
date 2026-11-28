@@ -213,6 +213,8 @@ def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitRefreshed:
 
 
 VISIT_REFRESH = "visit.refresh"
+# The read set a visit's readings land in, which its control follows while they are under way (``core.live``).
+FOLLOWS = "estate"
 
 
 @dataclass(frozen=True, slots=True)

@@ -509,8 +509,8 @@ what the part shows (the dashboard does for its calendar and links). A part
 whose inputs are known by revision answers an unchanged question with 304.
 
 A live region names the read set it is drawn from, one that
-`hq/platform/core/live.py` declares, through the `live` filter or
-`live.region` in Python. The page holds one stream, `/live/`, while it is
+`hq/platform/core/live.py` declares, drawn by `{% live_region %}` or a part's
+`data_fragment_live` option, and never written by hand. The page holds one stream, `/live/`, while it is
 visible and shows a live region. Each event names the sets whose tables the
 keeper of derived answers found written since the change the page was drawn
 after, once it has stored what they change, and nothing else, so each live

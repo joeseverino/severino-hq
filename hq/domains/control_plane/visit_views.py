@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.views import View
 
 from hq.platform.application.asks import AskMixin
-from hq.platform.application.visit_refresh import VISIT_REFRESH, visit_standing
+from hq.platform.application.visit_refresh import FOLLOWS, VISIT_REFRESH, visit_standing
 
 # The control a visit is drawn as, which answers its own region.
 CONTROL = "partials/_visit_refresh.html"
@@ -15,7 +15,8 @@ CONTROL = "partials/_visit_refresh.html"
 
 def _control(request: HttpRequest, source: QueryDict) -> HttpResponse:
     drawn = {name: str(source.get(name, "")) for name in ("subject", "name", "refresh")}
-    return render(request, CONTROL, {**drawn, "visit_standing": visit_standing(drawn["subject"], drawn["name"])})
+    standing = visit_standing(drawn["subject"], drawn["name"])
+    return render(request, CONTROL, {**drawn, "visit_standing": standing, "visit_follows": FOLLOWS})
 
 
 class VisitRefreshView(AskMixin, View):

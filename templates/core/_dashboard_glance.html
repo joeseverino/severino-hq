@@ -8,7 +8,7 @@ server draws `data-fragment-live` and the region is asked again as it lands; eac
 a part, so only a panel that changed is replaced, and its popover, found by
 its id, is shown again if it was open.
 {% endcomment %}
-<div data-glance data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-live="{{ dashboard_refreshing|live:"dashboard" }}"{% endif %}>
+{% url 'dashboard_glance' as glance_url %}<div data-glance{% live_region "dashboard" dashboard_refreshing at=glance_url %}>
   {% comment %}
   The region asks for its due readings itself, once, when the page is showing.
   Asking by hand is each panel's Refresh (glance_refresh.refresh_ask), an ask whose

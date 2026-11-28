@@ -7,7 +7,7 @@ what it changes in a fold. The page's part "upgrade", drawn again alone while
 its update moves.
 {% endcomment %}
 {% if plan or state %}
-{% section "Upgrade" id="upgrade" data_fragment=state.follows data_fragment_name="upgrade" data_fragment_live=state.follows|live:"estate" %}
+{% section "Upgrade" id="upgrade" data_fragment_name="upgrade" data_fragment_live=state.follows %}
   {% if state.flow.steps %}
   {% button_row %}<span><strong>{{ state.flow.about }}.</strong> {{ state.flow.said }}{% if update.brings %} {% status update.brings_said.short tone=update.brings_said.tone pill=False icon="shield" %}{% endif %}</span>{% if act %}{% include "partials/_page_action.html" with action=act only %}{% endif %}{% endbutton_row %}
   {% steps of=state.flow %}

@@ -307,6 +307,14 @@ SHAPES = (
         },
     ),
     Shape(
+        name="live-region",
+        said="A live region's hooks written by hand, where the live region part draws them from a declared read set.",
+        instead='<div{% live_region "estate" drawn at=url %}>, or a part\'s data_fragment_live= option',
+        find=matched(r"data-fragment-live"),
+        refuses=('<div data-fragment="" data-fragment-live="estate">',),
+        keeps=('<div{% live_region "estate" drawn %}>', '{% card data_fragment_live="run" %}A{% endcard %}'),
+    ),
+    Shape(
         name="form",
         said="A form that writes drawn by hand, where the form part draws it.",
         instead='{% include "partials/_form.html" %}, or partials/_page_action.html of a PageAction.command',

@@ -16,7 +16,7 @@ way. A page draws it idle, and its ask on opening is answered with how they
 stand.
 {% endcomment %}
 {% firstof visit.subject subject as on %}{% firstof visit.name name as named %}{% url 'control_plane:visit' as visit_url %}{% with_query visit_url subject=on name=named refresh=refresh|default:"" as control_url %}
-<div class="ask ask-quiet" id="visit-{{ on }}-{{ named }}" data-fragment="{{ control_url }}"{% if visit_standing.live %} data-fragment-live="estate"{% endif %} data-ask data-ask-state="{{ visit_standing.state|default:"idle" }}" data-ask-said="{% if visit_standing.state == "failed" %}{{ visit_standing.said }}{% endif %}" data-ask-tone="{{ visit_standing.tone }}" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
+<div class="ask ask-quiet" id="visit-{{ on }}-{{ named }}" {% live_region visit_follows visit_standing.live at=control_url %} data-ask data-ask-state="{{ visit_standing.state|default:"idle" }}" data-ask-said="{% if visit_standing.state == "failed" %}{{ visit_standing.said }}{% endif %}" data-ask-tone="{{ visit_standing.tone }}" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
   <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
     {% write_token %}
     <input type="hidden" name="subject" value="{{ on }}">

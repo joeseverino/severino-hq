@@ -14,7 +14,8 @@ import re
 from typing import override
 from urllib.parse import urlsplit
 
-from hq.platform.application.markup_testing import drawn_live, within
+from hq.platform.application.markup_testing import within
+from hq.platform.core.templatetags.action_tags import live_region
 from hq.platform.core.tests.browser.estate import ExampleEstateGate
 from hq.platform.core.tests.browser.gate import sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
@@ -82,7 +83,7 @@ def _under_way(page, anchor):
 
     def live(found):
         return (
-            f'{found["open"]}{drawn_live("estate")} aria-busy="true"'
+            f'{found["open"]}{live_region("estate")} aria-busy="true"'
             f'{found["between"]}data-ask-state="queued"{found["rest"]}'
             f'<span class="ask-word">Queued</span><span class="ask-sentence">{_WAITING}</span>'
         )

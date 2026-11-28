@@ -13,7 +13,7 @@ What ask.js writes beyond the control is each piece drawn here empty
 press refused at once, the line a row opens to, and the offer of a newer
 reading.
 {% endcomment %}
-<span class="ask" id="{{ ask.anchor }}{% if "menu" in extra %}-menu{% endif %}"{% if ask.standing.live and ask.follows %} data-fragment="" data-fragment-live="{{ ask.follows }}"{% endif %} data-ask data-ask-state="{{ ask.standing.state }}"{% if ask.refresh %} data-ask-refresh="{{ ask.refresh }}"{% endif %}{% if ask.outcome %} data-ask-outcome{% endif %}{% if ask.standing.live %} aria-busy="true"{% endif %}>
+<span class="ask" id="{{ ask.anchor }}{% if "menu" in extra %}-menu{% endif %}"{% live_region ask.follows ask.standing.live %} data-ask data-ask-state="{{ ask.standing.state }}"{% if ask.refresh %} data-ask-refresh="{{ ask.refresh }}"{% endif %}{% if ask.outcome %} data-ask-outcome{% endif %}{% if ask.standing.live %} aria-busy="true"{% endif %}>
   {% ask_button ask extra|default:"" %}
   <span class="ask-said{% if heard %} visually-hidden{% endif %}">
     <span class="ask-note{% if ask.standing.tone %} {{ ask.standing.tone|tone_class }}{% endif %}" role="status" data-ask-note data-ask-word>{% if ask.standing.state == "idle" %}{% elif ask.standing.note %}{% partial said %}{% else %}{{ ask.standing.label }}{% endif %}</span>
