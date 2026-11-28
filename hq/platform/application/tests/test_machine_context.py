@@ -15,6 +15,7 @@ from django.utils import timezone
 from hq.domains.analytics.models import AnalyticsSite, RumDaily
 from hq.platform.core.testing import declare
 
+from ..facts import Subject
 from ..machine_context import sections_for
 from ..security import Capability, Principal
 from ..ui import MISSING
@@ -38,6 +39,7 @@ def a_machine(*hostnames, resources=(), name="probe", declaration="", device="")
         aliases=(),
         addresses=(),
         runs_hq=False,
+        subject=Subject.of(machines=(name,)),
     )
 
 

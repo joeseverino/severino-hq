@@ -159,6 +159,19 @@ class EngineTests(TestCase):
             },
         )
 
+    def test_a_machine_name_and_a_dns_name_spelled_alike_never_join_each_other(self):
+        """A lookup of the bare name ``example-box`` is about a DNS name, and the
+        Docker host ``example-box`` a machine: each joins only its own kind of subject."""
+
+        store("adguard.query_summary", {"domain": "example-box", "queries": 3})
+        store("portainer.runtime", {"host": "example-box", "container": "web"})
+
+        machine = readings().about(Subject.of(machines=("example-box",)))
+        name = readings().about(Subject.of(hostnames=("example-box",)))
+
+        self.assertEqual([item.kind for item in machine], ["portainer.runtime"])
+        self.assertEqual([item.kind for item in name], ["adguard.query_summary"])
+
     def test_the_index_is_read_once_per_projection(self):
         with projection_scope():
             readings()

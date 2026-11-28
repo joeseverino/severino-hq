@@ -19,7 +19,7 @@ from hq.domains.control_plane.observations.portainer import (
 
 from .docker_estate import IMAGE_BEHIND, image_names, image_verdicts, kept_names
 from .entity_links import entity_link
-from .facts import Subject, readings
+from .facts import readings
 from .labels import human_bytes
 from .moments import moment, when_day
 from .service_context import Cell, ServiceSection
@@ -27,13 +27,7 @@ from .ui import MISSING, counted
 
 
 def _records(machine, kind: str) -> tuple[Mapping[str, Any], ...]:
-    subject = Subject.of(
-        hostnames=(machine.name, *machine.aliases),
-        addresses=machine.addresses,
-    )
-    if not subject:
-        return ()
-    return tuple(joined.record for joined in readings().about(subject, kinds=(kind,)))
+    return tuple(joined.record for joined in readings().about(machine.subject, kinds=(kind,)))
 
 
 def _text(value: Any) -> Cell:

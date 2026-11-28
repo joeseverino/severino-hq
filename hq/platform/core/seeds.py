@@ -199,6 +199,15 @@ def _readings_aged(owner) -> None:
     example_estate.work.readings_aged()
 
 
+def _short_named(owner) -> None:
+    """The example estate with the machine's tailnet device named as the LAN
+    names a service, so the machine's page is drawn beside a DNS name
+    spelled as one of its own names."""
+
+    _estate(owner)
+    example_estate.network.short_named()
+
+
 def _glance_aged(owner) -> None:
     """The example estate as the dashboard finds it after nobody looked for a
     while: the machine's reading due again, nothing asked yet."""
@@ -353,6 +362,7 @@ SEEDS: dict[str, Seed] = {
     "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
     "readings-aged": Seed(_readings_aged, _SET_UP),
+    "short-named": Seed(_short_named, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),

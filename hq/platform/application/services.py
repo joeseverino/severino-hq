@@ -593,8 +593,10 @@ def _serving(index: Readings | None, origin_address: str) -> tuple[str, ...]:
 
     if index is None:
         return ()
+    # An origin names its host as the record forwarding to it does: a DNS
+    # name, a machine's own name or an address.
     host = host_of(origin_address)
-    found = index.about(Subject.of(hostnames=(host,), addresses=(host,)), facets=_SERVES)
+    found = index.about(Subject.of(hostnames=(host,), machines=(host,), addresses=(host,)), facets=_SERVES)
     return tuple(dict.fromkeys(item.title for item in found if item.title))
 
 

@@ -1,7 +1,7 @@
 """The join engine: what HQ knows about a subject, and where from.
 
-A subject is a set of hostnames, addresses and zones (a machine, a service
-name, a domain). Readings join only through their spec's declared keys,
+A subject is a set of typed keys: DNS names, machine names, addresses and
+zones (a service name, a machine, a domain). Readings join only through their spec's declared keys,
 inventories through their provider's, tailnet devices and containers through
 their own readers, so nothing else parses a record to find a join key. How a
 page uses it is docs/Derived-Facts.md#facts-about-a-subject.
@@ -35,6 +35,9 @@ _READINGS_KEY = "facts.readings"
 class Subject:
     """The join keys of whatever the facts are about, normalized once.
 
+    ``hostnames`` are DNS names and ``machines`` machine names: a typed
+    reference, as a Kubernetes kind and name is, so a reading about a DNS
+    name never joins a machine spelled the same, nor the other way round.
     ``zones`` names every hostname under each zone, the zone included;
     ``containers`` each container it is, by ``container_key``; ``keys``
     each public key it holds the private half of.
@@ -42,6 +45,7 @@ class Subject:
 
     hostnames: frozenset[str]
     addresses: frozenset[str]
+    machines: frozenset[str] = frozenset()
     zones: frozenset[str] = frozenset()
     containers: frozenset[str] = frozenset()
     keys: frozenset[str] = frozenset()
@@ -51,6 +55,7 @@ class Subject:
         cls,
         hostnames: Iterable[str] = (),
         addresses: Iterable[str] = (),
+        machines: Iterable[str] = (),
         zones: Iterable[str] = (),
         containers: Iterable[str] = (),
         keys: Iterable[str] = (),
@@ -58,17 +63,14 @@ class Subject:
         return cls(
             containers=frozenset(key for key in containers if key),
             keys=frozenset(key for key in keys if key),
-            hostnames=frozenset(name for name in (normalized_hostname(str(h)) for h in hostnames) if name),
+            hostnames=frozenset(_keys(hostnames)),
+            machines=frozenset(_keys(machines)),
             addresses=frozenset(address for address in (host_of(a) for a in addresses) if address),
-            zones=frozenset(zone for zone in (normalized_hostname(str(z)) for z in zones) if zone),
+            zones=frozenset(_keys(zones)),
         )
 
     def __bool__(self) -> bool:
-        return bool(self.hostnames or self.addresses or self.zones or self.containers or self.keys)
-
-    @property
-    def dns_names(self) -> frozenset[str]:
-        return frozenset(name for name in self.hostnames if "." in name)
+        return bool(self.hostnames or self.machines or self.addresses or self.zones or self.containers or self.keys)
 
     def matches(self, name: str) -> bool:
         """Whether one hostname key names this subject: exactly, by wildcard, or by zone."""
@@ -99,6 +101,7 @@ class Joined:
     observed_at: datetime | None
     controller_id: str = ""
     hostnames: tuple[str, ...] = ()
+    machines: tuple[str, ...] = ()
     addresses: tuple[str, ...] = ()
     containers: tuple[str, ...] = ()
     keys: tuple[str, ...] = ()
@@ -116,16 +119,20 @@ class Joined:
         return self.spec.facet
 
     @property
+    def by_name(self) -> bool:
+        return bool(self.hostnames or self.machines)
+
+    @property
     def by_address(self) -> bool:
-        return bool(self.addresses) and not self.hostnames
+        return bool(self.addresses) and not self.by_name
 
     @property
     def by_container(self) -> bool:
-        return bool(self.containers) and not self.hostnames and not self.addresses
+        return bool(self.containers) and not self.by_name and not self.addresses
 
     @property
     def by_key(self) -> bool:
-        return bool(self.keys) and not self.hostnames and not self.addresses and not self.containers
+        return bool(self.keys) and not self.by_name and not self.addresses and not self.containers
 
     @property
     def relation(self) -> str:
@@ -185,6 +192,7 @@ class _Entry:
     connection_ref: str
     hostnames: tuple[str, ...]
     addresses: tuple[str, ...]
+    machines: tuple[str, ...] = ()
     containers: tuple[str, ...] = ()
     keys: tuple[str, ...] = ()
 
@@ -203,12 +211,15 @@ class Readings:
         self._fronted = fronted
         self._fronted_by: dict[str, frozenset[str]] = {}
         self._by_name: dict[str, list[int]] = {}
+        self._by_machine: dict[str, list[int]] = {}
         self._by_address: dict[str, list[int]] = {}
         self._by_container: dict[str, list[int]] = {}
         self._by_key: dict[str, list[int]] = {}
         for index, entry in enumerate(self._entries):
             for name in entry.hostnames:
                 self._by_name.setdefault(name, []).append(index)
+            for machine in entry.machines:
+                self._by_machine.setdefault(machine, []).append(index)
             for address in entry.addresses:
                 self._by_address.setdefault(address, []).append(index)
             for container in entry.containers:
@@ -232,8 +243,8 @@ class Readings:
 
     def _indexes_about(self, subject: Subject) -> set[int]:
         """The entries any of ``subject``'s keys reach through the indexes: a
-        hostname or the wildcard over it, a name in one of its zones, an
-        address, a container, a key."""
+        hostname or the wildcard over it, a name in one of its zones, a
+        machine name, an address, a container, a key."""
 
         found: set[int] = set()
         for hostname in subject.hostnames:
@@ -245,6 +256,8 @@ class Readings:
             for name, indexes in self._by_name.items():
                 if any(in_zone(name, zone) for zone in subject.zones):
                     found.update(indexes)
+        for machine in subject.machines:
+            found.update(self._by_machine.get(machine, ()))
         for address in subject.addresses:
             found.update(self._by_address.get(address, ()))
         for container in subject.containers:
@@ -261,10 +274,11 @@ class Readings:
         names = tuple(name for name in entry.hostnames if subject.matches(name))
         if entry.spec.fronted_by and names:
             names = self._fronted_names(entry, names, subject)
+        machines = tuple(machine for machine in entry.machines if machine in subject.machines)
         addresses = tuple(address for address in entry.addresses if address in subject.addresses)
         containers = tuple(key for key in entry.containers if key in subject.containers)
         keys = tuple(key for key in entry.keys if key in subject.keys)
-        if not (names or addresses or containers or keys):
+        if not (names or machines or addresses or containers or keys):
             return None
         return Joined(
             spec=entry.spec,
@@ -273,6 +287,7 @@ class Readings:
             observed_at=record_read_at(entry.record) or entry.snapshot.observed_at,
             controller_id=entry.snapshot.controller_id,
             hostnames=names,
+            machines=machines,
             addresses=addresses,
             containers=containers,
             keys=keys,
@@ -361,13 +376,8 @@ def readings() -> Readings:
                         snapshot=snapshot,
                         record=_frozen(record),
                         connection_ref=str(record.get("connection_ref", "") or ""),
-                        hostnames=tuple(
-                            dict.fromkeys(
-                                name
-                                for name in (normalized_hostname(str(item)) for item in spec.hostnames(record))
-                                if name
-                            )
-                        ),
+                        hostnames=_keys(spec.hostnames(record)),
+                        machines=_keys(spec.machines(record)),
                         addresses=tuple(
                             dict.fromkeys(
                                 address for address in (host_of(item) for item in spec.addresses(record)) if address
@@ -409,14 +419,11 @@ def fronted_names(kind: str) -> frozenset[str]:
 
 
 def reading_could_join(spec: ObservationSpec, subject: Subject) -> bool:
-    """Whether a record of ``spec`` could say anything about ``subject``.
-
-    A reading names DNS names, so a subject's bare machine name (no dot) is not
-    one it could join.
-    """
+    """Whether a record of ``spec`` could say anything about ``subject``."""
 
     return bool(
-        (spec.joins_hostnames and (subject.dns_names or subject.zones))
+        (spec.joins_hostnames and (subject.hostnames or subject.zones))
+        or (spec.joins_machines and subject.machines)
         or (spec.joins_addresses and subject.addresses)
         or (spec.joins_keys and subject.keys)
     )
@@ -433,7 +440,8 @@ def inventory_could_join(kind: str, subject: Subject) -> bool:
     by_name = provider.hostnames is not None or provider.identity is not None
     by_address = provider.answers is not None or provider.origin is not None
     return bool(
-        (by_name and (subject.hostnames or subject.zones)) or (by_address and (subject.addresses or subject.hostnames))
+        (by_name and (subject.hostnames or subject.zones))
+        or (by_address and (subject.addresses or subject.hostnames or subject.machines))
     )
 
 
@@ -628,6 +636,10 @@ def _inventory(kind: str) -> tuple[Any, ...]:
     return tuple(snapshot for snapshot in _stored().get(kind, ()) if snapshot.connected)
 
 
+def _keys(names: Iterable[Any]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(name for name in (normalized_hostname(str(item)) for item in names) if name))
+
+
 def _frozen(record: Mapping[str, Any]) -> Mapping[str, Any]:
     return frozendict(dict(record))
 
@@ -650,10 +662,15 @@ def _spec_keys(provider, spec, *, by_identity: bool = False) -> tuple[tuple[str,
 
 def _keys_about(subject: Subject, names: tuple[str, ...], answers: tuple[str, ...], origin: str) -> bool:
     """Whether a record's keys reach ``subject``: a name it has, an address it
-    holds, or an origin at either."""
+    holds, or an origin at either. An origin's host is whatever the record
+    forwards to, a DNS name or a machine's own name alike."""
 
+    host = host_of(origin) if origin else ""
     return bool(
         subject.names(names)
         or subject.holds(answers)
-        or (origin and (subject.holds((origin,)) or subject.names((host_of(origin),))))
+        or (
+            host
+            and (subject.holds((origin,)) or subject.names((host,)) or normalized_hostname(host) in subject.machines)
+        )
     )

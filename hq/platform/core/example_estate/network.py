@@ -4,7 +4,7 @@ and the public zone at Cloudflare."""
 import json
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import record_spec
 
 from .names import (
@@ -289,6 +289,33 @@ def adguard():
             for hostname, _container, port, _image in SERVICES
         ),
     )
+
+
+# What the machine's owner named its tailnet device, and what the LAN calls
+# it by: one spelling, a machine's name and a DNS name at once.
+SHORT_NAME = "homebox"
+
+
+def short_named():
+    """The machine's tailnet device renamed to its short LAN name, which an
+    AdGuard rewrite also answers and the LAN looks up: the machine's page
+    shows the device and never that name's lookups or rewrite."""
+
+    devices = ProviderInventory.objects.get(kind="tailscale.device")
+    for device in devices.records:
+        if device["name"] == MACHINE:
+            device.update(name=SHORT_NAME, dns_name=magic_dns(SHORT_NAME))
+    devices.save(update_fields=["records"])
+    for kind, record in (
+        ("adguard.rewrite", {"domain": SHORT_NAME, "answer": LAN, "connection_ref": ADGUARD}),
+        (
+            "adguard.query_summary",
+            {"connection_ref": ADGUARD, "domain": SHORT_NAME, "queries": 42, "last_seen": iso(timedelta(minutes=2))},
+        ),
+    ):
+        held = ProviderInventory.objects.get(kind=kind)
+        held.records = [*held.records, record]
+        held.save(update_fields=["records"])
 
 
 def lock_key(name):

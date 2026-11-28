@@ -134,11 +134,11 @@ class Machine:
 
     @property
     def subject(self) -> Subject:
-        """What a reading about this machine names it by: its names, its
-        addresses and the tailnet lock key its device holds."""
+        """What a reading about this machine names it by: its machine names,
+        its addresses and the tailnet lock key its device holds."""
 
         return Subject.of(
-            hostnames=(self.name, *self.aliases),
+            machines=(self.name, *self.aliases),
             addresses=self.addresses,
             keys=(self.presence.lock_key,) if self.presence is not None else (),
         )
