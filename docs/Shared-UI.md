@@ -244,6 +244,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | `{% cell_line %}`first line`{% detail %}`second line`{% endcell_line %}`, or `{% list %}` for lines read down |
 | `section` | A `<section>` element drawn by hand, where the section part draws it. | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
 | `icon` | An icon drawn by hand, where the icon part draws it. | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
+| `live-region` | A live region's hooks written by hand, where the live region part draws them from a declared read set. | `<div{% live_region "estate" drawn at=url %}>`, or a part's data_fragment_live= option |
 | `form` | A form that writes drawn by hand, where the form part draws it. | `{% include "partials/_form.html" %}`, or `partials/_page_action.html` of a PageAction.command |
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
 | `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
@@ -963,6 +964,11 @@ A row of places to go (the dashboard's links, a saved copy's own pages) is `{% l
 %}`, each item an `<li>` holding one link, `{% entity url|outside label=... %}` for a page outside
 HQ. Each link is a chip, a target by its frame and never underlined at rest, and an outside one's
 arrow sits quieter than its name. A run of names inside a line stays a `dots` list.
+
+### live_region (host only)
+
+The one writer of `data-fragment-live`, through `page_parts.html_attributes` as a part's
+`data_fragment_live` is; its set is one `core.live` declares (`hand_drawn`'s live-region shape).
 
 ### muted
 
