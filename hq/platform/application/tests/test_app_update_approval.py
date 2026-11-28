@@ -67,9 +67,9 @@ def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
             "task": "Ask sudo whether the deploy login may start it",
             "outcome": "ok",
             "message": "",
-            "warnings": "",
+            "warnings": [],
         },
-        {"host": APP, "task": task, "outcome": "failed", "message": message, "warnings": ""},
+        {"host": APP, "task": task, "outcome": "failed", "message": message, "warnings": []},
     ]
 
 

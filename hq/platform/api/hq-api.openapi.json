@@ -28003,8 +28003,11 @@
             "type": "string"
           },
           "warnings": {
-            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none.",
-            "type": "string"
+            "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [

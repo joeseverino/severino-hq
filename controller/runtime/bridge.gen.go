@@ -3170,8 +3170,8 @@ type RunEvent struct {
 	Outcome RunEventOutcome `json:"outcome"`
 	Task    string          `json:"task"`
 
-	// Warnings Each warning Ansible gave of the task, in one line; empty when it gave none.
-	Warnings string `json:"warnings"`
+	// Warnings Each warning Ansible gave of the task, each in one line; empty when it gave none.
+	Warnings []string `json:"warnings"`
 }
 
 // RunEventOutcome defines model for RunEvent.Outcome.

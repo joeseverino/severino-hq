@@ -19,6 +19,7 @@ from typing import Any
 HOST_LIMIT = 253
 TASK_LIMIT = 200
 MESSAGE_LIMIT = 500
+WARNINGS_LIMIT = 10
 EVENT_LIMIT = 200
 
 REDACTED = "[redacted]"
@@ -62,17 +63,17 @@ class Event:
     task: str
     outcome: str
     message: str
-    # Each warning in Ansible's result, in one line: a fact beside the outcome,
-    # which stays what the task did.
-    warnings: str = ""
+    # Each warning in Ansible's result, each in one line: a fact beside the
+    # outcome, which stays what the task did.
+    warnings: tuple[str, ...] = ()
 
-    def as_report(self) -> dict[str, str]:
+    def as_report(self) -> dict[str, Any]:
         return {
             "host": self.host,
             "task": self.task,
             "outcome": self.outcome,
             "message": self.message,
-            "warnings": self.warnings,
+            "warnings": list(self.warnings),
         }
 
 
@@ -128,9 +129,7 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     if outcome == "ok" and result.get("changed") is True:
         outcome = "changed"
     warned = result.get("warnings")
-    warnings = (
-        "; ".join(_one_line(each) for each in warned if isinstance(each, str)) if isinstance(warned, list) else ""
-    )
+    warnings = [each for each in warned if isinstance(each, str)][:WARNINGS_LIMIT] if isinstance(warned, list) else []
     # "censored" is Ansible's own stand-in for the result of a task marked no_log.
     hidden = "censored" in result
     message = HIDDEN if hidden else strike(_one_line(result.get("msg", "")), secrets)
@@ -141,7 +140,7 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
         _clip(task, TASK_LIMIT),
         outcome,
         _clip(message, MESSAGE_LIMIT),
-        "" if hidden else _clip(strike(warnings, secrets), MESSAGE_LIMIT),
+        () if hidden else tuple(_clip(strike(_one_line(each), secrets), MESSAGE_LIMIT) for each in warnings),
     )
 
 

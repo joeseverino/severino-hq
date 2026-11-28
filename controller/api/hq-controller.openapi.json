@@ -1307,9 +1307,13 @@
             "maxLength": 500
           },
           "warnings": {
-            "type": "string",
-            "maxLength": 500,
-            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none."
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 10,
+            "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none."
           }
         },
         "additionalProperties": false,

@@ -106,10 +106,12 @@ def _ran(operation: OperationRequest, *, ended: str = "") -> Standing:
     task, said = run.stopped
     # A note worded from its readings says their records to act on already.
     amiss = () if said == run.evidence.told else run.evidence.amiss
-    stated = said if isinstance(said, Quoted) else Quoted("")
-    lines = (f"At “{task}”" if task else "", "" if stated else said, *(line for line, _tone in amiss))
+    lines = (said, *(line for line, _tone in amiss))
+    # What the playbook said in its own words stays apart from HQ's.
+    stated = Quoted(dotted(*(line for line in lines if isinstance(line, Quoted))))
+    words = (f"At “{task}”" if task else "", *(line for line in lines if not isinstance(line, Quoted)))
     return Standing(
-        FAILED, dotted(*lines), since=standing.since, word=ended or standing.label, url=standing.url, stated=stated
+        FAILED, dotted(*words), since=standing.since, word=ended or standing.label, url=standing.url, stated=stated
     )
 
 

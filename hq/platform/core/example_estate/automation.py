@@ -469,15 +469,17 @@ class Ended:
     success: bool
     message: str
     # Each task, its outcome and what it said, then its warnings where it warned.
-    events: tuple[tuple[str, str, str] | tuple[str, str, str, str], ...] = ()
+    events: tuple[tuple[str, str, str] | tuple[str, str, str, tuple[str, ...]], ...] = ()
     # The readings its playbook stated on its machine, by kind (``RunStated``).
     readings: dict[str, list[dict[str, Any]]] | None = None
 
 
-def _events(host: str, events: tuple[tuple[str, str, str] | tuple[str, str, str, str], ...]) -> list[dict[str, Any]]:
+def _events(
+    host: str, events: tuple[tuple[str, str, str] | tuple[str, str, str, tuple[str, ...]], ...]
+) -> list[dict[str, Any]]:
     return [
-        {"host": host, "task": task, "outcome": outcome, "message": said, "warnings": warned}
-        for task, outcome, said, warned in ((*each, "")[:4] for each in events)
+        {"host": host, "task": task, "outcome": outcome, "message": said, "warnings": list(warned)}
+        for task, outcome, said, warned in ((*each, ())[:4] for each in events)
     ]
 
 
@@ -488,7 +490,7 @@ DONE = Ended(
     message="",
     events=(("Read what it holds", "ok", ""), ("Empty it", "changed", "Emptied."), ("Check it is empty", "ok", "")),
 )
-# A preview of it on the server, whose read warned that it could not examine a path.
+# A preview of it on the server, whose read warned that it could not examine two paths.
 PREVIEWED = Ended(
     success=True,
     message="",
@@ -497,7 +499,10 @@ PREVIEWED = Ended(
             "Read what it holds",
             "ok",
             "Not all paths examined, check warnings for details",
-            "Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' is not a directory",
+            (
+                "Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' is not a directory",
+                "Skipped '/srv/example/spool' path due to this access issue: '/srv/example/spool' is not a directory",
+            ),
         ),
         ("Empty it", "changed", ""),
         ("Check it is empty", "skipped", ""),

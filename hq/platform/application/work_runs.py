@@ -208,10 +208,11 @@ class RunEvidence:
     @property
     def amiss(self) -> tuple[tuple[str, Tone], ...]:
         """Each record of its readings whose kind says it in a tone to act on,
-        then each task's warnings, said in a line, with that tone."""
+        then each task's warnings, listed in a line, with that tone."""
 
+        # The task and what Ansible warned of it are the playbook's own words.
         warned = tuple(
-            (dotted(str(event.get("task") or ""), str(event["warnings"])), Tone.ATTENTION)
+            (Quoted(dotted(str(event.get("task") or ""), get_text_list(event["warnings"], "and"))), Tone.ATTENTION)
             for event in self.events
             if event.get("warnings")
         )
@@ -822,7 +823,7 @@ def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     with no warnings where its worker reported none."""
 
     return tuple(
-        {"warnings": "", **event, "tone": outcome_tone(event.get("outcome", ""))}
+        {"warnings": [], **event, "tone": outcome_tone(event.get("outcome", ""))}
         for event in result.get(RUN_EVENTS) or ()
     )
 
