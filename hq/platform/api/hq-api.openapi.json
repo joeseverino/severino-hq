@@ -39303,6 +39303,8 @@
                 "events-worker-behind",
                 "events-worker-refusing",
                 "deploy-running",
+                "release-check-failed",
+                "release-server-errors",
                 "machine-offline",
                 "content-drafts",
                 "content-undocumented",
@@ -39567,11 +39569,13 @@
                 "hq.calendar",
                 "hq.contacts",
                 "hq.content",
+                "hq.errors",
                 "hq.estate",
                 "hq.expenses",
                 "hq.infrastructure",
                 "hq.projects",
-                "hq.receipts"
+                "hq.receipts",
+                "hq.self"
               ],
               "type": "string"
             },
