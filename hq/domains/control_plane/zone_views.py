@@ -24,6 +24,7 @@ from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
 from hq.platform.application.pages import PageAction, RecordPageMixin, page_context
 from hq.platform.application.pins import DOMAIN, PIN, pinned
+from hq.platform.application.problems import About, problems_of
 from hq.platform.application.references import Kind
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import (
@@ -41,6 +42,7 @@ from hq.platform.application.tables import Cell, DataTable, Group, Row, StatusMa
 from hq.platform.application.tone import Absent
 from hq.platform.application.ui import counted, measured
 from hq.platform.application.web_writes import execute_posted
+from hq.platform.application.zone_findings import MAIL_CARD
 from hq.platform.application.zones import ADOPT_ZONE, RECORD_KIND, find_zone, zone_catalog
 from hq.platform.core.held_values import format_html
 from hq.platform.core.templatetags.value_tags import entity
@@ -80,7 +82,6 @@ def _page_relationships(domain, relationships):
     carded = {
         url
         for insight in domain["insights"]
-        if not insight["notice"]
         for url in (
             *(each["url"] for each in insight["rows"]),
             *(link["url"] for group in insight["links"] for link in group["links"]),
@@ -165,6 +166,8 @@ class ZoneMailView(View):
             {
                 "zone": found,
                 "mail": overview,
+                # What is wrong with its mail, from the findings about the domain.
+                "problems": problems_of(About(urls=(found.url,), cards=(MAIL_CARD,)), web_principal(request.user)),
                 "senders_form": drawn[MailSendersForm.SECTION],
                 "failures_form": drawn[MailFailuresForm.SECTION],
                 # The form a refusal is answered over.

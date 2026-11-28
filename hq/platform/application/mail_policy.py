@@ -333,7 +333,6 @@ class MailSection:
     answer: str
     detail: str
     records: tuple[Any, ...] = ()
-    concern: str = ""
     add_type: str = ""
     # Its one record names no server, so it is read as what it says.
     null_mx: bool = False
@@ -350,12 +349,10 @@ class MailOverview:
     sections: tuple[MailSection, ...]
     dmarc_record: Any = None
     dmarc_tags: dict[str, str] = field(default_factory=dict)
+    # The published SPF policy, as parsed; None for none.
+    spf: SpfPolicy | None = None
     # The domain's page, where a record no section here edits is added.
     zone_url: str = ""
-
-    @property
-    def concerns(self) -> tuple[str, ...]:
-        return tuple(section.concern for section in self.sections if section.concern)
 
     def place(self, section: MailSection) -> str:
         """Where a stage is changed: its section on the page, or the domain's
@@ -372,17 +369,16 @@ class MailOverview:
     @property
     def insights(self) -> tuple[Insight, ...]:
         """Each stage as an insight: its answer the reading, its question
-        what the reading is about and a link to where it is changed, a
-        concern its next step."""
+        what the reading is about and a link to where it is changed. What is
+        wrong with a stage is a finding about the domain (``zone_findings``)."""
 
         return tuple(
             Insight(
-                Tone.ATTENTION if section.concern else Tone.NEUTRAL,
+                Tone.NEUTRAL,
                 section.label,
                 section.question,
                 section.answer,
                 section.detail,
-                action=section.concern,
                 url=self.place(section),
             )
             for section in self.sections
@@ -502,12 +498,6 @@ def mail_overview(zone) -> MailOverview:
                 else "No SPF record. Nothing states who may send as this domain."
             ),
             records=spf_records,
-            concern=(
-                f"{spf.lookups} DNS lookups, over the limit of {SPF_LOOKUP_LIMIT}. "
-                "Receivers stop evaluating and the policy silently stops applying."
-                if spf and spf.over_limit
-                else ""
-            ),
             add_type="TXT",
         ),
         MailSection(
@@ -540,7 +530,6 @@ def mail_overview(zone) -> MailOverview:
                 "domain and receivers have no instruction to refuse it."
             ),
             records=dmarc_records,
-            concern=("Published but not enforcing: failures are delivered." if policy == "none" else ""),
             add_type="TXT",
         ),
     )
@@ -549,5 +538,6 @@ def mail_overview(zone) -> MailOverview:
         sections=sections,
         dmarc_record=dmarc_records[0] if dmarc_records else None,
         dmarc_tags=dmarc_tags,
+        spf=spf,
         zone_url=entity_link("zone", zone.zone).url,
     )

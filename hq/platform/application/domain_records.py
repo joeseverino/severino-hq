@@ -72,8 +72,6 @@ class InsightPart(TypedDict):
     value: Annotated[str, Describe("What HQ found, in a few words.")]
     detail: Annotated[str, Describe("More on it, in a sentence; empty for none.")]
     url: Annotated[str, Describe("Where to look into it; empty for none.")]
-    concern: Annotated[bool, Describe("Whether it is a concern to act on.")]
-    notice: Annotated[bool, Describe("Whether it is a notice worth knowing, short of a concern.")]
     rows: Annotated[list[InsightRowPart], Describe("The whole list a counted `value` stands for; empty for none.")]
     links: Annotated[list[LinkGroupPart], Describe("What it names, each group under what it is to the domain.")]
     note: Annotated[str, Describe("A reason kept beside it, in a line; empty for none.")]

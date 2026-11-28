@@ -53,6 +53,7 @@ from . import (
     tailnet_device_findings,
     tailnet_findings,
     unit_findings,
+    zone_findings,
 )
 from .action_links import (
     ActionLink,
@@ -194,6 +195,7 @@ RULE_MODULES = (
     reboot_findings,
     certificate_expiry,
     registration_findings,
+    zone_findings,
     reference_findings,
     controller_findings,
     tailnet_findings,

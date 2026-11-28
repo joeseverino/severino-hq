@@ -936,8 +936,6 @@
               "insights.value",
               "insights.detail",
               "insights.url",
-              "insights.concern",
-              "insights.notice",
               "insights.rows",
               "insights.rows.title",
               "insights.rows.detail",
@@ -18060,10 +18058,6 @@
       "InsightPart": {
         "additionalProperties": false,
         "properties": {
-          "concern": {
-            "description": "Whether it is a concern to act on.",
-            "type": "boolean"
-          },
           "detail": {
             "description": "More on it, in a sentence; empty for none.",
             "type": "string"
@@ -18087,10 +18081,6 @@
             "description": "The note's full reason, where `note` says it in fewer words; empty for none.",
             "type": "string"
           },
-          "notice": {
-            "description": "Whether it is a notice worth knowing, short of a concern.",
-            "type": "boolean"
-          },
           "rows": {
             "description": "The whole list a counted `value` stands for; empty for none.",
             "items": {
@@ -18112,8 +18102,6 @@
           "value",
           "detail",
           "url",
-          "concern",
-          "notice",
           "rows",
           "links",
           "note",
@@ -18124,9 +18112,6 @@
       "InsightPartPartial": {
         "additionalProperties": false,
         "properties": {
-          "concern": {
-            "$ref": "#/components/schemas/InsightPart/properties/concern"
-          },
           "detail": {
             "$ref": "#/components/schemas/InsightPart/properties/detail"
           },
@@ -18145,9 +18130,6 @@
           },
           "note_title": {
             "$ref": "#/components/schemas/InsightPart/properties/note_title"
-          },
-          "notice": {
-            "$ref": "#/components/schemas/InsightPart/properties/notice"
           },
           "rows": {
             "description": "The whole list a counted `value` stands for; empty for none.",
@@ -38519,6 +38501,11 @@
                 "reboot-pending",
                 "certificate-expiring",
                 "registration-lapsing",
+                "acme-challenge-left-over",
+                "caa-refuses-renewal",
+                "encryption-weaker-than-elsewhere",
+                "spf-over-lookup-limit",
+                "dmarc-not-enforcing",
                 "names-nothing",
                 "report-refused",
                 "connections-lost",

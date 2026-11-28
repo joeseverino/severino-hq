@@ -50,21 +50,16 @@ never a replacement: the href reaches a page that answers the same question,
 so the fact still works if the dialog does not open.
 {% endcomment %}
 {% card element="div" %}{% facts layout="band" label=domain.name %}
-  {% for insight in domain.insights %}{% if not insight.notice %}
-    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="zone-{{ insight.label|slugify }}"{% endif %}>{{ insight.value }}</a>{% else %}{{ insight.value }}{% endif %}{% detail %}
-      {% if insight.concern %}<small>{% status "Needs attention" tone="attention" %}</small>{% endif %}
+  {% for insight in domain.insights %}
+    {% fact insight.label %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="zone-{{ insight.label|slugify }}"{% endif %}>{{ insight.value }}</a>{% else %}{{ insight.value }}{% endif %}{% detail %}
       {% if insight.detail %}<small>{{ insight.detail }}</small>{% endif %}
       {% for group in insight.links %}<small>{{ group.label }} {% for link in group.links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
       {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note }}</small>{% endif %}
     {% endfact %}
-  {% endif %}{% endfor %}
+  {% endfor %}
 {% endfacts %}{% endcard %}
-{% for insight in domain.insights %}{% if insight.rows and not insight.notice %}
+{% for insight in domain.insights %}{% if insight.rows %}
   {% include "partials/_modal.html" with id="zone-"|add:insight.label|slugify title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
-{% endif %}{% endfor %}
-
-{% for notice in domain.insights %}{% if notice.notice %}
-  {% notice tone="warning" %}<p>{{ notice.detail }}</p>{% title %}{{ notice.label }}: {{ notice.value }}{% endnotice %}
 {% endif %}{% endfor %}
 
 {% comment %}

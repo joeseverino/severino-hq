@@ -288,7 +288,6 @@ class RegistrationFallbackTests(TestCase):
 
         self.assertIn("80 days", card.value)
         self.assertIn("Example Registrar", card.detail)
-        self.assertFalse(card.concern)
         self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn("Authentication error", card.note_title)
 
@@ -345,12 +344,6 @@ class RegistrationFallbackTests(TestCase):
 
         self.assertEqual(card.note, "Registrar not read: Cloudflare refused the request: Invalid API Token")
         self.assertEqual(card.note_title, "")
-
-    def test_without_a_public_reading_it_is_not_an_alarm(self):
-        card = registration(self.zone)
-
-        self.assertEqual(card.value, "Not read")
-        self.assertFalse(card.concern)
 
 
 class RegistrarRegistrationTests(TestCase):

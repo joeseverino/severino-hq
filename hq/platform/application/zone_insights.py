@@ -11,7 +11,7 @@ import re
 from functools import partial
 
 from hq.domains.control_plane.certificate_authorities import UPLOADED
-from hq.domains.control_plane.names import in_zone, normalized_hostname
+from hq.domains.control_plane.names import in_zone
 from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
 from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
@@ -26,8 +26,7 @@ from hq.platform.application.routes import reverse
 
 from .card_items import Badge, ListRow, RowTitle
 from .entity_links import entity_link
-from .expiry import days_until
-from .facts import Subject, inventory_about, inventory_records, readings as stored_readings, refusals_about
+from .facts import Subject, inventory_about, readings as stored_readings, refusals_about
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
@@ -38,13 +37,6 @@ from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones
 lazy from .estate import certificates as expiring
 lazy from .service_list import services_by_zone
-
-# The authority HQ's own certificate provider issues from. Stated here because
-# the insight below compares it against what a zone's CAA record permits, and
-# "Let's Encrypt" appears in that provider's summary as prose rather than as
-# something a comparison can read.
-MANAGED_ISSUER = "letsencrypt.org"
-ISSUING_PROVIDER = CERTIFICATE_KIND
 
 
 def _earliest(stamps) -> str:
@@ -106,7 +98,6 @@ def services(zone) -> ZoneInsight | None:
         ),
         links=(("Served by", serving),) if serving else (),
         note=overlays,
-        concern=bool(unhealthy) and len(parked) != len(members),
     )
 
 
@@ -122,20 +113,17 @@ def _overlays(joined) -> str:
 
 
 def certificates(zone) -> ZoneInsight | None:
-    """The managed certificates covering this domain, and whether it allows them.
+    """The managed certificates covering this domain, else what may issue for it.
 
-    The second half is the point. A CAA record naming which authorities may
-    issue for a domain is a security control, and it silently becomes an outage
-    when it excludes the authority that renews the certificate already serving
-    the domain. Nothing at Cloudflare knows which certificates HQ renews, and
-    nothing in the certificate registry knows what the zone permits.
+    A CAA record that refuses the authority HQ renews with is a finding
+    (``zone_findings``), drawn with what to change.
     """
 
-    covering = _covering(zone)
-    permitted = _caa_issuers(zone)
+    covered = covering(zone)
+    permitted = caa_issuers(zone)
     index = stored_readings()
     edge = index.about(Subject.of(zones=(zone.zone,)), facets=("certificate",))
-    if not covering:
+    if not covered:
         if edge:
             return _edge_certificates(edge)
         refused = index.unread(facets=("certificate",))
@@ -158,28 +146,11 @@ def certificates(zone) -> ZoneInsight | None:
             detail="No CAA record either, so any authority may issue for it.",
         )
 
-    resource, _names = covering[0]
+    resource, _names = covered[0]
     expires = expiry_phrase(str((resource.status or {}).get("not_after", "")))
-    extra = f" and {len(covering) - 1} more" if len(covering) > 1 else ""
+    extra = f" and {len(covered) - 1} more" if len(covered) > 1 else ""
 
-    # The cross-check. Only a certificate HQ issues has an authority HQ can
-    # predict; an uploaded one was signed by something HQ never chose.
-    renewed = [item for item, _ in covering if item.kind == ISSUING_PROVIDER]
-    if renewed and permitted and MANAGED_ISSUER not in permitted:
-        return ZoneInsight(
-            label="Certificates",
-            value=f"{resource.key}{extra}",
-            detail=(
-                f"This domain's CAA record permits only {', '.join(sorted(permitted))}, "
-                f"so the next renewal of {renewed[0].key} will be refused. Add "
-                f"{MANAGED_ISSUER} to the CAA records, or the certificate lapses."
-            ),
-            url=entity_link("resource", renewed[0].key).url,
-            concern=True,
-        )
-
-    # Just the expiry. What it covers is on the certificate's own page, and the
-    # CAA check has a card of its own when it has something to report.
+    # Just the expiry. What it covers is on the certificate's own page.
     return ZoneInsight(
         label="Certificates",
         value=f"{resource.key}{extra}",
@@ -193,11 +164,11 @@ def _hostnames(provider, spec) -> tuple[str, ...]:
     return tuple(provider.hostnames(spec))
 
 
-def _covering(zone) -> list:
+def covering(zone) -> list:
     """``(resource, names)`` for each managed certificate naming a name in the zone."""
 
     targets = delivery_targets()
-    covering = []
+    found = []
     # From the read the page already shares, in its order.
     for resource in enabled_resources():
         if resource.kind not in (CERTIFICATE_KIND, UPLOADED_CERTIFICATE_KIND):
@@ -209,81 +180,34 @@ def _covering(zone) -> list:
         if names is None:
             continue
         if any(in_zone(name, zone.zone) for name in names):
-            covering.append((resource, names))
-    return covering
+            found.append((resource, names))
+    return found
 
 
 def security(zone) -> ZoneInsight | None:
     """How this domain answers over TLS, and with which certificates.
 
     One card: the TLS mode, the edge and managed certificates and the earliest
-    expiry among them. A concern when a CAA record refuses the authority HQ
-    renews with, or when another domain here is held to a stronger posture.
+    expiry among them. What is wrong with them is a finding about the domain.
     """
 
     tls = posture(zone)
     certificates_card = certificates(zone)
     edge = stored_readings().about(Subject.of(zones=(zone.zone,)), facets=("certificate",))
-    covering = _covering(zone)
+    covered = covering(zone)
     # The mode is the answer; the rest is one line of facts. What each mode
     # means and who issued each certificate are the certificates' own pages.
     facts = list(_posture_facts(zone))
-    if found := expiring((zone.zone,), keys={resource.key for resource, _ in covering}):
+    if found := expiring((zone.zone,), keys={resource.key for resource, _ in covered}):
         facts.append(f"{counted(len(found), 'certificate')}, first {expiry_words(found[0].expires)}")
-    stronger = _stronger_elsewhere(zone)
-    concerns = []
-    if certificates_card is not None and certificates_card.concern:
-        concerns.append(certificates_card.detail)
-    if stronger:
-        concerns.append(ended(f"Stronger on {stronger}"))
     return ZoneInsight(
         label="Security",
         value=tls.value if tls else "TLS not read",
-        detail=" ".join(concerns) or dotted(*facts),
+        detail=dotted(*facts),
         url=certificates_card.url if certificates_card is not None else "",
         # Only why a part could not be read; a readable edge is in the count.
         note=certificates_card.note if certificates_card is not None and not edge else "",
-        concern=bool(
-            (tls and tls.concern) or (certificates_card is not None and certificates_card.concern) or stronger
-        ),
     )
-
-
-# Cloudflare's documented order of SSL modes, weakest first.
-_SSL_ORDER = ("off", "flexible", "full", "strict")
-
-
-def _strength(found: dict) -> tuple[int, tuple[int, ...]] | None:
-    """A readable posture as (mode rank, minimum TLS version), or None."""
-
-    if not found:
-        return None
-    mode = str(found.get("ssl", "")).lower().replace("full_strict", "strict")
-    if mode not in _SSL_ORDER:
-        return None
-    version = tuple(int(part) for part in str(found.get("min_tls_version", "") or "0").split(".") if part.isdigit())
-    return _SSL_ORDER.index(mode), version
-
-
-def _stronger_elsewhere(zone) -> str:
-    """Other domains read here with a stronger TLS posture, as a phrase."""
-
-    postures: dict[str, dict] = {}
-    for _snapshot, record in inventory_records(ZONE_KIND):
-        name = normalized_hostname(record.get("zone"))
-        if name:
-            postures[name] = dict(record.get("posture") or {})
-    mine = _strength(postures.get(zone.zone, {}))
-    if mine is None:
-        return ""
-    better = []
-    for name, found in sorted(postures.items()):
-        theirs = _strength(found)
-        if name != zone.zone and theirs is not None and theirs > mine:
-            label = _TLS_MODE.get(str(found.get("ssl", "")).lower(), ("", ""))[0]
-            minimum = str(found.get("min_tls_version", "") or "")
-            better.append(f"{name} ({label}{f', TLS {minimum}' if minimum else ''})")
-    return ", ".join(better)
 
 
 def _edge_certificates(edge) -> ZoneInsight:
@@ -352,32 +276,6 @@ def email(zone) -> ZoneInsight | None:
     )
 
 
-def leftover_challenges(zone) -> ZoneInsight | None:
-    """Challenge records that outlived the issuance they existed for.
-
-    The one judgment this page makes without a declared policy, because it
-    does not need one: a challenge record exists for the seconds an authority
-    takes to verify a request and is removed afterwards. One still present at a
-    scheduled sweep was left behind and serves nothing.
-    """
-
-    stale = [
-        record for record in zone.records if record.record_type == "TXT" and record.name.startswith("_acme-challenge.")
-    ]
-    if not stale:
-        return None
-    return ZoneInsight(
-        label="Left-over ACME challenges",
-        notice=True,
-        value=f"{len(stale)} left behind",
-        detail=(
-            "Made while a certificate is issued and normally removed after. "
-            "These were left behind and serve no purpose."
-        ),
-        concern=True,
-    )
-
-
 def _mail_host(mail) -> str:
     """Who actually receives mail for this domain, read off the MX records.
 
@@ -393,7 +291,7 @@ def _mail_host(mail) -> str:
     return operator(hosts.pop())
 
 
-def _caa_issuers(zone) -> set[str]:
+def caa_issuers(zone) -> set[str]:
     """Every authority this domain's CAA records permit to issue.
 
     ``iodef`` is deliberately excluded: it names where to report a violation,
@@ -429,7 +327,7 @@ def _dmarc_policy(content: str) -> str:
 # How Cloudflare's own words for a TLS mode read to somebody who did not set it.
 # "flexible" means the browser gets TLS and the origin gets plain HTTP, which is
 # worth saying in those terms rather than repeating the label.
-_TLS_MODE = {
+TLS_MODES = {
     "off": ("Off", "Served over plain HTTP."),
     "flexible": (
         "Flexible",
@@ -469,10 +367,9 @@ def _posture_facts(zone) -> tuple[str, ...]:
 def posture(zone) -> ZoneInsight | None:
     """How this domain answers over TLS, as Cloudflare currently holds it.
 
-    Stated, never flagged: HQ holds no declared posture to compare against,
-    and drift from a policy nobody wrote is invented. What is wrong by its own
-    definition has its own insight. A posture HQ could not read is never shown
-    as "Off".
+    Stated here; one weaker than another domain's is a finding about the
+    domain (``zone_findings``). A posture HQ could not read is never shown as
+    "Off".
     """
 
     found = _posture_record(zone)
@@ -485,13 +382,12 @@ def posture(zone) -> ZoneInsight | None:
             label="TLS posture",
             value="Not readable",
             detail=ended(refused.phrase),
-            concern=True,
         )
     if not found:
         return None
 
     mode = str(found.get("ssl", "")).lower()
-    label, explanation = _TLS_MODE.get(mode, (mode.replace("_", " ").title(), ""))
+    label, explanation = TLS_MODES.get(mode, (mode.replace("_", " ").title(), ""))
     minimum = str(found.get("min_tls_version", "")).strip()
     detail = [explanation] if explanation else []
     if minimum:
@@ -525,7 +421,6 @@ def registration(zone) -> ZoneInsight | None:
     if when is None:
         return None
     renews = bool(found.get("auto_renew"))
-    days = days_until(when)
     # The registrar reports its own name beside the dates; say it rather than
     # "the registrar", which makes the reader go and find out which one.
     registrar = str(found.get("registrar", "") or "").strip()
@@ -537,8 +432,6 @@ def registration(zone) -> ZoneInsight | None:
             if renews
             else f"Auto-renew is off{f' at {registrar}' if registrar else ''}, so this has to be renewed by hand."
         ),
-        # Only when both halves are true. A date alone is a calendar entry.
-        concern=days <= 90 and not renews,
     )
 
 
