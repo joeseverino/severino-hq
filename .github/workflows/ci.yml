@@ -19,8 +19,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # A pull request into an integration branch (pass/...) runs the same
+  # graph over the one worker's change it carries, so a worker's browser
+  # suite runs here, never on the Mac.
   pull_request:
-    branches: [main]
+    branches: [main, "pass/**"]
 
 permissions:
   contents: read

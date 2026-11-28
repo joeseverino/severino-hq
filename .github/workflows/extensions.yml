@@ -5,8 +5,9 @@ name: Check extensions
 # verify-only candidate. It runs for two kinds of change:
 #
 # - A host pull request, as a job of its composition (compose.yml), with each
-#   extension as that pull request meets it: its same-named branch or its
-#   default branch. Build HQ reuses wheels admitted against main, so only this
+#   extension as that pull request meets it: its same-named branch, else
+#   the one named for the integration branch it goes into, else its default
+#   branch. Build HQ reuses wheels admitted against main, so only this
 #   sees a host change that breaks an extension before it merges.
 # - An extension pull request, dispatched by the extension's
 #   check-on-host action with the pull request's head commit, and run on host
@@ -90,13 +91,15 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
           BRANCH: ${{ github.head_ref }}
+          # Every extension carries main, so only an integration branch is named.
+          BASE: ${{ github.base_ref != 'main' && github.base_ref || '' }}
           COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
           if [ -n "$COMMIT" ]; then
             tools/pipeline/coordinated-branches.sh composition-set.json --commit "$COMMIT" coordinated.txt
           else
-            tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
+            tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" ${BASE:+"$BASE"} coordinated.txt
           fi
 
       - name: Check out each extension as this change meets it

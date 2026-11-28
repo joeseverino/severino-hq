@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # The extension repositories a check builds from a branch rather than as
 # admitted.
-#   tools/pipeline/coordinated-branches.sh SET BRANCH OUT          # a host pull request's branch
+#   tools/pipeline/coordinated-branches.sh SET BRANCH... OUT       # a host pull request's branches
 #   tools/pipeline/coordinated-branches.sh SET --commit SHA OUT    # an extension pull request's head
 # OUT: repository=sha, one line per repository. SET is the composition set.
 #
 # A repository carrying BRANCH is a coordinated change: its extensions are
-# built from that commit instead of reusing their admission. With --commit,
-# the one repository with a pull request whose head is SHA is the change, its
-# open one first, else the one that merged or closed while the check ran, so
-# every job of a run answers alike whenever it asks. Its base commit is
+# built from that commit instead of reusing their admission. A pull request
+# into an integration branch names that branch second, so a repository
+# without the head's branch is built as the integration branch carries it.
+# With --commit, the one repository with a pull request whose head is SHA is
+# the change, its open one first, else the one that merged or closed while
+# the check ran, so every job of a run answers alike whenever it asks. Its base commit is
 # written as base= for the secret scan of what the pull request brings, and
 # its name, which the set's mask hides, as name= for the token that reports
 # on it. Writes found=true|false to $GITHUB_OUTPUT. Needs
 # GH_TOKEN able to read the extension repositories and their pull requests.
 set -euo pipefail
 
-usage() { echo "usage: $0 SET BRANCH OUT | SET --commit SHA OUT" >&2; exit 2; }
+usage() { echo "usage: $0 SET BRANCH... OUT | SET --commit SHA OUT" >&2; exit 2; }
 error=$(mktemp)
 trap 'rm -f "$error"' EXIT
 # Not "absent": the answer is unknown, and guessing either way would verify
@@ -30,21 +32,25 @@ unanswered() {
 repositories() { jq -r '.extensions[].repository' "$set_file" | sort -u; }
 
 by_branch() {
-  local branch=$1 repository sha count
-  if [[ ! "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-    echo "::error::The pull request branch name has characters this step does not accept."
-    exit 1
-  fi
-  while read -r repository; do
-    if sha=$(gh api "repos/$repository/branches/$branch" --jq .commit.sha 2>"$error"); then
-      printf '%s=%s\n' "$repository" "$sha" >>"$out"
-    else
-      unanswered "branch $branch"
+  local branch repository sha count
+  for branch in "$@"; do
+    if [[ ! "$branch" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+      echo "::error::The pull request branch name has characters this step does not accept."
+      exit 1
     fi
+  done
+  while read -r repository; do
+    for branch in "$@"; do
+      if sha=$(gh api "repos/$repository/branches/$branch" --jq .commit.sha 2>"$error"); then
+        printf '%s=%s\n' "$repository" "$sha" >>"$out"
+        break
+      fi
+      unanswered "branch $branch"
+    done
   done < <(repositories)
   count=$(grep -c . "$out" || true)
   echo "found=$([ "$count" -gt 0 ] && echo true || echo false)" >>"$GITHUB_OUTPUT"
-  echo "coordinated extension branches named $branch: $count"
+  echo "coordinated extension branches named $*: $count"
 }
 
 by_commit() {
@@ -74,5 +80,9 @@ by_commit() {
 
 case "${2:-}" in
   --commit) [ "$#" -eq 4 ] || usage; set_file=$1 out=$4; : >"$out"; by_commit "$3" ;;
-  *) [ "$#" -eq 3 ] || usage; set_file=$1 out=$3; : >"$out"; by_branch "$2" ;;
+  *)
+    [ "$#" -ge 3 ] || usage
+    set_file=$1 out=${!#}; : >"$out"
+    by_branch "${@:2:$#-2}"
+    ;;
 esac

@@ -17,6 +17,7 @@ so a change that passes on a laptop passes in CI
 | See what a page change looks like | `mise run dev:look`, screenshots as the browser gates draw them |
 | Check a change while editing | `mise run fast`, the tests it reaches and the quick gates |
 | Check a branch before it is pushed | `mise run check`, every gate CI runs |
+| Run the browser suite on one change | a draft pull request from its branch into the integration branch (`pass/...`) it lands on: CI runs every leg the change reaches, there rather than on the laptop |
 
 Heavy tasks take turns on one lock, so agents in several checkouts never run
 two suites at once

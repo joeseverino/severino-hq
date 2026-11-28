@@ -556,13 +556,17 @@ before either merges:
   unadmitted wheels, no lock, a local tag, never published, signed or
   deployed. The app's Contents and Pull requests read cover finding and
   reading the branches.
+- A host pull request into an integration branch (`pass/...`), which is how
+  one worker's change runs CI before it lands, meets an extension without
+  its branch on the integration branch's instead, so the two halves the
+  integration branch already holds are composed together.
 - A host pull request with such a branch composes nothing from the admitted
   set in Build HQ: the candidate stands for it.
 - On a checkout, every step that composes the set picks an extension's local
   branch of the same name the same way
   ([The extension set](Development.md#the-extension-set)).
 - Every host pull request runs its own `plugin:check` against every extension
-  in the set, from its same-named branch or else its default branch, in that
+  in the set, from its branch as the composition picks it, in that
   job beside Build HQ. So a host change that breaks an extension fails the pull
   request rather than the next admission. Which extension failed is only in the
   sealed failure logs.

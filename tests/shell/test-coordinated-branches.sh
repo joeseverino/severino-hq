@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prove Compose finds every extension repository carrying the pull request's
-# branch, and the one repository with a pull request, open or merged, whose
+# branch, else its integration branch, and the one repository with a pull request, open or merged, whose
 # head is a commit; that it fails when it cannot tell, and never names a
 # repository in its log.
 set -euo pipefail
@@ -13,8 +13,9 @@ mkdir -p "$bin"
 
 # gh api PATH --jq QUERY answers GitHub's body for PATH through QUERY, as gh
 # does, and a 502 for any repository in TEST_BROKEN.
-# repos/<repository>/branches/<branch>: the branch when the repository is in
-# TEST_CARRYING, a 404 when not.
+# repos/<repository>/branches/<branch>: the branch, its sha the digest of
+# <repository>@<branch>, when TEST_CARRYING lists the repository (any
+# branch) or <repository>@<branch>, a 404 when not.
 # repos/<repository>/commits/<sha>/pulls: the pull requests with that head,
 # in GitHub's shape: a merged one where the repository is in TEST_MERGED
 # (based on d...), then an open one where it is in TEST_OPEN (based on b...),
@@ -39,8 +40,12 @@ case "$2" in
     listed "$TEST_HOLDING" && pulls+=("$(pull 3 open null "$(printf 'f%.0s' $(seq 40))" "$(printf 'b%.0s' $(seq 40))")")
     body="[$(IFS=,; printf '%s' "${pulls[*]}")]" ;;
   *)
-    listed "$TEST_CARRYING" || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
-    body="{\"commit\":{\"sha\":\"$(printf '%s' "$repository" | tr -c 'a-f0-9' 'a' | cut -c1-8)\"}}" ;;
+    branch=${2#*/branches/}
+    case " $TEST_CARRYING " in
+      *" $repository "* | *" $repository@$branch "*) ;;
+      *) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+    esac
+    body="{\"commit\":{\"sha\":\"$(printf '%s' "$repository@$branch" | shasum | cut -c1-40)\"}}" ;;
 esac
 printf '%s' "$body" | jq -r "$4"
 STUB
@@ -52,12 +57,12 @@ printf '%s' '{"extensions": [
   {"id": "example.gamma", "repository": "example/gamma"}]}' >"$work/set.json"
 
 coordinated() {
-  local branch=$1
   : >"$work/github-output"
   (cd "$work" && PATH="$bin:$PATH" GITHUB_OUTPUT="$work/github-output" \
     TEST_CARRYING="${CARRYING-}" TEST_BROKEN="${BROKEN-}" \
-    "$repo_dir/tools/pipeline/coordinated-branches.sh" set.json "$branch" coordinated.txt) >"$work/out" 2>&1
+    "$repo_dir/tools/pipeline/coordinated-branches.sh" set.json "$@" coordinated.txt) >"$work/out" 2>&1
 }
+built_from() { printf '%s=%s\n' "$1" "$(printf '%s' "$1@$2" | shasum | cut -c1-40)"; }
 fail() { echo "$1" >&2; cat "$work/out" >&2; exit 1; }
 quiet() {
   for name in example/extensions example/gamma example.alpha; do
@@ -76,6 +81,12 @@ CARRYING="example/extensions example/gamma" coordinated feature/both || fail "tw
 coordinated feature/host-only || fail "a branch only the host carries did not resolve"
 [ ! -s "$work/coordinated.txt" ] || fail "a branch no extension carries listed one"
 grep -qx 'found=false' "$work/github-output" || fail "no coordinated branch was not reported as none"
+
+CARRYING="example/gamma@pass/worker example/gamma@pass/after example/extensions@pass/after" \
+  coordinated pass/worker pass/after || fail "a pull request into an integration branch did not resolve"
+[ "$(sort "$work/coordinated.txt")" = "$(built_from example/extensions pass/after; built_from example/gamma pass/worker)" ] ||
+  fail "a repository was not built from the head's branch, else the integration branch's"
+quiet "a pull request into an integration branch"
 
 if BROKEN="example/gamma" coordinated feature/both; then fail "an unanswered question was taken as no branch"; fi
 grep -q '::error::' "$work/out" || fail "an unanswered question did not fail with an error"
