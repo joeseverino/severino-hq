@@ -80,7 +80,7 @@ LAYOUT_STATES = {
         '{% include "partials/_chart.html" with chart=trend data_open=True %}{% endlayout %}',
         lambda: {
             "totals": [Kpi("Example net worth", "$15,500.00", "+$1,240.00 in the last 30 days")],
-            "trend": readings("Example trend", "Example readings over a quarter.", "Example", unit="$", days=90),
+            "trend": readings("Example trend", "Example readings over a month.", "Example", unit="$", days=30),
         },
     ),
     # Facts beside a table long enough to run past them: the facts keep the
