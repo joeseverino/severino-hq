@@ -175,9 +175,6 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
-    # Workflows that cross outside systems: each a ``SequenceSpec`` whose
-    # steps every surface draws and reads (``application.sequences``).
-    sequences: Callable[[], Iterable[Any]] | None = None
     # How old a reading of each of the extension's kinds may get, by kind:
     # ``hq_sdk.reads.freshness`` and the Connections page judge it by this.
     # Each kind's is asked only as that kind is judged, so it may follow a
@@ -192,6 +189,9 @@ class PluginIntegration:
     # A record's page of each kind ``demo_seed`` writes, by address, which the
     # layout gate and dev:look's ``all`` read beside the host's own.
     demo_pages: Callable[[], Iterable[str]] | None = None
+    # Workflows that cross outside systems: each a ``SequenceSpec`` whose
+    # steps every surface draws and reads (``application.sequences``).
+    sequences: Callable[[], Iterable[Any]] | None = None
 
 
 @dataclass(frozen=True, slots=True)

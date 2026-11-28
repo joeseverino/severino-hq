@@ -73,9 +73,6 @@ class SectionPart:
     id: str = field(default="", doc="Its own `id`, for a link to it or a region refreshed in place.")
     fold: bool = field(default=False, doc="Drawn closed, its heading the toggle.")
     open: bool = field(default=False, doc="A folded section drawn open.")
-    line: bool = field(
-        default=False, doc="A fold drawn as one line, its heading and aside the summary, its body under it, unframed."
-    )
     level: int = TOP_LEVEL
     css: str = field(default="", doc="The classes of where it stands.")
     template: str = field(default="", doc="The template that draws the body, with `context`.")
@@ -92,6 +89,9 @@ class SectionPart:
     figure: bool = field(default=False, doc="Drawn as a figure, its head the caption.")
     edge: Tone | Literal[""] = field(
         default="", doc="Its frame's starting edge in a status tone, while it stands out from those beside it."
+    )
+    line: bool = field(
+        default=False, doc="A fold drawn as one line, its heading and aside the summary, its body under it, unframed."
     )
 
     def __post_init__(self) -> None:
