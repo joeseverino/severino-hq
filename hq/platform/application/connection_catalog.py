@@ -229,9 +229,15 @@ class ConnectionView:
             return last_read(observed)
         if self.lifecycle == Lifecycle.UNREACHABLE:
             return f"Last tried {when(observed)}" if observed else ""
-        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
+        if self.keyless_use:
             return ""
         return AUTHORITY_LABELS[self.authority]
+
+    @property
+    def keyless_use(self) -> bool:
+        """Whether nothing it does needs a key, so its credential has no permissions to know about."""
+
+        return bool(self.abilities) and all(state.evidence == "not_applicable" for state in self.abilities)
 
     @property
     def missing_scopes(self) -> tuple[str, ...]:

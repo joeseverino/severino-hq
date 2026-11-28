@@ -55,7 +55,8 @@ def _agent(standing: AgentStanding, actions: Any) -> Row:
         lines=_dotted(_about(standing)),
         below=_held(standing),
     )
-    granted = [Cell(f"{len(standing.in_force)} of {len(identity.granted)}")]
+    # Of what it may hold: in force, and offered but not granted, which the line below counts.
+    granted = [Cell(f"{len(standing.in_force)} of {len(standing.in_force) + len(standing.missing)}")]
     if standing.beyond_role:
         granted.append(Cell(f"{len(standing.beyond_role)} beyond its person's role", muted=True))
     if standing.missing:
