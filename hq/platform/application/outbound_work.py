@@ -180,16 +180,18 @@ def reader_of(kind: str) -> str:
     return _readers().get(kind, "")
 
 
+def _finds(name: str, subject: str) -> bool:
+    """Whether the host's own work ``name`` would find anything about ``subject`` (its ``reads_due``)."""
+
+    check = _host_named(name).reads_due if name else None
+    return check is None or check(subject)
+
+
 def wanted(kinds: Iterable[str], subject: str) -> tuple[str, ...]:
     """Of ``kinds``, those a read about ``subject`` would find anything of: a
     kind HQ reads itself where its work's ``reads_due`` says so, any other always."""
 
-    def due(kind: str) -> bool:
-        name = reader_of(kind)
-        check = _host_named(name).reads_due if name else None
-        return check is None or check(subject)
-
-    return tuple(kind for kind in kinds if due(kind))
+    return tuple(kind for kind in kinds if _finds(reader_of(kind), subject))
 
 
 def declared_work() -> dict[str, OutboundWork]:
@@ -404,8 +406,7 @@ def start_reading(name: str) -> bool:
     it would find anything to read (``reads_due``); False where it would not
     or it is already running."""
 
-    due = _host_named(name).reads_due
-    return (due is None or due("")) and start_for_host(name)
+    return _finds(name, "") and start_for_host(name)
 
 
 def start_for_host(name: str) -> bool:
