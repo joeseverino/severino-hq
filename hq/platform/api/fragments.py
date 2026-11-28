@@ -3,12 +3,16 @@ its component names, and the reading of the whole that refuses a document
 saying a thing twice, or a part of it not at all."""
 
 import json
+import logging
 import re
 from collections import Counter
 from collections.abc import Iterator
 from typing import Any
 
+from django.conf import settings
 from django.utils.text import capfirst
+
+logger = logging.getLogger("severino.api")
 
 
 class OpenAPIError(RuntimeError):
@@ -149,8 +153,14 @@ def _refused(document: dict[str, Any]) -> Iterator[str]:
 
 
 def said_once(document: dict[str, Any]) -> dict[str, Any]:
-    """``document``, refused when it says a thing twice or a part of it not at all."""
+    """``document``, refused where a developer sees it when it says a thing
+    twice or a part of it not at all. Served, it is never refused: a part
+    derived from what an operator holds (a playbook's inputs) has no
+    declaration in HQ to fix, so what it says wrong is logged."""
 
     if problems := list(_refused(document)):
-        raise OpenAPIError(f"{len(problems)} parts of the API document are said wrong, first: {problems[0]}")
+        said = f"{len(problems)} parts of the API document are said wrong, first: {problems[0]}"
+        if settings.SEVERINO_STRICT_PRINT:
+            raise OpenAPIError(said)
+        logger.error(said, extra={"event": "api.document.refused"})
     return document
