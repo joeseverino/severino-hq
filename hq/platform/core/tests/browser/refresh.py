@@ -139,12 +139,16 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
         if request.method == "POST" and path == self.pressed:
             self.fulfill(route, _under_way(self.pages[self.on, ""], self.asking))
             return
-        if path == "/live/" and self.pressed:
-            route.fulfill(headers={"Content-Type": "text/event-stream"}, body=_CHANGED)
-            return
         if self.pressed and request.headers.get("x-requested-with"):
             self.redrawn.append(path)
         super().answer(route)
+
+    @override
+    def stream(self, route):
+        if self.pressed:
+            route.fulfill(headers={"Content-Type": "text/event-stream"}, body=_CHANGED)
+        else:
+            super().stream(route)
 
     def press(self):
         """The head's ask, pressed beside the title, or in the head's menu

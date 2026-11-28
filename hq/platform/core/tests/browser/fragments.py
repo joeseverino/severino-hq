@@ -411,6 +411,10 @@ class FragmentBrowserTests(BrowserGate):
         return self.fulfill(route, _FIXED["/probe-sent/"])
 
     @override
+    def stream(self, route):
+        self.streams.append(route)
+
+    @override
     def respond(self, route):
         request = route.request
         parts = urlsplit(request.url)
@@ -423,8 +427,6 @@ class FragmentBrowserTests(BrowserGate):
             return self.fulfill(route, _keyed_probe())
         if parts.path.startswith("/probe-keyed/"):
             return self.answer_keyed(route, parts.path.removeprefix("/probe-keyed/").strip("/"))
-        if parts.path == "/live/":
-            return self.streams.append(route)
         if parts.path == "/probe/":
             return self.fulfill(route, _FRAGMENT_PROBE.replace("{_STREAM}", f"/live/?after={self.drawn}"))
         if (fixed := _FIXED.get(parts.path)) is not None:

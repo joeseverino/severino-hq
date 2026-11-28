@@ -1430,13 +1430,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if request.method != "GET":
             route.fulfill(status=405, body="dev:look only reads")
             return
-        if request.resource_type == "eventsource":
-            # The live stream's view is async, which the in-process client
-            # cannot run from the browser's loop, and an estate held in memory
-            # emits nothing to hear. So the stream ends at once, empty, and
-            # asks the browser to wait out the look before it opens again.
-            route.fulfill(status=200, headers={"content-type": "text/event-stream"}, body="retry: 3600000\n\n")
-            return
         address = _address(request.url)
         headers = {
             f"HTTP_{name.upper().replace('-', '_')}": value
