@@ -182,6 +182,9 @@ def _token(word: str, *, sole: bool) -> str:
 
 # The tags that close a word's boxes, after its last letter.
 _CLOSING = re.compile(r"(?:</span>)*$")
+# The tags a drawn value closes on, its link and bold among them: the box a
+# dot after it is held in.
+_VALUE_CLOSING = re.compile(r"(?:</(?:span|a|strong)>)*$")
 
 
 def button_words(value):
@@ -210,9 +213,23 @@ def breakable(value, mark=""):
     # Django renders it. It passes as it is: what built it held the names in
     # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
-        after = mark_safe(DOT_MARKUP) if mark == DOT_MARK else conditional_escape(mark)  # noqa: S308 - HQ's own literal markup
-        return conditional_escape(value) + after
+        if mark == DOT_MARK:
+            return dot_held(conditional_escape(value))
+        return conditional_escape(value) + conditional_escape(mark)
     return mark_safe(_drawn(str(value), mark))  # noqa: S308 - each word is escaped as it is drawn
+
+
+def dot_held(drawn, css=""):
+    """Drawn markup ending with ``{% dot %}``'s dot inside its last box, then
+    the space a line breaks at (``DOT_MARK``). ``css`` is the class the part
+    after the dot shows by, so the dot hides with it."""
+
+    mark = DOT_MARKUP.rstrip()
+    if css:
+        mark = f'<span class="{css}">{mark}</span>'
+    drawn = str(drawn)
+    at = _VALUE_CLOSING.search(drawn).start()
+    return mark_safe(f"{drawn[:at]}{mark}{drawn[at:]} ")  # noqa: S308 - markup already drawn, and HQ's own literal
 
 
 @functools.lru_cache(maxsize=4096)
@@ -221,7 +238,7 @@ def _drawn(text: str, mark: str) -> str:
     draw the same markup on every page, and a table repeats them row by row."""
 
     if mark == DOT_MARK:
-        return "".join([*_inside_last(_line(text), DOT_MARKUP.rstrip()), " "])
+        return dot_held("".join(_line(text)))
     return "".join(_marked(_line(text), mark))
 
 

@@ -17,13 +17,12 @@ from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece,
 from hq.platform.core.held_values import format_html
 from hq.platform.core.template_parts import enclosed
 from hq.platform.core.templatetags.frame_tags import muted
-from hq.platform.core.templatetags.line_breaks import breakable, code_spans
+from hq.platform.core.templatetags.line_breaks import breakable, code_spans, dot_held
 from hq.platform.core.templatetags.list_tags import LINE_LEAD, LIST, line_run
 from hq.platform.core.templatetags.status_tags import status
 from hq.platform.core.templatetags.table_tags import LINE_FRAME, data_attributes, table_heading
 from hq.platform.core.templatetags.value_tags import (
     cell_line,
-    dot,
     empty_value,
     entity,
     money,
@@ -510,7 +509,7 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
         parts = [_safe("<li>", _value(part, cell, drawing, own=False), "</li>") for part in value.parts]
         drawn.append(line_run(parts, kind="dots"))
     else:
-        drawn += [_after(part, cell, drawing) for part in value.parts]
+        drawn = [_joined(drawn[0], value.parts, cell, drawing)]
     # A gist takes the room its line leaves (cuts.css), so the line is a box of its own.
     if value.lead or any(each.shows == "gist" for each in (value, *value.parts)):
         drawn = [_safe('<div class="row-line">', *drawn, "</div>")]
@@ -537,7 +536,7 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
             continue
         shown = f' class="{SHOWN[line.shows]}"' if line.shows else ""
         drawn = _value(line, cell, drawing, own=False, whole=True, hushed=line.muted)
-        drawn = _safe(drawn, *(_after(part, cell, drawing, hushed=line.muted) for part in line.parts))
+        drawn = _joined(drawn, line.parts, cell, drawing, hushed=line.muted)
         items.append(
             _safe("<li", shown, data_attributes(line.data), ">", muted(drawn) if line.muted else drawn, "</li>")
         )
@@ -546,11 +545,20 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
     return _safe(*blocks)
 
 
-def _after(part: Cell, cell: DrawnCell | None, drawing: _Drawing, *, hushed: bool = False) -> SafeString:
-    """A part after what stands before it on its line: a space, unless its dot joins it."""
+def _joined(
+    drawn: SafeString, parts: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing, *, hushed: bool = False
+) -> SafeString:
+    """A value, then each part after it on its line: after a space, or after
+    its dot, which is drawn inside the box before it and shows as the part does."""
 
-    drawn = _value(part, cell, drawing, own=False, hushed=hushed)
-    return drawn if part.dot else _safe(" ", drawn)
+    for part in parts:
+        value = _value(part, cell, drawing, own=False, hushed=hushed)
+        if part.dot:
+            shown = SHOWN[part.shows] if part.shows and part.shows != "gist" else ""
+            drawn = _safe(dot_held(drawn, shown), value)
+        else:
+            drawn = _safe(drawn, " ", value)
+    return drawn
 
 
 def _value(
@@ -564,7 +572,7 @@ def _value(
 ) -> SafeString:
     """One value as its declaration says it: around its words, from the
     inside out, its kind's markup, its bold or link, what a reader hears, its
-    tip or muted voice, its box, its dot, its span when it shows only part
+    tip or muted voice, its box, its span when it shows only part
     of the time, its count, and its hooks. ``own`` is the cell's own value,
     whose bold names its row; ``whole`` a line, whose own box is its item;
     ``hushed`` a value on a line muted whole."""
@@ -586,8 +594,6 @@ def _value(
         drawn = _safe("<span", tipped, ">", drawn, "</span>")
     if cell is not None and cell.whole_parts:
         drawn = _safe('<span class="cell-part">', drawn, "</span>")
-    if value.dot:
-        drawn = _safe(dot(), drawn)
     if value.shows and not (whole or gist):
         drawn = _safe('<span class="', SHOWN[value.shows], '">', drawn, "</span>")
     if value.count is not None:
