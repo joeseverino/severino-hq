@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from functools import reduce
 from typing import Any
 
-from django.db.models import Q
+from django.db.models import Min, Q, QuerySet
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +27,16 @@ class Lapse:
         return reduce(
             operator.or_, (Q(state=state, **{f"{moment}__lte": now - grace}) for state, moment, grace in self.terms)
         )
+
+    def next(self, rows: QuerySet, now: datetime) -> datetime | None:
+        """The earliest moment one of ``rows`` not lapsed at ``now`` lapses;
+        None when none can."""
+
+        moments = (
+            (rows.filter(state=state, **{f"{moment}__gt": now - grace}).aggregate(at=Min(moment))["at"], grace)
+            for state, moment, grace in self.terms
+        )
+        return min((at + grace for at, grace in moments if at is not None), default=None)
 
     def holds(self, row: Any, now: datetime) -> bool:
         """Whether ``row`` has lapsed at ``now``."""

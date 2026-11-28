@@ -25,7 +25,7 @@ from django.db import connection
 from django.utils import timezone
 
 from hq.platform.application import derivations
-from hq.platform.core import live, revisions
+from hq.platform.core import doorbell, live, revisions
 from hq.platform.core.outside_requests import connections_of_its_own
 
 logger = logging.getLogger("severino.ahead")
@@ -84,7 +84,7 @@ class Keeper:
     def turn(self, *, due: bool = False) -> set[str]:
         """One pass: the tables written since the last, every question that
         reads one asked again (every one, when an answer's moment is ``due``),
-        and only then the pages told. The tables written."""
+        and only then the pages and the doorbell told. The tables written."""
 
         found = revisions.read()
         if found is None:
@@ -100,6 +100,7 @@ class Keeper:
                 derivations.derive_ahead()
         finally:
             live.HUB.told(changed)
+            doorbell.heard(changed)
         return changed
 
     def _run(self) -> None:

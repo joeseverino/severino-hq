@@ -605,6 +605,19 @@ class PassDueTests(TestCase):
         OperationRequest.objects.filter(pk=claimed.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
         self.assertEqual(cadence.pass_due(), "Work a controller took did not finish in time.")
 
+    def test_a_pass_comes_due_with_time_alone_at_the_moment_named_for_it(self):
+        lease = timezone.now() + timedelta(minutes=5)
+        self.operation(state=OperationRequest.State.CLAIMED, claimed_by="example-controller", lease_expires_at=lease)
+        self.assertEqual(cadence.next_due(), lease)
+        with mock.patch("django.utils.timezone.now", return_value=lease):
+            self.assertEqual(cadence.pass_due(), "Work a controller took did not finish in time.")
+
+        OperationRequest.objects.all().delete()
+        sweep = cadence.next_due()
+        for moment, due in ((sweep - timedelta(seconds=1), False), (sweep, True)):
+            with self.subTest(due=due), mock.patch("django.utils.timezone.now", return_value=moment):
+                self.assertIs(cadence.sweep_due()["due"], due)
+
     def test_a_dashboard_reading_asked_for_belongs_to_the_glance_pass_alone(self):
         from hq.domains.control_plane.models import DashboardRefreshRequest
 
@@ -668,6 +681,20 @@ class DefaultCadenceTests(TestCase):
 
         self.assertTrue(recently_used(now=touched + 15 * 60))
         self.assertFalse(recently_used(now=touched + 15 * 60 + 1))
+
+    def test_somebody_arriving_after_a_quiet_spell_wakes_the_doorbell(self):
+        marker = self.directory / "activity"
+        marker.touch()
+        long_ago = 1_000_000_000
+        for quiet, woken in ((15 * 60 + 1, True), (2 * 60, False)):
+            with self.subTest(quiet=quiet):
+                os.utime(marker, (long_ago, long_ago))
+                with (
+                    mock.patch.object(cadence, "time", SimpleNamespace(time=lambda quiet=quiet: long_ago + quiet)),
+                    mock.patch.object(cadence, "wake") as wake,
+                ):
+                    note_activity()
+                self.assertIs(wake.called, woken)
 
     def test_the_marker_is_rewritten_once_a_minute_at_most(self):
         marker = self.directory / "activity"

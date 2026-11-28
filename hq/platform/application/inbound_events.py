@@ -43,6 +43,7 @@ HOST_NAMED: Final = "host event reader"
 # InboundHeartbeatSeconds, and so how long a channel may go unheard before it
 # is silent: two of these.
 CHANNEL_EVERY = timedelta(minutes=5)
+SILENT_AFTER = 2 * CHANNEL_EVERY
 
 
 def unheard(source: InboundSource) -> WorkerState:
@@ -75,7 +76,7 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
     seen_at = readings.heard(channel(source))
     if seen_at is None:
         return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard(source))
-    silent = passed(seen_at + 2 * CHANNEL_EVERY)
+    silent = passed(seen_at + SILENT_AFTER)
     return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=named)
 
 
@@ -90,6 +91,17 @@ def covers(kind: str) -> bool:
             if standing.seen_at is not None and not standing.silent:
                 return True
     return False
+
+
+def falls_silent() -> datetime | None:
+    """The earliest moment a channel heard now goes silent, and so stops
+    covering what it kept current; None when none is heard."""
+
+    standings = (channel_standing(source) for source in InboundSource)
+    return min(
+        (standing.seen_at + SILENT_AFTER for standing in standings if standing.seen_at and not standing.silent),
+        default=None,
+    )
 
 
 def arrives_by(spec: InboundSpec) -> InboundSource:
