@@ -56,7 +56,7 @@ from .workflow_contracts import ActionLink
 lazy from . import domains
 lazy from .connection_records import (
     ConnectionStandingRecord,
-    CredentialSightPart,
+    CredentialRow,
     LastActivityPart,
     ReadPart,
     SeenPart,
@@ -224,8 +224,8 @@ def _newest(sight: Sight, instance: ConnectionInstance) -> dict[str, Any]:
     return {"newest": newest, "newest_at": at}
 
 
-def _sight(sight: ProviderSight) -> CredentialSightPart:
-    return record_saves.row(sight, CredentialSightPart, tally=tally(sight))
+def _sight(sight: ProviderSight) -> CredentialRow:
+    return record_saves.row(sight, CredentialRow, tally=tally(sight))
 
 
 def _read(read: Read) -> ReadPart:

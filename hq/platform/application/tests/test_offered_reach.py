@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.core import seeds
-from hq.platform.core.example_estate.names import MACHINE
+from hq.platform.core.example_estate.names import MACHINE, SSH
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import OPERATOR
 
@@ -54,3 +54,14 @@ class OfferedReachTests(TestCase):
             idempotency_key="example-run-printer",
         ).answer
         self.assertFalse(refused["ok"], refused)
+
+    def test_a_connection_changes_only_what_its_own_sweep_reads_of_its_provider(self):
+        from ..connection_context import get_connection_standing
+
+        def changes(ref: str) -> set[str]:
+            return {each["name"] for each in get_connection_standing(ref, principal=OPERATOR)["changes"]}
+
+        edge, web_host = changes(SSH), changes(WEB_HOST)
+        self.assertIn("caddy.route", edge)
+        self.assertNotIn("caddy.route", web_host)
+        self.assertIn("tls.uploaded_certificate", web_host)

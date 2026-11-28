@@ -536,7 +536,6 @@
               "sight.tally",
               "sight.tally.count",
               "sight.tally.state",
-              "sight.manages",
               "would_also_see",
               "credential_fix",
               "credential_fix.missing",
@@ -9636,8 +9635,8 @@
           "sight": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CredentialSightPart",
-                "title": "Credential sight part"
+                "$ref": "#/components/schemas/CredentialRow",
+                "title": "Credential row"
               },
               {
                 "type": "null"
@@ -9887,8 +9886,8 @@
           "sight": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CredentialSightPartPartial",
-                "title": "Credential sight part"
+                "$ref": "#/components/schemas/CredentialRowPartial",
+                "title": "Credential row"
               },
               {
                 "type": "null"
@@ -11756,7 +11755,11 @@
             "$ref": "#/components/schemas/CredentialRow/properties/label"
           },
           "manages": {
-            "$ref": "#/components/schemas/CredentialSightPart/properties/manages"
+            "description": "The types of record its credential changes, in words.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "provider": {
             "$ref": "#/components/schemas/CredentialRow/properties/provider"
@@ -11823,7 +11826,7 @@
             "$ref": "#/components/schemas/CredentialRowPartial/properties/label"
           },
           "manages": {
-            "$ref": "#/components/schemas/CredentialSightPartPartial/properties/manages"
+            "$ref": "#/components/schemas/CredentialRecord/properties/manages"
           },
           "provider": {
             "$ref": "#/components/schemas/CredentialRowPartial/properties/provider"
@@ -11907,61 +11910,6 @@
               "$ref": "#/components/schemas/TallyPartPartial"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "CredentialSightPart": {
-        "additionalProperties": false,
-        "description": "What a connection's credential can read, counted in each state.",
-        "properties": {
-          "credential_refusal": {
-            "$ref": "#/components/schemas/CredentialRow/properties/credential_refusal"
-          },
-          "label": {
-            "$ref": "#/components/schemas/CredentialRow/properties/label"
-          },
-          "manages": {
-            "description": "The types of record its credential changes, in words.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/CredentialRow/properties/provider"
-          },
-          "tally": {
-            "$ref": "#/components/schemas/CredentialRow/properties/tally"
-          }
-        },
-        "required": [
-          "provider",
-          "label",
-          "credential_refusal",
-          "tally",
-          "manages"
-        ],
-        "type": "object"
-      },
-      "CredentialSightPartPartial": {
-        "additionalProperties": false,
-        "description": "What a connection's credential can read, counted in each state.",
-        "properties": {
-          "credential_refusal": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/credential_refusal"
-          },
-          "label": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/label"
-          },
-          "manages": {
-            "$ref": "#/components/schemas/CredentialSightPart/properties/manages"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/provider"
-          },
-          "tally": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/tally"
           }
         },
         "type": "object"

@@ -66,15 +66,10 @@ class SightPart(TypedDict):
     remedy: Annotated[str, Describe("What would let HQ read all of it; empty when nothing is missing.")]
 
 
-class CredentialSightPart(CredentialRow):
-    """What a connection's credential can read, counted in each state."""
-
-    manages: Annotated[list[str], Describe("The types of record its credential changes, in words.")]
-
-
-class CredentialRecord(CredentialSightPart):
+class CredentialRecord(CredentialRow):
     """What one service's credential reads, each reading or listing it sees."""
 
+    manages: Annotated[list[str], Describe("The types of record its credential changes, in words.")]
     sights: Annotated[list[SightPart], Describe("Each reading or record type it could read.")]
 
 
@@ -328,7 +323,7 @@ class ConnectionStandingRecord(ConnectionStandingRow):
     secret_store: Annotated[str | None, Describe("Where its credential is kept; null when its type names no place.")]
     reach: Annotated[ReachPart | None, Describe("How HQ reaches its address; null when that was not worked out.")]
     sight: Annotated[
-        CredentialSightPart | None, Describe("What its credential can read; null when nothing reads through it.")
+        CredentialRow | None, Describe("What its credential can read; null when nothing reads through it.")
     ]
     would_also_see: Annotated[
         list[str], Describe("What the credential would also read with more permissions, each naming them.")

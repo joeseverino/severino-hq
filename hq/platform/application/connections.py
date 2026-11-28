@@ -50,7 +50,7 @@ from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
-lazy from .credential_sight import credential_sight, sight_by_connection
+lazy from .credential_sight import credential_sight, fed_kinds, sight_by_connection
 lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
@@ -403,11 +403,16 @@ def _controller_instances(
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
-                # A reading another connection of its provider took is that one's.
+                # A kind its provider's sweeps read through each connection
+                # (a reading, an edge's Caddy routes) is the connection's only
+                # where its own sweep read it, so a shell into shared hosting
+                # is never said to change an edge's routes.
                 ability_names=tuple(
                     name
                     for name in ability_names.get(reading.provider, ())
-                    if sight is None or name not in OBSERVATIONS or any(seen.kind == name for seen in sight.sights)
+                    if sight is None
+                    or name not in fed_kinds(reading.provider)
+                    or any(seen.kind == name for seen in sight.sights)
                 ),
                 targets=targets,
                 dependencies=dependencies,
