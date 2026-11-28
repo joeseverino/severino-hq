@@ -7,7 +7,8 @@ estate gives it. Here every view in the URLconf that draws its rows through
 model's own fields: text at its ``max_length`` in words that must wrap with an
 identifier and a digest among them, a paragraph for free text, an address as
 long as the field takes, a number at the largest its field and validators allow,
-and the longest label of every choice. One more row leaves every field that
+the longest label of every choice, and a JSON value as its declared shape
+reads the field's default. One more row leaves every field that
 may be empty empty, since a list can show only the rows where a field (a
 removal time, say) is unset. Every row has a row of each model that points
 back at it, since a list can show only the rows something hangs off. A new list
@@ -31,12 +32,14 @@ from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
+from pydantic_core import to_jsonable_python
 
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.references import ReferenceField
 from hq.platform.application.resources import resource_registry
 from hq.platform.application.routes import routed
 from hq.platform.core import seeds
+from hq.platform.core.stored_json import StoredJSONField
 
 # Words a record really says, run to the field's length so a column must wrap them.
 _WORDS = (
@@ -195,17 +198,30 @@ def _admitted(model, values, exclude):
 
 
 def _filled(field: models.Field) -> bool:
-    """Whether a row's value for ``field`` is derived here. Keys, relations and
-    what HQ computes are not; a reference names a record, so it is left empty."""
+    """Whether a row's value for ``field`` is derived here. Keys HQ assigns,
+    relations and what HQ computes are not; a reference names a record, so it
+    is left empty. A key the row names itself (a commit) is text like any other."""
 
     return (
         field.concrete
         and field.editable
-        and not field.primary_key
+        and not (field.primary_key and (field.has_default() or isinstance(field, models.AutoField)))
         and not field.is_relation
         and not isinstance(field, ReferenceField)
         and not isinstance(field, (models.BooleanField, models.JSONField))
     )
+
+
+def _shaped(model, values):
+    """Each JSON value that must hold something, as its declared shape reads
+    the field's default and HQ writes it: a shape's every field, at its default."""
+
+    row = model(**values)
+    return {
+        field.name: to_jsonable_python(field.load(row))
+        for field in model._meta.concrete_fields
+        if isinstance(field, StoredJSONField) and not field.blank and field.name not in values
+    }
 
 
 def _required(field: models.Field) -> bool:
@@ -293,17 +309,10 @@ class _Fill:
             }
         fields = [field for field in model._meta.concrete_fields if _filled(field) and not (sparse and field.null)]
         chosen = [field for field in fields if field.choices]
-        plain = _admitted(
-            model,
-            given
-            | {
-                field.name: value
-                for field in fields
-                if not field.choices
-                if (value := _value(field, index)) is not None
-            },
-            exclude=[field.name for field in chosen],
-        )
+        plain = given | {
+            field.name: value for field in fields if not field.choices if (value := _value(field, index)) is not None
+        }
+        plain = _admitted(model, plain | _shaped(model, plain), exclude=[field.name for field in chosen])
         # Row `index` starts each choice field `index` places down its longest-first list.
         ranked = []
         for field in chosen:
