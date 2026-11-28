@@ -74,6 +74,37 @@ class WorkerSocketTests(LaneTestCase):
                 self.refused(claim(bridge_client.worker(), kind, "reconcile"))
         self.assertEqual(claim(bridge_client.worker(), "automation.operation", "run").status, 200)
 
+    def test_the_hosts_ask_names_only_the_workers_a_claim_would_give_work(self):
+        from hq.domains.control_plane.connection_shapes import READ_PROFILE
+        from hq.platform.application.cadence import automation_standing
+
+        profiles = [READ_PROFILE, "example.change"]
+
+        def waiting() -> list[str]:
+            answer = bridge_client.request("/waiting", query={"profile": profiles}, app=bridge_client.worker())
+            self.assertEqual(answer.status, 200, answer.body)
+            return answer.json()["profiles"]
+
+        # Work of another lane, or one claimed already, is no worker's to start for.
+        claimed("automation.source", OperationRequest.Action.SCAN)
+        OperationRequest.objects.create(
+            resource=declare("example-certificate", "tls.certificate"),
+            action=OperationRequest.Action.RECONCILE,
+            idempotency_key="example-reconcile",
+            input={"generation": 1},
+        )
+        self.assertEqual(waiting(), [])
+        for profile in profiles:
+            self.assertIsNotNone(automation_standing(profile).seen_at, profile)
+
+        OperationRequest.objects.create(
+            resource=declare("example-queued-source", "automation.source"),
+            action=OperationRequest.Action.SCAN,
+            idempotency_key="example-queued-scan",
+            input={"generation": 1},
+        )
+        self.assertEqual(waiting(), [READ_PROFILE])
+
     def test_it_renews_and_reports_no_work_of_another_kind(self):
         for kind, action in (("tls.certificate", "reconcile"), ("github.pull_request", "merge")):
             operation = claimed(kind, action)

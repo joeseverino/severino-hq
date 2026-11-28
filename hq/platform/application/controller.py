@@ -39,7 +39,7 @@ from .plugin_admission import admitted_sources
 from .projection import iso, serialized_reads
 from .record_errors import PolicyError
 from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation, succeeded
-lazy from .automation_runs import held_runs, operation_registry, other_profiles, queue_settling
+lazy from .automation_runs import claimant, held_runs, operation_registry, other_profiles, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -394,6 +394,35 @@ def _check_lease(lease_seconds: int) -> None:
         raise ValueError("Lease duration must be between 30 and 3600 seconds.")
 
 
+def _claimable(capabilities: tuple[tuple[str, str], ...], profile: str | None):
+    """The queued operations a claim naming ``capabilities`` and ``profile`` is offered, oldest first."""
+
+    operations = (
+        OperationRequest.objects.select_related("resource")
+        .filter(state=OperationRequest.State.QUEUED)
+        .order_by("created_at")
+    )
+    # The pause and a block stop what an agent already asked for, not only
+    # what it asks next. Left queued, so lifting the brake resumes it.
+    operations = operations.exclude(agent_access.held_askers())
+    operations = _compatible_operations(operations, capabilities)
+    if profile is not None:
+        operations = operations.exclude(other_profiles(profile))
+    return operations
+
+
+@transaction.atomic
+def waiting_profiles(profiles: tuple[str, ...], *, capabilities: tuple[tuple[str, str], ...]) -> list[str]:
+    """Which of ``profiles`` has a queued scan or run its worker's claim of
+    ``capabilities`` would take (``claimant``), so the host starts only those
+    workers. Work whose lease ran out is put back first, as before a claim."""
+
+    release_lapsed(timezone.now())
+    queued = _claimable(capabilities, None).order_by().values_list("action", "resource__spec__privilege").distinct()
+    due = {claimant(action, privilege) for action, privilege in queued}
+    return [profile for profile in profiles if profile in due]
+
+
 @transaction.atomic
 def claim_next_operation(
     controller_id: str,
@@ -431,19 +460,7 @@ def claim_next_operation(
             result = _pending(held, claimed=True)
             result.update(controller_contract(held.resource))
             return result
-    operations = (
-        OperationRequest.objects.select_for_update(skip_locked=True)
-        .select_related("resource")
-        .filter(state=OperationRequest.State.QUEUED)
-        .order_by("created_at")
-    )
-    # The pause and a block stop what an agent already asked for, not only
-    # what it asks next. Left queued, so lifting the brake resumes it.
-    operations = operations.exclude(agent_access.held_askers())
-    operations = _compatible_operations(operations, capabilities)
-    if profile is not None:
-        operations = operations.exclude(other_profiles(profile))
-    operation, contract = _next_resolvable(operations)
+    operation, contract = _next_resolvable(_claimable(capabilities, profile).select_for_update(skip_locked=True))
     if operation is None:
         return {"ok": True, "operation": None}
     operation.state = OperationRequest.State.CLAIMED

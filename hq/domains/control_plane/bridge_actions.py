@@ -19,7 +19,7 @@ from hq.domains.control_plane.connection_shapes import READ_PROFILE
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.analytics import analytics_plan, record_analytics
-from hq.platform.application.cadence import note_automation, note_controller, sweep_due
+from hq.platform.application.cadence import note_automation, note_controller, pass_due, sweep_due
 from hq.platform.application.certificates import material_for
 from hq.platform.application.controller import (
     ControllerReport,
@@ -29,6 +29,7 @@ from hq.platform.application.controller import (
     renew_operation,
     report_operation,
     schedule_automatic_operations,
+    waiting_profiles,
 )
 from hq.platform.application.glance_refresh import dashboard_refresh_plan, record_dashboard_observations
 from hq.platform.application.inbound import apply_events
@@ -88,10 +89,10 @@ WORKER_LANE = Lane(automation=True)
 
 def _claim(lane: Lane) -> Run:
     def run(parameters: Parameters, payload: Any) -> Any:
-        # Every applying pass claims, an idle one included, before any work
-        # that could end it early, and neither a preflight nor a glance pass
-        # does: so a claim on the controller's socket is the controller
-        # arriving. A glance pass runs when a person asks, and counted, it
+        # Every applying pass claims before any work that could end it early,
+        # and neither a preflight nor a glance pass does: so a claim on the
+        # controller's socket is the controller arriving, as the host's
+        # pass-due ask is when no pass runs. A glance pass runs when a person asks, and counted, it
         # would hide a controller that had stopped. One on the worker's socket
         # is HQ's playbook worker arriving instead.
         del payload
@@ -130,11 +131,18 @@ def _renew(lane: Lane) -> Run:
     return run
 
 
+# What HQ's playbook worker claims: a playbook's runs and the source's scans.
+WORKER_WORK = ((OPERATION_KIND, OperationRequest.Action.RUN), (SOURCE_KIND, OperationRequest.Action.SCAN))
+
+
 def _waiting(parameters: Parameters, payload: Any) -> Any:
-    # Every profile asked, so each profile's worker starts and claims as it
-    # does without the ask.
+    # The host asks before it starts any profile's worker, an idle pass
+    # included, so the ask is each of its workers arriving.
     del payload
-    return {"ok": True, "profiles": list(parameters["profile"])}
+    profiles = tuple(parameters["profile"])
+    for profile in profiles:
+        note_automation(profile)
+    return {"ok": True, "profiles": waiting_profiles(profiles, capabilities=WORKER_WORK)}
 
 
 def _peek(parameters: Parameters, payload: Any) -> Any:
@@ -214,6 +222,15 @@ def _sweep_due(parameters: Parameters, payload: Any) -> Any:
     return sweep_due(parameters["controller-id"], take(forced_reads()))
 
 
+def _pass_due(parameters: Parameters, payload: Any) -> Any:
+    # The host asks before every applying pass, an idle one included, so the
+    # ask is the controller arriving, as its claim is once a pass runs.
+    del parameters, payload
+    note_controller()
+    reason = pass_due()
+    return {"ok": True, "due": bool(reason), "reason": reason}
+
+
 def _glance_plan(parameters: Parameters, payload: Any) -> Any:
     del payload
     return dashboard_refresh_plan(parameters["controller-id"])
@@ -285,6 +302,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("analytics", "The controller sent site analytics", _analytics),
     Action("analytics-plan", "The controller asked which analytics to read", _analytics_plan),
     Action("sweep-due", "The controller asked which readings are due", _sweep_due),
+    Action("pass-due", "The controller's host asked whether a pass is due", _pass_due),
     Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
     Action("glance", "The controller refreshed the dashboard", _glance),
     Action("registry", "The controller read what each provider declares", _registry),

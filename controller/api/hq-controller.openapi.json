@@ -461,6 +461,35 @@
         }
       }
     },
+    "/pass-due": {
+      "post": {
+        "operationId": "pass-due",
+        "summary": "Say whether a controller pass would find anything to do now, and why.",
+        "x-bridge-action": "pass-due",
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassDue"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/connections": {
       "post": {
         "operationId": "connections",
@@ -2960,6 +2989,27 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "PassDue": {
+        "type": "object",
+        "description": "Whether a controller pass is due, and why; the reason is empty when none is.",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "due",
+          "reason"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "due": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
           }
         }
       },

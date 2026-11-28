@@ -53,6 +53,8 @@ type launch struct {
 	container func(out string)
 	// loaded is whether an egress table was loaded.
 	loaded bool
+	// passDue is what HQ answers the ask of whether a pass is due.
+	passDue string
 }
 
 // listenerNetworkJSON is what `docker network inspect` says of the
@@ -89,7 +91,7 @@ func newLaunch(t *testing.T) *launch {
 		t.Fatal(err)
 	}
 
-	l := &launch{f: f, mounted: map[string][]byte{}}
+	l := &launch{f: f, mounted: map[string][]byte{}, passDue: `{"ok":true,"due":true,"reason":"Work is queued."}`}
 	program := f.machine.Command
 	f.machine.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
 		if name == "docker" && args[0] == "run" {
@@ -114,6 +116,9 @@ func newLaunch(t *testing.T) *launch {
 					}
 				}
 			}
+		}
+		if name == "docker" && slices.Equal(args, []string{"exec", hostcore.Container, "hq-controller", "pass-due"}) {
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"`, "sh", l.passDue)
 		}
 		if name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}) {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"`, "sh", listenerNetworkJSON)
@@ -176,6 +181,38 @@ func (l *launch) envs() []string {
 		}
 	}
 	return envs
+}
+
+// An applying pass starts its container only when it has something to do: a
+// grant's token to mint, or what HQ says is due. One HQ cannot answer runs,
+// so a missed answer never strands work.
+func TestAnIdlePassStartsNoContainer(t *testing.T) {
+	idle := `{"ok":true,"due":false,"reason":""}`
+	cases := []struct {
+		name    string
+		answer  string
+		granted bool
+		starts  bool
+	}{
+		{"nothing is due", idle, false, false},
+		{"a grant's token is due", idle, true, true},
+		{"HQ does not answer", "", false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			l := newLaunch(t)
+			l.passDue = c.answer
+			l.controller.Grants = nil
+			if c.granted {
+				l.controller.Grants = []Grant{{Name: "example", Repositories: []string{"example/playbooks"},
+					Permissions: map[string]string{"contents": "read"}, Path: filepath.Join(l.f.root, "absent-token")}}
+			}
+			l.run(t, Apply)
+			if started := l.args != nil; started != c.starts {
+				t.Errorf("the pass's container started: %v, want %v", started, c.starts)
+			}
+		})
+	}
 }
 
 func TestConnectionsAreMountedAndNeverPassedAsEnvironment(t *testing.T) {

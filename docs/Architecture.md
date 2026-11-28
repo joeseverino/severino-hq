@@ -1823,10 +1823,13 @@ also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
-HQ knows each profile's worker is there by its claims. Each claim of nothing
-but its work records that profile's arrival (`cadence.note_automation`), so a
-worker that finds nothing to take still counts as seen, and never as the
-controller. One never seen, or not seen within two of its timer's floors
+HQ knows each profile's worker is there by its host's ask and its claims.
+Before it starts any worker, `hq-host automation` asks which profiles have a
+queued run or scan (`hq-controller waiting`, answered by
+`controller.waiting_profiles` from the claim's own selection), and starts only
+those. The ask and each claim record each profile's arrival
+(`cadence.note_automation`), so an idle host still counts its workers as
+seen, and never as the controller. One never seen, or not seen within two of its timer's floors
 while it holds no run's lease, is absent (`cadence.automation_standing`).
 While the read profile's is absent no scan is asked for; while any profile's
 is, each run of that profile is refused with the reason, one already waiting

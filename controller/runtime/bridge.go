@@ -167,6 +167,15 @@ func (b *SocketBridge) Peek(ctx context.Context, capabilities []string) (Pending
 	return pending, err
 }
 
+// PassDue answers whether a controller pass would find anything to do.
+func (b *SocketBridge) PassDue(ctx context.Context) (PassDue, error) {
+	var due PassDue
+	err := b.call(ctx, nil, &due, func(ctx context.Context, _ string, _ io.Reader) (*http.Response, error) {
+		return b.client.PassDue(ctx)
+	})
+	return due, err
+}
+
 // Waiting answers which of profiles have queued work their worker would claim.
 func (b *SocketBridge) Waiting(ctx context.Context, profiles []string) ([]string, error) {
 	var waiting Waiting

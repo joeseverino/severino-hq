@@ -2874,6 +2874,13 @@ type Operation struct {
 	State  string `json:"state"`
 }
 
+// PassDue Whether a controller pass is due, and why; the reason is empty when none is.
+type PassDue struct {
+	Due    bool   `json:"due"`
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason"`
+}
+
 // PassMode Whether a pass only looked (plan) or claimed and executed work (apply).
 type PassMode string
 
@@ -3797,6 +3804,11 @@ type ClientInterface interface {
 	// Corresponds with POST /material (the `Material` operationId).
 	Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PassDue Say whether a controller pass would find anything to do now, and why.
+	//
+	// Corresponds with POST /pass-due (the `PassDue` operationId).
+	PassDue(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// Peek Read the next compatible operation without leasing it.
 	//
 	// Corresponds with POST /peek (the `Peek` operationId).
@@ -4134,6 +4146,21 @@ func (c *Client) Job(ctx context.Context, params *JobParams, reqEditors ...Reque
 // Corresponds with POST /material (the `Material` operationId).
 func (c *Client) Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMaterialRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PassDue Say whether a controller pass would find anything to do now, and why.
+//
+// Corresponds with POST /pass-due (the `PassDue` operationId).
+func (c *Client) PassDue(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPassDueRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -4939,6 +4966,33 @@ func NewMaterialRequest(server string, params *MaterialParams) (*http.Request, e
 	return req, nil
 }
 
+// NewPassDueRequest constructs an http.Request for the PassDue method
+func NewPassDueRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/pass-due"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPeekRequest constructs an http.Request for the Peek method
 func NewPeekRequest(server string, params *PeekParams) (*http.Request, error) {
 	var err error
@@ -5550,6 +5604,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /material (the `Material` operationId).
 	MaterialWithResponse(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*MaterialResponse, error)
 
+	// PassDueWithResponse Say whether a controller pass would find anything to do now, and why.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /pass-due (the `PassDue` operationId).
+	PassDueWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PassDueResponse, error)
+
 	// PeekWithResponse Read the next compatible operation without leasing it.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -6150,6 +6211,54 @@ func (r MaterialResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r MaterialResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PassDueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PassDue
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PassDueResponse) GetJSON200() *PassDue {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PassDueResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PassDueResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PassDueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PassDueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PassDueResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -6761,6 +6870,19 @@ func (c *ClientWithResponses) MaterialWithResponse(ctx context.Context, params *
 	return ParseMaterialResponse(rsp)
 }
 
+// PassDueWithResponse Say whether a controller pass would find anything to do now, and why.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /pass-due (the `PassDue` operationId).
+func (c *ClientWithResponses) PassDueWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PassDueResponse, error) {
+	rsp, err := c.PassDue(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePassDueResponse(rsp)
+}
+
 // PeekWithResponse Read the next compatible operation without leasing it.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -7250,6 +7372,39 @@ func ParseMaterialResponse(rsp *http.Response) (*MaterialResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Material
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePassDueResponse parses an HTTP response from a PassDueWithResponse call
+func ParsePassDueResponse(rsp *http.Response) (*PassDueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PassDueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PassDue
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

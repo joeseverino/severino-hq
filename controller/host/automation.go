@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -220,15 +219,9 @@ func (a *Automation) work(ctx context.Context, image, run, token string, profile
 // starts no container. Every profile starts when HQ cannot say, so a missed
 // answer never strands queued work.
 func (a *Automation) waiting(ctx context.Context, profiles []string) []string {
-	ask, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	out, err := a.Command(ask, "docker", append([]string{"exec", hostcore.Container, "hq-controller", "waiting"}, profiles...)...).Output()
 	var answer runtime.Waiting
-	if err == nil {
-		err = json.Unmarshal(out, &answer)
-	}
-	if err != nil || !answer.OK {
-		fmt.Fprintf(a.Stderr, "HQ did not say which workers have queued work, so each starts: %v %s\n", err, bytes.TrimSpace(out))
+	if err := a.askHQ(ctx, &answer, append([]string{"waiting"}, profiles...)...); err != nil || !answer.OK {
+		fmt.Fprintf(a.Stderr, "HQ did not say which workers have queued work, so each starts: %v\n", err)
 		return profiles
 	}
 	return slices.DeleteFunc(profiles, func(profile string) bool { return !slices.Contains(answer.Profiles, profile) })
