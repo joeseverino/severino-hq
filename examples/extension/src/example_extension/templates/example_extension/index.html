@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-{% section "Notes" id="example-notes" count=notes.rows|length %}
+{% section "Notes" id="example-notes" counts=notes.rows %}
   {% data_table notes %}
 {% endsection %}
 {% endblock %}
