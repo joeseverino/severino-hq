@@ -64,6 +64,12 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   .chart-frame-dense .chart-cats .chart-category:first-child,
   .chart-frame-dense .chart-cats .chart-category:last-child { display: inline; }
 }
+/* Labels that fit a phone's card but not a 320px screen's thin out there the same way. */
+@container chart (max-width: 300px) {
+  .chart-frame-cramped .chart-category { display: none; }
+  .chart-frame-cramped .chart-cats .chart-category:first-child,
+  .chart-frame-cramped .chart-cats .chart-category:last-child { display: inline; }
+}
 /* Where a label goes is computed from the data and arrives as its x and y; everything about how it looks is here. */
 .chart-frame .chart-axis {
   color: var(--muted);

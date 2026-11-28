@@ -144,6 +144,12 @@ def drawn(table: DataTable, context: Any, *, empty: str = "") -> dict[str, Any]:
     }
 
 
+# The rows past which a table outgrows a card of facts beside it, where a
+# row of cards stops sharing its height (`data-long`, layout.css): a page
+# cannot compare two cards' heights, so the count stands for it.
+LONG_ROWS = 9
+
+
 def _box(table: DataTable, groups: list[DrawnGroup]) -> SafeString:
     """The attributes of the box a table fits past its classes (``data_table``'s rules).
 
@@ -157,11 +163,12 @@ def _box(table: DataTable, groups: list[DrawnGroup]) -> SafeString:
     region = table.region
     edits = any(cell.editor for group in groups for row in group.rows for cell in row.row.cells)
     return format_html(
-        "{}{}{}",
+        "{}{}{}{}",
         format_html(' role="group" aria-label="{}" tabindex="0"', table.label)
         if region["pane"] or region["chart"]
         else "",
         mark_safe(" data-chart") if region["chart"] else "",
+        mark_safe(" data-long") if sum(len(group.rows) for group in groups) >= LONG_ROWS else "",
         format_html(' id="table-{}" data-fragment=""', slugify(table.label)) if edits else "",
     )
 

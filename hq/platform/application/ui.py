@@ -262,6 +262,10 @@ LABEL_GAP_PX = 8.0
 # drawing. Labels wanting more are `dense`, and the container query that acts
 # on it (figures.css) keeps only the end labels in any narrow card.
 NARROW_PLOT_PX = 284.0 * PLOT_WIDTH / STANDARD_SVG
+# The plot of a card on a 320px screen, whose frame the page's inset and the
+# card's sides leave 254px wide. Labels wanting more are `cramped`: they fit a
+# phone's wider card but keep only the end labels in one that narrow.
+SCREEN_PLOT_PX = 254.0 * PLOT_WIDTH / STANDARD_SVG
 
 
 @display
@@ -358,18 +362,29 @@ class Chart:
     stacked: ClassVar[bool] = False
 
     @property
+    def _labels_px(self) -> float:
+        """What the axis labels want side by side, measured rather than
+        counted: the sum of what each label's text costs and the gaps."""
+
+        if not self.categories:
+            return 0.0
+        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
+        return text + (len(self.categories) - 1) * LABEL_GAP_PX
+
+    @property
     def dense(self) -> bool:
         """Whether these labels can fit a narrow card side by side.
 
         This says the half knowable here, that the labels want more than a
         narrow card has; a container query says whether the card is that narrow.
         """
-        if not self.categories:
-            return False
-        # Measured, not counted: the sum of what each label's text costs.
-        text = sum(len(item.label) for item in self.categories) * LABEL_CHAR_PX
-        gaps = (len(self.categories) - 1) * LABEL_GAP_PX
-        return text + gaps > NARROW_PLOT_PX
+        return self._labels_px > NARROW_PLOT_PX
+
+    @property
+    def cramped(self) -> bool:
+        """Whether labels that fit a narrow card want more than a 320px screen's card has."""
+
+        return self._labels_px > SCREEN_PLOT_PX
 
     @property
     def gutter(self) -> float:
