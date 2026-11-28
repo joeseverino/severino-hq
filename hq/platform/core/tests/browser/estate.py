@@ -613,11 +613,12 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.evaluate("() => { window.kept = true; }")
                 link = self.page.locator(self.css(SELECTORS["sort_link"])).first
                 sorted_by = "(link) => link.closest('th').getAttribute('aria-sort')"
-                self.assertEqual(link.evaluate(sorted_by), "none")
-                for direction in ("ascending", "descending"):
-                    asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
-                    link.click()
-                    self.page.wait_for_function(_ASKED, arg=["sort", asked])
+                # Unasked, the list is read in its first column's order, and that heading says so.
+                for pressed, direction in enumerate(("ascending", "descending", "ascending")):
+                    if pressed:
+                        asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
+                        link.click()
+                        self.page.wait_for_function(_ASKED, arg=["sort", asked])
                     self.assertEqual(link.evaluate(sorted_by), direction)
                     names = self.page.evaluate(_FIRST_COLUMN, self.css(SELECTORS["table_rows"]))
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))
