@@ -36,6 +36,7 @@ from .tone import Absent
 from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones
+lazy from .estate import certificates as expiring
 lazy from .service_list import services_by_zone
 
 # The authority HQ's own certificate provider issues from. Stated here because
@@ -224,20 +225,11 @@ def security(zone) -> ZoneInsight | None:
     certificates_card = certificates(zone)
     edge = stored_readings().about(Subject.of(zones=(zone.zone,)), facets=("certificate",))
     covering = _covering(zone)
-    earliest = _earliest(
-        [item.expires for item in edge]
-        + [str((resource.status or {}).get("not_after", "")) for resource, _ in covering]
-    )
     # The mode is the answer; the rest is one line of facts. What each mode
     # means and who issued each certificate are the certificates' own pages.
     facts = list(_posture_facts(zone))
-    count = len(edge) + len(covering)
-    if count:
-        certificates_fact = counted(count, "certificate")
-        first = moment(earliest) if earliest else None
-        if first is not None:
-            certificates_fact += f", first {expiry_words(first)}"
-        facts.append(certificates_fact)
+    if found := expiring((zone.zone,), keys={resource.key for resource, _ in covering}):
+        facts.append(f"{counted(len(found), 'certificate')}, first {expiry_words(found[0].expires)}")
     stronger = _stronger_elsewhere(zone)
     concerns = []
     if certificates_card is not None and certificates_card.concern:
