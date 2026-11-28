@@ -9,6 +9,7 @@ second truth, only a second way of slicing the first.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import timedelta
 from functools import cached_property
 from typing import override
 
@@ -22,6 +23,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.platform.application.entity_links import entity_link, page_url
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.mail_policy import mail_overview, parse_spf
+from hq.platform.application.moments import Span
 from hq.platform.application.pages import PageAction, RecordPageMixin, page_context
 from hq.platform.application.pins import DOMAIN, PIN, pinned
 from hq.platform.application.problems import About, problems_of
@@ -40,7 +42,7 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.tables import Cell, DataTable, Group, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Absent
-from hq.platform.application.ui import counted, measured
+from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted
 from hq.platform.application.zone_findings import MAIL_CARD
 from hq.platform.application.zones import ADOPT_ZONE, RECORD_KIND, find_zone, zone_catalog
@@ -387,7 +389,7 @@ def _record_cells(record: Mapping, *, ttl_set: bool, managed: bool) -> tuple[Cel
         replace(name, lines=(Cell(summary, muted=True, role="data", shows="narrow"),) if summary else ()),
         Cell(record["record_type"], readout=True),
         Cell(record["value"], readout=True, parts=proxied),
-        *((Cell(measured(record["ttl"], "s") if record["ttl"] != 1 else ""),) if ttl_set else ()),
+        *((Cell(Span(timedelta(seconds=record["ttl"])) if record["ttl"] != 1 else ""),) if ttl_set else ()),
         *((_record_state(record),) if managed else ()),
     )
 

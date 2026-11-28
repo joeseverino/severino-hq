@@ -11,7 +11,7 @@ EDGE_KIND = "host.edge_reboot"
 OUT_OF_DATE = stale_after(KIND) + timedelta(minutes=10)
 
 
-AT_ELEVEN = "Jan\xa015, 11\xa0AM"
+AT_ELEVEN = "Jan\xa015, 11:00\xa0AM"
 
 
 NEWER = "example-edge waits on a restart"

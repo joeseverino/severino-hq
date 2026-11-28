@@ -42,17 +42,17 @@ EXAMPLES = (
         "certificate-expiring",
         fires=(
             # Two weeks out.
-            edges(edge(14, "app.example.com"), raises=("Edge certificate example.com expires in 15 days",)),
+            edges(edge(14, "app.example.com"), raises=("Edge certificate example.com expires in 15\xa0days",)),
             # Past expiry.
             edges(
                 edge(-3, "app.example.com"),
-                raises=(Raised(title="Edge certificate example.com expired 2 days ago", severity=Tone.SERIOUS),),
+                raises=(Raised(title="Edge certificate example.com expired 2\xa0days ago", severity=Tone.SERIOUS),),
             ),
             # A name held twice is raised once, by the one that runs out last.
             edges(
                 edge(-3, "app.example.com"),
                 edge(5, "app.example.com"),
-                raises=(Raised(title="Edge certificate example.com expires in 6 days", severity=Tone.SERIOUS),),
+                raises=(Raised(title="Edge certificate example.com expires in 6\xa0days", severity=Tone.SERIOUS),),
             ),
             # Certificates that serve no name are each their own, told apart by
             # issuer. One title read at one moment is one certificate, so these
@@ -61,8 +61,8 @@ EXAMPLES = (
                 edge(-3, authority="google"),
                 edge(-2.8, authority="lets_encrypt"),
                 raises=(
-                    "Edge certificate example.com from Google Trust Services expired 2 days ago",
-                    "Edge certificate example.com from Let's Encrypt expired 2 days ago",
+                    "Edge certificate example.com from Google Trust Services expired 2\xa0days ago",
+                    "Edge certificate example.com from Let's Encrypt expired 2\xa0days ago",
                 ),
             ),
             # From one issuer, told apart by the names they serve.
@@ -71,10 +71,12 @@ EXAMPLES = (
                 edge(4.2, "b.example.com"),
                 raises=(
                     Raised(
-                        title="Edge certificate example.com for a.example.com expires in 5 days", severity=Tone.SERIOUS
+                        title="Edge certificate example.com for a.example.com expires in 5\xa0days",
+                        severity=Tone.SERIOUS,
                     ),
                     Raised(
-                        title="Edge certificate example.com for b.example.com expires in 5 days", severity=Tone.SERIOUS
+                        title="Edge certificate example.com for b.example.com expires in 5\xa0days",
+                        severity=Tone.SERIOUS,
                     ),
                 ),
             ),
@@ -84,10 +86,10 @@ EXAMPLES = (
                 edge(4, "app.example.com", ref="example-cf-b"),
                 raises=(
                     Raised(
-                        title="Edge certificate example.com in example-cf-a expires in 5 days", severity=Tone.SERIOUS
+                        title="Edge certificate example.com in example-cf-a expires in 5\xa0days", severity=Tone.SERIOUS
                     ),
                     Raised(
-                        title="Edge certificate example.com in example-cf-b expires in 5 days", severity=Tone.SERIOUS
+                        title="Edge certificate example.com in example-cf-b expires in 5\xa0days", severity=Tone.SERIOUS
                     ),
                 ),
             ),
@@ -95,8 +97,8 @@ EXAMPLES = (
             Example(
                 readings={"npm.certificate": (npm(1, "letsencrypt"), npm(2, "other"))},
                 raises=(
-                    "NPM certificate lapsed.example.com from Let's Encrypt expired 3 days ago",
-                    "Uploaded NPM certificate lapsed.example.com expired 3 days ago",
+                    "NPM certificate lapsed.example.com from Let's Encrypt expired 3\xa0days ago",
+                    "Uploaded NPM certificate lapsed.example.com expired 3\xa0days ago",
                 ),
             ),
         ),

@@ -36,7 +36,7 @@ from .figured import Figure
 from .github_public import github_repository
 from .image_findings import SERIOUS, ImageFindings, ranked
 from .images import ImageRef, affected, compare, newer, version
-from .moments import duration, moment
+from .moments import Span, moment
 from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted
@@ -94,7 +94,7 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
         return uptime_of(status)
     up = timezone.now() - started
     # Under a minute, a length of time reads "0 minutes".
-    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {duration(up, depth=1)}", up.total_seconds())
+    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {Span(up)}", up.total_seconds())
 
 
 def started_at(machine: str, container: str) -> str:

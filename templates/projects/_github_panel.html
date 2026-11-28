@@ -73,7 +73,7 @@ reading; nothing here calls GitHub.
       {% fact "Deploy rules" %}
         {% if environment.reviewers %}Approval from {{ environment.reviewers|join:", " }}{% else %}No approval{% endif %}
       {% detail %}
-        {% if environment.wait_minutes or environment.branches != "any" %}<small>{% if environment.wait_minutes %}{{ environment.wait_minutes|counted:"minute" }} wait{% if environment.branches != "any" %}{% dot %}{% endif %}{% endif %}{% if environment.branches == "protected" %}Protected branches only{% elif environment.branches != "any" %}Chosen branches only{% endif %}</small>{% endif %}
+        {% if environment.wait_minutes or environment.branches != "any" %}<small>{% if environment.wait_minutes %}{{ environment.wait_minutes|span:"minutes" }} wait{% if environment.branches != "any" %}{% dot %}{% endif %}{% endif %}{% if environment.branches == "protected" %}Protected branches only{% elif environment.branches != "any" %}Chosen branches only{% endif %}</small>{% endif %}
       {% endfact %}
     {% endif %}
     {% for runner in repo.runners %}

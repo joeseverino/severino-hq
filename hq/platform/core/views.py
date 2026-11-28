@@ -1,6 +1,7 @@
 """Dashboard + audit-log views."""
 
 import re
+from datetime import timedelta
 from typing import Any, ClassVar, override
 
 from django import forms
@@ -32,7 +33,7 @@ from hq.platform.application.command_forms import command_form_class
 from hq.platform.application.demo import DEMO_SESSION_KEY, SET_DEMO
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.entity_links import entity_link
-from hq.platform.application.moments import moment
+from hq.platform.application.moments import Span, moment
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
 from hq.platform.application.pages import PageAction, PageMixin, runs_here
 from hq.platform.application.projection import projection_scope
@@ -40,7 +41,7 @@ from hq.platform.application.references import Kind
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
-from hq.platform.application.ui import PageNavigation, PageSection, counted
+from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.url_query import with_query
 from hq.platform.application.web_writes import execute_posted, run_posted
 from hq.platform.core.web_refusals import refusal_response, refused
@@ -131,7 +132,7 @@ class ThrottledLoginView(LoginView):
         # real username.
         form.add_error(
             None,
-            f"Too many failed sign-in attempts. Try again in {counted(state.minutes_remaining, 'minute')}.",
+            f"Too many failed sign-in attempts. Try again in {Span(timedelta(minutes=state.minutes_remaining))}.",
         )
         return self.render_to_response(self.get_context_data(form=form), status=429)
 

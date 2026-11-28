@@ -46,7 +46,7 @@ class PhrasingTests(SimpleTestCase):
     def test_a_moment_is_read_in_the_timezone_hq_is_read_in(self):
         late = datetime(timezone.localdate().year, 7, 4, 3, 0, tzinfo=UTC)
 
-        self.assertEqual(when(late), "Jul\xa03, 10\xa0PM")
+        self.assertEqual(when(late), "Jul\xa03, 10:00\xa0PM")
         self.assertEqual(when_day(late), "Jul\xa03")
 
     def test_a_bare_date_has_no_time_of_day(self):
@@ -81,8 +81,8 @@ class PhrasingTests(SimpleTestCase):
         for missing in (None, "", "not a time"):
             self.assertEqual(when(missing, timezone.now()), "never")
 
-    def test_a_whole_hour_drops_its_minutes(self):
-        self.assertEqual(clock(this_year(10, 3, 19)), "7\xa0PM")
+    def test_a_whole_hour_keeps_its_minutes(self):
+        self.assertEqual(clock(this_year(10, 3, 19)), "7:00\xa0PM")
         self.assertEqual(clock(this_year(10, 3, 19, 30)), "7:30\xa0PM")
 
     def test_a_run_of_days_says_a_shared_year_once(self):
@@ -253,19 +253,34 @@ class DaySpanTests(TestCase):
 
 
 class SpanTests(SimpleTestCase):
-    def test_a_deadline_is_counted_in_days_and_a_long_one_in_months_and_years(self):
+    def test_a_length_is_its_largest_whole_unit_alone(self):
+        from ..moments import Span
+
+        ladder = {
+            timedelta(seconds=45): "45\xa0seconds",
+            timedelta(minutes=4, seconds=55): "4\xa0minutes",
+            timedelta(hours=1, minutes=2): "1\xa0hour",
+            timedelta(days=12, hours=5): "12\xa0days",
+            timedelta(days=90): "90\xa0days",
+            timedelta(days=91): "3\xa0months",
+            timedelta(days=180): "5\xa0months",
+            timedelta(days=1443): "3\xa0years",
+            -timedelta(seconds=5): "0\xa0seconds",
+        }
+        for lasting, said in ladder.items():
+            with self.subTest(lasting=lasting):
+                self.assertEqual(Span(lasting), said)
+                self.assertEqual(Span(lasting).figure, max(lasting, timedelta(0)).total_seconds())
+
+    def test_a_count_of_days_below_nothing_is_that_long_overdue(self):
         from ..moments import span
 
-        self.assertEqual(span(1), "1 day")
-        self.assertEqual(span(46), "46 days")
-        self.assertEqual(span(90), "90 days")
-        self.assertEqual(span(301), "9\xa0months, 3\xa0weeks")
-        self.assertEqual(span(1443), "3\xa0years, 11\xa0months")
-        self.assertEqual(span(-3), "3 days overdue")
+        self.assertEqual(span(-3), "3\xa0days overdue")
+        self.assertEqual(span(301), "9\xa0months")
 
-    def test_a_length_can_be_said_in_its_largest_unit_alone(self):
-        from ..moments import duration
+    def test_a_unit_of_time_is_no_count(self):
+        from ..ui import counted
 
-        twelve_days = timedelta(days=12, hours=5)
-        self.assertEqual(duration(twelve_days), "1\xa0week, 5\xa0days")
-        self.assertEqual(duration(twelve_days, depth=1), "1\xa0week")
+        for one, many in (("day", None), ("hour left", "hours left")):
+            with self.subTest(one), self.assertRaisesMessage(ValueError, "Span"):
+                counted(2, one, many)

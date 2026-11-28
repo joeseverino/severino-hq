@@ -64,12 +64,12 @@ EXAMPLES = (
             # Inside the window: its day and what to do.
             devices(
                 {"name": "example-edge", "addresses": ["100.64.0.7"], "key_expires": expiring_in(30)},
-                raises=("example-edge leaves the tailnet in 30 days",),
+                raises=("example-edge leaves the tailnet in 30\xa0days",),
             ),
             # Close enough to be serious rather than routine.
             devices(
                 {"name": "example-edge", "key_expires": expiring_in(3)},
-                raises=(Raised(title="example-edge leaves the tailnet in 3 days", severity=Tone.SERIOUS),),
+                raises=(Raised(title="example-edge leaves the tailnet in 3\xa0days", severity=Tone.SERIOUS),),
             ),
             # Already past: the machine has left.
             devices(

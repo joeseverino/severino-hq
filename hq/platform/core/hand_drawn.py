@@ -117,7 +117,6 @@ WORDED_FIGURES = {
     "measured": "a figure and its unit",
     "money": "an amount",
     "money_whole": "an amount in whole dollars",
-    "seconds": "a run time",
     "signed_in": "an age in words",
     "span": "a length of time",
     "when_text": "a moment in words",

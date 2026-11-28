@@ -46,7 +46,7 @@ from .entity_links import container_link, entity_link, web_url
 from .facts import inventory_records
 from .figured import Figure
 from .labels import lower_first, plural
-from .moments import duration, epoch, moment
+from .moments import Span, epoch, moment
 from .projection import read_once
 from .quoted import Quoted
 from .routes import reverse
@@ -510,7 +510,7 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any, here: str) -> R
         # The row's own text as stored, which an older release may have worded.
         said = Cell(Quoted(line.message), muted=True, role="data")
     when = (
-        Cell(Figure(f"+{duration(line.at - line.began, short=True)}", epoch(line.at)), muted=True)
+        Cell(Figure(f"+{Span(line.at - line.began)}", epoch(line.at)), muted=True)
         if line.began is not None
         else Cell(moment=line.at, muted=True)
     )

@@ -189,7 +189,7 @@ class DomainCardTests(TestCase):
         card = certificates(self.zone)
 
         self.assertTrue(card.value.startswith("2 "), card.value)
-        self.assertIn("40 days", card.detail)
+        self.assertIn("40\xa0days", card.detail)
         for code in ("example_ca", "other_ca"):
             self.assertIn(authority_name(code), card.detail)
 
@@ -286,7 +286,7 @@ class RegistrationFallbackTests(TestCase):
 
         card = registration(self.zone)
 
-        self.assertIn("80 days", card.value)
+        self.assertIn("80\xa0days", card.value)
         self.assertIn("Example Registrar", card.detail)
         self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn("Authentication error", card.note_title)
@@ -414,7 +414,7 @@ class ServiceColumnTests(TestCase):
         self.assertEqual(
             line.detail, ", ".join(authority_name(code) for code in ("google", "lets_encrypt", "unknown_ca"))
         )
-        self.assertIn("40 days", line.expiry)
+        self.assertIn("40\xa0days", line.expiry)
 
         response = self.client.get(reverse("control_plane:services"))
 

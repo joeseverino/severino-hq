@@ -27,7 +27,7 @@ lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 
 from .cadence import sweep_interval
 from .display_words import Code
-from .moments import stamp_day
+from .moments import Span, stamp_day
 from .projection import page_of
 lazy from .projection import iso
 
@@ -603,7 +603,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
             {
                 "label": "Page views",
                 "value": f"{totals['pageviews']:,}",
-                "detail": f"{days}d",
+                "detail": Span(timedelta(days=days)),
                 "is_zero": not totals["pageviews"],
             },
             {

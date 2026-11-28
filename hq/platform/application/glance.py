@@ -1,6 +1,7 @@
 """Typed, cached dashboard observations and their explicit refresh queue."""
 
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from functools import cache
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -29,7 +30,7 @@ from .container_state import ContainerCount
 from .contracts import Effect
 from .freshness import freshness
 from .labels import dotted, human_bytes
-from .moments import clock
+from .moments import Span, clock
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 from .tone import Tone
@@ -493,7 +494,7 @@ def weather_words(weather: Weather) -> dict[str, Any]:
             _metric(
                 "Range",
                 f"{measured(min(temperatures), '', -1)}–{measured(max(temperatures), '°', -1)}",
-                f"next {counted(len(hours), 'hour')}",
+                f"next {Span(timedelta(hours=len(hours)))}",
             )
         )
     if rain := next(((index, hour) for index, hour in enumerate(hours) if hour.chance >= RAIN_CHANCE), None):

@@ -32,10 +32,11 @@ EXAMPLES = (
         "registration-lapsing",
         fires=(
             registered(
-                40, raises=(Raised(title="example.com expires in 40 days and will not renew", severity=Tone.ATTENTION),)
+                40,
+                raises=(Raised(title="example.com expires in 40\xa0days and will not renew", severity=Tone.ATTENTION),),
             ),
             # Serious inside a month.
-            registered(10, raises=("example.com expires in 10 days and will not renew",)),
+            registered(10, raises=("example.com expires in 10\xa0days and will not renew",)),
         ),
         quiet=(
             # Every domain expires every year: with auto-renew on that is a calendar.

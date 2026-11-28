@@ -22,7 +22,7 @@ from .cadence import WorkerStanding, controller_standing, every_sweep, sweep_due
 from .credential_sight import Standing
 from .entity_links import EntityLink, entity_link, kind_label
 from .freshness import freshness
-from .moments import duration
+from .moments import Span
 from .read_requests import ForcedRead, forced_reads
 from .references import Kind
 from .tone import Tone
@@ -125,7 +125,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         swept_at=max((at for _row, at in tried), default=None),
         sweep_due=due,
         next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
-        sweep_every=duration(every),
+        sweep_every=Span(every),
         readings=readings,
         oldest=oldest[0] if oldest else None,
         overdue=oldest is not None and freshness(oldest[0].sight.kind, oldest[1], now).stale,

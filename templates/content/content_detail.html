@@ -9,15 +9,15 @@
   {% fact "Added to HQ" %}{% muted %}{{ item.created_at|when }}{% endmuted %}{% endfact %}
   {% fact "Updated" %}{% muted %}{{ item.updated_at|when }}{% endmuted %}{% endfact %}
   {% comment %}No visits is a fact about the page, said beside the others rather than in a card of its own.{% endcomment %}
-  {% if traffic.path and not traffic.measured %}{% fact "Traffic" %}{% with days=traffic.days|counted:"day" %}{% include "partials/_empty_state.html" with message="No visits in the last "|add:days inline=True %}{% endwith %}{% endfact %}{% endif %}
+  {% if traffic.path and not traffic.measured %}{% fact "Traffic" %}{% with days=traffic.days|span %}{% include "partials/_empty_state.html" with message="No visits in the last "|add:days inline=True %}{% endwith %}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
 {% if traffic.path and traffic.measured %}
   {% url 'analytics:overview' as analytics_url %}{% with_query analytics_url days=traffic.days as analytics_url %}
   {% section "Traffic" more_label="All analytics" more_url=analytics_url %}
     {% facts layout="band" %}
-      {% fact "Page views" %}{{ traffic.pageviews }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
-      {% fact "Visits" %}{{ traffic.visits }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
+      {% fact "Page views" %}{{ traffic.pageviews }}{% detail %}in the last {{ traffic.days|span }}{% endfact %}
+      {% fact "Visits" %}{{ traffic.visits }}{% detail %}in the last {{ traffic.days|span }}{% endfact %}
     {% endfacts %}
   {% endsection %}
 {% endif %}

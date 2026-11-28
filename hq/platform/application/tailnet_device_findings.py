@@ -6,6 +6,7 @@ date set months earlier, a route advertised but never approved.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from functools import cmp_to_key
 from typing import Any
 
@@ -15,7 +16,7 @@ from .expiry import days_until
 from .finding_model import TAILNET_CARD, Finding, FindingEstate, FindingRule
 from .finding_steps import ByHand, Do, Does, Why
 from .images import compare, version
-from .moments import moment, when_day
+from .moments import Span, moment, when_day
 from .projection import read_once
 from .reading_facts import by_node, stands
 from .thresholds import Threshold
@@ -146,7 +147,7 @@ def _key_expiring(estate: FindingEstate) -> tuple[Finding, ...]:
             rule="tailnet-key-expiring",
             subject=node.id,
             severity=Tone.SERIOUS if days <= KEY_EXPIRY_SERIOUS_DAYS.value else Tone.ATTENTION,
-            title=f"{name} leaves the tailnet in {counted(days, 'day')}"
+            title=f"{name} leaves the tailnet in {Span(timedelta(days=days))}"
             if days > 0
             else f"{name} has left the tailnet",
             explanation=(

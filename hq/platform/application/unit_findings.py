@@ -26,7 +26,7 @@ from .finding_model import (
     matter_key,
 )
 from .finding_steps import ByHand, Does, Fix, Why
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .quoted import Quoted
 from .reading_facts import OnEachMachine, ReadingRow, stated, unjudged
 from .security import Capability
@@ -492,7 +492,7 @@ def _stall(timer: UnitState, started: UnitState | None) -> str:
     if timer.sub == "elapsed":
         return "It has run out and nothing more is scheduled"
     if timer.sub == "waiting" and timer.behind(timer.next_elapse_at, OVERDUE_AFTER):
-        return f"It was more than {duration(OVERDUE_AFTER)} overdue when HQ last read it"
+        return f"It was more than {Span(OVERDUE_AFTER)} overdue when HQ last read it"
     if started is None:
         return ""
     # systemd answers "no" for a unit it has not started since boot, with no
@@ -500,7 +500,7 @@ def _stall(timer: UnitState, started: UnitState | None) -> str:
     if started.condition == "no" and started.condition_at:
         return f"{started.named} was skipped because a condition it needs was not met"
     if started.active == "activating" and started.behind(started.started_at, STARTING_TOO_LONG):
-        return f"{started.named} had been starting for more than {duration(STARTING_TOO_LONG)}"
+        return f"{started.named} had been starting for more than {Span(STARTING_TOO_LONG)}"
     return ""
 
 
@@ -679,11 +679,10 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: (
-                f"a timer is {duration(OVERDUE_AFTER)} overdue, "
-                f"or its job has been starting for {duration(STARTING_TOO_LONG)}"
+                f"a timer is {Span(OVERDUE_AFTER)} overdue, or its job has been starting for {Span(STARTING_TOO_LONG)}"
             )
         },
-        clears=f"the timer runs within {duration(OVERDUE_AFTER)} of when it is due",
+        clears=f"the timer runs within {Span(OVERDUE_AFTER)} of when it is due",
     ),
     FindingRule(
         "unit-restarting",
@@ -694,11 +693,9 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Read the service's log on the machine, fix what it names, then clear its restart count.",
         no_help_reason=cannot_run_commands(),
         bars={
-            Tone.SERIOUS: (
-                f"a service restarted {RESTARTING_FROM} times without staying up for {duration(SETTLED_AFTER)}"
-            )
+            Tone.SERIOUS: (f"a service restarted {RESTARTING_FROM} times without staying up for {Span(SETTLED_AFTER)}")
         },
-        clears=f"the service stays up for {duration(SETTLED_AFTER)}, or its restart count is cleared",
+        clears=f"the service stays up for {Span(SETTLED_AFTER)}, or its restart count is cleared",
     ),
     FindingRule(
         "unit-state-unread",

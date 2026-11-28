@@ -29,7 +29,7 @@ press, approval and merge that set it going, linking the whole chain.
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
     {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when }}{% endfact %}{% endif %}
     {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when }}{% endfact %}{% endif %}
-    {% if duration is not None %}{% fact "Duration" value=duration|seconds %}{% endif %}
+    {% if duration is not None %}{% fact "Duration" value=duration|span:"seconds" %}{% endif %}
     {% if run.headline %}{% fact "Result" value=run.headline %}{% endif %}
     {% if reading %}{% fact "Reading" value=reading.words detail=reading.ended|yesno:"Not stated," %}{% endif %}
     {% run_evidence evidence layout="facts" %}

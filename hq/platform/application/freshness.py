@@ -25,7 +25,7 @@ lazy from hq.platform.core.included_parts import READING_AGE
 
 from .derivations import reached
 from .labels import dotted
-from .moments import duration, when
+from .moments import Span, when
 from .process_caches import kept
 lazy from . import plugins
 lazy from .cadence import slowest_sweep_interval, ssh_probe_interval
@@ -283,7 +283,7 @@ class Freshness:
         """How often its kind is read, in words: what an out-of-date age ends with."""
 
         # One of a unit is said as the unit alone; the count and its unit hold on a non-breaking space.
-        return f"read every {duration(self.every).removeprefix('1\xa0')}"
+        return f"read every {Span(self.every).removeprefix('1\xa0')}"
 
     @property
     def label(self) -> str:

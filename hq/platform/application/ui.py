@@ -9,6 +9,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from numbers import Number
 from typing import TYPE_CHECKING, ClassVar
 
+# A day with its year, in the layout moments declares and config.formats hands
+# Django: ui stays below moments, which reaches the workflow engine.
+from django.utils.formats import date_format
+
 from .card_items import Kpi, TimelineItem
 from .chart_numbers import (
     _format_chart_value,
@@ -19,9 +23,9 @@ from .chart_numbers import (
     _table_heading,
     fitted_range,
 )
-from .display_words import display
+from .display_words import display, refused
 from .drawings import LegendKey
-from .figured import Figure
+from .figured import UNITS, Figure
 from .labels import dotted, plural
 from .money import signed_number
 from .tone import Tone
@@ -170,6 +174,9 @@ def counted_forms(one: str, many: str | None = None) -> tuple[str, str]:
     """
     if not one.strip():
         raise ValueError("A count needs the words it counts.")
+    # A length of time is a ``Span``, said in the one unit its length holds.
+    if one.split(maxsplit=1)[0] in UNITS:
+        refused(f"{one!r} counts a unit of time: say the length as a Span.", "A length of time is said as a Span.")
     if many is None:
         # Only one word is pluralized by a rule; a phrase has a verb or a
         # qualifier, which the caller pluralizes.
@@ -639,8 +646,8 @@ def _placed_line(series: DatedSeries, plot: DatePlot, *, unit: str, trend: bool)
             x=plot.x(day),
             y=plot.y(value),
             value=value,
-            label=f"{day:%b %-d, %Y}",
-            tooltip=dotted(f"{day:%b %-d, %Y}", f"{label}: {_format_reading(value, unit)}"),
+            label=date_format(day),
+            tooltip=dotted(date_format(day), f"{label}: {_format_reading(value, unit)}"),
         )
         for day, value in points
     )
@@ -662,7 +669,7 @@ def _dated_rows(series: tuple[DatedSeries, ...]) -> tuple[ChartRow, ...]:
             dated.setdefault(day, {})[label] = value
     return tuple(
         ChartRow(
-            f"{day:%b %-d, %Y}",
+            date_format(day),
             tuple(dated[day].get(label, 0.0) for label, _, _ in series),
         )
         for day in sorted(dated)

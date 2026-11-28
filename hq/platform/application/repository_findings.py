@@ -32,7 +32,7 @@ from .github_estate import (
     repositories,
 )
 from .github_posture import COMMANDS, REASONS, STANDARD, calls_workflows, left_out, postures
-from .moments import moment
+from .moments import Span, moment
 from .standard_findings import Help, Measured, Per, Standard
 from .standards import Check
 from .tone import Tone
@@ -105,7 +105,7 @@ def _waiting(repo: Repository) -> Iterator[Said]:
             title=f"{name} waits for your approval to deploy to {where}",
             severity=Tone.SERIOUS if started and reached(started + WAITING_SERIOUS_AFTER.value) else Tone.ATTENTION,
             explanation=f"Commit {run.get('sha', '')[:7]} of {repo.short}",
-            evidence=(("Waiting", f"{hours}h"),),
+            evidence=(("Waiting", Span(timedelta(hours=hours))),),
             primary=opens("Review deployment", web_url(run.get("url")) or repo.url),
         )
         yield finding, f"{name} was waiting for your approval to deploy to {where}"
@@ -254,13 +254,13 @@ def _lapsing(repo: Repository) -> Iterator[Said]:
             repo,
             LAPSING,
             artifact["name"],
-            title=f"{repo.short}'s admission lapses in {days} days",
+            title=f"{repo.short}'s admission lapses in {Span(timedelta(days=days))}",
             severity=Tone.SERIOUS if days <= ARTIFACT_SERIOUS_DAYS.value else Tone.ATTENTION,
             explanation="Run its admission again to keep it in the build.",
-            evidence=(("Lapses in", counted(days, "day")),),
+            evidence=(("Lapses in", Span(timedelta(days=days))),),
             primary=opens("Open workflow", f"{repo.url}/actions/workflows/{workflow}"),
         )
-        yield finding, f"{repo.short}'s admission was due to lapse in {days} days"
+        yield finding, f"{repo.short}'s admission was due to lapse in {Span(timedelta(days=days))}"
 
 
 def _posture_help(check: Check, subjects: tuple[Measured, ...]) -> Help:

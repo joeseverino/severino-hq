@@ -9,8 +9,8 @@ from datetime import timedelta
 from typing import Literal
 
 from .labels import human_bytes
-from .moments import duration
-from .ui import counted, measured
+from .moments import Span
+from .ui import measured
 
 # What its value counts, which says how it is said.
 type Measure = Literal["days", "bytes", "share", "time"]
@@ -31,9 +31,9 @@ class Threshold[V: (int, float, timedelta)]:
     def __str__(self) -> str:
         value = self.value
         if isinstance(value, timedelta):
-            return duration(value)
+            return Span(value)
         if self.measure == "bytes":
             return human_bytes(value)
         if self.measure == "share":
             return measured(value * 100, "%", 0)
-        return counted(int(value), "day")
+        return Span(timedelta(days=value))

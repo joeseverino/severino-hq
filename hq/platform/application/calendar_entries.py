@@ -406,7 +406,7 @@ def upcoming(entry: Entry, *, count: int = 5, today: date | None = None) -> tupl
 
 
 def when_label(entry: Entry) -> str:
-    """When an entry is, as a person says it: "Wed, Sep 30 · 3 PM – 4 PM"."""
+    """When an entry is, as a person says it: "Wed, Sep 30 · 3:00 PM – 4:00 PM"."""
 
     if entry.ends_on and entry.ends_on != entry.starts_on:
         days = when_range(entry.starts_on, entry.ends_on)

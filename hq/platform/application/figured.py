@@ -8,6 +8,18 @@ words by what they say, never by reading them back.
 from decimal import Decimal
 from typing import Self
 
+# The units a length is said in, for one and for many. ``counted`` refuses
+# them, so ``moments.Span`` is the one place a length is counted.
+UNITS = {
+    "second": "seconds",
+    "minute": "minutes",
+    "hour": "hours",
+    "day": "days",
+    "week": "weeks",
+    "month": "months",
+    "year": "years",
+}
+
 
 class Figure(str):
     """Words saying a number ("$1,234.50", "4.25 mi", "3 jobs", "2 days"), with the number."""

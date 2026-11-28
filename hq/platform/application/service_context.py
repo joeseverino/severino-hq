@@ -9,6 +9,7 @@ every side already carries it, and storing the tie again would make two answers.
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -19,11 +20,10 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
-lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .moments import when
+from .moments import Span, when
 from .published_sites import projects_by_hostname
 from .tables import Cell, DataTable, Row, TableColumn
 from .tone import Tone
@@ -257,7 +257,7 @@ def _run_cells(run: WorkRun, *, shows: bool) -> tuple[Cell, ...]:
     return (
         Cell(run.word, tone=run.tone),
         Cell(when(run.created_at), muted=True),
-        Cell(str(seconds(run.duration)) if run.duration is not None else ""),
+        Cell(Span(timedelta(seconds=run.duration)) if run.duration is not None else ""),
         Cell(run.note),
         Cell(run.by.words if shows else ""),
     )
@@ -301,7 +301,7 @@ def _traffic(service) -> SummaryItem | None:
     # is the best number available and still not a count.
     basis = "counted" if interval <= 1 else f"sampled 1 in {interval}"
     return SummaryItem(
-        dotted("Traffic", f"{HOST_TRAFFIC_DAYS} days"),
+        dotted("Traffic", Span(timedelta(days=HOST_TRAFFIC_DAYS))),
         counted(measured["pageviews"], "pageview"),
         detail=lines(counted(measured["visits"], "visit"), basis),
         icon="eye",

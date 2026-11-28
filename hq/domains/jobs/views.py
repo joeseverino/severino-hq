@@ -19,7 +19,7 @@ lazy from hq.platform.application.asks import AskMixin
 lazy from hq.platform.application.automation_runs import AGAIN, cancel_action
 lazy from hq.platform.application.capabilities import capability_spec
 lazy from hq.platform.application.labels import lower_first
-lazy from hq.platform.application.moments import duration, moment
+lazy from hq.platform.application.moments import Span, moment
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.run_pages import run_context
 lazy from hq.platform.application.run_reads import evidence_of
@@ -31,7 +31,7 @@ from .models import Job, JobState
 def _ran_for(seconds: float | None) -> str:
     """How long a piece of work ran, from the one owner of a run time; "" when unknown."""
 
-    return "" if seconds is None else duration(timedelta(seconds=seconds), short=True)
+    return "" if seconds is None else Span(timedelta(seconds=seconds))
 
 
 # A run's tone (``JobState``'s) in the notice's own names for it.

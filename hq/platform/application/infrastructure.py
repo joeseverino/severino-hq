@@ -47,7 +47,7 @@ lazy from .facts import kinds_read
 lazy from .freshness import OUT_OF_DATE, behind, cadence, freshness
 lazy from .locate import names_by_connection
 lazy from .managed_records import HealthPart, ManagedResourceItem
-lazy from .moments import duration
+lazy from .moments import Span
 lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
 
@@ -362,7 +362,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
         return _health(ResourceState.UNSEEN, "Not found lately", message="The others of its type have been read since.")
     if (ready := active.get(READY)) is not None:
         if read_at is None or freshness(resource.kind, read_at).stale:
-            said = f"HQ reads it every {duration(cadence(resource.kind).every)}."
+            said = f"HQ reads it every {Span(cadence(resource.kind).every)}."
             return _health(ResourceState.STALE, OUT_OF_DATE, ready.get("reason", ""), said)
         return _health(ResourceState.HEALTHY, "Working", ready.get("reason", ""), ready.get("message", ""))
     # Nothing converges this kind, or nothing reads it back past the apply

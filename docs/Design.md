@@ -281,7 +281,8 @@ state says it in ink, as `.figure` with its tone class
 An address, a path or a command breaks only where `|breakable` lets it (after
 a dot or a slash, before a port); in a table's cell it breaks elsewhere only
 where its column lacks room for it. A length of time
-keeps each count with its unit.
+is said in the one unit it holds whole (`moments.Span`, `{{ n|span }}`),
+its count kept with that unit, and a time of day always with its minutes.
 
 A template prints a value bare (`{{ host }}`, `Runs on {{ host }}.`): the
 template engine holds every value printed as text as it compiles the template,

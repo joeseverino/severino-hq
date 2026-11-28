@@ -6,12 +6,14 @@ eligible. Prints counts only. The daily run is the ``audit.prune`` job
 to count what it would delete.
 """
 
+from datetime import timedelta
 from typing import override
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from hq.platform.application.host_work import prune_audit
+from hq.platform.application.moments import Span
 from hq.platform.application.ui import counted
 from hq.platform.core.audit import prune_routine
 
@@ -34,10 +36,10 @@ class Command(BaseCommand):
             count = prune_routine(days=days, check_only=True)
             self.stdout.write(
                 f"{counted(count, 'routine event', 'routine events')} older than "
-                f"{counted(days, 'day')} would be deleted."
+                f"{Span(timedelta(days=days))} would be deleted."
             )
             return
         deleted = prune_audit()["deleted"]
         self.stdout.write(
-            f"{counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')} deleted."
+            f"{counted(deleted, 'routine event', 'routine events')} older than {Span(timedelta(days=days))} deleted."
         )

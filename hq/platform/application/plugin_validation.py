@@ -32,9 +32,7 @@ lazy from hq.platform.core.hand_drawn import hand_drawn
 # argument of a ``raise`` is left out: it reaches a log, not a page.
 
 # HQ's own phrase functions: their words end on a literal HQ wrote.
-_OWN_PHRASES = frozenset(
-    {"counted", "duration", "span", "when", "when_day", "when_exact", "expiry_phrase", "human_bytes"}
-)
+_OWN_PHRASES = frozenset({"counted", "Span", "span", "when", "when_day", "when_exact", "expiry_phrase", "human_bytes"})
 # Builders whose template is markup, where ``ended`` cannot reach the text.
 _MARKUP = frozenset({"format_html"})
 # The helper itself, which is where the full stop is written.

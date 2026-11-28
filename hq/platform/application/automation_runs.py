@@ -8,6 +8,7 @@ docs/Architecture.md, "Running a playbook".
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
+from datetime import timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
@@ -32,7 +33,6 @@ lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE
 lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.domains.jobs.runner import SCHEDULER
 lazy from hq.platform.core.attribution import own_operation
-lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import REVISION_INPUT, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
@@ -52,7 +52,7 @@ lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
 lazy from .json_schemas import json_schema
 lazy from .labels import lower_first
-lazy from .moments import moment, since_when
+lazy from .moments import Span, moment, since_when
 lazy from .playbook_about import about, reading_words, run_preview
 lazy from .playbook_reach import reachable, reached, resolved_hosts
 lazy from .resource_operations import (
@@ -67,7 +67,7 @@ lazy from .resource_operations import (
     serialize_operation,
 )
 lazy from .run_reads import RUNS
-lazy from .ui import agreed, ended
+lazy from .ui import MISSING, agreed, ended
 lazy from .work_runs import RUN, WorkRun, operation_of, run_url
 
 if TYPE_CHECKING:
@@ -739,9 +739,12 @@ def stated_words(statements: tuple[str, ...]) -> Quoted:
 
 
 def timeout_words(timeout_seconds: object) -> str:
-    """How long a run of a playbook has, in every page's words: "10 min"."""
+    """How long a run of a playbook has, in every page's words: "10 minutes"."""
 
-    return str(seconds(timeout_seconds))
+    try:
+        return Span(timedelta(seconds=float(str(timeout_seconds))))
+    except ValueError:
+        return MISSING
 
 
 def access_words(privilege: str | None) -> str:

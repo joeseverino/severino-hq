@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .references import Kind
 from .tone import Tone
 from .ui import counted
@@ -65,8 +65,8 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Bring it back at the machine: power, network, then Tailscale.",
         no_help_reason="HQ has no power or console access to machines.",
         bars={
-            Tone.SERIOUS: f"a machine that serves a name or a role has been away for {duration(OFFLINE_AFTER)}",
-            Tone.ATTENTION: f"a machine that serves no name or role has been away for {duration(OFFLINE_AFTER)}",
+            Tone.SERIOUS: f"a machine that serves a name or a role has been away for {Span(OFFLINE_AFTER)}",
+            Tone.ATTENTION: f"a machine that serves no name or role has been away for {Span(OFFLINE_AFTER)}",
         },
         clears="Tailscale sees the machine again",
         domain="hq.estate",

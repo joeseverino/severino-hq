@@ -42,7 +42,7 @@ from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
 from .inbound_events import told
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .projection import read_once
 from .sequences import Step
 from .thresholds import Threshold
@@ -196,7 +196,7 @@ def check_step(check: PullCheck) -> Step:
     took = ""
     if run.started_at is not None:
         took = (
-            str(duration(run.completed_at - run.started_at, short=True))
+            str(Span(run.completed_at - run.started_at))
             if run.completed_at is not None
             else f"since {when(run.started_at)}"
         )

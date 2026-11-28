@@ -198,7 +198,7 @@ EXAMPLES = (
                     artifacts=admission(2, 6),
                     raises=(
                         Raised(
-                            title="alpha's admission lapses in 6 days",
+                            title="alpha's admission lapses in 6\xa0days",
                             primary=(
                                 "Open workflow",
                                 "https://github.com/example/alpha/actions/workflows/admit-plugin.yml",

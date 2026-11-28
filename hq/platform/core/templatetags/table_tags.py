@@ -176,7 +176,7 @@ TABLE_HEADING = Part(
     server's order it holds and a change table does with a change. `tables.js` sorts the rows on
     the page: ascending, descending, then as they came. A cell whose value is not its words carries
     it as `data-sort` (`Cell.sort_value`): a moment its instant, an amount its sum, words a figure's
-    function wrote (`Figure`: `money`, `measured`, `counted`, `duration`, `span`, `when`) their
+    function wrote (`Figure`: `money`, `measured`, `counted`, `Span`, `span`, `when`) their
     number, and `Cell(sort=)` any other. Every other cell sorts by the words it shows, compared as
     written, never parsed for a number or a date. Sections keep their own rows.
     *Gate:* `test_any_table_sorts_by_a_heading`.

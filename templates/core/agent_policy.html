@@ -10,7 +10,7 @@ the heading, then what the rules below allow and what they held or refused.
   {% facts layout="band" %}
     {% fact "Rules" value=rule_count %}
     {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
-    {% with days=recent_days|counted:"day" %}{% fact "Refused in the last "|add:days value=refused_count url=refused_url %}{% endwith %}
+    {% with days=recent_days|span %}{% fact "Refused in the last "|add:days value=refused_count url=refused_url %}{% endwith %}
   {% endfacts %}
 {% aside %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}
@@ -35,7 +35,7 @@ holds open now (none says nothing, and a full set is warned of in its row),
 and its own block beside the pause above. Removing it is offered only while
 it is not blocked, since removal never lifts a block.
 {% endcomment %}
-{% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
+{% with days=recent_days|span %}{% with lede="Activity over the last "|add:days %}
 {% section "Agents" counts=standings id="agents" lede=lede %}
 {% if standings %}
   {% data_table agents %}
@@ -85,7 +85,7 @@ device sent the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
-  {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
+  {% with days=recent_days|span %}{% with lede="Activity over the last "|add:days %}
   {% section "Devices" id="agent-devices" lede=lede %}
   {% data_table device_groups %}
   {% endsection %}

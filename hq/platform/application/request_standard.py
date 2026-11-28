@@ -7,7 +7,7 @@ the path it is decided at, and measured as every standard is (``standards``).
 
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -24,7 +24,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, operator_label
 from . import tailnet
 from .doors import approved_words
 from .freshness import PAGE_VISIT, freshness
-from .moments import expiry_words, moment
+from .moments import Span, expiry_words, moment
 from .posture import EDGE, FIREWALL, SIGN_IN, STANDARD, advanced
 from .request_channel import (
     ELSEWHERE_CHANNEL,
@@ -529,7 +529,7 @@ def _canonical(_facts: RequestFacts) -> Reading:
         holds,
         evidence=dotted(
             "plain HTTP redirected" if redirected else "plain HTTP served",
-            f"HSTS {hsts // 86400} days" if hsts else "HSTS not sent",
+            f"HSTS {Span(timedelta(seconds=hsts))}" if hsts else "HSTS not sent",
             "subdomains included" if hsts and subdomains else "",
         ),
         detail=(

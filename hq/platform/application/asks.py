@@ -27,7 +27,7 @@ lazy from hq.platform.core import live
 lazy from hq.platform.core.web_refusals import refusal_response
 
 from .describe import Describe, listed
-from .moments import duration
+from .moments import Span
 from .projection import read_once
 from .quoted import Quoted
 from .record_errors import Sentence, worded
@@ -422,7 +422,7 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
         if timezone.now() - asked > read_request_lifetime():
             return Standing(
                 FAILED,
-                f"No answer within {duration(read_request_lifetime())}.",
+                f"No answer within {Span(read_request_lifetime())}.",
                 since=asked,
             )
         return _untried(asked)

@@ -1,0 +1,35 @@
+# hq/platform/application/moments writes a day and a time of day one way
+# (when_day, clock, when_at, when_exact), read in the timezone HQ is read in.
+# A format of a person's day or clock written elsewhere ("{day:%b %-d}",
+# strftime("%I:%M %p")) says the same moment a second way, in a zone and a
+# layout of its own. A machine's layout (ISO's %Y-%m-%d %H:%M, a path's
+# %Y/%m) is neither.
+id: day-and-clock-said-by-moments
+language: python
+severity: error
+message: A day or a time of day is formatted outside moments.
+note: Say it with when_day, clock, when_at or when_exact from hq.platform.application.moments.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/migrations/**"
+  - "hq/platform/application/moments.py"
+utils:
+  # A month's or a weekday's name, a day without its zero, or a twelve-hour clock.
+  human-layout:
+    regex: '%-?[aAbBeIp]|%-d'
+rule:
+  any:
+    - kind: format_specifier
+      matches: human-layout
+    - kind: string
+      matches: human-layout
+      inside:
+        kind: argument_list
+        inside:
+          kind: call
+          has:
+            field: function
+            regex: (strftime|dateformat\.format|date_format|time_format)$

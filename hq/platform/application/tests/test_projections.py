@@ -329,7 +329,7 @@ class LineChartTests(TestCase):
         chart = line_chart("Resting", "", self.SERIES, unit="bpm")
         rendered = render_to_string("partials/_chart.html", {"chart": chart})
         self.assertIn(
-            "Jan 1, 2026\xa0· Resting heart rate: 52 bpm",
+            "Jan\xa01,\xa02026\xa0· Resting heart rate: 52 bpm",
             [mark.attrs["data-tip"] for mark in select(rendered, "data-tip")],
         )
         # No browser tooltip of its own: the chart's data table titles its cells.

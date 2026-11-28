@@ -406,7 +406,7 @@ class WalkedStatesTests(TestCase):
             for item in group["items"]
             if held_twice in " ".join((item["label"], *(fact["value"] for fact in item["facts"])))
         ]
-        self.assertIn("expires in 5 days", item["label"])
+        self.assertIn("expires in 5\xa0days", item["label"])
         with projection_scope():
             keys = [item["key"] for item in work_queue()]
         self.assertEqual(sorted({key for key in keys if keys.count(key) > 1}), [])

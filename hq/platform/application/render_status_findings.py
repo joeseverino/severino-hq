@@ -29,7 +29,7 @@ from .finding_model import (
 )
 from .finding_steps import ByHand, Do, Fix, Why
 from .freshness import missed
-from .moments import duration, moment, since_when, when
+from .moments import Span, moment, since_when, when
 from .projection import iso
 from .reading_facts import ReadingRow, stated, unjudged
 from .tone import Tone
@@ -325,7 +325,7 @@ def _stale(estate: FindingEstate) -> tuple[Finding, ...]:
                 explanation="Its refresh job is not running.",
                 evidence=(
                     *(item for rendering in stale for item in _stale_evidence(rendering, estate.now)),
-                    ("Due", f"Every {duration(RENDER_EVERY)}, in full every {duration(FULL_READ_EVERY)}"),
+                    ("Due", f"Every {Span(RENDER_EVERY)}, in full every {Span(FULL_READ_EVERY)}"),
                 ),
                 fixes=_run_again(node, stale, "Run it now"),
                 no_help_reason=cannot_run_commands(node.label),
@@ -438,7 +438,7 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Read the refresh job's log, fix the cause, then run it again.",
         no_help_reason=cannot_run_commands(),
         bars={
-            Tone.SERIOUS: f"a refresh fails and nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}",
+            Tone.SERIOUS: f"a refresh fails and nothing has confirmed credentials current for {Span(CONFIRMED_WITHIN)}",
             Tone.ATTENTION: "the last refresh of credentials failed",
         },
         clears="a refresh of credentials succeeds",
@@ -453,11 +453,11 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason=cannot_run_commands(),
         bars={
             Tone.SERIOUS: (
-                f"nothing has confirmed credentials current for {duration(CONFIRMED_WITHIN)}, "
-                f"or read 1Password in full for {duration(RENDERED_WITHIN)}"
+                f"nothing has confirmed credentials current for {Span(CONFIRMED_WITHIN)}, "
+                f"or read 1Password in full for {Span(RENDERED_WITHIN)}"
             )
         },
-        clears=f"a refresh confirms credentials current within {duration(CONFIRMED_WITHIN)}",
+        clears=f"a refresh confirms credentials current within {Span(CONFIRMED_WITHIN)}",
     ),
     FindingRule(
         "connect-sync-stalled",

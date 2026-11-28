@@ -7,11 +7,13 @@ answers. The query log leaves the controller only as the aggregate
 """
 
 from collections.abc import Mapping
+from datetime import timedelta
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
 
 from hq.platform.application.labels import dotted
+from hq.platform.application.moments import Span
 from hq.platform.application.ui import counted
 lazy from hq.platform.application.reach import network_of
 
@@ -191,9 +193,7 @@ def window_phrase(hours: Any) -> str:
         value = float(hours or 0)
     except TypeError, ValueError:
         value = 0.0
-    if value >= 48:
-        return counted(round(value / 24), "day")
-    return counted(max(1, round(value)), "hour")
+    return Span(timedelta(hours=max(1.0, value)))
 
 
 def _query_title(record: Mapping[str, Any]) -> str:

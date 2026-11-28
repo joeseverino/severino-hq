@@ -9,6 +9,7 @@ page's sections and cells, so a band renders identically on both.
 
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import timedelta
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
@@ -19,6 +20,7 @@ lazy from hq.domains.control_plane.providers import service_facets
 from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label, provider_label
+from .moments import Span
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
@@ -157,7 +159,7 @@ def _names(machine, *, principal: Principal) -> ServiceSection | None:
     any_measured = any(measured.get(normalized_hostname(host)) for host in hostnames)
     label = "Serves"
     if any_measured:
-        label = dotted(label, f"traffic over {HOST_TRAFFIC_DAYS} days")
+        label = dotted(label, f"traffic over {Span(timedelta(days=HOST_TRAFFIC_DAYS))}")
     return ServiceSection(
         id="names",
         label=label,

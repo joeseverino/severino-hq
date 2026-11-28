@@ -1,0 +1,14 @@
+id: length-said-by-span
+valid:
+  - 'said = f"Retry in {Span(timedelta(seconds=wait))}."'
+  - 'said = f"{count} jobs"'
+  - 'name = f"related_{kind}s"'
+  - 'said = f"{noun}s"'
+  - 'said = f"A {state!r} day is planned"'
+invalid:
+  - 'said = f"A key unused for {KEY_IDLE_DAYS} days"'
+  - 'took = f" in {seconds:.0f}s"'
+  - 'said = f"{hours}h"'
+  - 'said = f"{days}d"'
+  - "said = f'after {seconds} seconds'"
+  - 'said = f"lapses in {days} days"'

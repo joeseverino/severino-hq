@@ -15,11 +15,10 @@ lazy from hq.platform.core.included_parts import DOTS
 from ..automation_workers import ProfileWorker, profile_workers, reached_by_profile, workers_table
 from ..backup_findings import OffSiteCopy, off_site_copies
 from ..drawings import Dot, Dots
-from ..moments import moment
+from ..moments import Span, moment, when_at
 from ..projection import iso, read_once
 from ..tables import Cell, DataTable, Piece, TableColumn
 from ..tone import Tone
-from ..ui import counted
 lazy from .. import outbound_work
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
@@ -334,9 +333,7 @@ def _every(span: timedelta) -> str:
         return "Hourly"
     if hours == 24:
         return "Daily"
-    if hours and hours % 24 == 0:
-        return f"Every {counted(hours // 24, 'day')}"
-    return f"Every {counted(hours, 'hour')}" if hours else f"Every {counted(int(span.total_seconds() // 60), 'minute')}"
+    return f"Every {Span(span)}"
 
 
 # Recent runs shown per piece of work: as many dots as Dots draws.
@@ -346,7 +343,7 @@ RECENT = Dots.LIMIT
 def _run_dot(job: Any) -> Dot:
     return Dot(
         filled=job.state == JobRow.State.SUCCEEDED,
-        tip=f"{job_run(job).word}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
+        tip=f"{job_run(job).word}, {when_at(job.created_at)}",
         url=reverse("jobs:list"),
     )
 

@@ -11,10 +11,12 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from types import TracebackType
 
 from django.conf import settings
 
+from .moments import Span
 from .refusal_codes import Code
 from .refusal_status import Refusal
 
@@ -155,7 +157,7 @@ class Limits:
 def _rate_reason(wait: float) -> str:
     return (
         f"This agent is calling faster than {settings.SEVERINO_AGENT_CALLS_PER_MINUTE} calls a minute. "
-        f"Retry in {math.ceil(wait)} seconds."
+        f"Retry in {Span(timedelta(seconds=math.ceil(wait)))}."
     )
 
 

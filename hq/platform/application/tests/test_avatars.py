@@ -252,7 +252,7 @@ class MenuTests(TestCase):
         for age, said in (
             (timedelta(minutes=7), "Signed in within the hour"),
             (timedelta(hours=1, minutes=5), "Signed in 1 hour ago"),
-            (timedelta(hours=30), "Signed in 30 hours ago"),
+            (timedelta(hours=30), "Signed in 1 day ago"),
             (timedelta(days=3, hours=2), "Signed in 3 days ago"),
         ):
             with self.subTest(said):

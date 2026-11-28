@@ -49,7 +49,7 @@ declaration's machinery: the controller's actions are the buttons above, and
         {% fact "Name" value=resource.certificate.certificate_name %}
         {% fact "Issuer" value=resource.status.issuer|default:"Not read yet" %}
         {% fact "Expires" %}{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}{% endfact %}
-        {% fact "Renews" %}{% if resource.expiry %}From {{ resource.expiry.renewal_at|when:"day" }}, {% endif %}{{ resource.certificate.renewal_window_days|counted:"day" }} before it expires{% endfact %}
+        {% fact "Renews" %}{% if resource.expiry %}From {{ resource.expiry.renewal_at|when:"day" }}, {% endif %}{{ resource.certificate.renewal_window_days|span }} before it expires{% endfact %}
       {% endfacts %}
       {% section "Names" %}<p>{% for domain in resource.certificate.domains %}{% status domain chip=True %}{% endfor %}</p>{% endsection %}
     {% endsection %}

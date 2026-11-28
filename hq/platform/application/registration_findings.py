@@ -56,7 +56,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
                 severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 explanation="Every name under it stops when it lapses.",
                 evidence=(
-                    ("Expires", when_day(expires.date())),
+                    ("Expires", when_day(expires)),
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),

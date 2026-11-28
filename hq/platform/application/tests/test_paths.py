@@ -274,7 +274,6 @@ class PathTests(TestCase):
             (uptime,) = _running_facts(running)
 
         self.assertEqual(uptime[0], up_for(running["status"], started, running=True))
-        self.assertNotIn("12 days", uptime[0])
 
     def test_only_the_certificate_the_ingress_names_serves_the_name(self):
         from ..services import certificates_serving

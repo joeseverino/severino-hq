@@ -538,13 +538,13 @@ class GlanceRenderingTests(TestCase):
         self.assertEqual(weather["payload"]["status"], "serious")
         # The hour rain comes is the reading's instant on HQ's clock.
         self.assertLessEqual(
-            {"Mostly Cloudy", "4\xa0PM\xa0· 60%", "71.5–86°"}, {m["value"] for m in weather["caption"]}
+            {"Mostly Cloudy", "4:00\xa0PM\xa0· 60%", "71.5–86°"}, {m["value"] for m in weather["caption"]}
         )
         self.assertIn("Example Town, EX", text(html))
         # Each hour by its time, and a chance of rain said only when there is one.
         hours = {hour.attrs["title"]: hour.text for hour in with_class(html, "fact") if "title" in hour.attrs}
         self.assertIn("60%", hours["Showers"])
-        self.assertIn("4\xa0PM", hours["Showers"])
+        self.assertIn("4:00\xa0PM", hours["Showers"])
         self.assertNotIn("%", hours["Cloudy"])
 
     def test_no_machine_draws_no_machine_reading(self):
