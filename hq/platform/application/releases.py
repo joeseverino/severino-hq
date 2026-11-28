@@ -7,7 +7,7 @@ how it ended and who approved it are the GitHub reading's, so they are never
 older than the last read.
 """
 
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from datetime import timedelta
 from typing import Annotated, Any, TypedDict
 
@@ -100,6 +100,17 @@ def _deployments() -> tuple[tuple[Mapping[str, Any], ...], str]:
     return (found.releases, web_url(found.url)) if found is not None else ((), "")
 
 
+def _first_live(deployments: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
+    return next((item for item in deployments if deploy_outcomes.went_live(item)), None)
+
+
+def live() -> Mapping[str, Any] | None:
+    """The release production runs: the newest of its deployments that went
+    live, None before one has."""
+
+    return _first_live(_deployments()[0])
+
+
 def _item(deployment: Mapping[str, Any], kept: Collection[str], source: str) -> dict[str, Any]:
     commit = str(deployment.get("sha") or "")
     return {
@@ -137,7 +148,7 @@ def get_release(commit: str) -> dict[str, Any]:
     if not commit or at is None:
         raise RecordNotFound("No release of HQ GitHub keeps is that commit.")
     deployment = deployments[at]
-    before = next((item for item in deployments[at + 1 :] if deploy_outcomes.went_live(item)), None)
+    before = _first_live(deployments[at + 1 :])
     commits = [str(item.get("sha") or "") for item in (deployment, before) if item is not None]
     snapshots = {snapshot.commit: loaded(snapshot) for snapshot in ReleaseSnapshot.objects.filter(commit__in=commits)}
     found = _item(deployment, snapshots, source)

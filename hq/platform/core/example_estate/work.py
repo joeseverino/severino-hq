@@ -170,15 +170,17 @@ def repositories():
             "pins": [],
         }
         if name == "hq":
-            # The release production runs, one before it that went live with a
-            # check failed, and one between them that never deployed.
+            # The release production runs, live with a check failed, one before
+            # it that went live with every check passing, and one between them
+            # that never deployed.
             record["deployments"] = [
                 {
                     "environment": "production",
                     "sha": head,
                     "image": f"ghcr.io/example/hq@{HQ_DIGEST}",
                     "state": "success",
-                    "outcome": "live",
+                    "outcome": "live-check-failed",
+                    "check_failed": True,
                     "created_at": iso(timedelta(days=1)),
                     "ended_at": iso(timedelta(days=1) - timedelta(minutes=6)),
                     "url": "https://github.com/example/hq/actions/runs/4090",
@@ -203,8 +205,7 @@ def repositories():
                     "sha": PREVIOUS,
                     "image": f"ghcr.io/example/hq@{digest('hq', 'previous')}",
                     "state": "inactive",
-                    "outcome": "live-check-failed",
-                    "check_failed": True,
+                    "outcome": "live",
                     "created_at": iso(timedelta(days=6)),
                     "ended_at": iso(timedelta(days=6) - timedelta(minutes=7)),
                     "url": "https://github.com/example/hq/actions/runs/4070",
