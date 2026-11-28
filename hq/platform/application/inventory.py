@@ -153,6 +153,7 @@ def _record_report(kind: str, report: dict[str, Any], controller_id: str, observ
         "reachable": reached,
         "connected": report.get("connected", True),
         "error": error[:500],
+        "detail": report.get("detail", "")[:500] if not reached else "",
         "refusal": report.get("refusal", "") if not reached else "",
         # A refused read refuses every part; only a read that answered has some.
         "refused_parts": clean_refused_parts(kind, report.get("refused_parts")) if reached else [],
@@ -783,6 +784,7 @@ def inventory_state() -> tuple[dict[str, Any], ...]:
                 "count": len(snapshot.records),
                 "read": seen.read,
                 "error": snapshot.error,
+                "detail": snapshot.detail,
                 "age": seen.age,
                 "state": seen.state,
                 "state_label": seen.label,

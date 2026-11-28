@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type Object = map[string]any
@@ -76,6 +77,30 @@ func Classify(err error) (FailureClass, Refusal, string) {
 		return FailureClassUnclassified, RefusalUnclassified, ""
 	}
 	return provider.Failure, provider.Refusal(), provider.Reason
+}
+
+// Words is a failure HQ states in its own words, matched with errors.Is. As a
+// ProviderError's cause it is the reason, never the detail.
+type Words string
+
+func (w Words) Error() string { return string(w) }
+
+// Said is an error as the report carries it: HQ's words for what failed, and
+// the cause's own text apart, so a page draws the first and keeps the second a
+// click deeper. An error with no ProviderError wrapping a cause of another's
+// making is all reason.
+func Said(err error) (reason, detail string) {
+	whole := err.Error()
+	var provider *ProviderError
+	var words Words
+	if !errors.As(err, &provider) || provider.Message == "" || provider.Err == nil || errors.As(provider.Err, &words) {
+		return whole, ""
+	}
+	cause := provider.Err.Error()
+	if reason, ok := strings.CutSuffix(whole, ": "+cause); ok {
+		return reason, cause
+	}
+	return whole, ""
 }
 
 // HTTPRefusal is a provider's non-2xx answer: 401 refuses the credential, 403 permission.

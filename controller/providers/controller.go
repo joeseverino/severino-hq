@@ -27,13 +27,13 @@ var _ runtime.Providers = (*Controller)(nil)
 
 // Why Execute refused; match with errors.Is.
 var (
-	ErrUnsupported = errors.New("no handler for this kind and action")
+	ErrUnsupported = runtime.Words("no handler for this kind and action")
 	// ErrUndeclared fails closed: a write nothing declares a connection for
 	// has no manages switch an operator could have set.
-	ErrUndeclared        = errors.New("nothing declares which connections act for this kind")
-	ErrForeignConnection = errors.New("not a connection for this kind")
-	ErrNoManager         = errors.New("no connection this controller holds acts for this kind")
-	ErrObserveOnly       = errors.New("only observes; set manages on the connection to act through it")
+	ErrUndeclared        = runtime.Words("nothing declares which connections act for this kind")
+	ErrForeignConnection = runtime.Words("not a connection for this kind")
+	ErrNoManager         = runtime.Words("no connection this controller holds acts for this kind")
+	ErrObserveOnly       = runtime.Words("only observes; set manages on the connection to act through it")
 )
 
 func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller {
@@ -303,9 +303,10 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 	}
 	if err != nil {
 		_, refusal, reason := runtime.Classify(err)
-		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(err.Error()), Refusal: refusal}
+		said, detail := runtime.Said(err)
+		report := runtime.KindReport{OK: false, Records: []any{}, Error: runtime.ReportText(said), Detail: runtime.ReportText(detail), Refusal: refusal}
 		if refusal == runtime.RefusalCredential && reason != "" {
-			report.Error = runtime.ReportText(reason)
+			report.Error, report.Detail = runtime.ReportText(reason), ""
 		}
 		return report
 	}

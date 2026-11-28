@@ -188,11 +188,11 @@ func LoadConnections(env Environment) (Connections, error) {
 var (
 	// ErrSettingMissing never names the setting: a report must not carry
 	// what a connection is made of.
-	ErrSettingMissing      = errors.New("a setting this needs is not configured on the controller")
-	ErrNoSuchConnection    = errors.New("not supplied to the controller")
-	ErrForeignConnection   = errors.New("belongs to another provider")
-	ErrAmbiguousConnection = errors.New("more than one connection answers; the resource has to name one")
-	ErrBadSSHTarget        = errors.New("not a usable SSH destination")
+	ErrSettingMissing      = Words("a setting this needs is not configured on the controller")
+	ErrNoSuchConnection    = Words("not supplied to the controller")
+	ErrForeignConnection   = Words("belongs to another provider")
+	ErrAmbiguousConnection = Words("more than one connection answers; the resource has to name one")
+	ErrBadSSHTarget        = Words("not a usable SSH destination")
 )
 
 // All is every connection, in ref order.

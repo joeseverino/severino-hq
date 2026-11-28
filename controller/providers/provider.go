@@ -357,9 +357,13 @@ func refuseAt(ctx context.Context, part runtime.ReadingPartName, ref, scope, add
 		return
 	}
 	failure, _, _ := runtime.Classify(err)
+	reason, detail := runtime.Said(err)
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
-	ledger.entries = append(ledger.entries, runtime.RefusedPart{Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Reason: runtime.Clip(err.Error(), runtime.ReasonLimit), Address: address})
+	ledger.entries = append(ledger.entries, runtime.RefusedPart{
+		Part: part, ConnectionRef: ref, Scope: scope, Refusal: failure, Address: address,
+		Reason: runtime.Clip(reason, runtime.ReasonLimit), Detail: runtime.Clip(detail, runtime.ReasonLimit),
+	})
 }
 
 // decodePayload decodes a resource's opaque spec or observed payload into its kind's type.

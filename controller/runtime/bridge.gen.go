@@ -2801,10 +2801,15 @@ type KindReport struct {
 	Carried bool `json:"carried,omitempty"`
 
 	// Connected False when nothing this controller holds can read the kind; absent means it was read.
-	Connected *bool  `json:"connected,omitempty"`
-	Error     string `json:"error,omitempty"`
-	OK        bool   `json:"ok"`
-	Records   []any  `json:"records"`
+	Connected *bool `json:"connected,omitempty"`
+
+	// Detail The cause's own text, kept apart from the error; empty for none.
+	Detail string `json:"detail,omitempty"`
+
+	// Error HQ's words for what failed.
+	Error   string `json:"error,omitempty"`
+	OK      bool   `json:"ok"`
+	Records []any  `json:"records"`
 
 	// Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
 	Refusal      Refusal       `json:"refusal,omitempty"`
@@ -3160,9 +3165,14 @@ type RefusedPart struct {
 	Address       string `json:"address,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
 
+	// Detail The cause's own text, kept apart from the reason; empty for none.
+	Detail string `json:"detail,omitempty"`
+
 	// Part A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
-	Part   ReadingPartName `json:"part"`
-	Reason string          `json:"reason"`
+	Part ReadingPartName `json:"part"`
+
+	// Reason HQ's words for what failed.
+	Reason string `json:"reason"`
 
 	// Refusal Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.
 	Refusal FailureClass `json:"refusal"`

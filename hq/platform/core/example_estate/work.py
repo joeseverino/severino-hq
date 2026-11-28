@@ -364,7 +364,13 @@ def readings_aged():
 
     late = cadence(DEPENDENCY_RUN_KIND).stale_after + timedelta(hours=3)
     ProviderInventory.objects.filter(kind=DEPENDENCY_RUN_KIND).update(observed_at=timezone.now() - late)
-    store(ALLOWANCE_KIND, reachable=False, observed_at=None, error="GitHub did not answer in time.")
+    store(
+        ALLOWANCE_KIND,
+        reachable=False,
+        observed_at=None,
+        error="GitHub did not answer in time.",
+        detail="context deadline exceeded",
+    )
     closed = [
         {
             "part": CODE_SCANNING.name,

@@ -149,7 +149,7 @@ func (c *Commands) result(step, subject string, stdout, stderr []byte, exit int,
 
 // ErrNoShell is a reader whose kind HQ does not declare to log in (and so asks
 // for whenever a page opens) asking for a shell; a host counts its logins.
-var ErrNoShell = errors.New("its kind is not declared to log in to a machine")
+var ErrNoShell = runtime.Words("its kind is not declared to log in to a machine")
 
 type shellRefusedKey struct{}
 

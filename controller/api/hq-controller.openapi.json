@@ -1624,7 +1624,12 @@
             "$ref": "#/components/schemas/FailureClass"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the reason; empty for none."
           },
           "address": {
             "type": "string"
@@ -1661,7 +1666,12 @@
             }
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the error; empty for none."
           },
           "refusal": {
             "$ref": "#/components/schemas/Refusal"

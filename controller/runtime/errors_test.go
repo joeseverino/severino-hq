@@ -53,6 +53,28 @@ func TestProviderErrorSaysWhatFailedThenWhy(t *testing.T) {
 	}
 }
 
+// A report carries HQ's words apart from the cause's own text, whatever
+// context wraps them; an error with no cause named apart is all reason.
+func TestSaidKeepsTheCauseApartFromTheReason(t *testing.T) {
+	cause := errors.New("json: cannot unmarshal string into Go value of type int")
+	cases := []struct {
+		err            error
+		reason, detail string
+	}{
+		{errors.New("boom"), "boom", ""},
+		{&ProviderError{Message: "provider unreachable"}, "provider unreachable", ""},
+		{&ProviderError{Err: cause}, cause.Error(), ""},
+		{&ProviderError{Message: "cloudflare returned invalid rows", Err: cause}, "cloudflare returned invalid rows", cause.Error()},
+		{fmt.Errorf("zone example.com: %w", &ProviderError{Message: "read rows", Err: cause}), "zone example.com: read rows", cause.Error()},
+		{&ProviderError{Message: "connection example", Err: ErrNoSuchConnection}, "connection example: not supplied to the controller", ""},
+	}
+	for _, c := range cases {
+		if reason, detail := Said(c.err); reason != c.reason || detail != c.detail {
+			t.Errorf("%v: got %q %q", c.err, reason, detail)
+		}
+	}
+}
+
 func TestHTTPRefusalKeepsTheStatusAndClass(t *testing.T) {
 	for code, want := range map[int]FailureClass{401: FailureClassCredential, 403: FailureClassPermission, 404: FailureClassUnclassified} {
 		err := HTTPRefusal(code)

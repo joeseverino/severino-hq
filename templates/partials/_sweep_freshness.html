@@ -23,6 +23,8 @@ what it counts; with no reading it gives nothing, separator included.
 no band, and the page around it has already said which provider it is about.
 `count` replaces the sweep's total when the page shows part of it: one domain's
 records. Each state, its tone and its age are `credential_sight.standing`'s.
+An error is HQ's words; the cause's own text behind it is its `detail`, held
+in a title.
 {% endcomment %}{% if inventory %}{% if only_kind and inline %}{% for snapshot in inventory %}{% if snapshot.kind == only_kind %}{% dot %}{% if snapshot.read %}{% include "partials/_reading_age.html" with reading=snapshot.age only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|lower }}</span>{% endif %}{% endif %}{% endfor %}
   {% elif only_kind %}
     {% muted element="p" %}
@@ -32,7 +34,7 @@ records. Each state, its tone and its age are `credential_sight.standing`'s.
             {% if count or count == 0 %}{{ count|counted:"record" }}{% else %}{{ snapshot.count|counted:"record" }}{% endif %}{% dot %}
             {% include "partials/_reading_age.html" with reading=snapshot.age only %}
           {% else %}
-            {{ snapshot.state_label|lower }}{% if snapshot.error %} ({{ snapshot.error }}){% endif %}
+            {{ snapshot.state_label|lower }}{% if snapshot.error %} <span{% if snapshot.detail %} title="{{ snapshot.detail }}"{% endif %}>({{ snapshot.error }})</span>{% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}

@@ -184,6 +184,9 @@ class ProviderInventory(TimestampedModel):
     # False when the controller holds no connection that could read the kind.
     connected = models.BooleanField(default=True)
     error = models.CharField(max_length=500, blank=True)
+    # The cause's own text behind ``error``, kept apart so a page draws HQ's
+    # words and folds the machine's.
+    detail = models.CharField(max_length=500, blank=True)
     # What the provider refused when unreachable: the credential, or one
     # permission. Blank when the read failed for another reason.
     refusal = models.CharField(max_length=16, blank=True, choices=refusal_choices)
