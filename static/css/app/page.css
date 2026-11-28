@@ -125,11 +125,18 @@ a:is(:hover, :focus-visible) > .muted { color: inherit; }
    wraps, the dot that would end a line lies past the box's end and is not
    drawn, and a line never ends with a separator. Only its paint is cut
    there, so nothing it holds is clipped out of its box; a focus ring is
-   drawn inside its control. */
+   drawn inside its control. Each part is set whole: it never shrinks below
+   its own line, so one that does not fit moves to the next line, and only
+   one wider than the whole run wraps, inside the run. The run takes all of
+   the aside's width, the row's spare width with it (layout.css), rather
+   than its own max-content, which WebKit can measure a fraction of a pixel
+   short of the parts it holds. */
 .end-run {
   --dot-gap: calc(2 * var(--space-3) + .4em);
   display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; column-gap: var(--dot-gap);
+  inline-size: auto;
   clip-path: inset(-100vh 0 -100vh -100vw);
+  & > * { flex-shrink: 0; max-inline-size: 100%; }
 }
 .end-run > :not(:last-child)::after {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-end: calc(-1 * var(--dot-gap));

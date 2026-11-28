@@ -370,6 +370,8 @@ _DECLARED = {
     ),
     # Words said to a reader and never drawn.
     "unseen": _S(".visually-hidden", optional=True),
+    # A part of a run set at its box's end: a section aside's words, its link.
+    "run_part": _S(".end-run > *", optional=True),
     # The flow of sibling sections or cards, and of charts (layout.css).
     "flow": _S(".section-flow, .domain-charts", "layout", optional=True),
     # An identifier a band of facts shows as a value.

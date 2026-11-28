@@ -49,9 +49,11 @@ const oneLine = (el, text) => {
 # words lay out on more than one line in any box of it, or a select or an
 # input button whose chosen value (which the engine draws, so no range reads
 # it) is wider in its face than the box it is drawn in. Words of a control
-# inside it are that control's, and words kept from sight are no label.
+# inside it are that control's, and words kept from sight are no label. A
+# part of a run set at its box's end (`.end-run`: an aside's words, then its
+# link) is set whole the same way, unless its line is wider than the run.
 WRAPPED_CONTROLS = (
-    "([pressed, choice, unseen, vendored]) => {"
+    "([pressed, choice, unseen, vendored, part]) => {"
     + DESCRIBE
     + TEXT_SHOWN
     + _DRAWN
@@ -59,12 +61,12 @@ WRAPPED_CONTROLS = (
   const controls = `${pressed}, ${choice}`;
   const words = document.createRange();
   const found = [];
-  const lines = (el) => {
+  const lines = (el, own) => {
     const blocks = new Map();
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
-      if (!node.data.trim() || parent.closest(controls) !== el || parent.closest(unseen) || !textShown(node)) continue;
+      if (!node.data.trim() || parent.closest(own) !== el || parent.closest(unseen) || !textShown(node)) continue;
       let block = parent;
       let placed = false;
       while (block !== el) {
@@ -105,8 +107,19 @@ WRAPPED_CONTROLS = (
       }
       continue;
     }
-    const count = lines(el);
+    const count = lines(el, controls);
     if (count > 1) found.push(`${describe(el)} "${ownWords(el, controls)}" takes ${count} lines at ${width}px`);
+  }
+  for (const el of document.querySelectorAll(part)) {
+    if (!el.checkVisibility() || el.closest(`${unseen}, ${vendored}`)) continue;
+    const count = lines(el, part);
+    if (count < 2) continue;
+    const run = el.parentElement;
+    const style = getComputedStyle(run);
+    const room = run.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const words = el.textContent.trim().replace(/[ \\t\\n\\r\\f]+/g, ' ');
+    const needs = oneLine(el, words);
+    if (needs <= room) found.push(`${describe(el)} "${words.slice(0, 40)}" takes ${count} lines, ${needs.toFixed(1)}px on one, in a run of ${room.toFixed(1)}px`);
   }
   return found;
 }"""
@@ -304,8 +317,25 @@ CHECKS = {
     "control words on one line": Check(
         (
             WRAPPED_CONTROLS,
-            [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
+            [
+                SELECTORS["pressed"],
+                SELECTORS["choice"],
+                SELECTORS["unseen"],
+                SELECTORS["vendored"],
+                SELECTORS["run_part"],
+            ],
         ),
         reader_sees="a control's words broken across lines, or a select's choice cut short",
+        # A part of an end run held narrower than its words is found; one
+        # wider than the run wraps inside it rightly.
+        plants=(
+            Plant(
+                '<span class="end-run" style="inline-size: 16rem"><span>Example note</span>'
+                '<a class="subtle-link" href="/example/" style="inline-size: 4em">View example</a></span>'
+                '<span class="end-run" style="inline-size: 6rem"><span>Example</span>'
+                '<a class="subtle-link" href="/example/">View every example record</a></span>',
+                finds=('"View example"',),
+            ),
+        ),
     ),
 }
