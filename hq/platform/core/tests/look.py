@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,9 @@ lazy from hq.platform.core.tests.browser import catalog
 
 # A composed look's base composes the set its commit can load, picked there.
 lazy from tools.dev import extension_set
+
+# A run the gate sent to its second machine is told so.
+lazy from tools.gate.chain import SENT
 
 # dev:look runs perf in its share, and perf declares what it draws.
 lazy from tools.perf.report import tokens as perf_tokens
@@ -1576,7 +1580,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         if self.base is not None and self.base_kept:
             base += f", {_its_own(self.base_kept)}"
-        shots = f"Screenshots in {_shown(this_run())}/{base}"
+        # A run sent to the second machine draws its system faces (the monospace one above all), not this one's.
+        drawn = f", drawn on {socket.gethostname()} in its own system fonts" if os.environ.get(SENT) else ""
+        shots = f"Screenshots in {_shown(this_run())}/{base}{drawn}"
         if not self.shooting:
             shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
         unfit = [self.base_unfit] if self.base_unfit else []
