@@ -1013,7 +1013,9 @@ How a run goes (`tools/gate/remote.py`, and `tools/gate/remote-host.sh` there):
 4. What it wrote comes back, archived there as the run ends, while the
    worktree is still its own: each `var/gate/` verdict that names the tree
    sent (any other is left there, and said so), the logs, `var/look/` and
-   `var/perf/`.
+   `var/perf/`. A look's folder is reserved here before the run is sent
+   (`look_runs.RUN`), since runs sent at once shoot in worktrees of their own
+   there and land in this checkout's one `var/look/`.
    A pass fast recorded there is recorded here only then, its file naming the
    machine it ran on.
 
@@ -1336,7 +1338,7 @@ never holds still is cut from one reading of it, and its line says so, as is a
 `.failed.png`.
 
 A run removes the folders older than a day beyond the newest `KEPT_RUNS` of
-them (`hq/platform/core/tests/look.py`) as it starts, so an earlier run's shots
+them (`hq/platform/core/tests/look_runs.py`) as it starts, so an earlier run's shots
 stay where it printed them. A page that could not be looked at (refused, no
 `main`, a rule that could not run) is shot as it stands, as
 `<page>-<width>.failed.png`.

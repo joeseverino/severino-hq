@@ -14,7 +14,6 @@ import json
 import os
 import re
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -40,7 +39,7 @@ from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.stalls import stall_watch
-from hq.platform.core.tests import look_shares, task
+from hq.platform.core.tests import look_runs, look_shares, task
 from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import LIFTED, BrowserGate, add_css
@@ -114,14 +113,8 @@ lazy from tools.dev import extension_set
 # dev:look runs perf in its share, and perf declares what it draws.
 lazy from tools.perf.report import tokens as perf_tokens
 
-# Each run's shots go to a folder of their own under here, named for when the
-# run began, so a later run never overwrites what an earlier one printed: the
-# runs from the last `KEPT_FOR` seconds are kept, and at least the newest
-# `KEPT_RUNS` whatever their age, and everything else here is removed.
+# Each run's shots go to a folder of their own under here (look_runs).
 OUT = Path(settings.BASE_DIR) / "var" / "look"
-KEPT_RUNS = 5
-KEPT_FOR = 24 * 60 * 60
-_RUN_NAME = re.compile(r"\d{8}-\d{6}(?:-\d+)?")
 # The base's shots, written by the run at the base into this run's folder, so
 # the two sides of a change are read together and outlive the base's worktree.
 BASE_OUT = "base"
@@ -860,7 +853,8 @@ def _marked_a_guess(request: Any) -> bool:
 @functools.cache
 def this_run() -> Path:
     """The folder this run shoots into: the one the run that started it handed
-    a share or a look at a base, or else a new one under ``OUT``."""
+    a share or a look at a base, or else a new one under ``OUT``, by the name
+    the checkout that sent it here reserved, if one did."""
 
     if shared := look_shares.folder():
         return shared
@@ -868,43 +862,7 @@ def this_run() -> Path:
         folder = Path(given)
         folder.mkdir(parents=True, exist_ok=True)
         return folder
-    return _new_run(OUT)
-
-
-def _new_run(root: Path, kept: int = KEPT_RUNS) -> Path:
-    """A new folder in ``root`` named for now, kept with the runs from the last
-    ``KEPT_FOR`` seconds and the newest ``kept`` in all, and every other entry
-    of ``root`` removed. A run's age is read from its name."""
-
-    root.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    while True:
-        runs = sorted(
-            (entry for entry in root.iterdir() if _RUN_NAME.fullmatch(entry.name) and entry.is_dir()),
-            key=lambda entry: [int(part) for part in entry.name.split("-")],
-        )
-        # Past the newest run of this second, so a name pruned this second is never used again.
-        newest = runs[-1].name if runs else ""
-        again = int(newest.removeprefix(stamp).lstrip("-") or 0) + 1 if newest.startswith(stamp) else 0
-        folder = root / (f"{stamp}-{again}" if again else stamp)
-        try:
-            folder.mkdir()
-        except FileExistsError:
-            continue
-        break
-    cutoff = time.time() - KEPT_FOR
-    recent = [run for run in runs if time.mktime(time.strptime(run.name[:15], "%Y%m%d-%H%M%S")) >= cutoff]
-    keep = {folder, *recent, *(runs[-(kept - 1) :] if kept > 1 else ())}
-    # Another run pruning at once may take an entry first.
-    for entry in root.iterdir():
-        if entry in keep:
-            continue
-        if entry.is_dir() and not entry.is_symlink():
-            with suppress(FileNotFoundError):
-                shutil.rmtree(entry)
-        else:
-            entry.unlink(missing_ok=True)
-    return folder
+    return look_runs.new_run(OUT, name=os.environ.get(look_runs.RUN, ""))
 
 
 def _slug(name: str) -> str:

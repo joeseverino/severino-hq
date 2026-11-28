@@ -27,6 +27,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path, PurePosixPath
 from typing import NamedTuple
 
+from hq.platform.core.tests import look_runs
 from hq.platform.core.tests.task import RefError, Usage, commit_of, git
 from tools.dev import extension_set
 from tools.gate import chain, fast, ran, room
@@ -63,6 +64,7 @@ LEFT = {
         *("SEVERINO_HQ_PLUGINS", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON"),
     ),
     "remote-host.sh names it to the run there": ("HQ_GATE_SENT",),
+    "a run sent there is handed it, and one here reserves its own": (look_runs.RUN,),
     "mise, or mise.toml's env, sets it for the task that reads it": (
         *("HQ_DEV_ACCOUNT", "MISE_CONFIG_ROOT", "MISE_STATE_DIR", "MISE_TASK_LOCKS", "MISE_TASK_LOCK_TIMEOUT"),
         *("MISE_TASK_NAME", "PYTHON_VERSIONS"),
@@ -294,6 +296,9 @@ def run_there(task: str, host: str, checkout: str, values: dict[str, str], took:
     carried = {OUTPUT: "all" if shows_all(sys.stdout) else "short"} | {
         name: value for name, value in os.environ.items() if name in CARRIED
     }
+    if task == "dev:look":
+        # Its shots come back into this checkout's runs, so their folder is named here, where every run lands.
+        carried[look_runs.RUN] = look_runs.new_run(ROOT / "var" / "look").name
     handed = [f"{name}={value}" for name, value in carried.items()]
     composed = [*(sent.extension or ("-", "")), sent.packages]
     asked = [sent.id, sender(), checkout, sent.tree, sent.commit, sent.head, *composed, "env", *handed]
