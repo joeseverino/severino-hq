@@ -48,10 +48,11 @@ from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
 lazy from .automation_manifest import REVISION_INPUT
-lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, reading_words, timeout_words
+lazy from .automation_runs import RETRY_WORDS, access_words, reading_words, timeout_words
 lazy from .findings import rule_for
 lazy from .labels import dotted, lower_first
 lazy from .payload_words import field_words
+lazy from .playbook_reach import reachable
 lazy from .ui import ended
 lazy from .work_runs import wording
 
@@ -193,6 +194,16 @@ def adopted() -> AdoptedCatalog | None:
     for every part of a page that names it."""
 
     return read_once("automation.adopted", AdoptedCatalog.objects.first)
+
+
+def scan_result(pk: int | None = None) -> SourceProposal | None:
+    """The scan result ``pk``, or the newest when none is named; None when HQ
+    holds no such one. Read once for every part of a page that names it."""
+
+    newest = read_once("automation.scan_result", SourceProposal.objects.order_by("-pk").first)
+    if pk is None or (newest is not None and newest.pk == pk):
+        return newest
+    return read_once(f"automation.scan_result:{pk}", SourceProposal.objects.filter(pk=pk).first)
 
 
 def manifests(digest: str) -> tuple[OperationManifest, ...]:
@@ -476,8 +487,7 @@ def _widens(
 def _summary(procedure: AdoptedProcedure) -> str:
     """Its Effect, Runs on and Access, in the Playbooks table's words."""
 
-    where = ", ".join(procedure.hosts) or anywhere(procedure.target_kinds)
-    return dotted(procedure.effect.label, where, access_words(procedure.privilege))
+    return dotted(procedure.effect.label, ", ".join(reachable(procedure)), access_words(procedure.privilege))
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -489,7 +499,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
     return {
         SUMMARY: {"label": named, "value": _summary(procedure)},
         "effect": procedure.effect.label,
-        "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
+        "runs_on": list(reachable(procedure)),
         "access": access_words(procedure.privilege),
         "timeout": timeout_words(procedure.timeout_seconds),
         "retry": RETRY_WORDS[procedure.retry],
@@ -621,7 +631,7 @@ def judged(proposal_id: int) -> AdoptionPlan:
     its problems, and a playbook a person rejected left as adopted;
     RecordNotFound for a proposal HQ no longer holds."""
 
-    proposal = SourceProposal.objects.filter(pk=proposal_id).first()
+    proposal = scan_result(proposal_id)
     if proposal is None:
         raise RecordNotFound("No scan result has that ID.")
     unplaced = _commit_refusals(proposal)

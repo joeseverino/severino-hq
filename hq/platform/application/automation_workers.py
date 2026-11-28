@@ -15,9 +15,9 @@ lazy from hq.domains.control_plane.provider_adapters.automation import SOURCE_KI
 from .cadence import WorkerStanding, automation_profiles, automation_standing
 from .projection import read_once
 from .tables import Cell, DataTable, TableColumn
-lazy from .automation_runs import runner_reaches
 lazy from .entity_links import entity_link
 lazy from .infrastructure import declared_resources
+lazy from .playbook_reach import runner_reaches
 
 
 @dataclass(frozen=True, slots=True)

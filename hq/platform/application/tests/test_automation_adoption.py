@@ -241,7 +241,7 @@ class AdoptTests(AdoptionTestCase):
             "unit": {"type": "str", "required": True, "description": "The unit to check."}
         }
         self.adopt(self.proposed(catalog(bounded)))
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
 
         with machines:
             refused = run_capability(
@@ -464,7 +464,7 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
     def asked_at(self, playbook: str) -> str:
         """The commit a run of ``playbook`` asked now hands the worker."""
 
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
         with machines:
             answer = run_capability(
                 f"automation.example.{playbook}.run",
@@ -564,7 +564,7 @@ class StaleRunTests(AdoptionTestCase):
     def test_a_held_run_goes_stale_when_its_procedure_is_adopted_anew(self):
         wipe = procedure("wipe", effect="destructive")
         self.adopt(self.proposed(catalog(wipe)))
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
         with machines:
             answer = run_capability(
                 "automation.example.wipe.run",

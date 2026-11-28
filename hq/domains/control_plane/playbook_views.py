@@ -12,8 +12,7 @@ from django.shortcuts import redirect
 from django.views import View
 from django.views.generic import TemplateView
 
-from hq.domains.control_plane.models import SourceProposal
-from hq.platform.application.automation_adoption import ADOPT, REJECT
+from hq.platform.application.automation_adoption import ADOPT, REJECT, scan_result
 from hq.platform.application.automation_findings import worker_problems
 from hq.platform.application.automation_sources import (
     SourceStanding,
@@ -67,7 +66,7 @@ class PlaybooksView(PageMixin, TemplateView):
             ),
             sources=sources,
             # When HQ last reached the repository: a scan result is kept only by a read that succeeded.
-            read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
+            read_at=newest.created_at if (newest := scan_result()) else None,
             rows=playbook_table(sources.procedures, sources.pending, self.principal),
             # HQ's playbook worker absent, with how to set it up: about no
             # record with a page, so found by its key.
@@ -98,7 +97,7 @@ class ProposalDecisionView(View):
         if not result.get("ok") and refusal_of(result).code in WANTS_A_GRANT:
             raise PermissionDenied(refusal_of(result).message)
         if refused(request, result) is not None:
-            scan = SourceProposal.objects.filter(pk=pk).first()
+            scan = scan_result(pk)
             return redirect(entry_url(scan) if scan else reverse("control_plane:playbooks"))
         return redirect(safe_next(request, fallback=reverse("control_plane:playbooks")))
 

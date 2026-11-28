@@ -205,6 +205,11 @@ class ProcedureTerms(Closed):
             raise _SETTLED_CHANGE.refused()
         return self
 
+    def admits(self, kind: str, host: str) -> bool:
+        """Whether a run may target this host of this kind."""
+
+        return kind in self.target_kinds and (not self.hosts or host in self.hosts)
+
 
 class OperationManifest(ProcedureTerms):
     """One reviewed playbook, as HQ may run it."""
@@ -231,11 +236,6 @@ class OperationManifest(ProcedureTerms):
         if self.effect.changes and not (self.preconditions and self.verification):
             raise _CHANGE_CHECKED.refused()
         return self
-
-    def admits(self, kind: str, host: str) -> bool:
-        """Whether a run may target this host of this kind."""
-
-        return kind in self.target_kinds and (not self.hosts or host in self.hosts)
 
 
 class UnknownOperation(KeyError):

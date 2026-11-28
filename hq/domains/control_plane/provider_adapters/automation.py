@@ -20,13 +20,13 @@ lazy from hq.platform.application.action_links import command_url
 lazy from hq.platform.application.automation_runs import (
     RETRY_WORDS,
     access_words,
-    anywhere,
     capability_name,
     operation_registry,
     resource_key,
     timeout_words,
 )
 lazy from hq.platform.application.entity_links import page_url
+lazy from hq.platform.application.playbook_reach import reachable
 lazy from hq.platform.application.references import Kind
 lazy from hq.platform.application.routes import reverse
 
@@ -95,7 +95,13 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
         ("Effect", "", Effect(spec["effect"]).label if spec.get("effect") in Effect else str(spec.get("effect", ""))),
         ("Access", "", access_words(str(spec.get("privilege", "")))),
         ("Record types", "", ", ".join(spec.get("target_kinds", ()))),
-        ("Machines", "", ", ".join(spec.get("hosts", ())) or anywhere(spec.get("target_kinds", ()))),
+        (
+            "Machines",
+            "",
+            ", ".join(reachable(adopted))
+            if (adopted := operation_registry().get(str(spec.get("operation", ""))))
+            else "",
+        ),
         ("Timeout", "", timeout_words(spec.get("timeout_seconds"))),
         ("Retry", "", RETRY_WORDS.get(str(spec.get("retry", "")), str(spec.get("retry", "")))),
     )

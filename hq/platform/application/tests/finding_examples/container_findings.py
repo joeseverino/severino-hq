@@ -106,7 +106,7 @@ def applied_on(*hosts: str) -> ExitStack:
         mock.patch("hq.platform.application.app_update_approval.applier", return_value=applies(hosts=hosts))
     )
     machines = (Machine(BOX), Machine(EDGE))
-    stack.enter_context(mock.patch("hq.platform.application.automation_runs.machine_catalog", return_value=machines))
+    stack.enter_context(mock.patch("hq.platform.application.playbook_reach.machine_catalog", return_value=machines))
     return stack
 
 

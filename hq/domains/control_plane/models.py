@@ -697,7 +697,7 @@ class OperationHost(models.Model):
     """One machine a run acts on, as a row, so "the runs on this machine" is an
     indexed query rather than a read of every run's ``input``.
 
-    ``host`` is the machine's canonical name, as ``automation_runs.resolved_hosts``
+    ``host`` is the machine's canonical name, as ``playbook_reach.resolved_hosts``
     gives it: machines are a projection of many readings rather than rows, so
     there is no row to point at. Written with the run, in its transaction, by
     ``automation_runs.request_run``, its one writer.
@@ -742,7 +742,7 @@ class SourceProposal(TimestampedModel):
     files = models.JSONField(default=list)
     unpinned = models.JSONField(default=list)
     # Each machine and privilege profile the worker said it has a login for,
-    # which a run is held to when it is asked (``automation_runs.reached``).
+    # which a run is held to when it is asked (``playbook_reach.reached``).
     reaches = models.JSONField(default=list)
     # Set when a person rejects it (``automation_adoption.reject``), so it no
     # longer waits to be decided; who did is the audit row that set it.

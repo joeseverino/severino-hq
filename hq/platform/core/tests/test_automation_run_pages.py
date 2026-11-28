@@ -7,7 +7,6 @@ from django.urls import reverse
 from hq.platform.application.markup_testing import select
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.automation import CACHE_FLUSH
-from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
 from hq.platform.core.testing import declare
 
@@ -95,24 +94,6 @@ class ProcedurePageTests(TestCase):
                 self.assertEqual(shown["Adopted commit"], manifest.revision[:12])
                 self.assertIn("Effect", shown)
                 self.assertIn("sudo", shown["Access"])
-
-    def test_a_procedure_runs_on_the_machines_it_names_each_by_its_link_and_else_on_any(self):
-        from hq.platform.application.automation_runs import operation_registry
-        from hq.platform.application.entity_links import entity_link
-        from hq.platform.application.playbook_about import about
-        from hq.platform.application.security import Capability, Principal
-
-        declared = operation_registry()[CACHE_FLUSH]
-        reader = Principal("example-reader", "web", frozenset({Capability.READ}))
-
-        def runs_on(manifest):
-            (fact,) = [fact for fact in about(manifest, reader).facts if fact.label == "Runs on"]
-            return fact
-
-        named = declared.model_copy(update={"hosts": (MACHINE,)})
-        self.assertEqual(runs_on(named).links, (entity_link("machine", MACHINE),))
-        self.assertFalse(declared.hosts)
-        self.assertEqual(runs_on(declared).links, ())
 
     def test_a_procedure_s_record_lives_on_its_command_page_while_the_catalog_names_it(self):
         from hq.domains.control_plane.models import ManagedResource

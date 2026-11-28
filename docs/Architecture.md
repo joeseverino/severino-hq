@@ -1874,7 +1874,9 @@ another one names (`controller/connections/document.go`). A host no such login
 reaches is refused before anything runs. HQ refuses it earlier, when the run is
 asked for. Each scan reports every machine and profile the worker has a login
 for, never an address, user or key, and a run is held to the newest scan's
-(`automation_runs.reached`). The refusal lists each missing pair in
+(`playbook_reach.reached`). Every page and read that offers a run or names
+where one runs asks the same answer (`playbook_reach.reachable`), so nothing
+is offered that the run would refuse. The refusal lists each missing pair in
 `details.missing`, and says that a login added since the last scan is seen
 after the next one. That list is the worker's word, so a worker that lies can
 only make the early refusal wrong. The worker's own check at the claim still

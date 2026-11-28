@@ -556,10 +556,6 @@ class FindingInvestigationTests(TestCase):
         (key,) = parse_qs(urlsplit(url).query)["finding"]
         self.assertIsNone(finding_run(self.COMMAND, key, NOBODY))
 
-    def test_a_worker_that_cannot_reach_the_machine_is_offered_no_run(self):
-        self.supply.reach()
-        self.assertEqual(self.offered(), [])
-
     def test_a_fix_whose_run_needs_an_input_of_its_own_is_never_offered_as_it_stands(self):
         self.supply(manifest(id=self.PLAYBOOK, input_type=self.input, fixes=("unit-restarting",)))
         self.assertEqual(self.offered(), [])
