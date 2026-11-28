@@ -2,8 +2,8 @@
 {% comment %}
 One release of HQ (`releases.ReleaseRecord`): GitHub's record of its
 deployment, and what HQ read of itself once it went live beside the release
-production ran before it. Those numbers move with load, so they are shown and
-raise nothing.
+production ran before it, and what each page cost in its rehearsal on a copy
+of production's data beside the previous release's (`release_pages`).
 {% endcomment %}
 {% block page %}
 {% layout %}
@@ -21,6 +21,15 @@ raise nothing.
 {% section "Readings" %}
   {% if release.readings or release.previous.readings %}
   {% data_table readings %}
+  {% else %}
+  {% include "partials/_empty_state.html" with absent="no reading yet" only %}
+  {% endif %}
+{% endsection %}
+{% section "Pages" %}
+  {% if release.pages %}
+  {% data_table pages %}
+  {% elif release.pages_unread %}
+  {% include "partials/_empty_state.html" with message=release.pages_unread|capfirst only %}
   {% else %}
   {% include "partials/_empty_state.html" with absent="no reading yet" only %}
   {% endif %}

@@ -14,7 +14,7 @@ from typing import Annotated, Any, TypedDict
 from hq.domains.jobs.models import Job
 from hq.platform.core.models import ReleaseSnapshot
 
-from . import deploy_outcomes
+from . import deploy_outcomes, release_pages
 from .answer_fields import DateTime, PageUrl
 from .describe import Describe
 from .entity_links import web_url
@@ -88,6 +88,10 @@ class ReleaseRecord(ReleaseItem):
     """One release whole: its readings beside the previous release's."""
 
     readings: Annotated[ReadingsRecord | None, Describe("What HQ read of itself; null where nothing was kept.")]
+    pages: Annotated[
+        list[release_pages.PageRecord], Describe("Each page its rehearsal drew, by path; empty where none was kept.")
+    ]
+    pages_unread: Annotated[str, Describe("Why its rehearsal drew no page; empty where it drew them or none was kept.")]
     verified: Annotated[list[dict[str, str]], Describe("Each check its deploy ran before deploying, and its end.")]
     previous: Annotated[PreviousRecord | None, Describe("The release production ran before it; null for none.")]
 
@@ -152,7 +156,8 @@ def get_release(commit: str) -> dict[str, Any]:
     commits = [str(item.get("sha") or "") for item in (deployment, before) if item is not None]
     snapshots = {snapshot.commit: loaded(snapshot) for snapshot in ReleaseSnapshot.objects.filter(commit__in=commits)}
     found = _item(deployment, snapshots, source)
-    previous = None
+    taken = snapshots.get(found["commit"])
+    previous, earlier = None, ""
     if before is not None:
         earlier = str(before.get("sha") or "")
         previous = {
@@ -162,7 +167,9 @@ def get_release(commit: str) -> dict[str, Any]:
         }
     return {
         **found,
-        "readings": _readings(snapshots.get(found["commit"])),
+        "readings": _readings(taken),
+        "pages": release_pages.rows(taken, snapshots.get(earlier)),
+        "pages_unread": taken.pages_unread if taken is not None else "",
         "verified": [dict(step) for step in deployment.get("verified") or ()],
         "previous": previous,
     }

@@ -10,7 +10,7 @@ from hq.platform.application.moments import moment
 from hq.platform.application.pages import RecordPageMixin
 from hq.platform.application.releases import RELEASES, comparison
 from hq.platform.application.tables import Cell, TableColumn
-lazy from hq.platform.application import deploy_outcomes
+lazy from hq.platform.application import deploy_outcomes, release_pages
 
 from .models import ReleaseSnapshot
 
@@ -57,4 +57,5 @@ class ReleaseView(RecordPageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["tone"] = deploy_outcomes.said(self.record)[1]
         context["readings"] = comparison(self.record)
+        context["pages"] = release_pages.table(self.record)
         return context

@@ -17,12 +17,19 @@ def _drawn(page: str, moved: int | None) -> dict:
     """A page's costs, the same for every release but where ``moved`` names
     which of its costs this release changed."""
 
+    if page == "/":
+        # The dashboard's address redirects, drawing nothing of its own.
+        return dict.fromkeys(("queries", "repeated_queries", "rows", "html_bytes", "row_html_bytes"), 0) | {
+            "page": page,
+            "status": 302,
+            "queries": 3,
+        }
     seed = int(hexed("page", page, length=8), 16)
     rows = seed % 40
     row_bytes = rows * (300 + seed % 500) + (rows * 120 if moved == 1 else 0)
     return {
         "page": page,
-        "status": 302 if page == "/" else 200,
+        "status": 200,
         "queries": 8 + seed % 30 + (rows if moved == 0 else 0),
         "repeated_queries": seed % 5 + (rows if moved == 0 else 0),
         "rows": rows,
@@ -40,7 +47,10 @@ def walked() -> None:
     pages = listed_pages()
     store(
         REHEARSAL_KIND,
-        {"revision": HQ_REVISION, "pages": [_drawn(page, at if at < MOVED else None) for at, page in enumerate(pages)]},
+        {
+            "revision": HQ_REVISION,
+            "pages": [_drawn(page, at if at < MOVED else None) for at, page in enumerate(pages, start=-1)],
+        },
     )
 
 

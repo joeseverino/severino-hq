@@ -2295,6 +2295,21 @@
               "readings.units.ended_at",
               "readings.units.seconds",
               "readings.units_read_at",
+              "pages",
+              "pages.page_queries",
+              "pages.row_queries",
+              "pages.bytes_per_row",
+              "pages.page_bytes",
+              "pages.page",
+              "pages.status",
+              "pages.rows",
+              "pages.html_bytes",
+              "pages.previous",
+              "pages.previous.page_queries",
+              "pages.previous.row_queries",
+              "pages.previous.bytes_per_row",
+              "pages.previous.page_bytes",
+              "pages_unread",
               "verified",
               "previous",
               "previous.commit",
@@ -22298,6 +22313,61 @@
         },
         "type": "object"
       },
+      "PageCostRecord": {
+        "additionalProperties": false,
+        "description": "What a page costs once, apart from what it costs per record it draws.",
+        "properties": {
+          "bytes_per_row": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The HTML each record's rows take; null where it drew none."
+          },
+          "page_bytes": {
+            "description": "Its HTML outside its records' rows, in bytes.",
+            "type": "integer"
+          },
+          "page_queries": {
+            "description": "The first of each SQL statement it sent.",
+            "type": "integer"
+          },
+          "row_queries": {
+            "description": "Each repeat of a statement it had sent, which grows with its rows.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_queries",
+          "row_queries",
+          "bytes_per_row",
+          "page_bytes"
+        ],
+        "type": "object"
+      },
+      "PageCostRecordPartial": {
+        "additionalProperties": false,
+        "description": "What a page costs once, apart from what it costs per record it draws.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/bytes_per_row"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_queries"
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/row_queries"
+          }
+        },
+        "type": "object"
+      },
       "PageLimit": {
         "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "maximum": 100,
@@ -22358,6 +22428,107 @@
           "next",
           "previous"
         ],
+        "type": "object"
+      },
+      "PageRecord": {
+        "additionalProperties": false,
+        "description": "One page as the release's rehearsal drew it on a copy of production's data.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/bytes_per_row"
+          },
+          "html_bytes": {
+            "description": "The bytes of HTML it answered.",
+            "type": "integer"
+          },
+          "page": {
+            "description": "The page's path.",
+            "type": "string"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_queries"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCostRecord",
+                "title": "Page cost record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The previous release's, where its rehearsal drew the page; null else."
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/row_queries"
+          },
+          "rows": {
+            "description": "The records its tables drew.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "The HTTP status it answered.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_queries",
+          "row_queries",
+          "bytes_per_row",
+          "page_bytes",
+          "page",
+          "status",
+          "rows",
+          "html_bytes",
+          "previous"
+        ],
+        "type": "object"
+      },
+      "PageRecordPartial": {
+        "additionalProperties": false,
+        "description": "One page as the release's rehearsal drew it on a copy of production's data.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/bytes_per_row"
+          },
+          "html_bytes": {
+            "$ref": "#/components/schemas/PageRecord/properties/html_bytes"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageRecord/properties/page"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/page_queries"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCostRecordPartial",
+                "title": "Page cost record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The previous release's, where its rehearsal drew the page; null else."
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/row_queries"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/PageRecord/properties/rows"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageRecord/properties/status"
+          }
+        },
         "type": "object"
       },
       "PageUrl": {
@@ -27414,6 +27585,17 @@
           "outcome_said": {
             "$ref": "#/components/schemas/ReleaseItem/properties/outcome_said"
           },
+          "pages": {
+            "description": "Each page its rehearsal drew, by path; empty where none was kept.",
+            "items": {
+              "$ref": "#/components/schemas/PageRecord"
+            },
+            "type": "array"
+          },
+          "pages_unread": {
+            "description": "Why its rehearsal drew no page; empty where it drew them or none was kept.",
+            "type": "string"
+          },
           "previous": {
             "anyOf": [
               {
@@ -27476,6 +27658,8 @@
           "image",
           "readings_kept",
           "readings",
+          "pages",
+          "pages_unread",
           "verified",
           "previous"
         ],
@@ -27511,6 +27695,16 @@
           },
           "outcome_said": {
             "$ref": "#/components/schemas/ReleaseItemPartial/properties/outcome_said"
+          },
+          "pages": {
+            "description": "Each page its rehearsal drew, by path; empty where none was kept.",
+            "items": {
+              "$ref": "#/components/schemas/PageRecordPartial"
+            },
+            "type": "array"
+          },
+          "pages_unread": {
+            "$ref": "#/components/schemas/ReleaseRecord/properties/pages_unread"
           },
           "previous": {
             "anyOf": [
