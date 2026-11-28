@@ -110,11 +110,13 @@ func TestWorkersReadDeploymentsAndInvocations(t *testing.T) {
 
 // A Worker whose serving version binds HQ's answers dataset carries its count
 // of each route and status over the day and its last hour, weighed for
-// sampling; one binding none was never counted, so it claims no answers.
+// sampling; one binding none was never counted, so it claims no answers. A
+// UInt64 count arrives quoted, as production answers it, or bare, as the
+// spec's example shows it.
 func TestWorkersAnswersAreCountedForAVersionBindingTheDataset(t *testing.T) {
 	var query string
 	r, _ := newCloudflare(t, workerRoutes(uninvoked, answers(&query,
-		map[string]any{"route": "/github", "status": 202, "requests": 118, "last_hour": 0},
+		map[string]any{"route": "/github", "status": 202, "requests": "118", "last_hour": "0"},
 		map[string]any{"route": "/github", "status": 401, "requests": 9, "last_hour": 9},
 	)))
 	records, err := r.cloudflareWorkers(t.Context())

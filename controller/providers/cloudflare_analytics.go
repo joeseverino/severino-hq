@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -114,6 +115,22 @@ func (r *Registry) cloudflareGraphQL(ctx context.Context, query string, variable
 		return nil, r.cloudflareRefused(held, "cloudflare analytics rejected the query", message, 0, nil)
 	}
 	return payload.Data, nil
+}
+
+// engineCount is an Analytics Engine UInt64 column's value. The SQL API's
+// FORMAT JSON quotes a 64-bit integer as a decimal string, as ClickHouse does
+// for JavaScript's sake, where its spec's example shows a bare number, so
+// both are read.
+type engineCount int64
+
+func (c *engineCount) UnmarshalJSON(data []byte) error {
+	text := strings.Trim(string(data), `"`)
+	value, err := strconv.ParseInt(text, 10, 64)
+	if err != nil {
+		return fmt.Errorf("analytics engine count %s is not a whole number", data)
+	}
+	*c = engineCount(value)
+	return nil
 }
 
 // cloudflareSQL is one Analytics Engine SQL query's rows (analytics-engine-sql-query-post

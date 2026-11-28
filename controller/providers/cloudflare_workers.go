@@ -62,12 +62,13 @@ WHERE timestamp > toDateTime(%[3]d) AND timestamp <= toDateTime(%[4]d)
 GROUP BY route, status
 FORMAT JSON`
 
-// workersAnswers is one row of the answer. A double is a Float64 column.
+// workersAnswers is one row of the answer. A double is a Float64 column, a
+// sum of _sample_interval a UInt64 one.
 type workersAnswers struct {
-	Route    string  `json:"route"`
-	Status   float64 `json:"status"`
-	Requests int     `json:"requests"`
-	LastHour int     `json:"last_hour"`
+	Route    string      `json:"route"`
+	Status   float64     `json:"status"`
+	Requests engineCount `json:"requests"`
+	LastHour engineCount `json:"last_hour"`
 }
 
 type workersInvocationsAnswer struct {
@@ -180,7 +181,7 @@ func (r *Registry) cloudflareWorkersAnswers(ctx context.Context, account, ref st
 	}
 	found := make([]runtime.CloudflareWorkerWorkerAnswersRecord, 0, len(rows))
 	for _, row := range rows {
-		found = append(found, runtime.CloudflareWorkerWorkerAnswersRecord{Route: row.Route, Status: int(row.Status), Requests: row.Requests, LastHour: row.LastHour})
+		found = append(found, runtime.CloudflareWorkerWorkerAnswersRecord{Route: row.Route, Status: int(row.Status), Requests: int(row.Requests), LastHour: int(row.LastHour)})
 	}
 	return found, nil
 }
