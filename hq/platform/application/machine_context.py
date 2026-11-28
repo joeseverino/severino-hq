@@ -244,7 +244,7 @@ def machine_links(record: MachineRecord) -> dict[str, object]:
     if presence["dns_name"]:
         links["magic_dns_link"] = entity_link(TAILNET_KIND, presence["dns_name"], record=addresses)
     names = PolicyNames()
-    links["opening_links"] = tuple((item["port"], names.of(item["open_to"])) for item in presence["openings"])
+    links["opening_links"] = tuple((item, names.of(item["open_to"])) for item in presence["openings"])
     return links
 
 

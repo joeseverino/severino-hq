@@ -4,7 +4,7 @@ and the public zone at Cloudflare."""
 import json
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.domains.control_plane.providers import record_spec
 
@@ -22,6 +22,7 @@ from .names import (
     OWNER,
     PHONE,
     PHONE_NAME,
+    PROXY_REF,
     PUBLIC,
     SERVICES,
     TAILNET,
@@ -377,9 +378,9 @@ ADMIN_PORT = 81
 
 def loopback_granted():
     """The grant and its test opening the proxy's admin port too, which the
-    sweep answers for and the proxy binds only to loopback: the machine's
-    page and the policy page draw a granted port beside one that reaches
-    nothing, and the finding about it raises."""
+    sweep answers for and the proxy binds, and is read on, only at loopback:
+    the machine's page and the policy page draw a granted port beside one
+    that reaches nothing, and the finding about it raises."""
 
     admin = f"tcp:{ADMIN_PORT}"
     policy = {
@@ -415,6 +416,8 @@ def loopback_granted():
     edit("tailscale.policy", granted)
     edit("tailscale.device", answered)
     edit(RUNTIME_KIND, bound)
+    # Its admin read the way a proxy bound to loopback is, from the machine itself.
+    ProviderConnection.objects.filter(connection_ref=PROXY_REF).update(endpoint=f"http://127.0.0.1:{ADMIN_PORT}")
 
 
 def lock_key(name):

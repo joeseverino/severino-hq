@@ -106,12 +106,6 @@ def ports_of(machine: str) -> tuple[Port, ...]:
     return tuple(port for (name, _), port in sorted(tailnet_ports().items()) if name == machine)
 
 
-def device_ports(device: str) -> tuple[Port, ...]:
-    """The ports of the machine whose tailnet device this is, in number order."""
-
-    return ports_of(_machine_of(device))
-
-
 def port_on(device: str, number: int) -> Port | None:
     """The port on the machine whose tailnet device this is, where the policy admits someone to it."""
 

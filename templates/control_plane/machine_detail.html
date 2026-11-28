@@ -118,13 +118,13 @@ last done to it is read before its parts.
     {% endif %}
     {% if machine.presence.tags %}{% fact "Tags" %}{% for tag in machine.presence.tags %}<code>{{ tag }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% comment %}
-    Who the policy lets in, per port: the answer the policy test gives,
-    shown without having to ask. A policy alias names a machine's address
-    and links to it; tags and users stay as the policy writes them. The
-    label is the port alone, so it fits its column beside the answer.
+    Each port the policy lets someone in at, as its one fact says it
+    (tailnet_ports.Port): what serves it, then who is let in, or that it is
+    bound only to loopback and so reaches nothing. The label is the port
+    alone, so it fits its column beside the answer.
     {% endcomment %}
-    {% for port, who in opening_links %}
-      {% with port_text=port|stringformat:"s" %}{% fact "Port "|add:port_text %}Open to {% include "control_plane/_policy_names.html" with names=who %}{% endfact %}{% endwith %}
+    {% for opening, who in opening_links %}
+      {% with port_text=opening.port|stringformat:"s" %}{% fact "Port "|add:port_text %}{% if opening.serves %}{{ opening.serves }}{% dot %}{% endif %}{% if opening.open %}{% include "control_plane/_policy_names.html" with names=who %}{% else %}Loopback only{% endif %}{% endfact %}{% endwith %}
     {% endfor %}
   {% endfacts %}
 {% aside %}

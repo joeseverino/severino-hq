@@ -1442,6 +1442,9 @@
               "presence.openings",
               "presence.openings.port",
               "presence.openings.open_to",
+              "presence.openings.serves",
+              "presence.openings.bound_at",
+              "presence.openings.open",
               "presence.observed_at",
               "*"
             ],
@@ -21478,6 +21481,17 @@
       "OpeningPart": {
         "additionalProperties": false,
         "properties": {
+          "bound_at": {
+            "description": "The addresses it is bound at there, as HQ read them; empty when unknown.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "open": {
+            "description": "Whether it is bound beyond loopback, or may be, so the policy's word reaches it.",
+            "type": "boolean"
+          },
           "open_to": {
             "description": "Who the policy lets in at that port: a machine by its name, a user or tag as written.",
             "items": {
@@ -21488,22 +21502,38 @@
           "port": {
             "description": "A port the tailnet policy admits a device to on it.",
             "type": "integer"
+          },
+          "serves": {
+            "description": "What serves it there, by its own name; empty when HQ knows of nothing.",
+            "type": "string"
           }
         },
         "required": [
           "port",
-          "open_to"
+          "open_to",
+          "serves",
+          "bound_at",
+          "open"
         ],
         "type": "object"
       },
       "OpeningPartPartial": {
         "additionalProperties": false,
         "properties": {
+          "bound_at": {
+            "$ref": "#/components/schemas/OpeningPart/properties/bound_at"
+          },
+          "open": {
+            "$ref": "#/components/schemas/OpeningPart/properties/open"
+          },
           "open_to": {
             "$ref": "#/components/schemas/OpeningPart/properties/open_to"
           },
           "port": {
             "$ref": "#/components/schemas/OpeningPart/properties/port"
+          },
+          "serves": {
+            "$ref": "#/components/schemas/OpeningPart/properties/serves"
           }
         },
         "type": "object"

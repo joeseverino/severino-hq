@@ -14,7 +14,6 @@ lazy from .arrivals import arrivals
 lazy from .locate import container_hosts, host_of
 lazy from .moments import moment, when
 lazy from .reach import is_public, network_of
-lazy from .tailnet_ports import device_ports
 lazy from .ui import MISSING
 
 
@@ -90,12 +89,6 @@ class Presence:
     # record names one.
     controller_id: str = ""
     connection_ref: str = ""
-
-    @property
-    def openings(self) -> tuple[tuple[int, tuple[str, ...]], ...]:
-        """Who the policy admits, per port, as each port's one fact says it."""
-
-        return tuple((port.number, port.open_to) for port in device_ports(self.tailnet_name))
 
     @property
     def personal(self) -> bool:

@@ -97,6 +97,9 @@ class OpeningPart(TypedDict):
     open_to: Annotated[
         list[str], Describe("Who the policy lets in at that port: a machine by its name, a user or tag as written.")
     ]
+    serves: Annotated[str, Describe("What serves it there, by its own name; empty when HQ knows of nothing.")]
+    bound_at: Annotated[list[str], Describe("The addresses it is bound at there, as HQ read them; empty when unknown.")]
+    open: Annotated[bool, Describe("Whether it is bound beyond loopback, or may be, so the policy's word reaches it.")]
 
 
 class PresencePart(TypedDict):

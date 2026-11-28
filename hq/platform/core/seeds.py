@@ -233,6 +233,15 @@ def _short_named(owner) -> None:
     example_estate.network.short_named()
 
 
+def _loopback_granted(owner) -> None:
+    """The example estate with the tailnet grant opening the proxy's admin
+    port, which the proxy binds only to loopback, so the machine's page, the
+    policy page and the finding draw a port that reaches nothing."""
+
+    _estate(owner)
+    example_estate.network.loopback_granted()
+
+
 def _glance_aged(owner) -> None:
     """The example estate as the dashboard finds it after nobody looked for a
     while: the machine's reading due again, nothing asked yet."""
@@ -389,6 +398,7 @@ SEEDS: dict[str, Seed] = {
     "policy-change": Seed(_policy_change, _SET_UP),
     "readings-aged": Seed(_readings_aged, _SET_UP),
     "short-named": Seed(_short_named, _SET_UP),
+    "loopback-granted": Seed(_loopback_granted, _SET_UP),
     "edge": Seed(_edge, _SET_UP),
     "neglected-domain": Seed(_neglected_domain, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),

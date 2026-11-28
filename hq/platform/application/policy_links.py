@@ -13,8 +13,8 @@ from typing import Annotated, Any
 
 from .describe import Describe
 from .entity_links import EntityLink, entity_link
-from .locate import index_of
 lazy from . import connections
+lazy from .locate import machines_index
 lazy from .tailnet import policy
 
 
@@ -31,17 +31,20 @@ class PolicyNames:
 
     def __init__(self, hosts: dict | None = None, machines: Iterable[Any] | None = None):
         catalog = tuple(connections.machines_once() if machines is None else machines)
-        self._machines = index_of(declared=({"name": item.name, "addresses": item.addresses} for item in catalog))
+        # The one index every address is placed through, its names folded
+        # into the catalog machine each is an alias of.
+        self._machines = machines_index()
+        self._catalog = {alias: item.name for item in catalog for alias in (item.name, *item.aliases)}
         self._hosts = dict(policy().hosts if hosts is None else hosts)
 
     def machine_at(self, address: str) -> str:
-        return self._machines.at(str(address).partition("/")[0])
+        return self._catalog.get(self._machines.at(str(address).partition("/")[0]), "")
 
     def machine_for(self, name: str) -> str:
         """The machine a policy name stands for, an alias through its address; "" for none."""
 
         text = str(name)
-        return self.machine_at(self._hosts[text]) if text in self._hosts else self._machines.named(text)
+        return self.machine_at(self._hosts[text]) if text in self._hosts else self._catalog.get(text, "")
 
     def of(self, names: Iterable[str]) -> tuple[PolicyName, ...]:
         """Each name, with the aliases of one machine folded into one link."""
