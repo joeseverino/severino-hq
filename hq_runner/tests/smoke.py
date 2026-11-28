@@ -447,17 +447,18 @@ def main() -> int:
     told = [bridge.tasks.get(sent["operation"], []) for action, sent in bridge.calls if action == "report"]
     _, ran_tasks, read_tasks, *_ = [*told, *([] for _ in range(reports))][:reports]
     if kept.get("success") is not True:
-        wrong.append(f"a playbook pointed the login it runs through elsewhere: {kept.get('message')}")
+        wrong.append(f"a playbook pointed the login it runs through elsewhere: {kept.get('outcome')}")
     if shown.get("success") is not True:
-        wrong.append(f"a preview of a playbook that writes a file did not succeed: {shown.get('message')}")
+        wrong.append(f"a preview of a playbook that writes a file did not succeed: {shown.get('outcome')}")
     for name, report in zip(STOPPED, stopped, strict=True):
-        if report.get("success") is not False or report.get("message") != _recorded_stop(name):
+        ended = report.get("outcome") or {}
+        if ended.get("ending") != "errored" or ended.get("message") != _recorded_stop(name):
             wrong.append(
-                f"the run of {STOPPED[name]} said {report.get('message')!r}, not {_recorded_stop(name)!r},"
-                " which recorded_stopped_events.json gives"
+                f"the run of {STOPPED[name]} ended {ended.get('ending')!r} saying {ended.get('message')!r},"
+                f" not errored saying {_recorded_stop(name)!r}, which recorded_stopped_events.json gives"
             )
     if used.get("success") is not True:
-        wrong.append(f"a run of a shipped collection's module did not succeed: {used.get('message')}")
+        wrong.append(f"a run of a shipped collection's module did not succeed: {used.get('outcome')}")
     judged = {found["sidecar"]: found["problems"] for found in scanned.get("catalog", {}).get("procedures", [])}
     for sidecar, modules in REFUSED_MODULES.items():
         problems = judged.get(sidecar)
@@ -468,7 +469,7 @@ def main() -> int:
         ):
             wrong.append(f"the scan said {problems} of {sidecar}, not a problem naming each of {modules}")
     if given.get("success") is not True:
-        wrong.append(f"a run given a template as a parameter did not take it as text: {given.get('message')}")
+        wrong.append(f"a run given a template as a parameter did not take it as text: {given.get('outcome')}")
     specs = {
         found["role"]: found["argument_spec"]
         for procedure in scanned.get("catalog", {}).get("procedures", [])
@@ -476,11 +477,11 @@ def main() -> int:
     }
     recorded = {role: ansible.entry_point(role, {role: spec}) for role, spec in fakes.RECORDED_ROLE_SPECS.items()}
     seen = [(event["task"], event["outcome"]) for event in ran_tasks]
-    print(f"smoke:runner: {worked} operations; scan {scanned.get('message')}; run {ran.get('message')}, events {seen}")
+    print(f"smoke:runner: {worked} operations; scan {scanned.get('message')}; run {ran.get('outcome')}, events {seen}")
     checked = [event["outcome"] for event in read_tasks if event["task"] == "The read ran as its own login"]
     # One check in the role, one in the escalated block.
     if read.get("success") is not True or checked != ["ok", "ok"]:
-        wrong.append(f"a read that asks to escalate did not run as its own login: {read.get('message')}, {checked}")
+        wrong.append(f"a read that asks to escalate did not run as its own login: {read.get('outcome')}, {checked}")
     if scanned.get("catalog", {}).get("reaches") != [{"machine": "localhost", "profile": "read"}]:
         wrong.append(
             f"the scan reported the logins {scanned.get('catalog', {}).get('reaches')}, not the one its connections hold"
