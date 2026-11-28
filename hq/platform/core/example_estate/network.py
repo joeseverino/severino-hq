@@ -230,6 +230,56 @@ def zone():
         store(kind)
 
 
+# What a zone left to itself drifts into, one of each thing HQ finds wrong
+# about a domain (``zone_findings``): challenges an issuance left behind, a CAA
+# record that refuses the authority renewing its certificate, an SPF past its
+# lookup limit, a DMARC policy that delivers forgeries, a weaker TLS posture
+# than its neighbor's, and a registration that will not renew.
+NEGLECTED = (
+    ("challenge", f"_acme-challenge.{ZONE}", "TXT", "example-challenge-token-one", None, False),
+    ("challenge-www", f"_acme-challenge.www.{ZONE}", "TXT", "example-challenge-token-two", None, False),
+    ("caa", ZONE, "CAA", '0 issue "ca.example.net"', None, False),
+    (
+        "spf",
+        ZONE,
+        "TXT",
+        "v=spf1 " + " ".join(f"include:_spf{number}.example.net" for number in range(11)) + " -all",
+        None,
+        False,
+    ),
+    ("dmarc", f"_dmarc.{ZONE}", "TXT", "v=DMARC1; p=none; rua=mailto:dmarc-reports@example.com", None, False),
+)
+NEIGHBOR = "example.net"
+
+
+def neglected():
+    """The domain as ``NEGLECTED`` leaves it, beside a neighbor held to a stronger posture."""
+
+    # Each record of the zone, one of the same key as it was left instead,
+    # declared as it was left, so HQ's record and the zone agree.
+    dropped = {"caa-wild", "caa-pki"}
+    ManagedResource.objects.filter(key__in=[f"{ZONE_KEY}-{key}" for key in dropped]).delete()
+    for key, *fields in NEGLECTED:
+        spec = record_spec("cloudflare.dns_record", _record(*fields))
+        ManagedResource.objects.filter(key=f"{ZONE_KEY}-{key}").update(spec=spec)
+    kept = {key: fields for key, *fields in (*PUBLIC_RECORDS, *NEGLECTED) if key not in dropped}
+    store("cloudflare.dns_record", *(_record(*fields) for fields in kept.values()))
+    store(
+        "cloudflare.zone",
+        {
+            "zone": ZONE,
+            "connection_ref": DNS,
+            "posture": {"ssl": "full", "min_tls_version": "1.0"},
+            "registration": {
+                "registrar": "Cloudflare, Inc.",
+                "expires_at": (now() + timedelta(days=40)).isoformat(),
+                "auto_renew": False,
+            },
+        },
+        {"zone": NEIGHBOR, "connection_ref": DNS, "posture": {"ssl": "strict", "min_tls_version": "1.2"}},
+    )
+
+
 def adguard():
     """The rewrites as AdGuard holds them, its settings, clients and lookups."""
 

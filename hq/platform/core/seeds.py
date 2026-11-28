@@ -198,6 +198,14 @@ def _short_release() -> None:
     example_estate.work.worker_image_missing()
 
 
+def _neglected_domain(owner) -> None:
+    """The example estate with its domain left to drift, so each finding
+    about a domain is drawn on its page and its Email page."""
+
+    _estate(owner)
+    example_estate.network.neglected()
+
+
 def _readings_aged(owner) -> None:
     """The example estate with a reading out of date, one failing and one
     read with a part refused, so each standing the Controller page lists a
@@ -372,6 +380,7 @@ SEEDS: dict[str, Seed] = {
     "policy-change": Seed(_policy_change, _SET_UP),
     "readings-aged": Seed(_readings_aged, _SET_UP),
     "short-named": Seed(_short_named, _SET_UP),
+    "neglected-domain": Seed(_neglected_domain, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),
