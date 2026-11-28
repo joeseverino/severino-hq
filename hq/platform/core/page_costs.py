@@ -14,9 +14,7 @@ site's own host.
 from collections import Counter
 from collections.abc import Mapping
 from html.parser import HTMLParser
-from http import HTTPStatus
 from typing import Any, NamedTuple, override
-from urllib.parse import urljoin
 
 lazy from django.conf import settings
 lazy from django.contrib.auth import get_user_model
@@ -24,17 +22,15 @@ lazy from django.db import connection
 lazy from django.test import Client
 lazy from django.urls import reverse
 
-lazy from hq.platform.application.entity_links import link_url
 lazy from hq.platform.application.pages import listed_routes
 lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.roles import Role
+lazy from hq.platform.core import redirects
 lazy from hq.platform.core.dev_sign_in import new_session
 
 # Why a walk measured nothing, in the document it writes.
 NO_OPERATOR = "no active operator to sign in as"
 SIGNED_OUT = "the walk was answered signed out"
-# More than the longest chain of redirects within HQ a page takes.
-_HOPS = 5
 # Elements that never hold others, so never close.
 _VOID = frozenset(
     {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
@@ -128,19 +124,10 @@ def bytes_per_row(measured: Mapping[str, int]) -> float | None:
 
 
 def _answer(client: Client, page: str):
-    """The answer ``page`` lands on, each redirect within HQ followed; a redirect out of HQ is
-    the answer, which the test client would otherwise ask of HQ under another host, as would a
-    redirect to HQ's own address."""
+    """The answer ``page`` lands on; a redirect out of HQ is the answer, which the test client
+    would otherwise ask of HQ under another host, as would a redirect to HQ's own address."""
 
-    response = client.get(page, secure=True)
-    for _ in range(_HOPS):
-        if not HTTPStatus(response.status_code).is_redirection or "Location" not in response:
-            break
-        # A path is a page of HQ's; an address naming a host leaves it.
-        if not link_url(page := urljoin(page, response["Location"])).startswith("/"):
-            break
-        response = client.get(page, secure=True)
-    return response
+    return redirects.follow(lambda address: client.get(address, secure=True), page)[1]
 
 
 class Rows(NamedTuple):

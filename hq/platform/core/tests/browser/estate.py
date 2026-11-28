@@ -17,7 +17,6 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from functools import cache
 from html import unescape
-from http import HTTPStatus
 from types import MappingProxyType
 from typing import Any, override
 from urllib.parse import parse_qsl, urljoin, urlsplit
@@ -38,7 +37,7 @@ from hq.platform.core.tests.browser.survey import geometry_probes
 from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, SCRIPTED, WIDE, viewport
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
-lazy from hq.platform.core import seeds
+lazy from hq.platform.core import redirects, seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
@@ -115,16 +114,10 @@ def landing(ask: Callable[[str], Any], address: str) -> str:
     A navigation entry may be a stop on the way (Domains goes straight to a domain), and a list
     of pages names the page a reader reaches, which is the one a gate draws and perf measures."""
 
-    seen = [address]
-    while HTTPStatus((response := ask(address)).status_code).is_redirection:
-        to = urlsplit(urljoin(address, response.headers["Location"]))
-        if to.scheme or to.netloc:
-            raise Redirected(f"{seen[0]} redirects out of HQ, to {to.geturl()}")
-        address = to.path + (f"?{to.query}" if to.query else "")
-        if address in seen:
-            raise Redirected(f"{seen[0]} redirects in a loop: {' -> '.join([*seen, address])}")
-        seen.append(address)
-    return address
+    landed, _, to = redirects.follow(ask, address)
+    if to:
+        raise Redirected(f"{address} lands on no page of HQ's: {landed} redirects to {to}")
+    return landed
 
 
 def landings(ask: Callable[[str], Any], addresses: Sequence[str]) -> list[str]:

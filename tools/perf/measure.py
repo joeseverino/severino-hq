@@ -10,19 +10,16 @@ import http.client
 import statistics
 from collections.abc import Collection, Mapping
 from contextlib import ExitStack, closing
-from http import HTTPStatus
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
+from hq.platform.core import redirects
 from hq.platform.core.page_costs import data_rows
 from hq.platform.core.tests.browser.in_flight import InFlight
 from tools.perf import parse
 
 # Asked of each page before its timed requests, so a first request's caching is not its cost.
 WARM = 2
-# A page that sends a reader on, such as a list that opens its one record, is measured where it
-# lands, within a few hops of the same server.
-HOPS = 5
 # Installed before any of a page's own script, in every document a visit
 # loads: first contentful paint, the largest contentful paint so far (the
 # latest candidate the browser reported), layout shift as Core Web Vitals
@@ -132,17 +129,16 @@ class Server:
         lands on: a redirect within the server is followed, as a link to it is, and its time counted."""
 
         spent: list[float] = []
-        for _ in range(HOPS):
-            self.connection.request("GET", page, headers={"Cookie": self.cookie})
+
+        def ask(address: str) -> tuple[int, str, bytes]:
+            self.connection.request("GET", address, headers={"Cookie": self.cookie})
             response = self.connection.getresponse()
-            body = response.read()
             took = parse.server_time(response.getheader("Server-Timing", ""))
-            spent += [] if took is None else [took]
-            location = urlsplit(response.getheader("Location", ""))
-            if not HTTPStatus(response.status).is_redirection or location.netloc or not location.path.startswith("/"):
-                break
-            page = location._replace(scheme="", netloc="").geturl()
-        return Answer(response.status, sum(spent) if spent else None, body)
+            spent.extend([] if took is None else [took])
+            return response.status, response.getheader("Location", ""), response.read()
+
+        status, _, body = redirects.follow(ask, page, lambda answer: answer[:2])[1]
+        return Answer(status, sum(spent) if spent else None, body)
 
     def close(self) -> None:
         self.connection.close()
