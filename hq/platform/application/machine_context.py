@@ -23,9 +23,7 @@ from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
 from .ui import MISSING
-lazy from . import connections, services
 lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
-lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .machine_records import MachineRecord
 lazy from .machines import Machine
@@ -36,6 +34,7 @@ lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .read_requests import connection_providers
 lazy from .routes import reverse
+lazy from .service_list import listed_services, served_on
 lazy from .tailnet import TAILNET_KIND
 lazy from .topology_model import RELATIONS
 lazy from .work_runs import runs_on
@@ -113,13 +112,11 @@ def _names(machine, *, principal: Principal) -> ServiceSection | None:
     this page holds enough names at once for the comparison to mean anything.
     """
 
-    hostnames = machine.hostnames
+    hostnames = served_on(machine.name)
     if not hostnames:
         return None
 
-    # One derivation for the whole catalog rather than one per name: asking
-    # per hostname would re-resolve the same estate nine times over.
-    catalog = {service.hostname: service for service in services.service_catalog()}
+    catalog = {service.hostname: service for service in listed_services()}
     measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
     facets = service_facets()
 
@@ -208,16 +205,11 @@ def _runs(machine, *, principal: Principal | None) -> ServiceSection | None:
 def serves_links(machine, relationships) -> tuple:
     """What the machine serves, read off the same relation query as its
     Relationships panel, so the header and the panel cannot disagree. HQ's
-    own service leads where HQ runs here."""
+    own names lead where HQ runs here."""
 
     group = relationships.group(RELATIONS["runs_on"].inverse)
-    serves = [item.entity for item in (group.items if group else ())]
-    if machine.runs_hq:
-        own = hq_service(catalog=connections.machines_once())
-        if own is not None:
-            first = entity_link("service", own.hostname)
-            serves = [first, *(link for link in serves if (link.kind, link.identity) != (first.kind, first.identity))]
-    return tuple(dict.fromkeys(serves))
+    serves = tuple(item.entity for item in group.items) if group else ()
+    return tuple(sorted(serves, key=lambda link: link.identity not in machine.hq_hostnames))
 
 
 def machine_links(record: MachineRecord) -> dict[str, object]:

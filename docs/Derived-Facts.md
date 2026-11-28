@@ -561,7 +561,12 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS`
+a machine, the machine "Serves" it, from one edge. Where a name runs is where
+its path lands (`ServicePath.answers`): the last address a proxy forwards to,
+placed by `whereabouts.locate`, else the machine the walk ends on.
+`service_list.served_from` groups the listed services by that machine and
+container, and the runs-on edges, a machine's and a container's Serves and the
+machine list read that one grouping. `topology_model.RELATIONS`
 states each structural edge kind's phrase, inverse and rank once. A reading
 edge takes its phrase from the reading's `relation` and its rank from its facet
 (`READING_RANKS`). So what serves a name comes first, and an overlay with no

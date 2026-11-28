@@ -21,6 +21,7 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, read_record
 lazy from .connections import connection_rows
 lazy from .facts import every_snapshot, snapshots_of
 lazy from .infrastructure import declared_machines
+lazy from .tailnet_presence import tailnet_presence
 
 
 def split_endpoint(value: Any) -> tuple[str, str]:
@@ -332,7 +333,8 @@ def names_by_connection() -> dict[str, tuple[str, ...]]:
 
 
 def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machines:
-    """The index over everything HQ holds, read from the database.
+    """The index over everything HQ holds, read from the database: the
+    machine catalog's, and the one every address is placed through.
 
     ``declared`` is accepted already-read because most callers have it: the
     service catalog reads the declarations once for a whole page and would
@@ -340,7 +342,12 @@ def machines_index(declared: Iterable[Mapping[str, Any]] | None = None) -> Machi
     """
 
     return index_of(
-        declared=declared_machines() if declared is None else declared,
+        declared=[
+            *(declared_machines() if declared is None else declared),
+            # The tailnet's own addresses, after the declarations, so a
+            # declared name still wins the address it claims.
+            *({"name": name, "addresses": presence.addresses} for name, presence in tailnet_presence().items()),
+        ],
         hosts=container_hosts(),
         connections=connection_rows(),
     )

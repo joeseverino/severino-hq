@@ -74,6 +74,35 @@ def _listed(favorites: tuple[str, ...]) -> tuple[Service, ...]:
     return ordered_services(tuple(sorted(marked + unlisted, key=lambda service: service.hostname)), favorites)
 
 
+def served_from() -> dict[tuple[str, str], tuple[str, ...]]:
+    """``{(machine, container): names}``: every listed name by where it runs
+    (``Service.answers``), the machine as the catalog names it and the
+    container "" where none is placed. A machine's and a container's Serves and
+    the topology's edges are this one grouping."""
+
+    return read_once("services.served_from", _served_from)
+
+
+def _served_from() -> dict[tuple[str, str], tuple[str, ...]]:
+    named = {
+        alias: machine.name for machine in connections.machines_once() for alias in (machine.name, *machine.aliases)
+    }
+    found: dict[tuple[str, str], list[str]] = {}
+    for service in listed_services():
+        answers = service.answers
+        if answers.machine:
+            found.setdefault((named.get(answers.machine, answers.machine), answers.container), []).append(
+                service.hostname
+            )
+    return {key: tuple(sorted(names)) for key, names in found.items()}
+
+
+def served_on(machine: str) -> tuple[str, ...]:
+    """Every name served from ``machine``, in a container or not."""
+
+    return tuple(sorted(name for (host, _), names in served_from().items() if host == machine for name in names))
+
+
 def listed_service(hostname: str) -> Service:
     """The listed service for a name, with its mark; a prospect for any other name."""
 

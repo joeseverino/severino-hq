@@ -12,7 +12,7 @@ from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_ho
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
-from .entity_links import EntityLink, entity_link
+from .entity_links import EntityLink, entity_link, kind_label
 from .infrastructure import (
     context_for_resolution,
     enabled_resources,
@@ -95,7 +95,14 @@ class Claim:
 
         link = self.link
         _name, arrow, leads_to = link.label.partition(LEADS_TO)
-        return replace(link, label=leads_to) if arrow else link
+        if arrow:
+            return replace(link, label=leads_to)
+        # Named by the name it answers for and leading nowhere it says: the
+        # row already says that name, so the record is said by its kind.
+        provider = PROVIDERS.get(self.kind)
+        if provider is not None and provider.name is None and provider.hostnames and not provider.covers:
+            return replace(link, label=kind_label(self.kind))
+        return link
 
     @property
     def drifted(self) -> bool:

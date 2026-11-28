@@ -215,6 +215,15 @@ def _readings_aged(owner) -> None:
     example_estate.work.readings_aged()
 
 
+def _edge(owner) -> None:
+    """The example estate with an edge machine, an exit node whose Caddy
+    serves two names, so its page, its container's and the topology are drawn
+    with what it serves."""
+
+    _estate(owner)
+    example_estate.infra.edge()
+
+
 def _short_named(owner) -> None:
     """The example estate with the machine's tailnet device named as the LAN
     names a service, so the machine's page is drawn beside a DNS name
@@ -380,6 +389,7 @@ SEEDS: dict[str, Seed] = {
     "policy-change": Seed(_policy_change, _SET_UP),
     "readings-aged": Seed(_readings_aged, _SET_UP),
     "short-named": Seed(_short_named, _SET_UP),
+    "edge": Seed(_edge, _SET_UP),
     "neglected-domain": Seed(_neglected_domain, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),

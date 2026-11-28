@@ -408,15 +408,11 @@ def _where(path) -> SummaryItem:
     if end is not None and end.step in ("served", "external", "origin", "hq"):
         return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, lines(end.detail))
     if path.machine:
-        container = next(
-            (hop.name for route in path.routes for hop in route.hops if hop.step == "container"),
-            "",
-        )
         return SummaryItem(
             "Where it runs",
             path.machine,
             entity_link("machine", path.machine),
-            _container_detail(path.machine, container),
+            _container_detail(path.machine, path.answers.container),
         )
     return SummaryItem("Where it runs", MISSING, detail=lines(path.gaps[0] if path.gaps else ""))
 

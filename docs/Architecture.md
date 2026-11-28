@@ -1748,11 +1748,11 @@ app released with `changed` false reads as unchanged.
 
 Before it is pressed, Approve says what applying it interrupts while its
 containers restart, on the press and in a held request's preview
-(`app_update_approval.interrupted`): each name a container is the origin of,
-and each name whose record a connection inside it holds, by the record's facet
-(a DNS server resolves its rewrites, a proxy routes its hosts). Both come from
-`machines.served_by`, which places each connection's endpoint once
-(`machines.connections_inside`).
+(`app_update_approval.interrupted`): each name whose path lands on the
+container (`service_list.served_from`), and each name whose record a
+connection inside it holds, by the record's facet (a DNS server resolves its
+rewrites, a proxy routes its hosts). Both come from `machines.served_by`, which
+places each connection's endpoint once (`machines.connections_inside`).
 
 An image built on its host is classified once, where its standing is decided
 (`containers._built_here`): the machine's copy holds no registry digest, and

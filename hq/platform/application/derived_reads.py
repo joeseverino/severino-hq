@@ -44,7 +44,7 @@ lazy from .relationship_records import JoinedReadingPart, RelationshipsRecord
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
 lazy from .search import global_search
-lazy from .service_list import services_by_zone
+lazy from .service_list import served_on, services_by_zone
 lazy from .tailnet_signers import signer_of
 lazy from .topology import relation_graph
 lazy from .zones import ZONE_KIND, find_zone, told_apart
@@ -121,6 +121,7 @@ def serialize_machine(machine: Any) -> MachineRecord:
         state=machine.state.label,
         tone=machine.state.tone,
         tailnet_device=machine.route_approval_key,
+        hostnames=list(served_on(machine.name)),
         header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],

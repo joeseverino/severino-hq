@@ -257,8 +257,8 @@ def _machines_apart(routes: tuple[Route, ...]) -> tuple[set[str], set[str]] | No
     """The machines a name reaches from the internet and from home, when the
     two answers disagree; None when either is missing or they agree."""
 
-    public = {route.machine for route in routes if public_name(route) and route.machine}
-    internal = {route.machine for route in routes if not public_name(route) and route.machine}
+    public = {route.answers.machine for route in routes if public_name(route) and route.answers.machine}
+    internal = {route.answers.machine for route in routes if not public_name(route) and route.answers.machine}
     # Every machine a public request crosses: an edge that proxies on to
     # the machine the internal record names is a front, and deliberate.
     crossed = {hop.name for route in routes if public_name(route) for hop in route.hops if hop.step == "machine"}

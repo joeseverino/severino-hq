@@ -25,6 +25,7 @@ from .infrastructure import enabled_resources
 from .labels import lower_first, plural
 from .locate import host_of, split_endpoint
 from .naming import name_context
+from .path_model import Forward
 from .projection import read_once
 from .published_sites import published_projects
 from .reach import is_documentation
@@ -90,6 +91,16 @@ class Service:
         """The request path to this name, walked from the readings."""
 
         return path_to(self.hostname)
+
+    @property
+    def answers(self) -> Forward:
+        """The machine and container the name runs on: where its path lands,
+        else, where no route reaches a machine, where its declared origin is."""
+
+        found = self.path.answers
+        if found.machine or self.origin is None:
+            return found
+        return Forward(self.origin.address, self.origin.host, self.origin.container)
 
     @property
     def exposure(self):
