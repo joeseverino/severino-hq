@@ -269,9 +269,9 @@ jobs:
         # lost runner, where a job's outputs are evaluated on the runner at its
         # end. Unread, it is taken to have begun, so no deployment claims the
         # previous image on a guess. A release that went live is a success
-        # whatever failed after it, since GitHub, release:report and HQ read
-        # the newest success as what production runs; its description says a
-        # check failed. The summary is public, so it names no host: an image,
+        # whatever failed after it, since GitHub and HQ read the newest
+        # success as what production runs; its description says a check
+        # failed. The summary is public, so it names no host: an image,
         # commits and links.
         run: |
           set -euo pipefail

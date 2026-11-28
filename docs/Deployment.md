@@ -169,8 +169,7 @@ the run shows the deploy step began:
 | *error*, interrupted | the step began, then a person or the job's timeout cancelled it, or its runner was lost; or the record was not read | unknown until `hq-host verify` reads the host |
 
 A live release's run summary links the changes since the release production
-ran before (`python3 -m tools.pipeline.production previous COMMIT`, the same
-reading `mise run release:report` takes). It gives the `cosign verify` command
+ran before (`python3 -m tools.pipeline.production previous COMMIT`). It gives the `cosign verify` command
 for the image it deployed.
 
 Resolve records the deployment itself: the environment's job sets
@@ -557,17 +556,14 @@ own, so its deployment says production's state is unknown.
 
 ### After a release
 
-Once the Deploy job is green, `mise run release:report` on a checkout of the
-released commit writes `var/release/<commit>.md` and prints its path. The
-report holds `perf all` beside the release production ran before it (the
-previous deployment GitHub records as live, or `--base <ref>`), and the
-production container's memory and CPU. It also holds the host's drift verdict,
-its failed units and the last run of the controller and glance units. It reads the host over SSH on
-`SEVERINO_HQ_DEPLOY_HOST` as the operator account, with no sudo and no docker
-group: the container is found through the cgroup of the process serving HQ,
-whose files any account can read. A reading that fails is a row saying so; the
-task exits 1 then, or when the release was never marked live. The perf reading
-is the run perf's closing line names, wherever perf ran.
+HQ keeps each release itself. Its page under `/hq/releases/` shows the
+release beside the one production ran before it: how its deploy ended, the
+cost of each page in its rehearsal, and what HQ read of itself once it went
+live (its container's memory and CPU, the units systemd held as failed, and
+the controller, glance and drift units' last runs). A release that went live
+with a check failed, and the pages that failed with a server error since it
+went live, are findings. The rehearsal's verdict line in the Deploy job's log
+says whether each check passed.
 
 ### The bridge
 

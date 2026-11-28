@@ -1502,7 +1502,7 @@ and `<run>.table` has every page.
 Memory is what the server allocated: a scratch server's footprint on macOS
 and its proportional set size with its swapped share on Linux, the readings
 the heavy gates' peak memory takes, or an image's cgroup `anon`, the same
-reading `release:report` takes of production. A container's
+reading a release's page shows of production. A container's
 `memory.current`, `docker stats` and a process's RSS add clean pages of the
 files it mapped or read (the shared libraries, the database), charged to
 whichever container read them first. The title names the machine measured,

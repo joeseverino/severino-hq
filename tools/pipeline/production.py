@@ -1,11 +1,10 @@
 """The releases production has run, as GitHub's deployments record them.
 
 ``previous COMMIT`` prints the commit production ran before COMMIT, or nothing
-when no other release was live: the Deploy workflow's compare link, and the
-base `mise run release:report` measures against. ``running`` prints the commit
-production runs now, and fails while none is live or what runs is unknown: the
-one the Deploy Worker workflow deploys the Worker from. Stdlib only: the jobs
-that run it set up no toolchain.
+when no other release was live: the Deploy workflow's compare link.
+``running`` prints the commit production runs now, and fails while none is
+live or what runs is unknown: the one the Deploy Worker workflow deploys the
+Worker from. Stdlib only: the jobs that run it set up no toolchain.
 """
 
 from __future__ import annotations

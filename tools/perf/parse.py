@@ -3,8 +3,6 @@
 import re
 import statistics
 
-from tools.pipeline.release_readings import keyed
-
 # One metric of a Server-Timing header: its name, then `;dur=<ms>` among its parameters.
 _METRIC = re.compile(r"(?:^|,)\s*([!#$%&'*+.^_`|~\w-]+)((?:\s*;[^,]*)*)")
 _DURATION = re.compile(r";\s*dur\s*=\s*([0-9.]+)")
@@ -47,10 +45,11 @@ def memory_bytes(output: str) -> int:
 def container_anon_bytes(memory_stat: str) -> int:
     """The anonymous memory a container's processes hold, from its cgroup's memory.stat."""
 
-    anon = keyed(memory_stat).get("anon")
-    if anon is None:
+    stat = dict(pair for pair in (line.split() for line in memory_stat.splitlines()) if len(pair) == 2)
+    anon = stat.get("anon", "")
+    if not anon.isdigit():
         raise ValueError(f"memory.stat names no anonymous memory: {memory_stat.strip()[:80]!r}")
-    return anon
+    return int(anon)
 
 
 def cookie(output: str) -> tuple[str, str]:

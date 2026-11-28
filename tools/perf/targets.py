@@ -40,7 +40,7 @@ def shown_under(seed: str) -> dict[str, str]:
 # (smaps_rollup), so pages the processes share count once; elsewhere its macOS footprint, dirty,
 # compressed and swapped memory and no clean page of a file. The two are not one measure, so each
 # names itself, and a kept report stands in only under the same. An image's is its cgroup's anon,
-# as release:report reads production's: docker stats adds the page cache charged to the container,
+# as a release's page shows production's: docker stats adds the page cache charged to the container,
 # which is whatever files it read first, not anything the code holds.
 LINUX = Path("/proc/self/smaps_rollup").is_file()
 SCRATCH_MEMORY = (
