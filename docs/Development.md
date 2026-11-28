@@ -513,12 +513,13 @@ catalog, CI's Browser job, as is any look of a Python-only change.
 
 A change to what the extensions' contract check reads (a template under
 `templates/partials/`, the template contract and its tag libraries, plugin
-validation, the file rules, `hq_sdk`, the check itself and the pins) selects
-`fast:extensions`, which runs in the heavy turn beside the tests: the check
-(`plugin:check`) of each extension package this checkout composes, as
-`tools/lib/extension-set.sh` picks the set, side by side, each line
-naming its package and how long it took. Where none is composed it says so
-and passes.
+validation, the file rules, `hq_sdk`, the check itself and the pins) or to
+the example extension under `examples/extension` selects `fast:extensions`,
+which runs in the heavy turn beside the tests: the check (`plugin:check`) of
+the example extension, as CI's Test job runs it (`test:plugin-check`), and of
+each extension package this checkout composes, as
+`tools/lib/extension-set.sh` picks the set, side by side, each line naming
+its package and how long it took.
 
 The generated API cases (`test:api-properties`) stay CI's Test job and
 `mise run check`'s: every change Django loads reaches every operation, and
