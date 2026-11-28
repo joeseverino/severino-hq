@@ -12,6 +12,7 @@ site's own host.
 """
 
 from collections import Counter
+from collections.abc import Mapping
 from html.parser import HTMLParser
 from typing import Any, NamedTuple, override
 from urllib.parse import urljoin
@@ -101,6 +102,28 @@ def cost(client: Client, page: str) -> dict[str, int]:
         "html_bytes": len(body),
         "row_html_bytes": rows.html_bytes,
     }
+
+
+# What a page costs once, apart from what it costs per record it draws, read from what ``cost``
+# measured, so a page that drew more records reads as more rows, never as a heavier page.
+
+
+def page_queries(measured: Mapping[str, int]) -> int:
+    """The first of each statement it sent; every repeat is its ``repeated_queries``."""
+
+    return measured["queries"] - measured["repeated_queries"]
+
+
+def page_bytes(measured: Mapping[str, int]) -> int:
+    """Its HTML outside its records' rows."""
+
+    return measured["html_bytes"] - measured["row_html_bytes"]
+
+
+def bytes_per_row(measured: Mapping[str, int]) -> float | None:
+    """The HTML each record's rows take, on average; None where it drew none."""
+
+    return measured["row_html_bytes"] / measured["rows"] if measured.get("rows") else None
 
 
 def _answer(client: Client, page: str):

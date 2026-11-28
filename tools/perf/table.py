@@ -9,32 +9,25 @@ and the table it summarizes is kept beside it.
 from collections.abc import Callable
 from typing import Any
 
+from hq.platform.core.page_costs import bytes_per_row, page_bytes, page_queries
 from tools.perf.measure import TYPES, past_spread, uncompressed
 
 Report = dict[str, Any]
 Read = Callable[[dict[str, Any]], float | None]
 
 
-def _per_row(server: dict[str, Any]) -> float | None:
-    """The HTML each record's rows take, on average; nothing where the page drew none."""
-
-    return server["row_html_bytes"] / server["rows"] if server.get("rows") else None
-
-
 # The server's columns, read from a page's `server`: header, value, decimals. What a page costs
-# once (`page`) stands apart from what it costs per record it draws (`row`), so a page that drew
-# more records reads as more rows, never as a heavier page: its queries, the first of each
-# statement against every repeat of one, and its HTML, outside its records' rows against their
-# bytes per record.
+# once (`page`) stands apart from what it costs per record it draws (`row`), as `page_costs`
+# reads them.
 SERVER: tuple[tuple[str, Read, int], ...] = (
     ("p50 ms", lambda server: server.get("p50_ms"), 1),
     ("p95 ms", lambda server: server.get("p95_ms"), 1),
-    ("page q", lambda server: server["queries"] - server["repeated_queries"], 0),
+    ("page q", page_queries, 0),
     ("row q", lambda server: server["repeated_queries"], 0),
     ("rows", lambda server: server.get("rows"), 0),
     ("HTML KB", lambda server: _kilobytes(server.get("html_bytes")), 1),
-    ("page KB", lambda server: _kilobytes(server["html_bytes"] - server["row_html_bytes"]), 1),
-    ("B/row", _per_row, 0),
+    ("page KB", lambda server: _kilobytes(page_bytes(server)), 1),
+    ("B/row", bytes_per_row, 0),
 )
 # Beside a base, the server time's round-by-round difference from the base's, and a mark past its spread.
 PAIRED: tuple[tuple[str, Read, int], ...] = (

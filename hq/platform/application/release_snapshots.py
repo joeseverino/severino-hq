@@ -3,10 +3,12 @@ commit: the readings it is taken from are replaced on every read, and GitHub
 keeps the release itself (``releases``).
 
 Taken from readings HQ already holds, never from the host: its own
-container's ``portainer.runtime`` record and its machine's ``host.unit``
-records. A repository read that shows production's newest release live with
-no snapshot asks for both readings, once, and the first sweep after which
-both are newer than the release's end writes the snapshot.
+container's ``portainer.runtime`` record, its machine's ``host.unit``
+records, and the ``host.rehearsal`` record when it names the release, which
+a sweep reads with the units. A repository read that shows production's
+newest release live with no snapshot asks for them, once, and the first sweep
+after which the container's and the units' are newer than the release's end
+writes the snapshot.
 """
 
 from collections.abc import Mapping
@@ -15,7 +17,14 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from hq.domains.control_plane.observations.host import CONTROLLER_UNIT, DRIFT_UNIT, GLANCE_UNIT, UNIT_KIND
+from hq.domains.control_plane.observations.host import (
+    CONTROLLER_UNIT,
+    DRIFT_UNIT,
+    GLANCE_UNIT,
+    REHEARSAL_KIND,
+    UNIT_KIND,
+    RehearsedPage,
+)
 from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, MEMORY_BASES, RUNTIME_KIND
 from hq.platform.core.models import ReleaseSnapshot
 
@@ -55,7 +64,8 @@ class UnitRun(BaseModel):
 
 
 class ReleaseReadings(BaseModel):
-    """HQ's own container and units, as read once its release went live."""
+    """HQ's own container and units, as read once its release went live, and
+    what each page cost in its rehearsal on a copy of production's data."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -70,6 +80,10 @@ class ReleaseReadings(BaseModel):
     failed: tuple[str, ...] = ()
     units: tuple[UnitRun, ...] = ()
     units_read_at: datetime | None = None
+    # Each page its rehearsal walked, or why the walk measured none; neither
+    # where no rehearsal of this release was read.
+    pages: tuple[RehearsedPage, ...] = ()
+    pages_unread: str = ""
 
     @property
     def cpu_percent(self) -> float | None:
@@ -120,11 +134,11 @@ def settle(*, repository_read: bool) -> ReleaseSnapshot | None:
     read_after = [moment(runtime.get("usage_read_at")), units.observed_at if units is not None else None]
     fresh = since is not None and all(at is not None and at > since for at in read_after)
     if fresh and running.runs_deployed:
-        return keep(commit, _readings(runtime, units))
+        return keep(commit, _readings(runtime, units, _rehearsal(commit)))
     # Asked once a release: a container read older than the release still
     # names the image before it.
     if repository_read and _asked() != commit:
-        ask(reads=(UNIT_KIND, RUNTIME_KIND, CONTAINER_KIND))
+        ask(reads=(UNIT_KIND, RUNTIME_KIND, CONTAINER_KIND, REHEARSAL_KIND))
         readings.record(ASKED, commit)
     return None
 
@@ -134,7 +148,17 @@ def _asked() -> str:
     return str(found.value) if found is not None else ""
 
 
-def _readings(runtime: Mapping[str, Any], units: Any) -> ReleaseReadings:
+def _rehearsal(commit: str) -> Mapping[str, Any]:
+    """The rehearsal's record when it is the release ``commit``'s, else nothing."""
+
+    for stored in stored_snapshots().get(REHEARSAL_KIND, ()):
+        for record in stored.records or ():
+            if isinstance(record, dict) and record.get("revision") == commit:
+                return record
+    return {}
+
+
+def _readings(runtime: Mapping[str, Any], units: Any, rehearsal: Mapping[str, Any]) -> ReleaseReadings:
     states = [unit_state(record) for record in units.records or () if isinstance(record, dict)]
     basis = str(runtime.get("memory_usage_basis") or "")
     return ReleaseReadings(
@@ -155,4 +179,6 @@ def _readings(runtime: Mapping[str, Any], units: Any) -> ReleaseReadings:
             if state.unit in TIMED
         ),
         units_read_at=units.observed_at,
+        pages=tuple(RehearsedPage.model_validate(page) for page in rehearsal.get("pages") or ()),
+        pages_unread=str(rehearsal.get("reason") or ""),
     )

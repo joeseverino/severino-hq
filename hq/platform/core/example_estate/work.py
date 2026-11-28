@@ -38,7 +38,7 @@ from hq.platform.application.sweep import ADOPT
 from hq.platform.core import bindings
 from hq.platform.core.audit import stamped
 
-from . import doors
+from . import doors, rehearsals
 from .names import (
     BUILT,
     CONTAINERS,
@@ -722,6 +722,7 @@ def releases() -> None:
                     _unit_run(DRIFT_UNIT, "exit-code", ago - timedelta(minutes=5), timedelta(seconds=3)),
                 ),
                 units_read_at=timezone.now() - ago + timedelta(minutes=40),
+                pages=rehearsals.before(),
             ),
         )
         release_snapshots.settle(repository_read=False)
