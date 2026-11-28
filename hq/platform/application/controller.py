@@ -27,6 +27,7 @@ from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
 from hq.platform.core.facets import Failure
 lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
+lazy from hq.domains.control_plane.observations.host import AUTOMATION_HELD
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 lazy from hq.domains.control_plane.secret_shapes import struck
 
@@ -762,13 +763,15 @@ def _hold(operation: OperationRequest, result: dict[str, Any]) -> None:
     (``_settled``), bounded by its declaration's timeout from its claim: an
     event on the unit's machine asks that read sooner (``host_work``), and
     the bound asks it once no event did (``_settle_lapsed_holds``). No worker
-    renews it."""
+    renews it. HQ looks once the hold is stored, since the unit may have
+    ended before the run reported it."""
 
     bound = operation.claimed_at + timedelta(seconds=_settling_timeout(operation) or 0)
     OperationRequest.objects.filter(pk=operation.pk).update(
         result=result, lease_expires_at=bound, updated_at=timezone.now()
     )
     operation.result, operation.lease_expires_at = result, bound
+    ask(reads=(AUTOMATION_HELD,))
 
 
 def _settled(held_id: str, report: ControllerReport) -> None:

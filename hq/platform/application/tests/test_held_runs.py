@@ -177,14 +177,16 @@ class HeldRunTests(TestCase):
         # A failed job is still told, for the machine's units alone.
         self.assertEqual(list(self.stored(OTHER).values_list("reads", flat=True)), [["host.unit"]])
 
-    def test_a_pull_that_ended_before_its_hand_off_settles_at_hq_s_next_look(self):
+    def test_a_pull_that_ended_before_its_hand_off_settles_once_the_hold_is_stored(self):
         run = self.pull()
         self.claim()
 
         self.job_ended()
-        self.report(run, {"handoff": {APP: UNIT}})
-        self.assertTrue(self.stored(UNIT).exists())
-        self.job_ended(OTHER, reconnected=True)
+        with (
+            mock.patch.object(outbound_work, "start_for_host", side_effect=outbound_work.run_for_host),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.report(run, {"handoff": {APP: UNIT}})
         self.read_ends(run, {"readings": RECEIPT})
 
         run.refresh_from_db()

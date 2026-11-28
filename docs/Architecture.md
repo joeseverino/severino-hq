@@ -1108,7 +1108,7 @@ end of the held unit's job on HQ's machine (`unit.job.<result>`) makes
 `automation.held` due, which the host job `automation.settle` reads by asking
 the read of each run held there whose unit's end is stored since the run was
 claimed and since its last read, so a unit that ended before its run reported
-the hand-off is asked at the next look. HQ stores a job's end only while a run
+the hand-off is asked once `_hold` stores the hold. HQ stores a job's end only while a run
 there holds on that unit or may yet hand off (`OutboundWork.reads_due`), so
 another unit's end asks nothing and is not stored, and the watcher leaves out
 HQ's own passes and runs. The lease's bound asks it once no event did
