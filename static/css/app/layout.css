@@ -61,8 +61,10 @@
    chart's data) or by a table of more rows than a card holds lines, would
    stretch its partners into tall empty boxes, so while one is in a row the
    row stops sharing its height and each member stands at its own (a pair's
-   member leaves its rows, since a subgrid always fills them). A table in a
-   closed fold draws nothing and counts for nothing. */
+   member leaves its rows, since a subgrid always fills them). Nine rows is
+   where a table outgrows a card of facts beside it: CSS cannot compare two
+   members' heights, so the row count stands for it. A table in a closed fold
+   draws nothing and counts for nothing. */
 :is(.two-col, .split, .section-flow, .domain-charts):has(> .section :is(details[open], tbody > tr:nth-child(9)):not(details:not([open]) *)) > .section:not(details) {
   display: flex;
   align-self: start;

@@ -35,7 +35,9 @@ LAYOUT = Part(
     identity, link and route, a page's run of cards) is one `{% layout %}`, the flow. It lays as many
     to a row as keep each at least `--flow-basis` wide (22rem), and one to a row where that is the whole
     width. A row's last ones share what it leaves, and each stands on a row as tall as the tallest, a
-    section's foot at its frame's bottom. Every member grows into what its row leaves and none caps its
+    section's foot at its frame's bottom. While a member holds an open fold (a chart's data) or a table of
+    nine rows or more, its row stops sharing its height and each member stands at its own, so a partner
+    is never stretched into an empty box. Every member grows into what its row leaves and none caps its
     width, so every row ends at the flow's end. It is measured against the box it sits in, so the same
     sections pair in a dialog and on a page. A part that needs more room before it shares a row sets a
     wider basis on itself (the connection panel's route); a run of charts is `kind="charts"`, the flow
