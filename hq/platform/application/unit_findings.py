@@ -13,7 +13,7 @@ from typing import Any
 
 from django.utils.text import capfirst, get_text_list
 
-from hq.domains.control_plane.observations.host import UNIT_KIND, unescaped
+from hq.domains.control_plane.observations.host import UNIT_KIND, SystemdName
 
 from . import render_status_findings
 from .action_links import ActionLink
@@ -77,13 +77,16 @@ UNREAD_REASONS = {
 }
 
 
+_UNNAMED = SystemdName()
+
+
 @dataclass(frozen=True, slots=True)
 class UnitState(ReadingRow):
     """One unit as its record says it: words and instants."""
 
     KIND = UNIT_KIND
 
-    unit: str = ""
+    unit: SystemdName = _UNNAMED
     load: str = ""
     file_state: str = ""
     active: str = ""
@@ -96,7 +99,7 @@ class UnitState(ReadingRow):
     condition_at: str = ""
     last_trigger_at: str = ""
     next_elapse_at: str = ""
-    activates: str = ""
+    activates: SystemdName = _UNNAMED
     read_at: str = ""
     # What the unit is, in its unit file's words; "" when systemd gave none.
     title: str = ""
@@ -109,7 +112,7 @@ class UnitState(ReadingRow):
     foreign: str = ""
     # The units it cannot start without, and what HQ's own program last told
     # systemd of it, such as why its run failed.
-    requires: tuple[str, ...] = ()
+    requires: tuple[SystemdName, ...] = ()
     status: str = ""
 
     @classmethod
@@ -120,14 +123,14 @@ class UnitState(ReadingRow):
     def label(self) -> str:
         """The unit as a person reads it: its title, else its name."""
 
-        return self.title or unescaped(self.unit)
+        return self.title or self.unit.said
 
     @property
     def named(self) -> str:
         """The unit in a sentence: its title quoted, since a unit file's title
         reads as a phrase of its own, else its name."""
 
-        return f"“{self.title}”" if self.title else unescaped(self.unit)
+        return f"“{self.title}”" if self.title else self.unit.said
 
     @property
     def failed(self) -> bool:
@@ -185,7 +188,7 @@ def unit_state(record: dict[str, Any]) -> UnitState:
         return str(record.get(name, "") or "")
 
     return UnitState(
-        unit=said("unit"),
+        unit=SystemdName(said("unit")),
         load=said("load"),
         file_state=said("file_state"),
         active=said("active"),
@@ -198,13 +201,13 @@ def unit_state(record: dict[str, Any]) -> UnitState:
         condition_at=said("condition_at"),
         last_trigger_at=said("last_trigger_at"),
         next_elapse_at=said("next_elapse_at"),
-        activates=said("activates"),
+        activates=SystemdName(said("activates")),
         read_at=said("read_at"),
         title=said("title"),
         restarts=said("restarts"),
         active_at=said("active_at"),
         foreign="yes" if record.get("foreign") else "",
-        requires=tuple(str(name) for name in record.get("requires") or ()),
+        requires=tuple(SystemdName(name) for name in record.get("requires") or ()),
         status=said("status"),
     )
 
@@ -329,7 +332,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
                     item
                     for unit in failed
                     for item in (
-                        ("Job", unit.unit),
+                        ("Job", unit.unit.said),
                         ("How it ended", _ended(unit)),
                         *((("Why", _why(unit)),) if unit.status and len(failed) > 1 else ()),
                         ("Failed", _failed_when(node.label, unit, estate.now)),
@@ -475,7 +478,7 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
                 severity=Tone.SERIOUS,
                 explanation=sentence,
-                evidence=tuple(item for unit in absent for item in (("Job", unit.unit), ("State", unit.absent))),
+                evidence=tuple(item for unit in absent for item in (("Job", unit.unit.said), ("State", unit.absent))),
                 fixes=steps,
                 no_help_reason=cannot_run_commands(node.label),
             )
@@ -550,7 +553,7 @@ def _stalled_finding(
             item
             for timer, why in stalled
             for item in (
-                ("Timer", timer.unit),
+                ("Timer", timer.unit.said),
                 *((("Why", why),) if len(stalled) > 1 else ()),
                 ("Last ran", when(timer.last_trigger_at, now)),
             )
@@ -585,7 +588,7 @@ _restarting = OnEachMachine(
         )
     ),
     evidence=lambda unit: (
-        ("Service", unit.unit),
+        ("Service", unit.unit.said),
         ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
         ("How it last ended", _ended(unit)),
     ),

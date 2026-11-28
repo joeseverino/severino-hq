@@ -8,7 +8,7 @@ from typing import Any
 from django.utils import timezone
 lazy from django.db.models import Max, Q
 
-from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, unescaped
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, SystemdName
 lazy from hq.domains.jobs.models import Job as JobRow
 lazy from hq.platform.core.included_parts import DOTS
 
@@ -230,14 +230,14 @@ def _scheduled_label(unit: str) -> str:
     return next((work.label for work in outbound_work.host_work() if instance and work.name == instance), "")
 
 
-def _runs(unit: str, title: str = "", shown: str = "") -> tuple[str, bool]:
+def _runs(unit: SystemdName, title: str = "", shown: str = "") -> tuple[str, bool]:
     """What a unit a trigger starts is, in the words HQ has for it: the
     scheduled work an instance of the job template names, else its unit file's
     title unless that repeats the ``shown`` words already beside it, else the
     unit's own name; and whether it is that name."""
 
     label = _scheduled_label(unit) or (title if title != shown else "")
-    return (label, False) if label else (unescaped(unit), True)
+    return (label, False) if label else (unit.said, True)
 
 
 def _scheduled(starter: Any, target: Any) -> WorkUnit:
@@ -251,7 +251,7 @@ def _scheduled(starter: Any, target: Any) -> WorkUnit:
     )
     return WorkUnit(
         unit=starter.unit,
-        name=unescaped(starter.unit),
+        name=starter.unit.said,
         title=starter.title,
         runs=runs,
         runs_unit=runs_unit,
@@ -269,7 +269,7 @@ def _standing(unit: Any) -> WorkUnit:
     result, tone = _result(unit)
     return WorkUnit(
         unit=unit.unit,
-        name=unescaped(unit.unit),
+        name=unit.unit.said,
         title=unit.title,
         runs=_scheduled_label(unit.unit),
         last_run=moment(unit.started_at),

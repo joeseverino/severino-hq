@@ -192,12 +192,17 @@ UNIT_REQUIRES = 32
 _ESCAPE = re.compile(rb"\\x([0-9a-f]{2})")
 
 
-def unescaped(unit: str) -> str:
-    """A unit's name as a person reads it, as ``systemd-escape --unescape``
-    gives it: each ``\\xNN`` its byte. Only words take it; whatever
-    addresses the unit keeps the name systemd has."""
+class SystemdName(str):
+    """A unit's name as systemd has it, which whatever addresses the unit
+    (a command, a match) uses, read once from its record. ``said`` is the name
+    as a person reads it, as ``systemd-escape --unescape`` gives it: each
+    ``\\xNN`` its byte."""
 
-    return _ESCAPE.sub(lambda escape: bytes([int(escape[1], 16)]), unit.encode()).decode(errors="replace")
+    __slots__ = ()
+
+    @property
+    def said(self) -> str:
+        return _ESCAPE.sub(lambda escape: bytes([int(escape[1], 16)]), self.encode()).decode(errors="replace")
 
 
 def _or_blank(pattern: str) -> str:
@@ -423,7 +428,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "HQ units",
         HostUnitRecord,
-        title=lambda record: str(record.get("title") or record.get("unit", "")),
+        title=lambda record: str(record.get("title") or SystemdName(record.get("unit", "")).said),
         relation="HQ units on",
     ),
     ObservationSpec(
