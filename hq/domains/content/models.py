@@ -49,7 +49,7 @@ class ContentItem(TimestampedModel):
     )
 
     class Meta:
-        ordering = ("-updated_at",)
+        ordering = ("-published_at", "title")
         indexes = [
             models.Index(fields=("status",)),
             models.Index(fields=("content_type",)),

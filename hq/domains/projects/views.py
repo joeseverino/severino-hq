@@ -70,7 +70,6 @@ class ProjectListView(ListPageMixin, TemplateView):
             "Technologies", "technologies_used", css="optional-col", cell=lambda row: _chips(row["technologies"])
         ),
         TableColumn("Repository", kind="status", cell=lambda row: Cell(lines=_repository(row))),
-        TableColumn("Last active", kind="status", cell=lambda row: Cell(moment=row["last_active_at"], muted=True)),
     )
     table_search_placeholder = "Search projects, technology, and notes…"
 
@@ -89,7 +88,6 @@ class ProjectListView(ListPageMixin, TemplateView):
             "state": Project.Status(item["status"]),
             "repository": repository,
             "pushed_at": moment(item["last_push_at"]),
-            "last_active_at": moment(item["last_active_at"]),
             "updates_link": replace(link, url=f"{link.url}#updates"),
         }
 
@@ -246,7 +244,7 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
                 # published names the service, and the service what runs it.
                 "runs_on": where_it_runs(record["public_url"]),
                 "address": _written_as(record["public_url"]),
-                "last_active_at": moment(record["last_active_at"]),
+                "pushed_at": moment(record["last_push_at"]),
                 # The GitHub panel names the repository when it is read.
                 "repository_url": "" if repository is not None else web_url(record["repository_url"]),
                 "repository": _written_as(record["repository_url"]),

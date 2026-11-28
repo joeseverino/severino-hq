@@ -58,7 +58,7 @@ class Project(TimestampedModel):
     referable = Referable(kind="project", key="slug", shows=("name",))
 
     class Meta:
-        ordering = ("-updated_at",)
+        ordering = ("name",)
         indexes = [
             models.Index(fields=("status",)),
             models.Index(fields=("category",)),

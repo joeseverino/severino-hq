@@ -96,7 +96,6 @@ class ProjectPageTests(TestCase):
         self.assertEqual(text(response.context["page"].lede), "One place for every example.")
         # The lede is prose at the reading measure; the facts take the head's width.
         self.assertNotIn("One place", text(response.context["page_facts"]))
-        self.assertIn("Last active", text(response.context["page_facts"]))
         self.assertNotIn("Description", [heading.words for heading in elements(response, "h2")])
 
     def test_the_head_says_where_it_runs_and_names_each_place_once(self):
@@ -138,7 +137,6 @@ class ProjectPageTests(TestCase):
 
         self.assertContains(response, 'href="https://github.com/example/tool"')
         self.assertIn(("github.com/example/tool", "https://github.com/example/tool"), links(response))
-        self.assertContains(response, "Last active ")
 
 
 class ProjectFormTests(TestCase):
@@ -242,10 +240,8 @@ class ProjectListTests(SignedInTestCase):
         for row in elements(response, "tr")[1:]:
             cells = [cell.words for cell in elements(response, "td") if row in cell.ancestors]
             rows[cells[headings.index("Name")]] = dict(zip(headings, cells, strict=True))
-        # A repository column says only what the repository says; when the
-        # project last moved is its own column.
+        # A repository column says only what the repository says.
         self.assertEqual(rows["Example"]["Repository"], MISSING)
-        self.assertEqual(rows["Example"]["Last"], rows["Example Tool tool"]["Last"])
         self.assertEqual(rows["Example Tool tool"]["Repository"], "Not read yet")
 
 
