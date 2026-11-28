@@ -2,8 +2,10 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from hq.domains.control_plane.observations.host import RehearsedPage
 from hq.platform.core.models import ServerError
 
+from ...release_snapshots import ReleaseReadings, keep
 from . import Ago, Example, Examples, Raised, ago
 
 KIND = "github.repository"
@@ -42,8 +44,37 @@ def failed(*pages: tuple[str, timedelta]) -> None:
         )
 
 
-def hq(*deployments: dict, errors: tuple[tuple[str, timedelta], ...] = (), raises=()) -> Example:
-    """HQ built from example/hq, production's deployments newest first, and the requests it failed."""
+def drawn(
+    page: str, *, queries: int = 20, repeated: int = 4, rows: int = 10, row_bytes: int = 8_000, html: int = 40_000
+):
+    """A page as a release's rehearsal drew it."""
+
+    return {
+        "page": page,
+        "status": 200,
+        "queries": queries,
+        "repeated_queries": repeated,
+        "rows": rows,
+        "html_bytes": html,
+        "row_html_bytes": row_bytes,
+    }
+
+
+def rehearsed(kept: dict[str, tuple[dict, ...]]) -> None:
+    """Each release's snapshot, keeping the pages its rehearsal drew."""
+
+    for commit, pages in kept.items():
+        keep(commit, ReleaseReadings(pages=tuple(RehearsedPage.model_validate(page) for page in pages)))
+
+
+def hq(
+    *deployments: dict,
+    errors: tuple[tuple[str, timedelta], ...] = (),
+    kept: dict[str, tuple[dict, ...]] | None = None,
+    raises=(),
+) -> Example:
+    """HQ built from example/hq, production's deployments newest first, the
+    requests it failed and the pages each release's rehearsal drew."""
 
     record = {
         "connection_ref": "github",
@@ -55,7 +86,7 @@ def hq(*deployments: dict, errors: tuple[tuple[str, timedelta], ...] = (), raise
     }
     return Example(
         readings={KIND: (record,)},
-        given=lambda: failed(*errors),
+        given=lambda: (failed(*errors), rehearsed(kept or {})),
         settings={"SEVERINO_HQ_SOURCE": SOURCE},
         raises=raises,
     )
@@ -67,6 +98,17 @@ CHECK_FAILED = deployment(LIVE, "live-check-failed", ago(hours=2), check_failed=
 NOT_DEPLOYED = deployment(LIVE, "not-deployed", ago(hours=1), state="failure", check_failed=True)
 EARLIER_CLEAN = deployment(EARLIER, "live", ago(days=2), state="inactive")
 EARLIER_CHECK_FAILED = deployment(EARLIER, "live-check-failed", ago(days=2), state="inactive", check_failed=True)
+
+# The pages the release before drew, and the release production runs drawing
+# them within every bar: its page's bytes a little more, its rows more of the
+# same size, and a page the release before did not have.
+BEFORE = (drawn("/search/"), drawn("/infrastructure/topology/"), drawn("/domains/example.com/"))
+WITHIN = (
+    drawn("/search/", html=41_500),
+    drawn("/infrastructure/topology/", rows=20, row_bytes=16_000, html=48_000),
+    drawn("/domains/example.com/"),
+    drawn("/connection/", queries=90, repeated=60),
+)
 
 EXAMPLES = (
     Examples(
@@ -113,6 +155,40 @@ EXAMPLES = (
         quiet=(
             hq(CLEAN, errors=(("/search/", timedelta(hours=3)),)),
             hq(NOT_DEPLOYED, errors=(("/search/", timedelta(minutes=5)),)),
+        ),
+    ),
+    Examples(
+        "release-pages-heavier",
+        fires=(
+            hq(
+                CLEAN,
+                EARLIER_CLEAN,
+                kept={
+                    LIVE: (
+                        # A page query more, and rows more than a tenth heavier.
+                        drawn("/search/", queries=21),
+                        drawn("/infrastructure/topology/", row_bytes=9_200, html=41_200),
+                        *WITHIN[2:],
+                    ),
+                    EARLIER: BEFORE,
+                },
+                raises=(
+                    Raised(
+                        title="2 pages heavier in release aaaaaaa than the release before",
+                        evidence=(
+                            ("/search/", "Page q 17 from 16"),
+                            ("/infrastructure/topology/", "B/row 920 from 800"),
+                        ),
+                        primary=("Open release", f"/hq/releases/{LIVE}/"),
+                    ),
+                ),
+            ),
+        ),
+        # Every page within its bars, and a release before with no page measured.
+        quiet=(
+            hq(CLEAN, EARLIER_CLEAN, kept={LIVE: WITHIN, EARLIER: BEFORE}),
+            hq(CLEAN, EARLIER_CLEAN, kept={LIVE: (drawn("/search/", queries=90),), EARLIER: ()}),
+            hq(CLEAN, EARLIER_CLEAN, kept={LIVE: (drawn("/search/", queries=90),)}),
         ),
     ),
 )
