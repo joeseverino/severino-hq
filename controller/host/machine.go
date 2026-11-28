@@ -59,6 +59,11 @@ func (m *Machine) UnitDir() string { return filepath.Join(m.Lib, "deploy", "syst
 // ReleasePath is the release record's path.
 func (m *Machine) ReleasePath() string { return filepath.Join(m.State, "release") }
 
+// RehearsalPagesPath is root's copy of what each page cost in the last
+// rehearsal's walk, on a copy of production's data, keyed by the release's
+// revision inside it.
+func (m *Machine) RehearsalPagesPath() string { return filepath.Join(m.State, "rehearsal-pages.json") }
+
 // run runs a command whose output is safe for the public log: systemctl and
 // docker verbs that print nothing of the host's.
 func (m *Machine) run(ctx context.Context, name string, args ...string) error {

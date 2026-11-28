@@ -519,6 +519,13 @@ nothing. `hq-host deploy`:
      over the socket and memory kills.
    - The image's controller plans on copies of the connections, identities and
      certificate state.
+   - The web process then renders every page the navigation and the header
+     list, as the first operator on the copy (`manage.py page_costs`), within
+     three minutes. A page answering anything but 200 or a redirect fails the
+     release, as `pages=<n>-failed`. A walk that cannot run reads
+     `pages=unread` and fails nothing. Each page's status, queries, records
+     and HTML bytes are kept for root in
+     `/var/lib/severino-hq/rehearsal-pages.json`, with the release's revision.
    - The live web unit and container must not have restarted meanwhile.
    - The image's setup playbook runs in check mode against this host, so a
      playbook this host's configuration or Ansible refuses fails here.

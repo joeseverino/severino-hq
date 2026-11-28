@@ -2,13 +2,18 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
+	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,6 +76,9 @@ const (
 	// the Deploy job's timeout allows for it.
 	rehearsalBound    = 10 * time.Minute
 	rehearsalReadyURL = "http://127.0.0.1:8000/health/ready/"
+	// rehearsalPagesBound bounds the walk of every page, inside the
+	// rehearsal's own bound.
+	rehearsalPagesBound = 3 * time.Minute
 )
 
 // The checks the rehearsal runs in the web process, as python one-liners.
@@ -89,7 +97,7 @@ print(sqlite3.connect("file:/data/` + Database + `?mode=ro", uri=True).execute("
 )
 
 // verdict is the rehearsal's one line: each check, "-" for one not reached.
-type verdict struct{ sandbox, setup, ready, socket, integrity, jobs, memory, plan, live string }
+type verdict struct{ sandbox, setup, ready, socket, integrity, jobs, memory, plan, pages, live string }
 
 func (v verdict) passed() bool {
 	for _, value := range []string{v.sandbox, v.setup, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan} {
@@ -97,7 +105,8 @@ func (v verdict) passed() bool {
 			return false
 		}
 	}
-	return v.live == "untouched"
+	// A walk that could not run says nothing of the release.
+	return (v.pages == "ok" || v.pages == "unread") && v.live == "untouched"
 }
 
 func (v verdict) String() string {
@@ -105,8 +114,8 @@ func (v verdict) String() string {
 	if v.passed() {
 		result = "pass"
 	}
-	return fmt.Sprintf("result=%s sandbox=%s setup=%s ready=%s socket=%s integrity=%s jobs=%s memory=%s plan=%s live=%s",
-		result, v.sandbox, v.setup, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan, v.live)
+	return fmt.Sprintf("result=%s sandbox=%s setup=%s ready=%s socket=%s integrity=%s jobs=%s memory=%s plan=%s pages=%s live=%s",
+		result, v.sandbox, v.setup, v.ready, v.socket, v.integrity, v.jobs, v.memory, v.plan, v.pages, v.live)
 }
 
 // rehearse refuses image unless it passes its rehearsal.
@@ -153,7 +162,7 @@ type rehearsing struct {
 }
 
 func (r *rehearsing) run(ctx context.Context) (said verdict) {
-	said = verdict{sandbox: "-", setup: "-", ready: "no", socket: "-", integrity: "-", jobs: "-", memory: "-", plan: "-", live: "-"}
+	said = verdict{sandbox: "-", setup: "-", ready: "no", socket: "-", integrity: "-", jobs: "-", memory: "-", plan: "-", pages: "-", live: "-"}
 	ctx, cancel := context.WithTimeout(ctx, rehearsalBound)
 	defer cancel()
 	r.own = r.beginRun()
@@ -204,7 +213,69 @@ func (r *rehearsing) run(ctx context.Context) (said verdict) {
 		said.memory = "ok"
 	}
 	said.plan = r.plan(ctx)
+	// Last, so a second process in the web container's memory cannot trip
+	// the memory check or starve the bridge the plan asks.
+	said.pages = r.pages(ctx)
 	return said
+}
+
+// walkedPages is the document `manage.py page_costs` prints: the release's
+// revision, and each page's costs by its address, or why it read none.
+type walkedPages struct {
+	Unread string `json:"unread"`
+	Pages  map[string]struct {
+		Status int `json:"status"`
+	} `json:"pages"`
+}
+
+// pages walks every page the release lists, in its web process on the copy,
+// and keeps the document in RehearsalPagesPath for the controller to read.
+// It is "ok" when every page answers 200 or a redirect, "<n>-failed" when n
+// answer anything else, and "unread" when the walk read nothing. Page names
+// go only to the private log and the root-only document.
+func (r *rehearsing) pages(ctx context.Context) string {
+	kept := r.RehearsalPagesPath()
+	if err := os.Remove(kept); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		fmt.Fprintln(r.log, err)
+		return "unread"
+	}
+	args := []string{"exec", rehearsalName, "timeout", strconv.Itoa(int(rehearsalPagesBound.Seconds())),
+		"python", "manage.py", "page_costs"}
+	fmt.Fprintf(r.log, "$ docker %s\n", strings.Join(args, " "))
+	walk := r.Command(ctx, "docker", args...)
+	var out strings.Builder
+	walk.Stdout, walk.Stderr = &out, r.log
+	if err := walk.Run(); err != nil {
+		fmt.Fprintf(r.log, "(%v)\n", err)
+		return "unread"
+	}
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	document := lines[len(lines)-1]
+	var walked walkedPages
+	if err := json.Unmarshal([]byte(document), &walked); err != nil || walked.Pages == nil {
+		fmt.Fprintf(r.log, "The walk printed no document: %q\n", document)
+		return "unread"
+	}
+	if err := os.MkdirAll(r.State, 0o755); err != nil {
+		fmt.Fprintln(r.log, err)
+	} else if err := atomicfile.WriteFile(kept, []byte(document+"\n"), 0o600); err != nil {
+		fmt.Fprintln(r.log, err)
+	}
+	if walked.Unread != "" {
+		fmt.Fprintf(r.log, "The walk read no page: %s\n", walked.Unread)
+		return "unread"
+	}
+	failed := 0
+	for _, page := range slices.Sorted(maps.Keys(walked.Pages)) {
+		if status := walked.Pages[page].Status; status != 200 && status/100 != 3 {
+			failed++
+			fmt.Fprintf(r.log, "%s answered %d\n", page, status)
+		}
+	}
+	if failed > 0 {
+		return strconv.Itoa(failed) + "-failed"
+	}
+	return "ok"
 }
 
 // sandboxes starts each program a shipped service runs from the image's tree
