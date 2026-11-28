@@ -57,8 +57,10 @@ IPV4 = re.compile(r"(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?(?![\d.])")
 IPV6 = re.compile(r"(?<![\w:])[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,7}(?:/\d{1,3})?(?![\w:])", re.IGNORECASE)
 # Dotted words are also record kinds (`tailscale.device`), units and files, so
 # a name is a host where it is used as one, in a URL or an address, or where it
-# ends in a top-level domain: any country's, or one of the generic ones.
-NAME = r"(?:[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?\.)+[a-z][a-z0-9-]+"
+# ends in a top-level domain: any country's, or one of the generic ones. A
+# top-level domain ends the word, so an event's action (`workflow_job.in_progress`)
+# names no host.
+NAME = r"(?:[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?\.)+[a-z][a-z0-9-]+(?!\w)"
 USED_AS_HOST = re.compile(rf"(?:://|@)({NAME})")
 GENERIC_TLDS = frozenset(
     {"com", "net", "org", "io", "dev", "app", "cloud", "ai", "co", "info", "me", "sh", "xyz", "goog", "page", "site"}
