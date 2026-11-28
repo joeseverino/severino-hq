@@ -492,6 +492,9 @@ DATA_TABLE = Part(
     filter emptied it, with the way back. A table whose rows open an editor (`Cell(editor=)`) is a
     region of the page's own (`data-fragment`, its id from its label), so an editor opens, saves and
     closes in place.
+
+    What holds for every row (how a figure was reckoned, what a test corrected for) is the table's
+    `note`, said once beneath its rows and never repeated in each row's open line.
     """,
     partial="partials/_data_table.html",
     function=data_table,
@@ -499,8 +502,8 @@ DATA_TABLE = Part(
     public=True,
     example=tags.DATA_TABLE,
     states=tags.DATA_TABLE_STATES,
-    # Its box, a row that is open, and its open line.
-    classes=("data-table", "is-expanded", "is-pane", "row-columns", "row-detail", "table-scroll"),
+    # Its box, a row that is open, its open line, and its note.
+    classes=("data-table", "is-expanded", "is-pane", "row-columns", "row-detail", "table-note", "table-scroll"),
 )
 slotted(DATA_TABLE, library=register)
 ROW_TOGGLE = Part(

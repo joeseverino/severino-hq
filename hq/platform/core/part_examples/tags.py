@@ -676,20 +676,20 @@ ROW_ACTIONS_STATES = {
 }
 
 
-DATA_TABLE = Example(
-    "{% data_table table %}",
-    context=lambda: {
-        "table": DataTable.of(
-            "Example hosts",
-            (
-                TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
-                TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
-                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
-            ),
-            ("example-host-01", "example-host-two"),
-        )
-    },
-)
+def _hosts(note: str = "") -> DataTable:
+    return DataTable.of(
+        "Example hosts",
+        (
+            TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
+            TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
+            TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
+        ),
+        ("example-host-01", "example-host-two"),
+        note=note,
+    )
+
+
+DATA_TABLE = Example("{% data_table table %}", context=lambda: {"table": _hosts()})
 
 
 TABLE_HEADING = Example(
@@ -905,6 +905,11 @@ DATA_TABLE_STATES = {
     # grant and a directive in a sentence: no name breaks at a hyphen or a
     # dot while its share holds it whole.
     "identifiers": Example("{% data_table table %}", context=lambda: {"table": _identifiers()}),
+    # A statement true of every row, beneath them once.
+    "note": Example(
+        "{% data_table table %}",
+        context=lambda: {"table": _hosts(note="Each cost is the example host's monthly bill, before tax.")},
+    ),
 }
 
 

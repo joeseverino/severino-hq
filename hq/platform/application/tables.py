@@ -525,6 +525,9 @@ class DataTable:
     headed: bool = True
     # The row of its totals, drawn last, in its ``tfoot``.
     footer: Row | None = None
+    # What holds for every row (how its figures were reckoned), said once
+    # beneath them rather than in each row.
+    note: str = ""
     # What its box takes beside its label (``box``): where it stands, and
     # what it says with no rows.
     region: Mapping[str, Any] = field(default_factory=dict)

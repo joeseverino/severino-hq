@@ -676,6 +676,9 @@ filter emptied it, with the way back. A table whose rows open an editor (`Cell(e
 region of the page's own (`data-fragment`, its id from its label), so an editor opens, saves and
 closes in place.
 
+What holds for every row (how a figure was reckoned, what a test corrected for) is the table's
+`note`, said once beneath its rows and never repeated in each row's open line.
+
 ### django/forms/field.html (host only)
 
 A field is the view's Django form field, drawn by this template, so its label, help, errors and

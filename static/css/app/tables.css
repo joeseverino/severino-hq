@@ -19,6 +19,9 @@
 /* The region is the container a table's columns are counted against: a table beside a chart is as narrow as one on a phone. min-width: 0, or a grid or flex ancestor sizes to the table. */
 .table-scroll { container: table-region / inline-size; --controls: none; margin-bottom: var(--space-8); min-width: 0; max-width: 100%; }
 .table-scroll .data-table { margin-bottom: 0; }
+/* What holds for every row (`DataTable.note`), once beneath them, its words set in from the box's edge as a cell's are. */
+.table-scroll > .table-note { margin: 0; padding: var(--space-4) var(--space-6); color: var(--muted); font-size: var(--text-xs); }
+@container table-region (width < 36rem) { .table-scroll > .table-note { padding-inline: var(--space-4); } }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
 /* A chart's table is read whole in the chart's order, so it scrolls in its region rather than let a column go; its block axis is stated or it computes to `auto`. */
