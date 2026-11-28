@@ -58,6 +58,8 @@ class TaskOutcome(Toned):
     STARTED = "started", JobState.RUNNING.tone
     OK = "ok", Tone.GOOD
     CHANGED = "changed", Tone.GOOD
+    # Ended well and warned, its message carrying the warnings.
+    WARNED = "warned", Tone.ATTENTION
     SKIPPED = "skipped", Tone.NEUTRAL
     FAILED = "failed", Tone.SERIOUS
     UNREACHABLE = "unreachable", Tone.SERIOUS

@@ -1297,6 +1297,7 @@
               "started",
               "ok",
               "changed",
+              "warned",
               "failed",
               "skipped",
               "unreachable"

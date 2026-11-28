@@ -1,0 +1,45 @@
+{
+  "uuid": "16ced01a-a0eb-4eef-8005-40835e071dc3",
+  "counter": 6,
+  "stdout": "\u001b[0;32mok: [localhost]\u001b[0m",
+  "start_line": 5,
+  "end_line": 6,
+  "runner_ident": "7aa8e59c-a7b2-44f0-a743-a18a5d6ea75a",
+  "event": "runner_on_ok",
+  "pid": 4242,
+  "created": "2026-11-28T00:21:37.031971+00:00",
+  "parent_uuid": "02000000-0000-3199-ba36-000000000004",
+  "event_data": {
+    "playbook": "play.yml",
+    "playbook_uuid": "7e2cca11-d9de-4dbd-8e66-15f7efa7643d",
+    "play": "Read",
+    "play_uuid": "02000000-0000-3199-ba36-000000000002",
+    "play_pattern": "all",
+    "task": "Find the files",
+    "task_uuid": "02000000-0000-3199-ba36-000000000004",
+    "task_action": "ansible.builtin.find",
+    "resolved_action": "ansible.builtin.find",
+    "task_args": "",
+    "task_path": "/srv/example/project/play.yml:6",
+    "host": "localhost",
+    "remote_addr": "localhost",
+    "res": {
+      "changed": false,
+      "warnings": [
+        "Skipped '/srv/example/closed/inner' path due to this access issue: '/srv/example/closed/inner' is not a directory\n"
+      ],
+      "msg": "Not all paths examined, check warnings for details",
+      "files": [],
+      "matched": 0,
+      "examined": 0,
+      "skipped_paths": {
+        "/srv/example/closed/inner": "'/srv/example/closed/inner' is not a directory"
+      }
+    },
+    "start": "2026-11-28T00:21:36.797961+00:00",
+    "end": "2026-11-28T00:21:37.031459+00:00",
+    "duration": 0.233498,
+    "event_loop": null,
+    "uuid": "16ced01a-a0eb-4eef-8005-40835e071dc3"
+  }
+}

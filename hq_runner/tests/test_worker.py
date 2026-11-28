@@ -120,6 +120,16 @@ class SuccessTests(PassTestCase):
         self.assertNotIn(line, json.dumps([self.only_report(bridge), bridge.progress, heard]))
         self.assertEqual([(e["task"], e["outcome"], e["message"]) for e in bridge.events], [(task, "ok", "")])
 
+    def test_a_task_that_warned_is_reported_as_warned_with_its_warnings(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner([fakes.WARNED]))
+
+        (event,) = bridge.events
+        self.assertEqual(event["outcome"], "warned")
+        self.assertIn("Not all paths examined", event["message"])
+        self.assertIn("Skipped '/srv/example/closed/inner' path", event["message"])
+
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
         bridge = fakes.Bridge(fakes.pending())
 

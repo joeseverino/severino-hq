@@ -1102,6 +1102,7 @@ const (
 	Skipped     RunEventOutcome = "skipped"
 	Started     RunEventOutcome = "started"
 	Unreachable RunEventOutcome = "unreachable"
+	Warned      RunEventOutcome = "warned"
 )
 
 // Valid indicates whether the value is a known member of the RunEventOutcome enum.
@@ -1118,6 +1119,8 @@ func (e RunEventOutcome) Valid() bool {
 	case Started:
 		return true
 	case Unreachable:
+		return true
+	case Warned:
 		return true
 	default:
 		return false

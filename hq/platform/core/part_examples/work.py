@@ -33,6 +33,13 @@ def _example_runs():
                 events=(
                     _event("Flush the example cache", "changed"),
                     _event("Check the example cache", "ok", host="example-02"),
+                    _event(
+                        "Find the example cache's files",
+                        "warned",
+                        host="example-02",
+                        message="Not all paths examined, check warnings for details; Skipped '/srv/example/cache' "
+                        "path due to this access issue: '/srv/example/cache' is not a directory",
+                    ),
                     _event("Restart every example service the cache feeds", "started"),
                 ),
             ),

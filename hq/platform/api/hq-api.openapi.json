@@ -28015,7 +28015,7 @@
             "type": "string"
           },
           "outcome": {
-            "description": "How it ended, or `started` while it is under way: `started`, `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
+            "description": "How it ended, or `started` while it is under way: `started`, `ok`, `changed`, `warned`, `skipped`, `failed` or `unreachable`.",
             "type": "string"
           },
           "task": {

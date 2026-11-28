@@ -1,8 +1,8 @@
 """A run's task outcomes, struck of secrets and held to the bridge's bounds, and what its playbook stated.
 
 An event takes four fields of what Ansible said, never its whole result, so
-what a module returned beside its message never leaves the worker, and no
-program's output does. A task that polls with ``until:`` stands as started
+what a module returned beside its message and its warnings never leaves the
+worker, and no program's output does. A task that polls with ``until:`` stands as started
 until it ends: a pass that goes again is no event. HQ strikes known
 credential shapes again at the bridge; this is the worker's own strike, of
 what it alone knows to be secret.
@@ -26,6 +26,9 @@ HIDDEN = "The task's output is hidden (no_log)."
 
 # A task under way on a machine, until its outcome takes its place (``Tasks``).
 STARTED = "started"
+# A task that ended well and warned (Ansible's ``warnings`` in its result),
+# which its message carries after its own.
+WARNED = "warned"
 # Ansible's host events, by the outcome each reports.
 _OUTCOMES = {
     "runner_on_start": STARTED,
@@ -118,8 +121,13 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     result = result if isinstance(result, Mapping) else {}
     if outcome == "ok" and result.get("changed") is True:
         outcome = "changed"
+    warned = result.get("warnings")
+    warnings = [_one_line(each) for each in warned if isinstance(each, str)] if isinstance(warned, list) else []
+    if warnings and outcome in ("ok", "changed"):
+        outcome = WARNED
     # "censored" is Ansible's own stand-in for the result of a task marked no_log.
-    message = HIDDEN if "censored" in result else strike(_one_line(result.get("msg", "")), secrets)
+    said = "; ".join(each for each in (_one_line(result.get("msg", "")), *warnings) if each)
+    message = HIDDEN if "censored" in result else strike(said, secrets)
     host = strike(_one_line(data.get("host", "")), secrets)
     task = strike(_one_line(data.get("task", "")), secrets)
     return Event(_clip(host, HOST_LIMIT), _clip(task, TASK_LIMIT), outcome, _clip(message, MESSAGE_LIMIT))
@@ -389,8 +397,8 @@ def _result(result: Any, secrets: Collection[str]) -> str | None:
 
 
 # The tasks a run's progress keeps first when it has more than it can carry:
-# what is under way, and what changed a machine or went wrong.
-_KEPT_FIRST = frozenset({STARTED, "changed", "failed", "unreachable"})
+# what is under way, and what changed a machine, warned or went wrong.
+_KEPT_FIRST = frozenset({STARTED, "changed", WARNED, "failed", "unreachable"})
 
 
 class Tasks:

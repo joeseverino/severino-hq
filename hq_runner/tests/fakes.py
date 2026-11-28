@@ -127,6 +127,10 @@ READINGS: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_reading
 # ``until:`` that went again, its stdout the line it printed of how far it had
 # got; the run's directory is rewritten to ``PROCEDURES``' project directory.
 RETRY: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_retry_event.json").read_text("utf-8"))
+# A find ansible-runner 2.4.3 and ansible-core 2.22 recorded that could not
+# examine one of its paths, which it ended well and warned of; its paths are
+# rewritten under /srv/example.
+WARNED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_warned_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 
