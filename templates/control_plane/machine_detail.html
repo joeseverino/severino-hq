@@ -124,7 +124,7 @@ last done to it is read before its parts.
     alone, so it fits its column beside the answer.
     {% endcomment %}
     {% for opening, who in opening_links %}
-      {% with port_text=opening.port|stringformat:"s" %}{% fact "Port "|add:port_text %}{% if opening.serves %}{{ opening.serves }}{% dot %}{% endif %}{% if opening.open %}{% include "control_plane/_policy_names.html" with names=who %}{% else %}Loopback only{% endif %}{% endfact %}{% endwith %}
+      {% with port_text=opening.port|stringformat:"s" %}{% fact "Port "|add:port_text %}{% list kind="dots" %}{% if opening.serves %}<li>{{ opening.serves }}</li>{% endif %}<li>{% if opening.open %}{% include "control_plane/_policy_names.html" with names=who %}{% else %}Loopback only{% endif %}</li>{% endlist %}{% endfact %}{% endwith %}
     {% endfor %}
   {% endfacts %}
 {% aside %}
