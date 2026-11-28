@@ -418,6 +418,8 @@ class Row:
     emphasized: bool = False
     # Its one cell spans every column: the count of a fold's rest.
     across: bool = False
+    # It names the family of rows folded under it, which are counted in its place.
+    heads: bool = False
     # Its id, which a link to the row names, and each ``data-`` attribute a
     # script finds it by, by its name after ``data-``.
     id: str = ""
@@ -448,13 +450,15 @@ class Row:
 
 @dataclass(frozen=True, slots=True)
 class Group:
-    """Rows under one heading (``partials/_row_group.html``): its name, how many, the
-    id its rows fold under when it starts folded away, the page they are
-    dealt with on together, and whether a reader should weigh it first."""
+    """Rows under one heading (``partials/_row_group.html``): its name, whether
+    it says how many it holds, the id its rows fold under when it starts folded
+    away, the page they are dealt with on together, and whether a reader should
+    weigh it first."""
 
     label: str
     rows: tuple[Row, ...]
-    count: int | None = None
+    # Its heading says how many things its rows show (``things``).
+    counted: bool = False
     folds: str = ""
     href: str = ""
     attention: bool = False
@@ -464,6 +468,19 @@ class Group:
 
     def __post_init__(self) -> None:
         held_data(self.data, "A group")
+
+    @property
+    def things(self) -> tuple[Row, ...]:
+        """The rows that each show a thing: every row but the count of a fold's
+        rest and the name of a family, whose own rows are counted instead."""
+
+        return tuple(row for row in self.rows if not (row.across or row.heads))
+
+    @property
+    def count(self) -> int | None:
+        """What its heading counts, when it counts."""
+
+        return len(self.things) if self.counted else None
 
 
 def box(
@@ -538,6 +555,12 @@ class DataTable:
         """The table of ``records``, each cell the one its column declares."""
 
         return cls(label, columns, tuple(Row(tuple(c.cell(r) for c in columns if c.cell)) for r in records), **options)
+
+    @property
+    def things(self) -> tuple[Row, ...]:
+        """The rows that each show a thing, in every group (``Group.things``)."""
+
+        return tuple(row for group in self.bodies for row in group.things)
 
     @property
     def bodies(self) -> tuple[Group, ...]:

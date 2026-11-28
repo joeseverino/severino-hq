@@ -421,7 +421,6 @@ class AgentPolicyView(PageMixin, TemplateView):
             "default_rules": capability_policy.table("Defaults", columns, defaults, settable=settable)
             if defaults
             else None,
-            "default_count": sum(len(group.rows) for group in defaults),
         }
 
     def post(self, request):

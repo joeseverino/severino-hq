@@ -303,7 +303,7 @@ RECORD_LIST_STATES = {
     # place with its chips, one with a line long enough to wrap and more
     # chips than fit beside it, and one with no page of its own.
     "places": Example(
-        '{% section "Example places" count=3 %}'
+        '{% section "Example places" counts=rows %}'
         '{% include "partials/_record_list.html" with whole_rows=True %}{% endsection %}',
         lambda: {
             "rows": [
@@ -321,7 +321,7 @@ RECORD_LIST_STATES = {
     # match inside a word, a snippet long enough to be cut at its second
     # line, and record text that is not HQ's words.
     "snippets": Example(
-        '{% section "Example results" count=3 %}{% include "partials/_record_list.html" %}{% endsection %}',
+        '{% section "Example results" counts=rows %}{% include "partials/_record_list.html" %}{% endsection %}',
         lambda: {
             "rows": [
                 ListRow(
@@ -932,7 +932,7 @@ WORK_QUEUE_STATES = {
     # Under a section's heading, the queue's one Refresh at its end, beside
     # what the heading says, where no row draws its own.
     "refresh": Example(
-        '{% section "Example" count=2 %}{% include "partials/_work_queue.html" %}'
+        '{% section "Example" counts=items %}{% include "partials/_work_queue.html" %}'
         '{% aside %}{% include "partials/_work_queue.html#refresh" %}{% endsection %}',
         lambda: {
             "items": _problems("Example certificate expires soon", "Example backup is late"),

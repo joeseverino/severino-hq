@@ -280,7 +280,7 @@ class InfrastructureListView(RecordListMixin, TemplateView):
             "Records",
             RECORD_COLUMNS,
             groups=tuple(
-                Group(group.label, tuple(Row(_record_cells(row)) for row in group.rows), count=len(group.rows))
+                Group(group.label, tuple(Row(_record_cells(row)) for row in group.rows), counted=True)
                 for group in records.groups
             ),
             region={"empty": "No records yet.", "filtered": records.filtered, "clear": reverse("control_plane:list")},

@@ -26,6 +26,6 @@ is drawn when nothing is open.
 {% endcard %}
 {% endif %}
 {% if rest %}
-{% section "Open problems" id="problems" count=rest|length %}{% partial rest %}{% aside %}{% include "partials/_work_queue.html#refresh" with items=problems only %}{% endsection %}
+{% section "Open problems" id="problems" counts=rest %}{% partial rest %}{% aside %}{% include "partials/_work_queue.html#refresh" with items=problems only %}{% endsection %}
 {% endif %}
 {% endwith %}

@@ -8,7 +8,7 @@ changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
 {% if changed_rules %}{% data_table changed_rules %}{% endif %}
 {% if default_rules %}
-  {% section "Defaults" count=default_count fold=True id="every-action" open=every_read %}
+  {% section "Defaults" counts=default_rules.things fold=True id="every-action" open=every_read %}
     {% if every_read %}
       {% include "core/_every_rule.html" %}
     {% else %}

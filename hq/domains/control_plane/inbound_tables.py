@@ -75,7 +75,6 @@ def taken_table(taken: tuple[Taken, ...]) -> DataTable:
         table,
         rows=(),
         groups=tuple(
-            Group(label, tuple(row for _each, row in rows), count=sum(len(each.events) for each, _row in rows))
-            for label, rows in sorted(by_provider.items())
+            Group(label, tuple(row for _each, row in rows), counted=True) for label, rows in sorted(by_provider.items())
         ),
     )

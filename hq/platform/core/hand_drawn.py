@@ -365,10 +365,10 @@ SHAPES = (
     Shape(
         name="count",
         said="A count or a line beside a heading drawn by hand, where the section part draws its voice.",
-        instead='{% section "Words" count=n %}, or the words alone in its {% aside %}',
+        instead='{% section "Words" counts=rows %}, or the words alone in its {% aside %}',
         find=tagged(r"[\w-]+", r"[\s}]class=[\"'](?:[^\"']*[\s}])?count(?:[\s\"'{]|$)"),
         refuses=('{% aside %}<span class="count">{{ rows|length|counted:"row" }}</span>', '<b class="x count">2</b>'),
-        keeps=('{% section "A" count=n %}{% aside %}{{ rows|length|counted:"row" }}{% endsection %}',),
+        keeps=('{% section "A" counts=rows %}{% aside %}{{ rows|length|counted:"row" }}{% endsection %}',),
         drawn_by={
             "partials/_section_head.html": "the section part itself, its heading's count",
             "partials/_row_group.html": "a declared group's count, after its name",
@@ -603,7 +603,7 @@ SHAPES = (
     Shape(
         name="cut-count",
         said="A count cut off from the words it counts.",
-        instead='{% section "Words" count=n %}, or {{ n|counted:"thing" }}',
+        instead='{% section "Words" counts=rows %}, or {{ n|counted:"thing" }}',
         find=_cut_counts,
         refuses=("<summary>Other settings ({{ rows|length }})</summary>",),
         keeps=("<option>Machines ({{ rows|length }})</option>",),

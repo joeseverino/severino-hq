@@ -185,7 +185,7 @@ def devices(found: Sequence[tuple[AgentStanding, Sequence[tuple[DeviceRow, Any]]
         Group(
             standing.label,
             tuple(_device(device, actions) for device, actions in rows),
-            count=len(rows),
+            counted=True,
             id=f"devices-{standing.identity.pk}",
             data={"agent-devices": standing.subject},
         )
@@ -254,8 +254,7 @@ def offers(endpoint: Any) -> DataTable:
 
     columns = (TableColumn("Name", kind="identifier"), TableColumn("Description"))
     groups = tuple(
-        Group(offer.label, tuple(_offered(item) for item in offer.items), count=len(offer.items))
-        for offer in endpoint.offers
+        Group(offer.label, tuple(_offered(item) for item in offer.items), counted=True) for offer in endpoint.offers
     )
     return DataTable("MCP server", columns, groups=groups)
 

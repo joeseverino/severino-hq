@@ -23,7 +23,7 @@ or a machine agent's, which anyone who governs agents approves. Pressed here
 or on the device's row below, the same form.
 {% endcomment %}
 {% if prompts %}
-  {% section "Needs approval" count=prompts.rows|length id="device-prompts" %}
+  {% section "Needs approval" counts=prompts.rows id="device-prompts" %}
     {% data_table prompts %}
   {% endsection %}
 {% endif %}
@@ -36,7 +36,7 @@ and its own block beside the pause above. Removing it is offered only while
 it is not blocked, since removal never lifts a block.
 {% endcomment %}
 {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
-{% section "Agents" count=standings|length id="agents" lede=lede %}
+{% section "Agents" counts=standings id="agents" lede=lede %}
 {% if standings %}
   {% data_table agents %}
 {% else %}
@@ -97,7 +97,7 @@ The signed-in person's own devices: a client registered here whose token also
 carries the device permission stands as them. Only theirs, never anybody else's.
 {% endcomment %}
 {% url 'own_device' as device_url %}
-{% section "Your apps" count=devices.rows|length id="own-devices" lede="Apps that sign in as you." %}
+{% section "Your apps" counts=devices.rows id="own-devices" lede="Apps that sign in as you." %}
   {% data_table devices %}
   {% if device_form %}
     {% include "partials/_form.html" with form=device_form action=device_url fields="core/_command_fields.html" choices=device_choices choice_field="registered" %}

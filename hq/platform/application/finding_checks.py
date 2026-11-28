@@ -104,9 +104,7 @@ def checks(principal: Principal) -> DataTable:
     return DataTable(
         "Checks",
         COLUMNS,
-        groups=tuple(
-            Group(labels.get(domain, domain), tuple(rows), count=len(rows)) for domain, rows in grouped.items()
-        ),
+        groups=tuple(Group(labels.get(domain, domain), tuple(rows), counted=True) for domain, rows in grouped.items()),
     )
 
 

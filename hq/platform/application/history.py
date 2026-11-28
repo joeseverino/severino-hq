@@ -418,11 +418,11 @@ class HistoryGroup:
     folds: str = ""
 
     @property
-    def count(self) -> int:
-        """How many rows of history its table draws: each line and those folded
+    def things(self) -> tuple[HistoryLine, ...]:
+        """The lines its table draws as things: each line and those folded
         beneath it, never the row counting what a fold leaves out."""
 
-        return sum(line.rest is None for event in self.lines for line in event.lines)
+        return tuple(line for event in self.lines for line in event.lines if line.rest is None)
 
 
 def columns(*, hide_who: bool = False) -> tuple[TableColumn, ...]:
@@ -464,7 +464,7 @@ def table(
                     for event in group.lines
                     for line in event.lines
                 ),
-                count=group.count or None,
+                counted=True,
                 folds=group.folds,
             )
             for group in groups

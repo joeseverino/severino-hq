@@ -96,12 +96,6 @@ class TailnetContext:
     def known(self) -> bool:
         return self.policy.known
 
-    @property
-    def group_rows(self) -> int:
-        """The rows of the one table that lists groups and then tags."""
-
-        return len(self.policy.groups) + len(self.tags)
-
     def as_dict(self) -> Tailnet:
         """The derived facts, for the API, MCP, CLI and SDK."""
 

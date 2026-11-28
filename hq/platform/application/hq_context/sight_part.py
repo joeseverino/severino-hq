@@ -110,7 +110,7 @@ class HqSight:
             "Readings by connection",
             _SEES_COLUMNS,
             groups=tuple(
-                Group(provider, tuple(row for standing in rows for row in _rows(standing)), count=len(rows))
+                Group(provider, tuple(row for standing in rows for row in _rows(standing)), counted=True)
                 for provider, rows in self.groups
             ),
         )

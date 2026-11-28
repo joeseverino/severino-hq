@@ -271,10 +271,10 @@ class ConnectionsContext:
     answers_request: bool
 
     @property
-    def to_connect(self) -> int:
+    def to_connect(self) -> tuple[ProviderSetup | ConnectionGroup, ...]:
         """Everything not yet connected: each service, and each family set up on its own."""
 
-        return len(self.setups) + len(self.unconfigured)
+        return (*self.setups, *self.unconfigured)
 
     @property
     def guide(self) -> str:

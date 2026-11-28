@@ -19,7 +19,7 @@ What changed, not what ran: a check that found what the one before it found
 is not a row, so an unchanged minute-by-minute result is one line.
 {% endcomment %}
 {% if changes %}
-{% section "Recent changes" count=changes|length %}
+{% section "Recent changes" counts=changes %}
 {% data_table changed %}
 {% endsection %}
 {% endif %}

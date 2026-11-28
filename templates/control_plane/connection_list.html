@@ -3,7 +3,7 @@
 {% if connections.groups %}
   {% data_table table %}
 {% comment %}What is not connected yet, here; once everything is, how to connect a second account closes the page, so the page always has a way to add one.{% endcomment %}
-{% if connections.setups or connections.unconfigured %}{% include "control_plane/_connection_setup.html" with setups=connections.setups others=connections.unconfigured count=connections.to_connect guide=connections.guide opened=request.GET.setup fields=setup_fields read_vault=read_vault only %}{% endif %}
+{% if connections.setups or connections.unconfigured %}{% include "control_plane/_connection_setup.html" with setups=connections.setups others=connections.unconfigured rows=connections.to_connect guide=connections.guide opened=request.GET.setup fields=setup_fields read_vault=read_vault only %}{% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No connection types installed." %}
 {% endif %}
@@ -32,7 +32,7 @@
   {% endlayout %}
 {% aside %}{% muted %}This request and each connection's credentials: {{ connections.posture.check_summary }}{% endmuted %}
 {% endsection %}
-{% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again count=connections.again|length guide=connections.guide again=True fields=setup_fields read_vault=read_vault only %}{% endif %}
+{% if connections.groups and not connections.setups and not connections.unconfigured and connections.again %}{% include "control_plane/_connection_setup.html" with setups=connections.again rows=connections.again guide=connections.guide again=True fields=setup_fields read_vault=read_vault only %}{% endif %}
 {% endblock %}
 {% comment %}
 HQ's standard (application.posture), in a section, given its ``posture``

@@ -23,7 +23,7 @@ queue's (data-queue) is counted down as its rows are dismissed.
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
 {% with area=action_groups.0 %}{% queue_refresh groups=action_groups as refresh %}
 {% if action_groups|length == 1 %}{% firstof area.label as queue_heading %}{% elif action_query or action_status or action_source or action_about %}{% firstof "Matches" as queue_heading %}{% else %}{% firstof "To do" as queue_heading %}{% endif %}
-{% section queue_heading count=action_item_total data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
+{% section queue_heading counts=action_doing data_queue=True data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% include "action_items.html#queue_groups" with groups=action_groups prefix="queue" aside_url=dismiss_all.url titled=action_groups|length|add:"-1" %}
 {% aside %}{% if action_groups|length == 1 and area.url %}<a class="subtle-link" href="{{ area.url }}">View all{% arrow %}</a>{% if dismiss_all or refresh %}{% dot %}{% endif %}{% endif %}{% if refresh %}{% include "partials/_page_action.html" with action=refresh only %}{% endif %}{% if dismiss_all %}{% include "partials/_page_action.html" with action=dismiss_all extra="compact ghost" only %}{% endif %}
 {% endsection %}
@@ -41,14 +41,14 @@ nothing to resolve. Kept apart from what needs doing; dismissing one is the end
 of it unless it reports something else.
 {% endcomment %}
 {% if notice_groups %}
-  {% section "Notices" count=notice_total data_queue=True %}
+  {% section "Notices" counts=action_told data_queue=True %}
     {% include "action_items.html#queue_groups" with groups=notice_groups prefix="notice" aside_url=dismiss_notices.url %}
   {% aside %}{% if dismiss_notices %}{% include "partials/_page_action.html" with action=dismiss_notices extra="compact ghost" only %}{% endif %}
   {% endsection %}
 {% endif %}
 
 {% if aside_groups %}
-  {% section "Dismissed" count=aside_total fold=True data_set_aside=True %}
+  {% section "Dismissed" counts=action_aside fold=True data_set_aside=True %}
     {% include "action_items.html#queue_groups" with groups=aside_groups prefix="aside" %}
   {% endsection %}
 {% endif %}

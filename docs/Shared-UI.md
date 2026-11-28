@@ -68,7 +68,7 @@ and those that hold across parts in [Design](Design.md).
 | `{% reference %}` | nothing | The link for the reference a record holds, for `{% entity %}`, or none the viewer may not see. | `{% reference expense "paid_from" as account %}{% entity account %}` |
 | `{% referenced_by %}` | nothing | Everything that names a thing, for that thing's page, a card per kind of reference. | `{% referenced_by "machine" machine.name %}` |
 | `{% row_editor %}` | nothing | The way into a row's editor, and the editor itself under the row where the page's address opens it. | `{% row_editor form row.pk label="Edit" action=row.edit_url verb="Save" %}` |
-| `{% section %}` | `lead`, `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
+| `{% section %}` | `lead`, `aside`, `empty`, `foot` | A titled part of a page in its frame, its head on the page and its body in the frame. | `{% section "Agents" counts=agents %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}` |
 | `{% status %}` | nothing | One short state, drawn in its tone and said in sentence case, the one way a page draws a state. | `{% status "Blocked" tone="attention" %}` |
 | `{% with_query %}` | nothing | An address with a query added to its own, each value encoded: written where it stands, or kept with `as` for the part that links it. | `{% with_query "/example/" kind="host" as hosts_url %}{% button "Hosts" hosts_url %}` |
 | `{% words %}` | nothing | What a button for a command says, from its declaration, for prose that names the one to press. | `Press {% words "agent.access.set" %}.` |
@@ -196,7 +196,7 @@ and those that hold across parts in [Design](Design.md).
 | `row_editor` | `verb` | required |  | Its button's words. |
 | `row_editor` | `**initial` |  |  | The row's values, each by its field's name. |
 | `section` | `heading`, first and unnamed |  |  | Plain words; with none, the moment it names is the heading. |
-| `section` | `count` | `None` |  | How many things it holds, beside the heading. |
+| `section` | `counts` | `None` |  | What it holds, whose number stands beside the heading. |
 | `section` | `css` |  |  | The classes of where it stands. |
 | `section` | `edge` |  | `serious`, `attention`, `neutral`, `good` | Its frame's starting edge in a status tone, while it stands out from those beside it. |
 | `section` | `figure` | `False` |  | Drawn as a figure, its head the caption. |
@@ -208,6 +208,7 @@ and those that hold across parts in [Design](Design.md).
 | `section` | `moment` | `None` |  | A moment the heading names, drawn after its words. |
 | `section` | `more_label` |  |  | The label of the aside's link to the whole of what it shows part of. |
 | `section` | `more_url` |  |  | Where that link leads, drawn only when there is somewhere to go. |
+| `section` | `noun` |  |  | What it counts, where the number alone would not say (3 images). |
 | `section` | `open` | `False` |  | A folded section drawn open. |
 | `section` | `remedy_label` |  |  | The label of the link the empty line offers. |
 | `section` | `remedy_url` |  |  | Where the empty line's link leads. |
@@ -249,7 +250,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
 | `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
 | `chip` | A chip, a badge, a count or an age drawn by hand, where the status part or a value filter draws it. | `{% status word chip=True %}`, a count by {{ n\|counted:"thing" }}, an age by {{ at\|ago }} |
-| `count` | A count or a line beside a heading drawn by hand, where the section part draws its voice. | `{% section "Words" count=n %}`, or the words alone in its `{% aside %}` |
+| `count` | A count or a line beside a heading drawn by hand, where the section part draws its voice. | `{% section "Words" counts=rows %}`, or the words alone in its `{% aside %}` |
 | `filter-choice` | A choice of several drawn as boxes by hand, where the toggle set part draws it. | `{% include "partials/_toggle_set.html" %}`, or `{% select %}` for one choice |
 | `form-control` | A form, a field or a label drawn by hand, where the form, field and filter bar parts draw it. | `{% include "partials/_form.html" %}` of a Django form, or `{% filter_bar %}` for what a list keeps |
 | `list` | A list or a band of facts drawn by hand, where the list or the facts part draws it. | `{% list kind="down\|dots\|prose\|chips\|codes\|labeled" %}``<li>`...`</li>``{% endlist %}`, or `{% facts %}` |
@@ -266,7 +267,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `typed-mark` | A dot or an arrow typed as text, which a reader hears and a line may strand. | `{% dot %}` between two parts, a .dot-list for a run of parts, `{% arrow %}` after a link |
 | `figure-in-chip` | A figure inside a chip, which is a word. | the figure in a band of facts, a numeric column or a sentence |
 | `counted-fold` | A list folded at a count, which hides parts its line has room for. | a Cell(fit=True) of the parts, which shows as many as the line holds |
-| `cut-count` | A count cut off from the words it counts. | `{% section "Words" count=n %}`, or {{ n\|counted:"thing" }} |
+| `cut-count` | A count cut off from the words it counts. | `{% section "Words" counts=rows %}`, or {{ n\|counted:"thing" }} |
 | `since` | A "since" written before a moment, which reads "since 3 days ago" beside an age. | {{ at\|when:"since" }}, which says its own "since" |
 | `plural` | A word chosen by a count of one, which the count's own filter agrees. | {{ n\|counted:"one,many" }}, or {{ n\|agreed:"one,many" }} for the words alone |
 | `code-block` | A code block a keyboard cannot reach, though it scrolls in its own box. | `<pre tabindex="0">` |
@@ -1625,7 +1626,7 @@ for them.
 
 ### section
 
-`{% section "Agents" count=n lede="..." %}body{% aside %}a line, a link, a control{% empty %}No
+`{% section "Agents" counts=agents lede="..." %}body{% aside %}a line, a link, a control{% empty %}No
 agent has connected yet.{% foot %}How to read the body.{% endsection %}` is a titled part of a
 page: a `<section>` labeled by its heading. Its head stands on the page: the heading with its count
 standing in it, the lede under it and the aside beside it. Its body follows in the frame. After
@@ -1641,6 +1642,10 @@ their own padding. Prose, facts and the empty line sit in the frame's padding. W
 draws its empty part as the empty state's line, followed by the link that fills it when
 `remedy_label` and `remedy_url` name one (`{% section "Receipts" remedy_label="Upload one"
 remedy_url=url %}{% empty %}No receipts.{% endsection %}`), and with neither it draws nothing.
+
+Its count is of what it holds: `counts` takes the rows themselves (a list, a table's `things`), never
+their number, so the heading cannot say more or fewer than the body shows. `noun` words the count
+where the number alone would not say what it counts (`counts=groups noun="image"`, "3 images").
 
 `more_label` and `more_url` end the aside with the quiet link to the whole of what the section
 shows part of ("View Estate", "All runs"), after a dot when the aside says something too, never a

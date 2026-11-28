@@ -40,7 +40,7 @@
     {% endnotice %}
   {% endif %}
   {% if scan_rows %}
-    {% section "Playbooks" count=scan_rows|length %}
+    {% section "Playbooks" counts=scan_rows.things %}
       {% data_table scan_rows %}
     {% endsection %}
   {% endif %}

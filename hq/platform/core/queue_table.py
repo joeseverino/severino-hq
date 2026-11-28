@@ -60,7 +60,7 @@ def by_domain(context: Any, groups: Iterable[Any], where: Where, *, titled: bool
         Group(
             group["label"] if titled else "",
             tuple(_entries(context, group["entries"], where)),
-            count=len(group["items"]),
+            counted=True,
             href=group.get("url") or "",
         )
         for group in groups
@@ -93,6 +93,7 @@ def _family(context: Any, entry: Mapping[str, Any], family: str, away: Any) -> R
         actions=tuple(remedies(context, entry["lead"])),
         put_away=away,
         folds=family,
+        heads=True,
         data={"queue-family": ""},
     )
 

@@ -54,13 +54,13 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% endwith %}
 
 {% if controller.waiting %}
-{% section "Pending" count=controller.waiting|length %}
+{% section "Pending" counts=controller.waiting %}
   {% data_table pending %}
 {% endsection %}
 {% endif %}
 
 {% if controller.standing.known %}
-{% section "Readings" count=sight.rows|length %}
+{% section "Readings" counts=sight.rows %}
   {% if sight.never != sight.rows|length %}
   {% data_table sight.table %}
   {% endif %}

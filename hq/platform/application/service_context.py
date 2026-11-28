@@ -102,10 +102,10 @@ class ServiceSection:
             raise ValueError("ServiceSection actions holds one entry for each record.")
 
     @property
-    def count(self) -> int:
-        """How many rows it holds."""
+    def things(self) -> tuple[Any, ...]:
+        """What its rows show, which its heading counts."""
 
-        return self.groups[0].count if self.history else len(self.records)
+        return self.groups[0].things if self.history else self.records
 
     @property
     def groups(self) -> tuple[HistoryGroup, ...]:
@@ -148,7 +148,7 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
     found = []
     for resolve in SECTIONS:
         section = resolve(service, project)
-        if section is not None and section.count:
+        if section is not None and section.things:
             found.append(section)
     return tuple(found)
 

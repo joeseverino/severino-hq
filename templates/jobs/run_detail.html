@@ -39,5 +39,5 @@ press, approval and merge that set it going, linking the whole chain.
 {% if evidence.raw_readings %}{% section "Raw data" fold=True %}<pre tabindex="0">{{ evidence.raw_readings }}</pre>{% endsection %}{% endif %}
 </div>
 {% endpartialdef %}
-{% if events %}{% section events_heading count=events.0.count fold=True %}{% history_table events_heading events %}{% foot %}Every row in the <a href="{{ events_url }}">audit log</a>{% endsection %}{% endif %}
+{% if events %}{% section events_heading counts=events.0.things fold=True %}{% history_table events_heading events %}{% foot %}Every row in the <a href="{{ events_url }}">audit log</a>{% endsection %}{% endif %}
 {% endblock %}

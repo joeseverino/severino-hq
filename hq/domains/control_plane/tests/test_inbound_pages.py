@@ -67,7 +67,6 @@ class EventsPageTests(TestCase):
             taken = self.client.get(reverse("control_plane:events")).context["taken"]
 
         group = next(group for group in taken.groups if group.label == "Example")
-        self.assertEqual(group.count, 3)
         self.assertEqual(
             [tuple(cell.text for cell in row.cells[:3]) for row in group.rows],
             [

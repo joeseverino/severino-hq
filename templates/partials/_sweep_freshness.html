@@ -43,7 +43,7 @@ records. Each state, its tone and its age are `credential_sight.standing`'s.
     something looks wrong, not on every visit, and thirty rows of it push the
     page's own content off a phone.
     {% endcomment %}
-    {% section "Last read" count=inventory|length fold=True css="sweep" %}
+    {% section "Last read" counts=inventory fold=True css="sweep" %}
       {% facts layout="band" %}
         {% for snapshot in inventory %}
           {% if not snapshot.read %}

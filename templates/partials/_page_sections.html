@@ -1,6 +1,6 @@
 {% comment %}Each of `sections` (ServiceSection) whose `spans_row` is the one given (its Part's rules).{% endcomment %}
 {% for section in sections %}{% if section.spans_row == spans_row %}
-{% section section.label id=section.id count=section.count fold=section.folded more_label=section.more_label more_url=section.more_url %}
+{% section section.label id=section.id counts=section.things fold=section.folded more_label=section.more_label more_url=section.more_url %}
   {% if section.history %}
   {% history_table section.label section.groups hide_who=section.hide_who %}
   {% else %}

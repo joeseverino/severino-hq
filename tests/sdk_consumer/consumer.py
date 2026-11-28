@@ -371,7 +371,7 @@ def a_section(hosts: int) -> None:
     ui.SectionPart("Hosts", foot=("Counted daily.",))  # type: ignore[arg-type]
     ui.SectionPart("Hosts", head=True)  # type: ignore[arg-type]
     ui.SectionPart("Hosts", moment="2026-11-01")  # type: ignore[arg-type]
-    ui.SectionPart("Hosts", count=1.5)  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", counts=3)  # type: ignore[arg-type]
     ui.SectionPart("Hosts", template=("example/_hosts.html",))  # type: ignore[arg-type]
 
 

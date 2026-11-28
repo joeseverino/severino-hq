@@ -48,7 +48,7 @@ def sections_for(machine, *, principal: Principal) -> tuple[ServiceSection, ...]
     with projection_scope():
         for resolve in SECTIONS:
             section = resolve(machine, principal=principal) if resolve in _READ_BY else resolve(machine)
-            if section is not None and section.count:
+            if section is not None and section.things:
                 found.append(section)
     return tuple(found)
 

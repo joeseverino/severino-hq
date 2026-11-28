@@ -16,7 +16,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
   {% if posture.unread %}
-    {% section "Not read" count=posture.unread fold=True lede="Checks HQ could not read, and why" %}
+    {% section "Not read" counts=tables.unread.things fold=True lede="Checks HQ could not read, and why" %}
         {% data_table tables.unread %}
     {% endsection %}
   {% endif %}
@@ -161,7 +161,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% section "Request" %}
         {% data_table tables.read %}
         {% if request_path.unread_headers %}
-          {% section "Not read" count=request_path.unread_headers|length fold=True %}
+          {% section "Not read" counts=request_path.unread_headers fold=True %}
             {% data_table tables.declined %}
           {% endsection %}
         {% endif %}

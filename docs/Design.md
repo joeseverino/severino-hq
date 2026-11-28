@@ -397,7 +397,7 @@ in Python. A measured zero is 0; the missing mark is for no value. The value tag
 refused as any template of the host or an extension loads.
 
 A bare figure counting what a heading heads (`.count`) stands in that
-heading after its words (`{% section "Readings" count=n %}`), and the same
+heading after its words (`{% section "Readings" counts=readings %}`), and the same
 in a summary, a group row and a tab. Never in parentheses, and never alone
 at the far end of a `.section-head`, cut off from the words it counts; what
 stands there is the section's aside, a line about it in the same quiet voice,

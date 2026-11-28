@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% card element="div" %}{% facts layout="band" size="large" items=example_metrics label="Notes summary" %}{% endcard %}
-{% section "Notes" id="example-notes" count=notes.rows|length %}
+{% section "Notes" id="example-notes" counts=notes.rows %}
   {% data_table notes %}
   {% list kind="prose" numbered=True %}<li>An example note is looked up in the registry.</li><li>Its entries are listed beside it.</li>{% endlist %}
 {% endsection %}

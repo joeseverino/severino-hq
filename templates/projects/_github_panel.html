@@ -100,7 +100,7 @@ reading; nothing here calls GitHub.
   {% include "projects/_updates.html" %}
 
   {% if repo.pull_rows %}
-    {% section "Open pull requests" count=repo.pull_rows|length %}
+    {% section "Open pull requests" counts=repo.pull_rows %}
       {% include "partials/_record_list.html" with rows=repo.pull_rows label="Open pull requests" only %}
     {% endsection %}
   {% endif %}

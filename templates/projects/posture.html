@@ -6,18 +6,18 @@ what is not met. A check met everywhere is a word in one closing line.
 {% block page %}
 {% if repositories %}
   {% if unmet %}
-    {% section "Failing" count=unmet|length %}
+    {% section "Failing" counts=unmet %}
     {% include "partials/_work_queue.html" with items=unmet grouped=True here=True only %}
     {% aside %}{% include "partials/_work_queue.html#refresh" with items=unmet only %}
     {% endsection %}
   {% endif %}
 
-  {% section "By repository" count=repositories|length %}
+  {% section "By repository" counts=repositories %}
   {% data_table postures %}
   {% endsection %}
 
   {% if everywhere %}
-    {% section "Passing everywhere" count=everywhere|length fold=True %}
+    {% section "Passing everywhere" counts=everywhere fold=True %}
       {% list kind="prose" %}{% for check in everywhere %}<li>{{ check.label }}</li>{% endfor %}{% endlist %}
     {% endsection %}
   {% endif %}

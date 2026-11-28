@@ -32,15 +32,17 @@ SECTION_STATES = {
     # option of the tag comes with an entry here (test_catalog's source check).
     "bare": Example('{% section "Example notes 2" %}<p>An example line of prose in the frame.</p>{% endsection %}'),
     "full": Example(
-        '{% section "An example heading long enough to need the row" count="12 example hosts" id="example-hosts"'
+        '{% section "An example heading long enough to need the row" counts=hosts noun="host" id="example-hosts"'
         ' css="example" data_example="example"'
         ' lede="An example lede, the line that says what the section holds." %}'
-        "<p>An example line of prose in the frame.</p>"
+        "<p>{{ hosts|join:', ' }}</p>"
         '{% aside %}<span class="pill tone-neutral">Example state</span>'
-        ' <a class="btn ghost compact" href="/example/">Example action</a>{% endsection %}'
+        ' <a class="btn ghost compact" href="/example/">Example action</a>{% endsection %}',
+        {"hosts": tuple(f"example-{number:02}" for number in range(1, 13))},
     ),
     "empty": Example(
-        '{% section "Example agents" count=0 %}{% empty %}No example agent has connected yet.{% endsection %}'
+        '{% section "Example agents" counts=agents %}{% empty %}No example agent has connected yet.{% endsection %}',
+        {"agents": ()},
     ),
     # An empty line with the link that fills it, as a record with no receipt draws it.
     "empty-remedy": Example(
@@ -59,7 +61,7 @@ SECTION_STATES = {
     ),
     # A table whose region carries the heading's name, as a list's sections draw one.
     "table": Example(
-        '{% section "Example hosts 2" count=2 %}{% data_table hosts %}{% aside %}<span>Example source</span>'
+        '{% section "Example hosts 2" counts=hosts.things %}{% data_table hosts %}{% aside %}<span>Example source</span>'
         "{% endsection %}",
         lambda: {
             "hosts": table("Example hosts 2", ("Name", "State"), ("example-01", "Online"), ("example-02", "Online"))
@@ -85,8 +87,10 @@ SECTION_STATES = {
         lambda: {"hosts": table("Example hosts 3", ("Name",), ("example-01",))},
     ),
     "fold": Example(
-        '{% section "Example readings" count=3 fold=True lede="An example lede of a folded section."'
-        " %}<p>An example line behind the fold.</p>{% aside %}<span>Example source</span>{% endsection %}"
+        '{% section "Example readings" counts=readings fold=True lede="An example lede of a folded section."'
+        " %}{% for reading in readings %}<p>{{ reading }}</p>{% endfor %}{% aside %}<span>Example source</span>"
+        "{% endsection %}",
+        {"readings": ("An example reading.", "Another example reading.", "A third example reading.")},
     ),
     "fold-open": Example(
         '{% section "Example names" fold=True open=True %}{% data_table names %}{% endsection %}',
@@ -115,8 +119,9 @@ SECTION_STATES = {
         },
     ),
     "more": Example(
-        '{% section "Example renewals" count=1 more_label="View example renewals" more_url="/example/" %}'
-        "<p>An example line of prose in the frame.</p>{% endsection %}"
+        '{% section "Example renewals" counts=renewals more_label="View example renewals" more_url="/example/" %}'
+        "{% for renewal in renewals %}<p>{{ renewal }}</p>{% endfor %}{% endsection %}",
+        {"renewals": ("An example renewal.",)},
     ),
     # A drawing as a figure, its head the caption: the heading, the line that
     # says what it shows, and its legend beside them.
@@ -130,10 +135,14 @@ SECTION_STATES = {
     # first line its lead, kept with its head wherever a column ends.
     "lead": Example(
         '<div style="columns: 12rem 2; max-inline-size: 26rem">'
-        '{% section "Example lane" count=4 %}<p>Example two</p><p>Example three</p><p>Example four</p>'
-        "{% lead %}<p>Example one</p>{% endsection %}"
-        '{% section "Another example lane" count=2 %}<p>Example six</p>'
-        "{% lead %}<p>Example five</p>{% endsection %}</div>"
+        '{% section "Example lane" counts=lane %}{% for name in lane|slice:"1:" %}<p>{{ name }}</p>{% endfor %}'
+        "{% lead %}<p>{{ lane.0 }}</p>{% endsection %}"
+        '{% section "Another example lane" counts=other %}<p>{{ other.1 }}</p>'
+        "{% lead %}<p>{{ other.0 }}</p>{% endsection %}</div>",
+        {
+            "lane": ("Example one", "Example two", "Example three", "Example four"),
+            "other": ("Example five", "Example six"),
+        },
     ),
     "fold-empty": Example(
         '{% section "Example dismissed" fold=True open=True %}{% empty %}Nothing example is dismissed.{% endsection %}'
@@ -143,7 +152,7 @@ SECTION_STATES = {
     # by the stack gap, after prose and after a list of rows alike.
     "nested-rows": Example(
         '{% section "Example repository 2" %}<p>An example line about the repository.</p>'
-        '{% section "Example pull requests" count=2 %}{% include "partials/_record_list.html" %}{% endsection %}'
+        '{% section "Example pull requests" counts=rows %}{% include "partials/_record_list.html" %}{% endsection %}'
         '{% section "Example workflows" %}<p>Example build, example test</p>{% endsection %}'
         "{% endsection %}",
         lambda: {
@@ -165,8 +174,9 @@ SECTION_STATES = {
     # draws it: part of the card's frame, its head with no rule or inset.
     "in-card": Example(
         "{% card %}<p>An example line about the card.</p>"
-        '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
-        '{% aside %}<span class="pill tone-neutral">Example state</span>{% endsection %}{% endcard %}'
+        '{% section "Example preview" counts=lines %}{% for line in lines %}<p>{{ line }}</p>{% endfor %}'
+        '{% aside %}<span class="pill tone-neutral">Example state</span>{% endsection %}{% endcard %}',
+        {"lines": ("An example line in the inner section.", "Another example line.")},
     ),
     # A reading as a folded section, open: its long lines wrap in the frame and
     # only its height scrolls.

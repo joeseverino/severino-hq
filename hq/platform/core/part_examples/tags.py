@@ -708,7 +708,13 @@ ROW_GROUP = Example(
         "table": DataTable(
             "Example groups",
             (TableColumn("Host"),),
-            groups=(tables.Group("Example group", (tables.Row((Cell("example-host"),)),), count=3),),
+            groups=(
+                tables.Group(
+                    "Example group",
+                    (tables.Row((Cell("example-host-01"),)), tables.Row((Cell("example-host-02"),))),
+                    counted=True,
+                ),
+            ),
         )
     },
 )
@@ -820,7 +826,7 @@ def _every_kind() -> DataTable:
             tables.Group(
                 "Example group",
                 (head, row("example-host-02", folded="example-fold"), rest, blank, marked),
-                count=4,
+                counted=True,
                 id="example-group",
                 data={"example": "group"},
             ),
