@@ -113,7 +113,7 @@ def _section() -> Part:
         `{{ part }}`. The part is the head, the frame and the spacing between, so a page states the
         content and never the spacing, the frame or the count's look.
         """,
-        classes=("section-aside", "section-body", "section-head", "section-lead", "section-lede", "section-line"),
+        classes=("section-aside", "section-body", "section-head", "section-lead", "section-lede"),
         pieces=("partials/_section_head.html",),
         partial=SECTION_PARTIAL,
         about="A titled part of a page in its frame, its head on the page and its body in the frame.",
