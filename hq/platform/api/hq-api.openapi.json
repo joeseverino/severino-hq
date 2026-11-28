@@ -190,6 +190,7 @@
               "steps.standing.tone",
               "steps.standing.live",
               "steps.standing.note",
+              "steps.standing.stated",
               "steps.standing.seconds",
               "steps.standing.percent",
               "steps.standing.url",
@@ -203,6 +204,7 @@
               "steps.parts.standing.tone",
               "steps.parts.standing.live",
               "steps.parts.standing.note",
+              "steps.parts.standing.stated",
               "steps.parts.standing.seconds",
               "steps.parts.standing.percent",
               "steps.parts.standing.url",
@@ -29610,6 +29612,10 @@
             "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
             "type": "string"
           },
+          "stated": {
+            "description": "What the work's own author said of how it ended, as written; empty when it said nothing.",
+            "type": "string"
+          },
           "tone": {
             "description": "The tone a page colors that label in; empty while nothing was asked.",
             "type": "string"
@@ -29625,6 +29631,7 @@
           "tone",
           "live",
           "note",
+          "stated",
           "seconds",
           "percent",
           "url"
@@ -29652,6 +29659,9 @@
           },
           "state": {
             "$ref": "#/components/schemas/StandingAnswer/properties/state"
+          },
+          "stated": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/stated"
           },
           "tone": {
             "$ref": "#/components/schemas/StandingAnswer/properties/tone"

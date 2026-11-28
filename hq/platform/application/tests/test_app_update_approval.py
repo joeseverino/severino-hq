@@ -35,6 +35,8 @@ CONTROLLER = "controller-example"
 WORKER = "worker-example"
 HEAD = "f" * 40
 MERGED = "c" * 40
+# A failed task's message as a playbook may write it, with the record it held.
+STOPPED = "The host did not apply it: {'apps': [{'project': 'app', 'result': 'failed'}]}"
 PERSON = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 AGENT = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
 # The task a preview stops on when the host refuses the start, and what it says.
@@ -432,7 +434,8 @@ class ApproveUpdateTests(TestCase):
     def test_a_merge_whose_apply_fails_is_applied_at_main_in_one_press(self):
         self.merged()
 
-        self.worked(success=False, events=stopped("Start the pull unit", "The pull unit failed."))
+        # The playbook's own words, however a machine wrote them.
+        self.worked(success=False, events=stopped("Start the pull unit", STOPPED))
 
         standing = self.standing()
         # The apply is the person's to press again, at main.
@@ -446,10 +449,10 @@ class ApproveUpdateTests(TestCase):
 
         # Its card keeps how it went, the run's page named by its standing.
         (card,) = [item for item in queued() if "app" in named(item, "Container")]
-        run, said = [value for label, value in card.evidence if label == "Apply"]
+        run, *said = [value for label, value in card.evidence if label == "Apply"]
         self.assertEqual(run.url, standing.url)
         self.assertIn("Failed", run.label)
-        self.assertIn("The pull unit failed.", said)
+        self.assertIn(STOPPED, said)
         self.assertEqual(self.client.post(apply.url, {"__retry_key": "example-apply"}).status_code, 302)
         again = self.applies().last()
         self.assertEqual((again.input["parameters"], again.input["hosts"]), ({"revision": MERGED}, [APP]))

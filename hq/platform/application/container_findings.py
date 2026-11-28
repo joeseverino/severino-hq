@@ -242,7 +242,8 @@ def _standing(state: UpdateState) -> tuple[Fact, ...]:
         return ()
     said = step.standing
     lead = declared_link(said.label, said.url) if said.url else ended(said.label)
-    return tuple((step.title, said) for said in (lead, *([ended(said.note)] if said.note else [])))
+    note = (ended(said.note),) if said.note else ()
+    return tuple((step.title, each) for each in (lead, *note, *((said.stated,) if said.stated else ())))
 
 
 def _held_back(standing: ImageStanding, plan: Plan | None) -> str:

@@ -29,6 +29,7 @@ lazy from hq.platform.core.web_refusals import refusal_response
 from .describe import Describe, listed
 from .moments import duration
 from .projection import read_once
+from .quoted import Quoted
 from .record_errors import Sentence, worded
 from .routes import reverse
 from .ui import button_classes, ended
@@ -56,6 +57,8 @@ REFRESHING = "Refreshing…"
 REFRESHED = "Refreshed just now."
 NEWER_READING = "A newer reading is in."
 SHOW_NEWER = "Show the reading"
+# What work whose author said nothing of how it ended states.
+UNSTATED = Quoted("")
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
 
@@ -68,6 +71,9 @@ class StandingAnswer(TypedDict):
     tone: Annotated[str, Describe("The tone a page colors that label in; empty while nothing was asked.")]
     live: Annotated[bool, Describe("Whether the work is still under way.")]
     note: Annotated[str, Describe("What the work is doing, or how it ended, in a sentence.")]
+    stated: Annotated[
+        str, Describe("What the work's own author said of how it ended, as written; empty when it said nothing.")
+    ]
     seconds: Annotated[int, Describe("How long ago the work was asked for, in whole seconds; 0 when it was not.")]
     percent: Annotated[int | None, Describe("How far along the work is, where it knows; null where it does not.")]
     url: Annotated[str, Describe("The work's own page: a playbook run's or a scan's; empty where it has none.")]
@@ -99,6 +105,9 @@ class Standing:
     word: str = ""
     # The work's own page, where it has one.
     url: str = ""
+    # What its author said of how it ended (a playbook's failed task), as
+    # written: beside ``note``, never in it.
+    stated: Quoted = UNSTATED
 
     def __post_init__(self) -> None:
         # Every caller says how its work stands through here, so a sentence
@@ -139,7 +148,13 @@ class Standing:
 
         since = timezone.now() - timedelta(seconds=said["seconds"]) if said["seconds"] else None
         return cls(
-            said["state"], said["note"], since=since, percent=said["percent"], word=said["label"], url=said["url"]
+            said["state"],
+            said["note"],
+            since=since,
+            percent=said["percent"],
+            word=said["label"],
+            url=said["url"],
+            stated=Quoted(said["stated"]),
         )
 
     def as_json(self) -> StandingAnswer:
@@ -149,6 +164,7 @@ class Standing:
             "tone": self.tone,
             "live": self.live,
             "note": self.note,
+            "stated": self.stated,
             "seconds": self.seconds,
             "percent": self.percent,
             "url": self.url,

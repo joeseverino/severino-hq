@@ -91,9 +91,11 @@ class Step:
 
     @property
     def detail(self) -> str:
-        """Its sentence, then who told HQ of it while an event says more than the last read."""
+        """Its sentence and what its work said, then who told HQ of it while an event says more than the last read."""
 
-        return dotted(self.standing.note, f"told by {provider_label(self.by)}" if self.told else "")
+        return dotted(
+            self.standing.note, self.standing.stated, f"told by {provider_label(self.by)}" if self.told else ""
+        )
 
     @property
     def link(self) -> EntityLink | None:
