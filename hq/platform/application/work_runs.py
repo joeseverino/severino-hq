@@ -27,7 +27,7 @@ lazy from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
-from .automation_runs import CHECK, PREVIEW, capability_name, run_title
+from .automation_runs import CHECK, capability_name, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
@@ -372,38 +372,27 @@ def _job_title() -> Case:
 
 
 def _run_title() -> Collate:
-    """The run's playbook by its title, ``run_title`` of a procedure no longer
-    adopted, or any other operation's action in words (a scan's among them),
-    as SQL. Case-blind, so the list sorts by it as it reads."""
+    """``run_title`` of a run, a preview's included, or any other operation's
+    action in words (a scan's among them), as SQL. Case-blind, so the list
+    sorts by it as it reads."""
 
-    operation = KT("input__operation")
-    titled = (
-        When(Exact(operation, Value(playbook)), then=Value(title))
-        for playbook, title in automation_adoption.playbook_titles().items()
-        if title
-    )
-    unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
-    run = Case(
-        *titled,
-        default=unadopted,
-        output_field=CharField(),
-    )
+    operation, titles = KT("input__operation"), automation_adoption.playbook_titles()
+
+    def runs(check: bool) -> Case:
+        titled = (
+            When(Exact(operation, Value(playbook)), then=Value(run_title(playbook, titles, check=check)))
+            for playbook in titles
+        )
+        unadopted = Concat(Value(run_title("", {}, check=check)), operation, output_field=CharField())
+        return Case(*titled, default=unadopted, output_field=CharField())
+
+    run = Case(When(Q(**{f"input__{CHECK}": True}), then=runs(True)), default=runs(False), output_field=CharField())
     acted = (
         When(action=action, then=Value(action.label))
         for action in OperationRequest.Action
         if action != OperationRequest.Action.RUN
     )
     return Collate(Case(*acted, default=run, output_field=CharField()), "NOCASE")
-
-
-def _shown_title(kind: str, title: str, *, check: bool = False) -> str:
-    """The work ``kind`` names as a page draws it: its playbook's title as the
-    author wrote it (``quoted.Quoted``), which SQL's copy of it
-    (``_run_title``) is not, else ``title``; a run in check mode
-    (``check``) as a preview of it."""
-
-    shown = automation_adoption.playbook_titles().get(operation_of(kind)) or title
-    return f"{PREVIEW.title}: {shown}" if check else shown
 
 
 def _run_kind() -> Case:
@@ -497,9 +486,10 @@ def _kinds() -> list[WorkKind]:
         .values_list("named", "title", "seen")
         .order_by()
     )
+    titles = automation_adoption.playbook_titles()
     # Two runs of a kind made in the same instant are both its latest; one names it.
     latest = {
-        named: WorkKind(named, _shown_title(named, title), seen)
+        named: WorkKind(named, run_title(operation, titles) if (operation := operation_of(named)) else title, seen)
         for named, title, seen in jobs.union(runs, all=True).order_by()
     }
     return sorted(latest.values(), key=lambda found: found.title.casefold())
@@ -765,12 +755,9 @@ def _run_row(
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
-        title=_shown_title(
-            kind := _kind_of(operation.action, str(asked.get("operation") or "")),
-            title,
-            check=asked.get(CHECK) is True,
-        ),
-        kind=kind,
+        # As the author wrote it (``quoted.Quoted``), which SQL's copy is not.
+        title=str(operation) if operation.action == OperationRequest.Action.RUN else title,
+        kind=_kind_of(operation.action, str(asked.get("operation") or "")),
         state=seen.value,
         word=word,
         tone=tone,

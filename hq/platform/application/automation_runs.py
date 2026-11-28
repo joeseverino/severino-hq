@@ -115,12 +115,14 @@ def runs_procedure(name: str) -> bool:
     return name.startswith("automation.") and name.endswith(".run")
 
 
-def run_title(operation_id: str, titles: Mapping[str, str]) -> str:
+def run_title(operation_id: str, titles: Mapping[str, str], *, check: bool = False) -> str:
     """A procedure's run in words, as its command's heading and button and a
     list of work say it: its playbook's title among ``titles``
-    (``automation_adoption.playbook_titles``), else Run and its id."""
+    (``automation_adoption.playbook_titles``), else Run and its id; a run in
+    check mode as a preview of it."""
 
-    return titles.get(operation_id) or f"{OperationRequest.Action.RUN.label} {operation_id}"
+    title = titles.get(operation_id) or f"{OperationRequest.Action.RUN.label} {operation_id}"
+    return f"{PREVIEW.title}: {title}" if check else title
 
 
 def resource_key(operation_id: str) -> str:

@@ -76,16 +76,3 @@ class OrderTests(WorkRunsTestCase):
         with mock.patch(titles, return_value={}):
             (row,) = self.listed()
         self.assertIn(RESTART, row.title)
-
-    def test_a_preview_is_called_a_preview_of_its_playbook(self):
-        """A run in check mode, on every list of work."""
-
-        self.run_of(APP, check=True)
-        with mock.patch(
-            "hq.platform.application.automation_adoption.playbook_titles", return_value={RESTART: "Restart"}
-        ):
-            (row,) = self.listed()
-            (machine_row,) = runs_on(APP)
-        self.assertTrue(row.title.startswith("Preview"), row.title)
-        self.assertIn("Restart", row.title)
-        self.assertEqual(machine_row.title, row.title)

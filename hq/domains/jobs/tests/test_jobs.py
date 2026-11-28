@@ -450,6 +450,7 @@ class JobsListRunsTests(TestCase):
     def test_every_run_and_scan_is_listed_beside_the_jobs(self):
         from hq.platform.application.resources import every_item
         from hq.platform.application.security import web_principal
+        from hq.platform.application.work_runs import seen_as_runs
 
         rows = every_item("work", principal=web_principal(self.owner))
 
@@ -459,6 +460,16 @@ class JobsListRunsTests(TestCase):
         )
         self.assertTrue(self.scans().exists())
         self.assertTrue(any(row["source"] == "job" for row in rows))
+        # Each run is shown and sorted by its record's title, a preview told apart from a run.
+        shown = {row["id"]: row["title"] for row in rows}
+        sorted_by = dict(seen_as_runs(self.runs()).values_list("pk", "title"))
+        for asked in self.runs():
+            with self.subTest(run=str(asked)):
+                self.assertEqual((shown[str(asked.pk)], sorted_by[asked.pk]), (str(asked), str(asked)))
+        previews = {asked.input["operation"]: str(asked) for asked in self.runs(input__check=True)}
+        self.assertTrue(previews)
+        for asked in self.runs(input__operation__in=previews).exclude(input__check=True):
+            self.assertNotEqual(str(asked), previews[asked.input["operation"]])
 
     def test_a_state_is_drawn_as_a_status_in_its_tone(self):
         page = self.listed(state=Job.State.RUNNING)

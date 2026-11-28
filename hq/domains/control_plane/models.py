@@ -23,9 +23,10 @@ from hq.platform.core.rules import Rule, has_text, one_of, singleton
 from hq.platform.core.stored_json import StoredJSONField
 lazy from hq.domains.control_plane.provider_adapters import INBOUND
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+lazy from hq.platform.application import automation_adoption
 lazy from hq.platform.application.approval_review import title as approval_title
-lazy from hq.platform.application.automation_adoption import adopted_procedures, playbook_titles
-lazy from hq.platform.application.automation_runs import run_title
+lazy from hq.platform.application.automation_adoption import adopted_procedures
+lazy from hq.platform.application.automation_runs import CHECK, run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance_refresh import _panel_names
 lazy from hq.platform.application.security import subject_parts
@@ -683,7 +684,10 @@ class OperationRequest(TimestampedModel):
     def __str__(self) -> str:
         # A run and a scan by the title Jobs and their own pages give them.
         if self.action == self.Action.RUN:
-            return run_title(str((self.input or {}).get("operation") or ""), playbook_titles())
+            asked = self.input or {}
+            return run_title(
+                str(asked.get("operation") or ""), automation_adoption.playbook_titles(), check=asked.get(CHECK) is True
+            )
         if self.action == self.Action.SCAN:
             return self.get_action_display()
         return f"{self.get_action_display()}: {self.resource.key}"
