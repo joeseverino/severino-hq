@@ -101,6 +101,12 @@ class SearchDefinition:
             return ""
         return " ".join(str(getattr(instance, self.snippet_field, "") or "").split())
 
+    def listed(self, instance: Model) -> bool:
+        """Whether a match on ``instance`` is a result: a row kept only as
+        history is none."""
+
+        return True
+
     def url(self, instance: Model) -> str:
         # Django leaves get_absolute_url for a model to define or not.
         return instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else ""

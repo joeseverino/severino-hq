@@ -302,6 +302,9 @@ def list_managed_resources(*, limit: int = 50, kind: str | None = None) -> dict[
     resources = ManagedResource.objects.all()
     if kind:
         resources = resources.filter(kind=kind)
+    sourced = [name for name, provider in PROVIDERS.items() if provider.sourced is not None]
+    retired = [each.key for each in resources.filter(kind__in=sourced) if PROVIDERS[each.kind].retired(each)]
+    resources = resources.exclude(key__in=retired)
     # Read once for the whole page: asked per row, where each forwards is a
     # query budget that grows with the estate.
     machines, targets = declared_machines(), delivery_targets()

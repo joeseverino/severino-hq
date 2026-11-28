@@ -321,6 +321,8 @@ def adopted(person: Principal) -> None:
     AdoptedCatalog.objects.filter(proposal_id=scan.result["proposal"]).update(
         created_at=adopted_at, updated_at=adopted_at
     )
+    # Each procedure's record was written by that adoption.
+    ManagedResource.objects.filter(kind=OPERATION_KIND).update(created_at=adopted_at, updated_at=adopted_at)
     # A seed's transaction has not committed, so this process reads what it adopted now.
     catch_up()
 
@@ -642,10 +644,6 @@ def runs(
     changes = [manifest for manifest in supplied if manifest.effect.changes]
     if changes:
         _held(changes[-1], server, agent, owner)
-    # Each procedure's record was written when it was first asked for.
-    for record in ManagedResource.objects.filter(kind=OPERATION_KIND):
-        first_ask = record.operations.order_by("created_at").values_list("created_at", flat=True).first()
-        ManagedResource.objects.filter(pk=record.pk).update(created_at=first_ask)
 
 
 def _held(manifest, host, agent, owner) -> None:

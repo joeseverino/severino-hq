@@ -142,7 +142,9 @@ OPERATION = ProviderSpec(
     name=lambda spec: str(spec.get("operation", "")),
     # It arrives with its adopted catalog, so nobody adds one from the picker.
     created_from="automation",
-    removal_note=lambda spec: f"HQ forgets {ended(spec.get('operation', 'this playbook'))} A new run records it again.",
+    removal_note=lambda spec: (
+        f"HQ forgets {ended(spec.get('operation', 'this playbook'))} HQ records it again at its next read while it is adopted."
+    ),
     unobserved_reason="Each run reports what it found.",
 )
 

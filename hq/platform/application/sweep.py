@@ -25,7 +25,7 @@ from .inventory import (
 )
 from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
-lazy from . import problems
+lazy from . import automation_adoption, problems
 lazy from .automation_sources import SCAN, scan_when_due
 lazy from .cadence import ask
 lazy from .first_seen import look_due
@@ -66,6 +66,9 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
         # Run after the loop above so a zone adopted moments ago already counts,
         # otherwise its records would wait a whole sweep for no reason.
         adopted += adopt_discovered_records(principal=principal)["adopted"]
+    # The adopted playbooks' records, as the catalog adopted now says.
+    with bindings.audit_operation(operation=automation_adoption.ADOPT, principal=principal):
+        automation_adoption.derive_records(principal=principal)
     # Every repository the GitHub App reads is a project, from the reading
     # just stored, and a playbook source whose branch moved is scanned again.
     if REPOSITORY_KIND in payload:

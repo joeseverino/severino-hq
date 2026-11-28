@@ -172,7 +172,7 @@ def _global_items(
             "snippet": _snippet(definition, record, query, snippet),
         }
         for object_id, snippet in hits
-        if (record := records.get(object_id)) is not None
+        if (record := records.get(object_id)) is not None and definition.listed(record)
     ]
 
 

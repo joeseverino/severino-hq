@@ -523,7 +523,14 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
         self.assertIsNone(standing().pending, "nothing of it waits")
 
     def test_adopting_a_removed_playbook_removes_it_and_leaves_the_rest(self):
+        from hq.domains.control_plane.models import ManagedResource
+
+        def records() -> set[str]:
+            return set(ManagedResource.objects.filter(kind="automation.operation").values_list("key", flat=True))
+
         self.adopt(self.proposed(catalog(procedure("check"), procedure("other"))))
+        # Each adopted playbook has its record before anything runs it.
+        self.assertEqual(records(), {"automation-example-check", "automation-example-other"})
         newer = self.proposed(catalog(procedure("check"), revision=SECOND))
         self.assertEqual(self.waiting(newer), {"example.other": "removed"})
 
@@ -531,6 +538,7 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
 
         self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
         self.assertIsNone(capability_spec("automation.example.other.run"))
+        self.assertEqual(records(), {"automation-example-check"})
 
     def test_a_playbook_hq_cannot_run_is_refused_alone_and_adopting_all_adopts_the_ones_beside_it(self):
         self.adopt(self.proposed(catalog(procedure("check"))))
