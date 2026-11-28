@@ -33,7 +33,7 @@ class Why(StrEnum):
     OTHER_MACHINE = "It runs on a machine HQ has no way to reach."
     FIRST_INSTALL = "HQ is not set up there yet, so nothing of HQ's can run it."
     CHANNEL = "It restores the way HQ reaches the machine, so HQ cannot do it through that way."
-    NOT_GRANTED = "HQ is not granted this on the machine."
+    NOT_GRANTED = "HQ is not granted this."
 
 
 @dataclass(frozen=True, slots=True)

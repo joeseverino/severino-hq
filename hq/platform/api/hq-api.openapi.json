@@ -32450,7 +32450,7 @@
           "It runs on a machine HQ has no way to reach.",
           "HQ is not set up there yet, so nothing of HQ's can run it.",
           "It restores the way HQ reaches the machine, so HQ cannot do it through that way.",
-          "HQ is not granted this on the machine."
+          "HQ is not granted this."
         ],
         "type": "string"
       },
