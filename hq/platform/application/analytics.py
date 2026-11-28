@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 from django.db import transaction
 from django.db.models import Max, Sum
 from django.utils import timezone
-from django.utils.text import capfirst
 
 from hq.domains.analytics.contracts import (
     BACKFILL_DAYS,
@@ -27,6 +26,7 @@ from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 
 from .cadence import sweep_interval
+from .display_words import Code
 from .moments import stamp_day
 from .projection import page_of
 lazy from .projection import iso
@@ -288,6 +288,14 @@ def coverage_summary(*, days: int = DEFAULT_WINDOW_DAYS) -> dict[str, Any]:
     }
 
 
+# The breakdowns whose values are Cloudflare's own identifiers for a country,
+# a device type, a browser or an operating system: shown as it sends them, in
+# code, never worded as a sentence.
+IDENTIFIED = frozenset(
+    (RumDaily.Dimension.COUNTRY, RumDaily.Dimension.DEVICE, RumDaily.Dimension.BROWSER, RumDaily.Dimension.OS)
+)
+
+
 def breakdown(dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int | None = 50) -> list[dict[str, Any]]:
     """One breakdown over a window, biggest first, every row of it with no ``limit``.
 
@@ -303,7 +311,8 @@ def breakdown(dimension: str, *, days: int = DEFAULT_WINDOW_DAYS, limit: int | N
         .annotate(pageviews=Sum("pageviews"), visits=Sum("visits"))
         .order_by("-pageviews", "value")[:limit]
     )
-    return [dict(row) for row in rows]
+    kind = Code if dimension in IDENTIFIED else str
+    return [{**row, "value": kind(row["value"])} for row in rows]
 
 
 def _traffic_for_locations(
@@ -556,7 +565,7 @@ OVERVIEW_DIMENSIONS = (
 )
 
 
-def _with_share(rows: list[dict[str, Any]], dimension: str = "") -> list[dict[str, Any]]:
+def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Each row as ``partials/_share_list.html`` draws it: its label, its
     figure and its size relative to the largest.
 
@@ -568,8 +577,8 @@ def _with_share(rows: list[dict[str, Any]], dimension: str = "") -> list[dict[st
     largest = max((row["pageviews"] for row in rows), default=0)
     return [
         {
-            # Cloudflare names a device type in lowercase, beside browsers it names as their makers do.
-            "label": capfirst(row["value"]) if dimension == RumDaily.Dimension.DEVICE else row["value"],
+            "label": row["value"],
+            "code": isinstance(row["value"], Code),
             "figure": f"{row['pageviews']:,}",
             "share": round(row["pageviews"] * 100 / largest, 1) if largest else 0,
         }
@@ -623,7 +632,7 @@ def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, A
             {
                 "dimension": dimension,
                 "label": RumDaily.Dimension(dimension).label,
-                "rows": _with_share(breakdown(dimension, days=days, limit=limit), dimension),
+                "rows": _with_share(breakdown(dimension, days=days, limit=limit)),
             }
             for dimension in OVERVIEW_DIMENSIONS
         ],

@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('control_plane', '0080_run_events_list_their_warnings'),
+        ("control_plane", "0081_runs_hold_their_outcome"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='providerconnection',
-            name='cause',
+            model_name="providerconnection",
+            name="cause",
             field=models.CharField(blank=True, max_length=500),
         ),
         migrations.AddField(
-            model_name='providerinventory',
-            name='detail',
+            model_name="providerinventory",
+            name="detail",
             field=models.CharField(blank=True, max_length=500),
         ),
     ]

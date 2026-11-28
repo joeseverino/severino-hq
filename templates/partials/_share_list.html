@@ -5,6 +5,7 @@ of its size against the largest row's:
   {% include "partials/_share_list.html" with rows=panel.rows only %}
 
 Each row has `label`, `figure` and `share` (0 to 100, of the largest row),
+and `code` where the label is an identifier a provider sent, drawn in code,
 drawn as `partials/_meter.html` draws a proportion. A label longer than its
 line is cut, whole on hover.
 {% endcomment %}
@@ -12,7 +13,7 @@ line is cut, whole on hover.
   {% for row in rows %}
     <li class="bar-row">
       {% include "partials/_meter.html" with value=row.share max=100 only %}
-      <span class="bar-label" title="{{ row.label }}">{{ row.label }}</span>
+      <span class="bar-label" title="{{ row.label }}">{% if row.code %}<code>{{ row.label }}</code>{% else %}{{ row.label }}{% endif %}</span>
       <span class="bar-value">{{ row.figure }}</span>
     </li>
   {% endfor %}

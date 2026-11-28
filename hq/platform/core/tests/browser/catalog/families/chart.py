@@ -96,14 +96,20 @@ ENTRIES = {
         {"matrix": matrix(), "chart": readings("Example minutes", "Minutes each day.", "Example run")},
     ),
     # Shares of the largest, ranked, in a flow of sections: a whole row, a
-    # sliver, and a label long enough to be cut on a phone.
+    # sliver, a label long enough to be cut on a phone, and identifiers in code.
     "chart/share-list": Example(
         '{% layout %}{% section "Example pages" %}{% include "partials/_share_list.html" %}'
         '{% endsection %}{% section "Example sources" %}{% include "partials/_share_list.html" with rows=few %}'
+        '{% endsection %}{% section "Example browsers" %}{% include "partials/_share_list.html" with rows=named %}'
         "{% endsection %}{% endlayout %}",
         {
             "rows": SHARES,
             "few": ({"label": "example.org", "figure": "48", "share": 100},),
+            # A provider's own identifiers, drawn in code.
+            "named": (
+                {"label": "ChromeMobile", "figure": "30", "share": 100, "code": True},
+                {"label": "MobileSafari", "figure": "12", "share": 40, "code": True},
+            ),
         },
     ),
 }
