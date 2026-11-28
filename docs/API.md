@@ -827,8 +827,10 @@ object naming none of its fields fails `fragments.said_once`, in development
 and in every test that builds it, the composed suite's included, so an
 extension's declarations are held too. A playbook's inputs are an operator's
 data, so an input several playbooks declare in the same words is written once
-by the builder (`_Builder.playbook_inputs`), and a served document is never
-refused: what it says wrong is logged as `api.document.refused`.
+by the builder (`_Builder.playbook_inputs`), two playbooks whose ids are one
+name in it are refused at adoption, and a served document is never refused:
+what it says wrong, or a part claiming a name another holds, is logged as
+`api.document.refused` (`fragments.said_wrong`).
 
 Each answer names the requests it leads to as OpenAPI links, derived in one
 place (`_Builder.links`) from what the registries say of it: a page links to

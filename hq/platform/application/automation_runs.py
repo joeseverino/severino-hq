@@ -37,7 +37,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import REVISION_INPUT, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
-from .contracts import Effect
+from .contracts import Effect, pascal
 from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
@@ -221,7 +221,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
         ),
     ]
     return make_dataclass(
-        f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
+        f"Run{pascal(manifest.id)}",
         fields,
         bases=(RunCommand,),
         frozen=True,

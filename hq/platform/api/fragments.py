@@ -1,37 +1,20 @@
 """What the API document's builder shares with its parts: its build failure,
-its component names, and the reading of the whole that refuses a document
-saying a thing twice, or a part of it not at all."""
+and the reading of the whole that refuses a document saying a thing twice, or
+a part of it not at all."""
 
 import json
 import logging
-import re
 from collections import Counter
 from collections.abc import Iterator
 from typing import Any
 
 from django.conf import settings
-from django.utils.text import capfirst
 
 logger = logging.getLogger("severino.api")
 
 
 class OpenAPIError(RuntimeError):
     """A route the document cannot describe; fails the build, not the client."""
-
-
-def pascal(name: str) -> str:
-    """``name``'s words run together, each capitalized: ``asset.create`` is ``AssetCreate``."""
-
-    return "".join(capfirst(part) for part in re.split(r"[^0-9A-Za-z]+", name) if part)
-
-
-def camel(name: str) -> str:
-    """``name`` as ``pascal`` writes it, its first letter lowercased: ``asset.create`` is ``assetCreate``."""
-
-    said = pascal(name)
-    # An identifier, camel-cased, is no label.
-    # ast-grep-ignore: first-letter-lowered-by-lower-first
-    return said[:1].lower() + said[1:]
 
 
 # Values the document carries rather than says.
@@ -152,15 +135,20 @@ def _refused(document: dict[str, Any]) -> Iterator[str]:
             yield f"The tag {tag['name']} says nothing of what it holds."
 
 
+def said_wrong(said: str) -> None:
+    """A part of the API document built wrong: where a developer sees it, it
+    fails the build; a served document is never refused, since a part derived
+    from what an operator holds (a playbook's inputs) has no declaration in HQ
+    to fix, so ``said`` is logged."""
+
+    if settings.SEVERINO_STRICT_PRINT:
+        raise OpenAPIError(said)
+    logger.error(said, extra={"event": "api.document.refused"})
+
+
 def said_once(document: dict[str, Any]) -> dict[str, Any]:
-    """``document``, refused where a developer sees it when it says a thing
-    twice or a part of it not at all. Served, it is never refused: a part
-    derived from what an operator holds (a playbook's inputs) has no
-    declaration in HQ to fix, so what it says wrong is logged."""
+    """``document``, said wrong (``said_wrong``) when it says a thing twice or a part of it not at all."""
 
     if problems := list(_refused(document)):
-        said = f"{len(problems)} parts of the API document are said wrong, first: {problems[0]}"
-        if settings.SEVERINO_STRICT_PRINT:
-            raise OpenAPIError(said)
-        logger.error(said, extra={"event": "api.document.refused"})
+        said_wrong(f"{len(problems)} parts of the API document are said wrong, first: {problems[0]}")
     return document

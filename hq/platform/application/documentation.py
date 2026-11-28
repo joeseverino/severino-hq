@@ -24,6 +24,7 @@ from hq.platform.core.models import AuditLog
 
 from .answer_fields import CallMessage, LinkedAssets, LinkedProjects, PageUrl, RecordedExpenses, UpdatedAt
 from .command_fields import Day, Describe, Names, NonEmpty
+from .contracts import pascal
 from .entity_links import EntityLink, entity_link
 from .labels import plural
 from .projection import listing
@@ -199,8 +200,8 @@ def _entry_type(field: str, value: Any, word: str) -> TypeAliasType:
     """A manifest field's named type, which each shape taking it alike refers
     to; one a shape narrows is named with that shape's ``word``."""
 
-    camel = "".join(part.title() for part in field.split("_"))
-    for name in (f"Manifest{camel}", f"Manifest{word}{camel}"):
+    named_field = pascal(field)
+    for name in (f"Manifest{named_field}", f"Manifest{word}{named_field}"):
         named = _ENTRY_TYPES.setdefault(name, TypeAliasType(name, value))
         if named.__value__ == value:
             return named

@@ -7,7 +7,9 @@ import copy
 from collections.abc import Iterator
 from typing import Any
 
-from hq.platform.application.json_schemas import LOCAL, json_schemas, merged_definitions
+from hq.platform.application.json_schemas import LOCAL, ClashingDefinition, json_schemas, merged_definitions
+
+from .fragments import said_wrong
 
 SCHEMAS = "#/components/schemas/"
 # A component's copy for an answer a field mask cuts, suffixed as Pydantic names a mode's schema.
@@ -58,7 +60,13 @@ class Components:
         return refs
 
     def add(self, name: str, schema: dict[str, Any]) -> str:
-        merged_definitions(self.schemas, {name: schema})
+        """``schema`` kept as ``name``; where another already holds the name,
+        the first is kept and the clash said wrong (``said_wrong``)."""
+
+        try:
+            merged_definitions(self.schemas, {name: schema})
+        except ClashingDefinition as clash:
+            said_wrong(str(clash))
         return SCHEMAS + name
 
     def hoist(self, schema: dict[str, Any]) -> dict[str, Any]:

@@ -2,9 +2,9 @@
 
 from django.test import SimpleTestCase
 
-from hq.platform.application.tests.test_automation_adoption import AdoptionTestCase, catalog, procedure
+from hq.platform.application.tests.test_automation_adoption import SECOND, AdoptionTestCase, catalog, procedure
 
-from ..components import SCHEMAS
+from ..components import SCHEMAS, Components
 from ..fragments import OpenAPIError
 from ..openapi import document
 
@@ -54,8 +54,14 @@ class SaidOnceTests(SimpleTestCase):
         from ..fragments import said_once
 
         twice = _document({"A": {"properties": {"default": _NOTES}}})
-        with self.settings(SEVERINO_STRICT_PRINT=False), self.assertLogs("severino.api", "ERROR"):
+        held = Components()
+        held.add("A", _NOTES)
+        with self.settings(SEVERINO_STRICT_PRINT=False), self.assertLogs("severino.api", "ERROR") as logged:
             self.assertIs(said_once(twice), twice)
+            # Two parts claiming one name: the first is kept.
+            held.add("A", {**_NOTES, "description": "Something else."})
+        self.assertEqual(held.schemas["A"], _NOTES)
+        self.assertEqual(len(logged.records), 2)
 
 
 class OperatorDataTests(AdoptionTestCase):
@@ -71,3 +77,19 @@ class OperatorDataTests(AdoptionTestCase):
         self.assertEqual(len(alike), 1)
         self.assertEqual(schemas[alike.pop().removeprefix(SCHEMAS)]["description"], "The service.")
         self.assertEqual(schemas["ExampleOtherInputs"]["properties"]["service"]["description"], "The service it reads.")
+
+    def test_two_playbook_ids_one_name_in_the_api_are_refused_naming_both(self):
+        alike = procedure("unit.history")
+        alike["roles"][0]["argument_spec"]["options"]["service"]["description"] = "The service it reads."
+        refused = self.refused(self.adopt(self.proposed(catalog(procedure("unit_history"), alike))))
+        self.assertIn("example.unit_history", refused)
+        self.assertIn("example.unit.history", refused)
+        document()
+
+        # One adopted from an earlier commit holds the name too, while it stays.
+        self.adopt(self.proposed(catalog(procedure("unit_history"))))
+        later = self.proposed(catalog(alike, revision=SECOND))
+        answer = self.adopt(later, key="example-adopt-later", playbook="example.unit.history")
+        self.assertFalse(answer["ok"], answer)
+        self.assertIn("example.unit_history", " ".join(answer["error"]["details"]["refused"]))
+        document()

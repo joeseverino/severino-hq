@@ -35,6 +35,7 @@ from django.db.models import Model
 
 from .answer_fields import CallMessage
 from .command_fields import Names, names_of
+from .contracts import pascal
 from .describe import Describe
 from .domains import records_of
 from .host_sections import load
@@ -75,7 +76,7 @@ def saved_type(resource: str) -> Any:
 
 
 def _saved_name(records: Records) -> str:
-    return "".join(part.title() for part in records.noun.split("_")) + "Saved"
+    return pascal(records.noun) + "Saved"
 
 
 @dataclass(frozen=True, slots=True)

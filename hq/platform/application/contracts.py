@@ -5,6 +5,7 @@ from typing import override
 from urllib.parse import urlsplit
 
 from django.urls import NoReverseMatch
+from django.utils.text import capfirst
 from pydantic import BaseModel, ConfigDict
 
 from hq.platform.application.effects import Effect
@@ -14,6 +15,21 @@ from hq.platform.application.routes import reverse
 DOTTED_NAME = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$")
 DJANGO_ROUTE = re.compile(r"(?:[A-Za-z_][\w-]*:)*[A-Za-z_][\w-]*\Z")
 SCOPE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/&();-]*$")
+
+
+def pascal(name: str) -> str:
+    """``name``'s words run together, each capitalized: ``asset.create`` is ``AssetCreate``."""
+
+    return "".join(capfirst(part) for part in re.split(r"[^0-9A-Za-z]+", name) if part)
+
+
+def camel(name: str) -> str:
+    """``name`` as ``pascal`` writes it, its first letter lowercased: ``asset.create`` is ``assetCreate``."""
+
+    said = pascal(name)
+    # An identifier, camel-cased, is no label.
+    # ast-grep-ignore: first-letter-lowered-by-lower-first
+    return said[:1].lower() + said[1:]
 
 
 class Closed(BaseModel):

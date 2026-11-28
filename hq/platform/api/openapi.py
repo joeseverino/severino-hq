@@ -18,7 +18,7 @@ from django.urls import URLPattern, reverse
 
 from hq.platform.application.automation_runs import RunCommand
 from hq.platform.application.capabilities import capability_registry, command_spec, describe_capabilities
-from hq.platform.application.contracts import effect_glossary
+from hq.platform.application.contracts import camel as _camel, effect_glossary, pascal as _pascal
 from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
@@ -44,7 +44,7 @@ lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .components import SCHEMAS, Components
-from .fragments import OpenAPIError, camel as _camel, pascal as _pascal, said_once
+from .fragments import OpenAPIError, said_once
 from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 from .tags import API_TAG, Tags
 
