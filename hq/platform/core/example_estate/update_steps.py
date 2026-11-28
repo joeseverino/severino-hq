@@ -67,26 +67,20 @@ def approval(owner, ended: str) -> None:
     queued as its approval queues it and ended as its worker leaves it."""
 
     from hq.domains.control_plane.models import OperationRequest
-    from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
-    from hq.platform.application.automation_runs import CHECK
+    from hq.platform.application.app_update_approval import applier
+    from hq.platform.application.automation_runs import CHECK, resource_key
     from hq.platform.application.resource_operations import THEN, asked_fields, enqueue
     from hq.platform.application.security import web_principal
 
     update = app_update(APPS)
     repository = f"example/{APPS}"
-    # A playbook with no run waiting, since a record queues one at a time.
-    waiting = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
-    playbook = (
-        ManagedResource.objects.filter(kind=OPERATION_KIND)
-        .exclude(operations__state__in=waiting)
-        .order_by("key")
-        .first()
-    )
-    hosts = [MACHINE]
+    # The playbook the real approval previews and applies with.
+    manifest = applier()
+    playbook = ManagedResource.objects.get(key=resource_key(manifest.id))
     applies = {
-        "operation": playbook.spec["operation"],
-        "revision": playbook.spec["revision"],
-        "hosts": hosts,
+        "operation": manifest.id,
+        "revision": manifest.revision,
+        "hosts": [MACHINE],
         "correlation": f"{repository}#{update['number']}@{update['head'][:12]}",
     }
     events = [{"host": MACHINE, "task": task, "outcome": outcome, "message": said} for task, outcome, said in _REFUSED]

@@ -255,11 +255,13 @@ def _told_again(owner) -> None:
 
 
 def _approved(ended: str) -> Callable[[Any], None]:
-    """The example estate with its app update approved and ended as
-    ``ended`` says, so its container's Upgrade card draws that standing."""
+    """The example estate with the playbook that applies app updates
+    adopted, and its app update approved and ended as ``ended`` says, so its
+    container's Upgrade card draws that standing."""
 
     def seed(owner) -> None:
         _estate(owner)
+        example_estate.automation.applies_updates(web_principal(owner), (example_estate.names.MACHINE,))
         update_steps.approval(owner, ended)
 
     return seed
@@ -277,8 +279,6 @@ def _updates(on: str = "") -> Callable[[Any], None]:
     agent's approval of the DNS server's update waits for a person."""
 
     def seed(owner) -> None:
-        from hq.platform.application.security import web_principal
-
         # Declared first, so every scan the estate reports reaches it.
         if on:
             apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
