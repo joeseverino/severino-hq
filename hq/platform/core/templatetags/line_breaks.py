@@ -280,6 +280,11 @@ def _inside_last(drawn: list[str], markup: str) -> list[str]:
 # A word a value ends on that a name before it holds: one word of letters,
 # perhaps with its sentence's mark ("TXT", "pulled").
 _TAIL = re.compile(r"\w*[^\W\d_]\w*[.,;:!?]?")
+# A word a value opens on that the name after it holds: one word of letters
+# ("Deployed"), and the boxes that name opens with, a token and its first
+# hyphenated part.
+_LEAD = re.compile(r"[^\W\d_]+")
+_BOXES = re.compile(r'<span class="token">(?:<span class="whole">)?')
 # A dot between two parts, ``labels.DOT`` or one typed between two spaces, so
 # a value that holds one draws it held to the part before it either way.
 _SEPARATOR = re.compile(r"\s·\s")
@@ -288,16 +293,24 @@ _SEPARATOR = re.compile(r"\s·\s")
 def _line(value, *, sole: bool | None = None) -> list[str]:
     """``value``'s words as ``breakable`` draws them, held so that no line they
     wrap onto starts with a stray: a dot between two parts (``_SEPARATOR``)
-    stays on the line of the part before it, and a word a value ends on
-    after a name stays on the name's last line. Each is held inside the box before it, since a box as wide as
-    its line leaves what follows no room there; a word a name holds stays
-    outside the parts of it a cell cuts."""
+    stays on the line of the part before it, a word a value opens on before
+    a name stays on the name's first line, and a word a value ends on after a
+    name stays on the name's last line. Each is held inside the box beside it,
+    since a box as wide as its line leaves what follows no room there; a word
+    a name holds stays outside the parts of it a cell cuts."""
 
     parts = _SEPARATOR.split(str(value))
     alone = (len(parts) == 1 and not _WORDS.search(parts[0])) if sole is None else sole
     drawn: list[str] = []
     for at, part in enumerate(parts):
         words = _words(part, sole=alone)
+        opens = len(words) >= 3 and not at and words[1] == " " and _LEAD.fullmatch(words[0]) and _BOXES.match(words[2])
+        if opens:
+            # Inside the name's first box, before the text a cell cuts there:
+            # held whole, the name could only drop to the next line and leave
+            # the word alone. The name then opens the value (`data-led`).
+            boxes = opens.group().replace('"token"', '"token" data-led', 1)
+            words = [f"{boxes}{words[0]}\xa0{words[2][opens.end() :]}", *words[3:]]
         if len(words) >= 3 and 'class="token"' in words[-3] and _TAIL.fullmatch(words[-1]) and words[-2] == " ":
             # In the token's own box, after the parts a cell cuts; in a
             # phrase whose last part is a box of its own (`.whole`), inside

@@ -95,7 +95,8 @@ pre code { background: transparent; padding: 0; color: inherit; }
    What a row's toggle opens or cuts (its open line, its gist) lays out its
    own identifiers (figures.css, cuts.css), except code in a sentence there.
    One behind a lead (`.led`) runs as text: a box held whole could only drop
-   to the next line and leave the lead alone. */
+   to the next line and leave the lead alone. The word a value opens on is
+   held inside the box after it instead (`data-led`, line_breaks). */
 :is(code, .token, .whole):not(pre *, .led *, tr.row-detail *, .row-gist *),
 :is(tr.row-detail, .row-gist) :is(p, li:not(:is(.stack-list, .code-list) > li), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
@@ -120,9 +121,6 @@ pre code { background: transparent; padding: 0; color: inherit; }
    the words it holds ask nothing more. */
 code :is(.token, .whole) { --share: initial; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
-/* In a cell, a token among words (no `data-sole`) flows as they do, so the
-   word before it keeps its line; only its hyphenated parts stay whole. */
-:is(td, th) .token:not([data-sole]) { display: inline; }
 /* Where the filter lets a token break (line_breaks._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
    reader hears. */
