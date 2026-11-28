@@ -1877,10 +1877,15 @@ type ConnectionProvider string
 
 // ConnectionRecord One connection the controller carries and what its probe found.
 type ConnectionRecord struct {
-	Carried       bool   `json:"carried,omitempty"`
+	Carried bool `json:"carried,omitempty"`
+
+	// Cause A failed probe's cause in its own text, kept apart from the detail; empty for none.
+	Cause         string `json:"cause,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
-	Detail        string `json:"detail"`
-	Endpoint      string `json:"endpoint"`
+
+	// Detail What the probe found, or HQ's words for why it failed.
+	Detail   string `json:"detail"`
+	Endpoint string `json:"endpoint"`
 
 	// ExpiresAt Credential expiry the probe read, when it read one.
 	ExpiresAt string `json:"expires_at,omitempty"`
@@ -1952,6 +1957,9 @@ type ControllerReport struct {
 	// Catalog What a scan of an automation source found; an operation other than a scan reports none.
 	Catalog    *SourceCatalog `json:"catalog,omitempty"`
 	Conditions []Condition    `json:"conditions,omitempty"`
+
+	// Detail A refused operation's cause in its own text, kept apart from the message; empty for none.
+	Detail string `json:"detail,omitempty"`
 
 	// Message How the work ended, in a line; a run says only what its report leaves out, beside its outcome.
 	Message            string `json:"message,omitempty"`
@@ -3154,6 +3162,8 @@ type Refusal string
 
 // RefusedOperationOutput The line an apply pass prints for one operation a provider refused.
 type RefusedOperationOutput struct {
+	// Detail The refusal's cause in its own text, kept apart from the message; empty for none.
+	Detail    string `json:"detail,omitempty"`
 	Message   string `json:"message"`
 	OK        bool   `json:"ok"`
 	Operation string `json:"operation"`

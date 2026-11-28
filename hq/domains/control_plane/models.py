@@ -231,6 +231,8 @@ class ProviderConnection(TimestampedModel):
     # look like an outage every time the page loaded.
     probed = models.BooleanField(default=True)
     detail = models.CharField(max_length=500, blank=True)
+    # A failed probe's cause in its own text, kept apart from ``detail``.
+    cause = models.CharField(max_length=500, blank=True)
     # Why the last probe failed: a refusal, the address answering as something
     # other than the API, or no answer. Blank when it answered or the cause is
     # unknown.

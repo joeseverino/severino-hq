@@ -93,6 +93,8 @@ class ConnectionReading:
     # it. A connection can answer every probe and refuse every operation, and
     # `reachable` only ever describes the probe.
     failing_steps: tuple[tuple[str, str], ...] = ()
+    # A failed probe's cause in its own text, behind ``detail``.
+    cause: str = ""
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
@@ -297,6 +299,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             reachable=row.reachable,
             probed=row.probed,
             detail=row.detail,
+            cause=row.cause,
             observed_at=row.reported_at or row.observed_at,
             probed_at=(row.observed_at if row.reported_at and row.reported_at > row.observed_at else None),
             machines=_machines_reached(row, known, located),

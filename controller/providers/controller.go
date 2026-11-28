@@ -240,7 +240,8 @@ func (c *Controller) Connections(ctx context.Context, carry []string) ([]runtime
 		default:
 			result, err := probe(ctx, ref)
 			if err != nil {
-				connection.OK, connection.Detail, connection.Failure = false, runtime.ReportText(err.Error()), failureOf(err)
+				reason, cause := runtime.Said(err)
+				connection.OK, connection.Detail, connection.Cause, connection.Failure = false, runtime.ReportText(reason), runtime.ReportText(cause), failureOf(err)
 			} else {
 				connection.Detail, connection.Reaches = result.Detail, result.Reaches
 				if result.ExpiresAt != nil {

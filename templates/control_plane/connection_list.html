@@ -25,7 +25,7 @@
     {% for result in connections.posture.results %}
       {% section result.check.label data_connection_control=result.check.id %}
         {% if result.reading.evidence %}<p><strong>{{ result.reading.evidence }}</strong></p>{% endif %}
-        {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail }}{% endmuted %}{% endif %}
+        {% if result.reading.detail %}{% muted element="p" title=result.reading.cause %}{{ result.reading.detail }}{% endmuted %}{% endif %}
       {% aside %}{% status result.answer tone=result.tone %}
       {% endsection %}
     {% endfor %}

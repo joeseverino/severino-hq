@@ -1249,6 +1249,10 @@
             "type": "string",
             "description": "How the work ended, in a line; a run says only what its report leaves out, beside its outcome."
           },
+          "detail": {
+            "type": "string",
+            "description": "A refused operation's cause in its own text, kept apart from the message; empty for none."
+          },
           "catalog": {
             "$ref": "#/components/schemas/SourceCatalog",
             "description": "What a scan of an automation source found; an operation other than a scan reports none.",
@@ -1557,7 +1561,12 @@
             "type": "boolean"
           },
           "detail": {
-            "type": "string"
+            "type": "string",
+            "description": "What the probe found, or HQ's words for why it failed."
+          },
+          "cause": {
+            "type": "string",
+            "description": "A failed probe's cause in its own text, kept apart from the detail; empty for none."
           },
           "reaches": {
             "type": "array",
@@ -2512,6 +2521,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "detail": {
+            "type": "string",
+            "description": "The refusal's cause in its own text, kept apart from the message; empty for none."
           }
         },
         "required": [

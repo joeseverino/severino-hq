@@ -668,6 +668,7 @@ def record_connections(payload: list[dict[str, Any]], *, admitted: Admitted) -> 
                 "reachable": connection["ok"],
                 "probed": connection["probed"],
                 "detail": connection["detail"][:500],
+                "cause": connection.get("cause", "")[:500],
                 # Why a probe failed is kept only for one that did.
                 "failure": "" if connection["ok"] else connection.get("failure", ""),
                 "manages": connection["manages"],
@@ -696,6 +697,7 @@ def record_connections(payload: list[dict[str, Any]], *, admitted: Admitted) -> 
             reachable=False,
             failure="",
             detail="Not in HQ's last read.",
+            cause="",
         )
     return {
         "ok": True,

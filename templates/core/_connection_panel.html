@@ -125,7 +125,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                 {% check_rung state=result.reading.standing evidence=result.reading.evidence data_connection_layer=result.check.id %}
                   {{ result.check.label }}
                 {% body %}
-                  {% if result.reading.detail %}{% muted element="p" %}{{ result.reading.detail }}{% endmuted %}{% endif %}
+                  {% if result.reading.detail %}{% muted element="p" title=result.reading.cause %}{{ result.reading.detail }}{% endmuted %}{% endif %}
                   {% if result.reading.rules %}
                     {% list %}{% for rule in result.reading.rules %}<li><code>{{ rule }}</code></li>{% endfor %}{% endlist %}
                   {% endif %}

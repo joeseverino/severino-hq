@@ -63,6 +63,8 @@ class ControllerReport:
     status: dict[str, Any] = field(default_factory=dict)
     conditions: list[dict[str, Any]] = field(default_factory=list)
     message: str = ""
+    # A refused operation's cause in its own text, kept apart from ``message``.
+    detail: str = ""
     # What a scan found (``SourceCatalog``); no other operation reports one.
     catalog: dict[str, Any] | None = None
     # What a run's playbook stated beside its result (``RunStated``); no other
@@ -823,7 +825,7 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
     _finish(
         operation,
         report,
-        {"message": report.message, "status": report.status, "conditions": report.conditions},
+        {"message": report.message, "detail": report.detail, "status": report.status, "conditions": report.conditions},
     )
 
     resource.conditions = stamped(resource.conditions, report.conditions)
