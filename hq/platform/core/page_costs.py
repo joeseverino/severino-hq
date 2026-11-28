@@ -14,6 +14,7 @@ site's own host.
 from collections import Counter
 from collections.abc import Mapping
 from html.parser import HTMLParser
+from http import HTTPStatus
 from typing import Any, NamedTuple, override
 from urllib.parse import urljoin
 
@@ -133,7 +134,7 @@ def _answer(client: Client, page: str):
 
     response = client.get(page, secure=True)
     for _ in range(_HOPS):
-        if response.status_code // 100 != 3 or "Location" not in response:
+        if not HTTPStatus(response.status_code).is_redirection or "Location" not in response:
             break
         # A path is a page of HQ's; an address naming a host leaves it.
         if not link_url(page := urljoin(page, response["Location"])).startswith("/"):

@@ -15,6 +15,7 @@ import types
 # Each loads where it is first used, once the count has started, and HQ loads it too.
 lazy import asyncio
 lazy import json
+lazy from http import HTTPStatus
 lazy from pathlib import Path
 lazy from urllib.parse import urlsplit
 
@@ -26,7 +27,6 @@ BOOT = "boot"
 PASS = "pass"  # noqa: S105 - a phase's name, no credential
 # What a server answers once it is ready to serve, which the count of boot ends on.
 READY = "/health/ready/"
-REDIRECTS = {301, 302, 303, 307, 308}
 # More than the longest chain of redirects within HQ a navigation entry takes.
 HOPS = 5
 # Each path boot never takes, by the modules that serve it: a sign-in through the OIDC provider,
@@ -133,7 +133,7 @@ async def landing(application, page: str, cookie: str) -> dict[str, int | str]:
 
     for _ in range(HOPS):
         answer, location = await ask(application, page, cookie)
-        if answer not in REDIRECTS:
+        if not HTTPStatus(answer).is_redirection:
             return {"status": answer, "to": ""}
         to = urlsplit(location)
         if to.scheme or to.netloc or not to.path.startswith("/"):

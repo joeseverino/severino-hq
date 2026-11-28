@@ -10,6 +10,7 @@ import http.client
 import statistics
 from collections.abc import Collection, Mapping
 from contextlib import ExitStack, closing
+from http import HTTPStatus
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
@@ -21,7 +22,6 @@ from tools.perf import parse
 WARM = 2
 # A page that sends a reader on, such as a list that opens its one record, is measured where it
 # lands, within a few hops of the same server.
-REDIRECTS = frozenset({301, 302, 303, 307, 308})
 HOPS = 5
 # Installed before any of a page's own script, in every document a visit
 # loads: first contentful paint, the largest contentful paint so far (the
@@ -139,7 +139,7 @@ class Server:
             took = parse.server_time(response.getheader("Server-Timing", ""))
             spent += [] if took is None else [took]
             location = urlsplit(response.getheader("Location", ""))
-            if response.status not in REDIRECTS or location.netloc or not location.path.startswith("/"):
+            if not HTTPStatus(response.status).is_redirection or location.netloc or not location.path.startswith("/"):
                 break
             page = location._replace(scheme="", netloc="").geturl()
         return Answer(response.status, sum(spent) if spent else None, body)

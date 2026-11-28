@@ -17,6 +17,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from functools import cache
 from html import unescape
+from http import HTTPStatus
 from types import MappingProxyType
 from typing import Any, override
 from urllib.parse import parse_qsl, urljoin, urlsplit
@@ -60,7 +61,6 @@ _STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: re
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
-_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
@@ -116,7 +116,7 @@ def landing(ask: Callable[[str], Any], address: str) -> str:
     of pages names the page a reader reaches, which is the one a gate draws and perf measures."""
 
     seen = [address]
-    while (response := ask(address)).status_code in _REDIRECTS:
+    while HTTPStatus((response := ask(address)).status_code).is_redirection:
         to = urlsplit(urljoin(address, response.headers["Location"]))
         if to.scheme or to.netloc:
             raise Redirected(f"{seen[0]} redirects out of HQ, to {to.geturl()}")
