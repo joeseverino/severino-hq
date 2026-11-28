@@ -73,19 +73,24 @@
   // place moves the address before it asks for its answer, so the address
   // bar is not the page itself.
   const shownAt = new URL(location.href);
-  // What a control that asks for a reading again (ask.js: a row's Refresh, a
-  // page's readings as it opens) is answered with: how the work stands, idle,
-  // saying why.
+  // A control that asks for a reading again (ask.js: a row's Refresh, a
+  // dashboard panel's, a page's readings as it opens) is answered as HQ
+  // answers it, with the page it was asked on: the saved copy, each control
+  // of that ask, found by its id, drawn idle and saying why (`data-ask-said`).
+  // Its address may be a region's own too (a panel's Refresh posts to the
+  // strip), whose saved copy is no answer to an ask. The copy is marked as
+  // text: only fragment.js may parse markup (its Trusted Types policy).
   const READ_AGAIN = "The demo can't read it again: this is as it was saved.";
-  const readsAgain = (url) => [...document.querySelectorAll("[data-ask-button], form[data-ask-auto]")]
-    .some((control) => (control.formAction || control.action) === url.href);
-  // The addresses an ask was just pressed at, each until its post is
-  // answered: one may be a region's own address too (a dashboard panel's
-  // Refresh posts to the strip), whose saved copy is no answer to an ask.
-  const pressed = new Set();
-  const readAgain = () => new Response(JSON.stringify({ state: "idle", live: false, note: READ_AGAIN }), {
-    headers: { "Content-Type": "application/json" },
-  });
+  const asksAt = (url) => [...document.querySelectorAll("[data-ask][id]")].filter((control) =>
+    [...control.querySelectorAll("[data-ask-button], form[data-ask-auto]")]
+      .some((asker) => (asker.formAction || asker.action) === url.href));
+  const readAgain = async (url) => {
+    let page = await (await plainFetch(demo.served)).text();
+    asksAt(url).forEach((control) => {
+      page = page.replace(` id="${control.id}"`, ` id="${control.id}" data-ask-said="${READ_AGAIN}"`);
+    });
+    return new Response(page, { headers: { "Content-Type": "text/html" } });
+  };
   window.fetch = async (input, init = {}) => {
     // A request is asked by a string, a URL (the command center's) or a Request.
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
@@ -96,7 +101,7 @@
     // answered as it was drawn: nothing changed, and an empty answer would
     // empty the region.
     if (method !== "GET" && !partial) return new Response("", { status: 200 });
-    if (partial && method !== "GET" && pressed.delete(url.href)) return readAgain();
+    if (partial && method !== "GET" && asksAt(url).length) return readAgain(url);
     if (partial) {
       // This page is being replaced by its address's saved copy
       // (demo-theme.js), and a request it sent would be cut off with it: it
@@ -122,9 +127,7 @@
       // region is found in; else nothing, and the link it enhanced is followed.
       const copy = found.variants[demo.key(url, found)];
       if (copy) return plainFetch(copy);
-      // A post with no saved answer (a page asking for its readings as it
-      // opens) is answered with nothing changed, as above.
-      if (method !== "GET" && readsAgain(url)) return readAgain();
+      // Any other post with no saved answer is answered with nothing changed, as above.
       if (method !== "GET") return new Response("", { status: 200 });
       if (url.search) return new Response("", { status: 404 });
     }
@@ -236,10 +239,7 @@
   // hears it, the form is never marked as sending.
   document.addEventListener("submit", async (event) => {
     if (event.defaultPrevented) return;
-    if (event.submitter?.matches("[data-ask-button]")) {
-      pressed.add(event.submitter.formAction);
-      return;
-    }
+    if (event.submitter?.matches("[data-ask-button]")) return;
     if ((event.target.getAttribute("method") || "get").toLowerCase() === "get") return;
     event.preventDefault();
     // A button's formAction is the page's own address when it names none.

@@ -393,27 +393,23 @@ class DemoSiteTests(unittest.TestCase):
     def test_asking_for_a_reading_again_says_the_demo_cannot(self):
         # A row's Refresh and a dashboard panel's say so where each was
         # pressed, never that the request failed or as a message.
-        from playwright.sync_api import sync_playwright
+        from playwright.sync_api import expect, sync_playwright
 
         with sync_playwright() as playwright:
             browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
             page.goto(self.origin + "/infrastructure/connections/", wait_until="networkidle")
+            # A locator, found again once the press is answered with the control drawn again.
             row = page.locator("tbody [data-ask]").first
             row.locator("[data-ask-button]").click()
-            note = row.locator("[data-ask-note]")
-            page.wait_for_function("note => note.textContent.trim()", arg=note.element_handle())
-            self.assertIn("demo", note.inner_text())
+            expect(row.locator("[data-ask-note]")).to_contain_text("demo")
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
             page.goto(self.origin + "/", wait_until="networkidle")
             refresh = page.locator("[data-glance] [data-ask]").first
             panel = refresh.locator("xpath=ancestor::*[@popover][1]")
             page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
-            # Held, since the strip is drawn again once the ask is answered.
-            note = refresh.locator("[data-ask-note]").element_handle()
             refresh.locator("[data-ask-button]").click()
-            page.wait_for_function("note => note.textContent.trim()", arg=note)
-            self.assertIn("demo", note.text_content())
+            expect(refresh.locator("[data-ask-note]")).to_contain_text("demo")
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, at the panel")
             browser.close()
 
