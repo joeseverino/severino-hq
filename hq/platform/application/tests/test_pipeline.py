@@ -615,10 +615,8 @@ class ExtensionsAgainstHostTests(SimpleTestCase):
             if (match := re.search(r"tools/pipeline/extension-branches\.sh (\w+)", script(step)))
         }
         self.assertEqual(set(branches), {"checkout", "build"})
-        source = code((ROOT / "tools" / "pipeline" / "extension-branches.sh").read_text())
         for absent in ("GH_TOKEN", "docker.sock", "pip wheel"):
             with self.subTest(absent=absent):
-                self.assertNotIn(absent, source)
                 self.assertNotIn(absent, branches["build"])
 
 

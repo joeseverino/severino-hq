@@ -4,7 +4,10 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import override
 
+from django.forms.utils import flatatt
 from django.http import HttpResponse
+
+lazy from hq.platform.core import live
 
 _VOID = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
 # The spans `|breakable` writes for a token, which are no edge in its text.
@@ -174,6 +177,12 @@ def followed(html: Page) -> list[str]:
     """The live set each region of the page that follows work is asked for again on."""
 
     return [element.attrs["data-fragment-live"] for element in select(html, "data-fragment-live")]
+
+
+def drawn_live(name: str) -> str:
+    """The hooks a region drawn from the read set ``name`` carries (``core.live.region``), as its tag writes them."""
+
+    return flatatt({f"data-{key}": value for key, value in live.region(name).items()})
 
 
 def elements(html: Page, tag: str) -> list[Element]:

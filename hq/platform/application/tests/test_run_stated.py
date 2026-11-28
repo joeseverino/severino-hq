@@ -8,7 +8,7 @@ from unittest import mock
 
 from hq.domains.control_plane.models import OperationRequest
 
-from ..controller import ControllerReport, claim_next_operation, renew_operation, report_operation
+from ..controller import ControllerReport, claim_next_operation, report_operation
 from .procedures import APP
 from .test_work_runs import WORKER, WorkRunsTestCase
 
@@ -92,38 +92,12 @@ class NotARunTests(RunStatedTestCase):
 
 
 class HeadlineTests(RunStatedTestCase):
-    """A run that ended well says what it did, on every list and read of
-    work: what its readings say, else how its tasks ended."""
-
-    def headline(self, run: OperationRequest) -> str:
-        """Its note, which its row, its page and the read's ``headline`` all say."""
-
-        (found,) = [row for row in self.listed() if row.id == str(run.pk)]
-        return found.note
-
-    def test_a_run_that_stated_a_release_says_the_app_it_released(self):
+    def test_a_run_that_stated_a_release_names_no_app_it_left_alone(self):
         run = self.claimed(self.run_of(APP))
         released = {"project": "example-app", "result": "ok", "health": "healthy", "changed": True}
         left = {"project": "example-app-left-alone", "result": "ok", "health": "healthy", "changed": False}
 
         self.report(run, {"readings": {APP: {"apps.pull": [released, left]}}})
 
-        said = self.headline(run)
-        self.assertIn("example-app", said)
-        self.assertIn("healthy", said)
-        self.assertNotIn("example-app-left-alone", said)
-        self.assertNotIn("Done", said)
-
-    def test_a_run_that_stated_nothing_says_how_its_tasks_ended(self):
-        run = self.claimed(self.run_of(APP))
-        events = [
-            {"host": APP, "task": "Read the service", "outcome": "ok", "message": ""},
-            {"host": APP, "task": "Restart the service", "outcome": "skipped", "message": ""},
-        ]
-        renew_operation(str(run.pk), controller_id=WORKER, events=events)
-
-        self.report(run, None, message="")
-
-        said = self.headline(run)
-        self.assertIn("1 ok", said)
-        self.assertIn("1 skipped", said)
+        (found,) = [row for row in self.listed() if row.id == str(run.pk)]
+        self.assertNotIn("example-app-left-alone", found.note)

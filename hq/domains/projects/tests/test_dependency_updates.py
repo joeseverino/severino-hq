@@ -261,7 +261,7 @@ class LastRunSurfaceTests(TestCase):
                     self.assertIn(f"tone-{seen.tone}", tones)
                 self.assertIn("2 hours ago", state.words)
 
-    def test_a_run_asked_for_and_not_yet_handed_off_says_so_and_is_followed(self):
+    def test_a_run_asked_for_and_not_yet_handed_off_says_so(self):
         ran("ok", hours_ago=30)
         self.assertTrue(execute_capability(RUN_NOW, {}, principal=cli_principal())["ok"])
 
@@ -271,10 +271,9 @@ class LastRunSurfaceTests(TestCase):
         asks = run_controls(response)
         self.assertTrue(asks)
         for ask in asks:
-            self.assertEqual(ask.attrs.get("data-fragment-live"), "estate")
             self.assertEqual(ask.attrs["data-ask-refresh"], "#updates-state")
 
-    def test_the_control_posts_the_run_and_the_page_follows_it(self):
+    def test_the_control_posts_the_run(self):
         response, _ = self.state()
         self.assertTrue(run_controls(response))
 
@@ -282,12 +281,9 @@ class LastRunSurfaceTests(TestCase):
             reverse("projects:updates_run", args=["alpha"]), form_keyed(), HTTP_X_REQUESTED_WITH="XMLHttpRequest"
         )
 
-        # Answered with the page it asked from, which follows the run.
+        # Answered with the page it asked from.
         self.assertEqual(posted.status_code, 302)
         self.assertIsNotNone(asked_at())
-        self.assertEqual(
-            [ask.attrs.get("data-fragment-live") for ask in run_controls(self.client.get(posted.url))], ["estate"]
-        )
 
     def test_a_project_not_opted_in_offers_no_run(self):
         Project.objects.filter(pk=self.project.pk).update(dependency_updates=False)

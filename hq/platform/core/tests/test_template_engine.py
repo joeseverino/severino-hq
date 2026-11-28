@@ -43,17 +43,23 @@ class DrawnTests(SimpleTestCase):
 
 
 class LiteralTests(SimpleTestCase):
-    """A literal a filter refuses fails as its template loads, written there
-    or handed over by an include, and one it takes loads."""
+    """A literal a filter or a tag refuses, of a value or of values together,
+    fails as its template loads, written there or handed over by an include;
+    one it takes loads."""
 
-    def test_a_literal_a_filter_refuses_fails_as_its_template_loads(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "example/page.html:2"):
-            loaded('<p>Example</p>\n<p>{{ n|counted:"newer release" }}</p>')
-
-    def test_a_literal_an_include_hands_a_filter_fails_where_it_is_included(self):
-        page = '<p>Example</p>\n{% include "example/part.html" with phrase="newer release" %}'
-        with self.assertRaisesMessage(TemplateSyntaxError, "example/page.html:2"):
-            loaded(page, part="{{ n|counted:phrase }}")
+    def test_a_literal_refused_fails_where_it_is_written(self):
+        # A filter's names the line too.
+        for source, where in (
+            ('{{ n|counted:"newer release" }}', ":2"),
+            ('{% include "example/part.html" with phrase="newer release" %}', ":2"),
+            ('{% status "Up" tone="goood" %}', ""),
+            ('{% status "Up" chip=True tone="good" %}', ""),
+            ('{% button "Open" "/example/" icon="hq-no-such-icon" %}', ""),
+            ('{% button "Example" "/example/" look="ghost" css="example-pin" %}', ""),
+            ('{% table_heading "Name" sort="name" local_sort=True %}', ""),
+        ):
+            with self.subTest(source), self.assertRaisesMessage(TemplateSyntaxError, f"example/page.html{where}"):
+                loaded(f"<p>Example</p>\n{source}", part="{{ n|counted:phrase }}")
 
     def test_a_literal_a_filter_takes_loads(self):
         page = '{{ n|counted:"newer release,newer releases" }}{% include "example/part.html" with phrase="row" %}'

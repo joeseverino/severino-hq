@@ -282,7 +282,9 @@ UPDATE = SequenceSpec(
     follow_ons={OperationRequest.Action.RUN: run_passed, OperationRequest.Action.MERGE: apply_merged},
     examples={
         "held": Example("app-updates", _HELD, PULL_REQUEST, IDLE),
+        "asked": Example("app-update-asked", _HELD, PULL_REQUEST, RUNNING),
         "opening": Example("app-update-running", _HELD, PULL_REQUEST, RUNNING),
+        "opened": Example("app-update-opened", _HELD, PULL_REQUEST, RUNNING),
         "not-opened": Example("app-update-failed", _HELD, PULL_REQUEST, FAILED),
         "checks-running": Example("app-update-checks-running", _UPDATED, CHECKS, RUNNING),
         "to-approve": Example("app-updates", _UPDATED, APPROVE, IDLE),

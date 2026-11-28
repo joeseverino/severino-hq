@@ -14,6 +14,7 @@ from hq.domains.control_plane.tests.test_moved_settings_apply import PROXY, _Est
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import cli_principal
+from hq.platform.application.tests.test_ahead import signaling
 from hq.platform.application.tests.test_cadence import swept
 from hq.platform.core import ahead, doorbell
 from hq.platform.core.testing import declare
@@ -67,15 +68,7 @@ class AnyWriterRingsTests(TransactionTestCase):
         swept(age_seconds=60)
         spec = {"domain": "app.example.com", "answer": "192.0.2.1"}
         resource = declare("example-rewrite", "adguard.rewrite", spec, observed_generation=1)
-        asked, rung = threading.Event(), threading.Event()
-        real = doorbell.ask
-
-        def ask():
-            try:
-                return real()
-            finally:
-                asked.set()
-
+        (ask, asked), rung = signaling(doorbell.ask), threading.Event()
         with (
             mock.patch.object(cadence, "_ring", side_effect=lambda _doorbell: rung.set() or True),
             mock.patch.object(doorbell, "ask", ask),

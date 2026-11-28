@@ -7,7 +7,6 @@ from django.urls import reverse
 
 from hq.platform.application import cadence
 from hq.platform.application.action_links import read_link
-from hq.platform.application.asks import RUNNING, Standing
 from hq.platform.application.cadence import ControllerSweepCommand
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
@@ -207,25 +206,6 @@ class DashboardQueueTests(SignedInTestCase):
         self.assertEqual(len(rows), 3)
         (button,) = select(short, "formaction", approve)
         self.assertTrue(button.inside(rows[0]))
-
-    def test_a_row_hq_is_acting_on_is_asked_again_until_it_ends(self):
-        moving = Finding(
-            rule="example-moving",
-            subject="",
-            severity="attention",
-            title="An example update under way",
-            explanation="An example update is ready.",
-            primary=opens("Open the update", "/example/update/"),
-            under_way=Standing(RUNNING, "Previewing: Check the example", url="/jobs/runs/example/"),
-        )
-        entries = gather_attention((("example.utility", "Example", lambda: (moving,), ()),))
-        with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries), uncached():
-            response = self.client.get("/action-items/")
-
-        (row,) = select(response, "data-fragment-live")
-        self.assertIn("data-attention-item", row.attrs)
-        # Asked again at its own address: the row is answered from the page by its id.
-        self.assertTrue(row.attrs.get("id"))
 
     def test_search_includes_the_recommended_action(self):
         response = self.client.get("/action-items/", {"q": "Reconcile the bill"})

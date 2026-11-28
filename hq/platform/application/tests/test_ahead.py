@@ -1,12 +1,15 @@
 """Derived answers asked again as their inputs change, ahead of the next request."""
 
+import itertools
 import sqlite3
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -397,6 +400,23 @@ class KeptCurrentTests(Remembering):
         self.assertEqual(len(calls), 1)
 
 
+def signaling(function: Callable[[], Any], *, calls: int = 1) -> tuple[Callable[[], Any], threading.Event]:
+    """``function``, answering as it does, and an event set once it has been
+    called ``calls`` times on any thread, which a test waits on for a call
+    another thread makes (a keeper's, a doorbell's)."""
+
+    called, counted = threading.Event(), itertools.count(1)
+
+    def signaled() -> Any:
+        try:
+            return function()
+        finally:
+            if next(counted) >= calls:
+                called.set()
+
+    return signaled, called
+
+
 class KeeperThreadTests(TransactionTestCase):
     """The thread the web application runs: woken by a commit, stopped with it."""
 
@@ -405,15 +425,9 @@ class KeeperThreadTests(TransactionTestCase):
         self.addCleanup(derivations.forget)
 
     def test_a_commit_by_any_writer_wakes_the_thread_and_the_answer_is_stored_off_the_request(self):
-        recomputed = threading.Event()
+        # The keeper's pass is the second call, after the request's.
+        readings, recomputed = signaling(_readings, calls=2)
         with declared("test.keeper.thread", reads=(READING,)) as (register, calls):
-
-            def readings() -> int:
-                # The keeper's pass is the second call, after the request's.
-                if len(calls) == 2:
-                    recomputed.set()
-                return _readings()
-
             read = register(readings)
             with projection_scope():
                 read()

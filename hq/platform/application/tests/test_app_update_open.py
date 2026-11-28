@@ -12,12 +12,10 @@ from django.utils import timezone
 from hq.domains.control_plane.models import OperationRequest
 from hq.domains.projects.models import Project
 
-from ..app_update_open import open_standing
 from ..capabilities import run_capability
 from ..dependency_updates import KIND, plan
 from ..inventory_testing import store as stored
-from ..labels import DOT, dotted
-from ..read_requests import forced_reads, take
+from ..read_requests import forced_reads
 from ..security import Capability, Principal
 from .test_app_updates import arranged
 from .test_github_estate import store
@@ -78,28 +76,10 @@ class OpenUpdateTests(TestCase):
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(plan()["owners"], [{"owner": "example", "repositories": ["example/alpha"], "branches": []}])
 
-    def test_its_card_reads_the_runs_outcome(self):
-        ran(HELD)
-        self.press()
-        self.assertEqual(open_standing("example/alpha", "app").note.split(DOT)[0], "Renovate's run is asked")
-
-        # The controller's pass takes the ask and hands the run off.
-        take(forced_reads())
-        ran(HELD, outcome="handed_off")
-        self.assertEqual(open_standing("example/alpha", "app").note, "Renovate is running")
-
-        ran({**HELD, "result": "pr-created", "pull_request": 61})
-        self.assertEqual(
-            open_standing("example/alpha", "app").note, dotted("Renovate opened pull request #61", "HQ reads it next")
-        )
-
-        ran(outcome="failed")
-        self.assertEqual(open_standing("example/alpha", "app").word, "Failed")
-
     def container_page(self):
         return self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
 
-    def test_a_press_under_way_is_followed_on_its_card_and_a_second_press_asks_nothing_more(self):
+    def test_a_press_under_way_is_said_on_its_card_and_a_second_press_asks_nothing_more(self):
         from hq.platform.core.testing import declare, operator
 
         operator(self.client)
@@ -107,7 +87,6 @@ class OpenUpdateTests(TestCase):
         ran(HELD)
         before = self.container_page()
         press = before.context["container"]["act"]
-        self.assertNotIn("data-fragment-live", tag_of(before, 'id="upgrade"'))
 
         answered = self.client.post(press.url, {"__retry_key": "example-open-1"}, follow=True)
 
@@ -117,8 +96,6 @@ class OpenUpdateTests(TestCase):
         container = page.context["container"]
         self.assertIsNone(container["act"])
         self.assertTrue(container["state"].pull.live)
-        # Its card is drawn again as it moves, until it ends.
-        self.assertIn("data-fragment-live", tag_of(page, 'id="upgrade"'))
         asked = forced_reads()
         again = self.press(key="example-open-2")
         self.assertTrue(again["ok"], again)

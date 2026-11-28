@@ -682,31 +682,19 @@ class DefaultCadenceTests(TestCase):
         self.assertTrue(recently_used(now=touched + 15 * 60))
         self.assertFalse(recently_used(now=touched + 15 * 60 + 1))
 
-    def test_somebody_arriving_after_a_quiet_spell_wakes_the_doorbell(self):
+    def test_the_marker_is_rewritten_once_a_minute_at_most_and_a_quiet_spell_ended_wakes_the_doorbell(self):
         marker = self.directory / "activity"
         marker.touch()
         long_ago = 1_000_000_000
-        for quiet, woken in ((15 * 60 + 1, True), (2 * 60, False)):
-            with self.subTest(quiet=quiet):
+        for age, rewritten, woken in ((59, False, False), (60, True, False), (15 * 60 + 1, True, True)):
+            with self.subTest(age=age):
                 os.utime(marker, (long_ago, long_ago))
                 with (
-                    mock.patch.object(cadence, "time", SimpleNamespace(time=lambda quiet=quiet: long_ago + quiet)),
+                    mock.patch.object(cadence, "time", SimpleNamespace(time=lambda age=age: long_ago + age)),
                     mock.patch.object(cadence, "wake") as wake,
                 ):
                     note_activity()
-                self.assertIs(wake.called, woken)
-
-    def test_the_marker_is_rewritten_once_a_minute_at_most(self):
-        marker = self.directory / "activity"
-        marker.touch()
-        long_ago = 1_000_000_000
-        os.utime(marker, (long_ago, long_ago))
-
-        for age, rewritten in ((59, False), (60, True)):
-            with self.subTest(age=age):
-                with mock.patch.object(cadence, "time", SimpleNamespace(time=lambda age=age: long_ago + age)):
-                    note_activity()
-                self.assertIs(marker.stat().st_mtime != long_ago, rewritten)
+                self.assertEqual((marker.stat().st_mtime != long_ago, wake.called), (rewritten, woken))
 
 
 @override_settings(SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=3600)

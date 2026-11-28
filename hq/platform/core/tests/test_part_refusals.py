@@ -141,22 +141,6 @@ class StatusRefusalTests(SimpleTestCase):
                     engines["django"].from_string(source).render({"tone": word})
 
 
-class WrittenRefusalTests(SimpleTestCase):
-    """What a tag refuses of a value, or of values together, written as
-    literals is refused as its template compiles, before any page draws it."""
-
-    def test_what_a_tag_refuses_of_its_literals_is_refused_as_the_template_compiles(self):
-        for source in (
-            '{% status "Up" tone="goood" %}',
-            '{% status "Up" chip=True tone="good" %}',
-            '{% button "Open" "/example/" icon="hq-no-such-icon" %}',
-            '{% button "Example" "/example/" look="ghost" css="example-pin" %}',
-            '{% table_heading "Name" sort="name" local_sort=True %}',
-        ):
-            with self.subTest(source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
-
-
 class SectionRefusalTests(SimpleTestCase):
     def test_a_section_written_needs_its_heading_and_a_link_to_the_rest_its_label(self):
         with self.assertRaises(TemplateSyntaxError):
