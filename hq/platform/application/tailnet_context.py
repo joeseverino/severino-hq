@@ -33,9 +33,9 @@ from .tailnet import (
     Policy,
     declaration,
     devices,
-    grant_ports,
     policy,
 )
+from .tailnet_ports import grant_ports
 from .tailnet_signers import Signer, signers
 from .topology import derive_topology
 lazy from .connection_records import PolicyRulePart, Tailnet, UnreadPart

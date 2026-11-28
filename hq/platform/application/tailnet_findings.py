@@ -3,6 +3,8 @@
 import json
 from dataclasses import dataclass
 
+from django.utils.text import get_text_list
+
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -16,7 +18,7 @@ from .finding_model import (
     per_connection,
 )
 from .finding_steps import Do, Does
-from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort, loopback_grants
+from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, loopback_grants, moved_tests
 from .tone import Tone
 from .ui import agreed, counted, counted_forms, ended
 
@@ -177,6 +179,7 @@ def _grant_reaches_only_loopback(estate: FindingEstate) -> tuple[Finding, ...]:
 
 
 def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
+    tests = moved_tests(grants)
     return Finding(
         rule=GRANT_REACHES_ONLY_LOOPBACK,
         subject=node.id,
@@ -187,48 +190,50 @@ def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
             evidence
             for item in grants
             for evidence in (
-                ("Grant", f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"),
-                *(("Port", f"{item.machine} {port.entry}, {_listens(port)}") for port in item.ports),
+                ("Grant", _whom(item)),
+                *(("Port", f"{held.machine} {port.entry}, {held.held}") for port in item.ports for held in port.held),
             )
         ),
-        fixes=tuple(step for item in grants for step in _loopback_steps(item)),
+        fixes=(
+            *(_loopback_edit(item) for item in grants),
+            *(
+                Do(
+                    ended(
+                        f"Replace the policy test for {test.get('src', '')} with this one, "
+                        f"which denies {get_text_list(list(moved), 'and')}"
+                    ),
+                    value=json.dumps(test),
+                    notes=(
+                        "Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",
+                    ),
+                )
+                for test, moved in tests
+            ),
+        ),
     )
 
 
 def _loopback_title(grants: tuple[LoopbackGrant, ...]) -> str:
     ports = [port for item in grants for port in item.ports]
-    if len(grants) == 1 and len(ports) == 1:
-        (item,), (port,) = grants, ports
-        return f"A grant opens {port.entry} on {item.machine}, which {_listens(port)}"
+    if len(ports) == 1 and len(held := ports[0].held) == 1:
+        return f"A grant opens {ports[0].entry} on {held[0].machine}, where {held[0].held}"
     return f"{counted(len(ports), 'granted port is', 'granted ports are')} bound only to loopback"
 
 
-def _listens(port: LoopbackPort) -> str:
-    return "HQ serves only on loopback" if port.hq else "every container publishing it binds to loopback"
+def _whom(item: LoopbackGrant) -> str:
+    return f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
 
 
-def _loopback_steps(item: LoopbackGrant) -> tuple[Do, ...]:
-    """The grant without the ports, then each test that accepts them with them moved to deny."""
+def _loopback_edit(item: LoopbackGrant) -> Do:
+    """The grant without the ports, every other key as written."""
 
-    whom = f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
-    fragment = item.fragment
-    edit = (
-        Do(
-            f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
+    if fragment := item.fragment:
+        return Do(
+            f"In the Tailscale admin console, open Access controls and replace the grant from {_whom(item)} "
+            "with this one.",
             value=json.dumps(fragment),
         )
-        if fragment
-        else Do(ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"))
-    )
-    tests = tuple(
-        Do(
-            "Replace the policy test that accepts the port with this one, which denies it.",
-            value=json.dumps(test),
-            notes=("Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",),
-        )
-        for test in item.tests
-    )
-    return (edit, *tests)
+    return Do(ended(f"In the Tailscale admin console, open Access controls and remove the grant from {_whom(item)}"))
 
 
 # The rules this module raises, beside the detectors that decide them.

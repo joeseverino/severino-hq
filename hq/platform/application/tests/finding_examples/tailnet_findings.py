@@ -1,8 +1,9 @@
 import json
 
-from hq.platform.core.testing import declare
+from hq.platform.core.testing import connection, declare
 
-from . import Example, Examples
+from ...finding_steps import Do
+from . import Example, Examples, Raised
 
 POLICY = "tailscale.policy"
 LOCK = "host.tailnet_lock"
@@ -40,16 +41,21 @@ def a_machine() -> None:
     declare("example-host", "machine", {"name": "example-host", "addresses": ["100.64.0.5"]})
 
 
-def loopback(*runtimes: tuple[str, dict], grants: tuple[dict, ...] = (GRANT,), **example) -> Example:
-    """The machine at 100.64.0.5, a grant to its ports, and its containers as Portainer read them."""
+def loopback(
+    *runtimes: tuple[str, dict], grants: tuple[dict, ...] = (GRANT,), tests: tuple[dict, ...] = (TEST,), **example
+) -> Example:
+    """The machine at 100.64.0.5, grants to its ports and the policy's tests, as
+    the document writes them, and its containers as Portainer read them."""
 
     return Example(
         readings={
             **policy(
                 hosts={"example-host": "100.64.0.5"},
                 grants=list(grants),
-                tests=[TEST],
-                document=json.dumps({"grants": [{**GRANT, "srcPosture": ["posture:latest"]}], "tests": [TEST]}),
+                tests=list(tests),
+                document=json.dumps(
+                    {"grants": [{**grant, "srcPosture": ["posture:latest"]} for grant in grants], "tests": list(tests)}
+                ),
                 devices=({"name": "example-host", "addresses": ["100.64.0.5"]},),
             ),
             "portainer.container": tuple(
@@ -67,7 +73,7 @@ def loopback(*runtimes: tuple[str, dict], grants: tuple[dict, ...] = (GRANT,), *
                 for name, fields in runtimes
             ),
         },
-        given=a_machine,
+        given=example.pop("given", a_machine),
         **example,
     )
 
@@ -80,11 +86,26 @@ def trusting(*trusted: str, addresses: tuple[str, ...], routes: tuple[str, ...] 
     )
 
 
-def bound(host_ip: str) -> dict:
-    return {"port_bindings": [{"container_port": "5432/tcp", "host_port": "5432", "host_ip": host_ip}]}
+def bound(host_ip: str, port: int = 5432) -> dict:
+    return {"port_bindings": [{"container_port": f"{port}/tcp", "host_port": str(port), "host_ip": host_ip}]}
+
+
+def read_on_loopback() -> None:
+    """The machine, and a connection HQ reads its database through over loopback."""
+
+    a_machine()
+    connection("adguard", "example-dns", controller_id="example-host", endpoint="http://127.0.0.1:5432")
 
 
 GRANT_5432 = {**GRANT, "ip": ["tcp:5432"]}
+# Two grants, and the one test that accepts what both open.
+FROM_MAC = {**GRANT, "ip": ["tcp:443", "tcp:5432"]}
+FROM_PHONE = {"src": ["example-phone"], "dst": ["example-host"], "ip": ["tcp:6379"]}
+ACCEPTS_BOTH = {
+    "src": "example-mac",
+    "proto": "tcp",
+    "accept": ["example-host:443", "example-host:5432", "example-host:6379"],
+}
 
 EXAMPLES = (
     Examples(
@@ -199,15 +220,62 @@ EXAMPLES = (
             loopback(
                 PROXY,
                 hq_at=("100.64.0.5",),
-                raises=("A grant opens tcp:8000 on example-host, which HQ serves only on loopback",),
+                raises=("A grant opens tcp:8000 on example-host, where Severino HQ is bound only to 127.0.0.1",),
             ),
             # A port every container binds to loopback.
             loopback(
                 PROXY,
                 ("example-db", bound("127.0.0.1")),
                 grants=({**GRANT, "ip": ["tcp:443", "tcp:5432"]},),
+                raises=("A grant opens tcp:5432 on example-host, where example-db is bound only to 127.0.0.1",),
+            ),
+            # Two grants crossing one test, a connection HQ reads over loopback
+            # naming a port without serving it beyond: each grant edited, and
+            # the test replaced once with every port it accepted denied.
+            loopback(
+                PROXY,
+                ("example-db", bound("127.0.0.1")),
+                ("example-cache", bound("127.0.0.1", 6379)),
+                grants=(FROM_MAC, FROM_PHONE),
+                tests=(ACCEPTS_BOTH,),
+                given=read_on_loopback,
                 raises=(
-                    "A grant opens tcp:5432 on example-host, which every container publishing it binds to loopback",
+                    Raised(
+                        title="2 granted ports are bound only to loopback",
+                        steps=(
+                            Do(
+                                "In the Tailscale admin console, open Access controls and replace the grant from "
+                                "example-mac to example-host with this one.",
+                                value=json.dumps(
+                                    {
+                                        "src": ["example-mac"],
+                                        "dst": ["example-host"],
+                                        "ip": ["tcp:443"],
+                                        "srcPosture": ["posture:latest"],
+                                    }
+                                ),
+                            ),
+                            Do(
+                                "In the Tailscale admin console, open Access controls and remove the grant from "
+                                "example-phone to example-host."
+                            ),
+                            Do(
+                                "Replace the policy test for example-mac with this one, which denies "
+                                "example-host:5432 and example-host:6379.",
+                                value=json.dumps(
+                                    {
+                                        "src": "example-mac",
+                                        "proto": "tcp",
+                                        "accept": ["example-host:443"],
+                                        "deny": ["example-host:5432", "example-host:6379"],
+                                    }
+                                ),
+                                notes=(
+                                    "Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",
+                                ),
+                            ),
+                        ),
+                    ),
                 ),
             ),
         ),

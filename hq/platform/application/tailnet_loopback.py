@@ -1,23 +1,15 @@
-"""Grant ports the tailnet policy opens where what HQ knows listens binds only loopback.
+"""Grant ports the tailnet policy opens where every machine they name binds them only to loopback.
 
-Read from the policy's grants and tests, the machines they name, the
-containers HQ read on each, and where HQ's own image serves. A finding
-raises it (``tailnet_findings``); this module only derives it.
+Read from the policy's grants and tests and each port's one fact
+(``tailnet_ports``). A finding raises it (``tailnet_findings``); this module
+only derives it.
 """
 
-import re
 from dataclasses import dataclass
 
-from hq.config.networks import is_loopback
-
-# Lazily: the module is the image server's, and loads Uvicorn.
-lazy from hq.config.serve import LISTENS_AT
-
-from . import connections
 from .projection import projection_scope, read_once
-from .tailnet import _by_name, _grant_machines, _PortNamer, _service_ports, _ssh_ports, devices, policy
-lazy from .containers import containers
-lazy from .hq_self import own_container
+from .tailnet import policy
+from .tailnet_ports import Port, grant_machines, single_port, tailnet_ports
 
 # A fact on the tailnet connection: a grant port only loopback listens on.
 GRANT_REACHES_ONLY_LOOPBACK = "grant-reaches-only-loopback"
@@ -25,28 +17,24 @@ GRANT_REACHES_ONLY_LOOPBACK = "grant-reaches-only-loopback"
 
 @dataclass(frozen=True, slots=True)
 class LoopbackPort:
-    """A port a grant opens where what HQ knows listens there binds only loopback.
-
-    ``hq`` when it is HQ's own port on HQ's machine, else it is the ports of
-    the containers publishing it there.
-    """
+    """A grant entry, and the port it opens on each machine the grant names."""
 
     entry: str
-    port: int
     # The protocol the entry names; "" for every one.
     proto: str
-    hq: bool
+    held: tuple[Port, ...]
+
+    @property
+    def number(self) -> int:
+        return self.held[0].number
 
 
 @dataclass(frozen=True, slots=True)
 class LoopbackGrant:
-    """A grant, one machine it names, and the ports it opens there to loopback alone."""
+    """A grant, as the document writes it, and the ports it opens to loopback alone."""
 
     grant: dict
-    machine: str
     ports: tuple[LoopbackPort, ...]
-    # Each policy test that accepts one of those ports, with it moved to deny.
-    tests: tuple[dict, ...]
 
     @property
     def fragment(self) -> dict:
@@ -57,15 +45,11 @@ class LoopbackGrant:
         return {**self.grant, "ip": kept} if kept else {}
 
 
-# A grant entry naming one port, with its protocol when it names one.
-_ONE_PORT = re.compile(r"(?:(tcp|udp):)?([0-9]+)")
-
-
 def loopback_grants() -> tuple[LoopbackGrant, ...]:
-    """Each grant port on a machine where what HQ knows listens there is bound to loopback.
+    """Each grant with an entry that every machine it names binds only to loopback.
 
-    Said only where nothing else HQ reads serves the port there, and never for
-    a machine whose containers were not read.
+    Said only where each of those machines' containers were read, since what
+    HQ knows binds a port is all that binds it only then.
     """
 
     with projection_scope():
@@ -74,68 +58,19 @@ def loopback_grants() -> tuple[LoopbackGrant, ...]:
 
 def _loopback_grants() -> tuple[LoopbackGrant, ...]:
     found = policy()
-    if not found.grants:
-        return ()
-    known = devices()
-    by_name = _by_name(connections.machines_once())
-    namer = _PortNamer(_ssh_ports(), _service_ports())
-    held = containers()
-    own = own_container()
+    held = tailnet_ports()
     out = []
     for grant in found.grants:
-        for machine in _grant_machines(grant.get("dst") or (), known, by_name):
-            read = [item for item in held if item.machine.name == machine.name and item.runtime is not None]
-            ports = _loopback_ports(grant, machine, read, own, namer) if read else ()
-            if ports:
-                written = _as_written(grant, found.written_grants)
-                out.append(LoopbackGrant(written, machine.name, ports, _moved_tests(found.tests, written, ports)))
+        machines = grant_machines(grant.get("dst") or ())
+        ports = []
+        for entry in grant.get("ip") or ():
+            one = single_port(entry)
+            on = tuple(held[key] for item in machines if one and (key := (item.name, one[1])) in held)
+            if one and on and len(on) == len(machines) and all(port.loopback_only(one[0]) for port in on):
+                ports.append(LoopbackPort(str(entry), one[0], on))
+        if ports:
+            out.append(LoopbackGrant(_as_written(grant, found.written_grants), tuple(ports)))
     return tuple(out)
-
-
-def _loopback_ports(grant: dict, machine, read, own, namer: _PortNamer) -> tuple[LoopbackPort, ...]:
-    found = (_loopback_port(str(entry), machine, read, own, namer) for entry in grant.get("ip") or ())
-    return tuple(port for port in found if port is not None)
-
-
-def _loopback_port(entry: str, machine, read, own, namer: _PortNamer) -> LoopbackPort | None:
-    match = _ONE_PORT.fullmatch(entry)
-    if match is None:
-        return None
-    proto, port = match.group(1) or "", int(match.group(2))
-    if namer.opens(machine, port) or namer.service(machine, port):
-        return None
-    host, served = LISTENS_AT
-    hq = bool(machine.runs_hq) and port == served and proto in ("", "tcp") and is_loopback(host)
-    others = [item.runtime for item in read if own is None or item.address != own.address]
-    published = _published_on(others, proto, port)
-    if published is None:
-        return None
-    return LoopbackPort(entry, port, proto, hq) if hq or published else None
-
-
-def _published_on(runtimes, proto: str, port: int) -> bool | None:
-    """Whether a container publishes the port to loopback alone; None when one may serve it elsewhere."""
-
-    published = False
-    for runtime in runtimes:
-        if runtime.get("network_mode") == "host" and port in (runtime.get("exposed_ports") or ()):
-            return None
-        bound = [
-            binding
-            for binding in runtime.get("port_bindings") or ()
-            if str(binding.get("host_port", "")) == str(port) and _same_protocol(proto, binding)
-        ]
-        if any(not is_loopback(str(binding.get("host_ip", "") or "")) for binding in bound):
-            return None
-        published = published or bool(bound)
-    return published
-
-
-def _same_protocol(proto: str, binding) -> bool:
-    """Whether a binding's ``80/tcp`` is the protocol a grant entry names; none names every one."""
-
-    _, _, bound = str(binding.get("container_port", "")).partition("/")
-    return not proto or (bound or "tcp") == proto
 
 
 def _as_written(grant: dict, written: tuple[dict, ...]) -> dict:
@@ -150,29 +85,37 @@ def _as_written(grant: dict, written: tuple[dict, ...]) -> dict:
     return next((item for item in written if same(item)), grant)
 
 
-def _moved_tests(tests, grant: dict, ports: tuple[LoopbackPort, ...]) -> tuple[dict, ...]:
-    """Each test accepting one of ``ports`` on a destination the grant names, with it in deny instead.
+def moved_tests(grants: tuple[LoopbackGrant, ...]) -> tuple[tuple[dict, tuple[str, ...]], ...]:
+    """Each policy test accepting one of the ports, with every one of them it
+    accepts moved to deny, and those it moved.
 
-    Tailscale rejects a policy file whose test fails, so a test denying the
-    port keeps a later edit from opening it again.
+    One per test whatever number of grants it crosses, so no replacement undoes
+    another. Tailscale rejects a policy file whose test fails, so a test
+    denying the port keeps a later edit from opening it again.
     """
 
-    names = {str(name) for name in grant.get("dst") or ()}
-    moved = (_moved_test(test, names, ports) for test in tests)
-    return tuple(test for test in moved if test)
+    wanted = {
+        (f"{name}:{port.number}", port.proto)
+        for item in grants
+        for name in item.grant.get("dst") or ()
+        for port in item.ports
+    }
+    moved = (_moved_test(test, wanted) for test in policy().tests)
+    return tuple(found for found in moved if found[1])
 
 
-def _moved_test(test: dict, names: set[str], ports: tuple[LoopbackPort, ...]) -> dict:
-    """The test with the ports it accepts on ``names`` moved to deny; {} when it accepts none."""
-
+def _moved_test(test: dict, wanted: set[tuple[str, str]]) -> tuple[dict, tuple[str, ...]]:
     proto = str(test.get("proto", "") or "")
-    wanted = {f"{name}:{port.port}" for name in names for port in ports if not proto or port.proto in ("", proto)}
     accept = [str(entry) for entry in test.get("accept") or ()]
-    leaving = [entry for entry in accept if entry in wanted]
+    leaving = tuple(
+        entry
+        for entry in accept
+        if any(entry == target and (not proto or held in ("", proto)) for target, held in wanted)
+    )
     if not leaving:
-        return {}
+        return test, ()
     kept = {key: value for key, value in test.items() if key not in ("accept", "deny")}
     if staying := [entry for entry in accept if entry not in leaving]:
         kept["accept"] = staying
     kept["deny"] = [*(str(entry) for entry in test.get("deny") or ()), *leaving]
-    return kept
+    return kept, leaving

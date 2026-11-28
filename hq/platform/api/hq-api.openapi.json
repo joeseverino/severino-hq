@@ -21479,14 +21479,14 @@
         "additionalProperties": false,
         "properties": {
           "open_to": {
-            "description": "Who the policy lets in at that port, as the policy writes them.",
+            "description": "Who the policy lets in at that port: a machine by its name, a user or tag as written.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "port": {
-            "description": "A port the tailnet policy opens on it.",
+            "description": "A port the tailnet policy admits a device to on it.",
             "type": "integer"
           }
         },

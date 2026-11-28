@@ -13,23 +13,19 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from hq.config.networks import is_loopback
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
-lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 lazy from hq.domains.control_plane.observations.host import TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
 
-from .projection import projection_scope, read_once
+from .moments import span
+from .projection import read_once
 from .tone import Tone
 from .ui import ended
 lazy from . import connections
-lazy from .connections import connection_rows
-lazy from .entity_links import provider_label
 lazy from .facts import inventory_records
-lazy from .hq_self import scoped_served_port, site_label
 lazy from .infrastructure import enabled_resources
-lazy from .locate import host_of, points_at_host, split_endpoint
+lazy from .tailnet_ports import port_on, port_order
 
 # The settings row naming the tailnet's resolvers, by address.
 RESOLVES_THROUGH = "Resolves through"
@@ -104,16 +100,6 @@ class Device:
 
         return frozenset({self.user, *self.tags, *self.aliases} - {""})
 
-    @property
-    def ports(self) -> tuple[int, ...]:
-        return tuple(sorted(self.reach))
-
-    @property
-    def openings(self) -> tuple[tuple[int, tuple[str, ...]], ...]:
-        """``(port, who)`` in port order, for a template that cannot index."""
-
-        return tuple((port, self.reach[port]) for port in self.ports)
-
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Verdict:
@@ -126,6 +112,8 @@ class Verdict:
     # The rules that decided it, so the answer shows its own reasoning and an
     # operator can go and change the thing that produced it.
     rules: tuple[dict, ...] = ()
+    # False where the port is allowed and bound only to loopback, so reaches nothing.
+    reaches: bool = True
 
     @property
     def label(self) -> str:
@@ -137,7 +125,9 @@ class Verdict:
     def tone(self) -> Tone:
         if not self.known:
             return Tone.NEUTRAL
-        return Tone.GOOD if self.allowed else Tone.SERIOUS
+        if not self.allowed:
+            return Tone.SERIOUS
+        return Tone.GOOD if self.reaches else Tone.NEUTRAL
 
 
 def devices() -> dict[str, Device]:
@@ -256,19 +246,12 @@ def by_device(destinations, owners: dict[str, str]) -> tuple[str, ...]:
             name, port = str(destination), ""
         ports_of.setdefault(owners.get(name, name), set()).add(port)
     return tuple(
-        f"{device}: {', '.join(sorted((p for p in ports if p), key=_port_order))}" if any(ports) else device
+        f"{device}: {', '.join(sorted((p for p in ports if p), key=port_order))}" if any(ports) else device
         for device, ports in ports_of.items()
     )
 
 
 _PORT = re.compile(r"\*|[0-9]+(?:-[0-9]+)?")
-
-
-def _port_order(port: str) -> tuple[int, str]:
-    """Numeric order for ``443``, ``tcp:443``; anything else after."""
-
-    match = _PORT_ENTRY.fullmatch(str(port))
-    return (int(match.group(1)), str(port)) if match else (1 << 16, str(port))
 
 
 def ports() -> tuple[int, ...]:
@@ -309,14 +292,18 @@ def may_reach(source: str, target: str, port: int, known: dict[str, Device] | No
     matched = tuple(sorted(who_asks.principals & set(admitted)))
     owners = alias_owners(known)
     if matched:
+        held = port_on(target, port)
+        bound = held is not None and held.loopback_only()
         return Verdict(
             allowed=True,
             known=True,
             detail=ended(
                 f"Allowed: {', '.join(as_devices(matched, owners))} to {owners.get(target, target)} on {port}"
+                + (f", where {held.held}" if bound else "")
             ),
             via=matched,
             rules=who_answers.rules.get(port, ()),
+            reaches=not bound,
         )
     return Verdict(
         allowed=False,
@@ -377,7 +364,7 @@ class Policy:
         rows.append(("MagicDNS", "On" if self.dns.get("magicDNS") else "Off"))
         days = self.settings.get("devicesKeyDurationDays")
         if days:
-            rows.append(("Device keys expire after", f"{days} days"))
+            rows.append(("Device keys expire after", span(int(days))))
         rows.append(
             (
                 NEW_DEVICES,
@@ -607,150 +594,6 @@ def _accept(test: dict[str, Any], asserted: str) -> None:
     accepted = list(test.get("accept") or ())
     if asserted not in accepted:
         test["accept"] = [*accepted, asserted]
-
-
-# Names for ports no connection or container on the destination explains.
-WELL_KNOWN_PORTS = {
-    22: "SSH",
-    53: "DNS",
-    80: "HTTP",
-    443: "HTTPS",
-    3389: "RDP",
-    5432: "PostgreSQL",
-}
-_PORT_ENTRY = re.compile(r"(?:(?:tcp|udp|sctp):)?([0-9]+)")
-
-
-def grant_ports(grants, known: dict[str, Device] | None = None, machines=None) -> tuple[dict, ...]:
-    """Each grant with ``ports``: ``(entry, name)`` per ``ip`` entry.
-
-    A single port is named, in order, by HQ itself when the destination runs HQ
-    on that port, an SSH connection to a destination machine on that port, a
-    container publishing it there, then ``WELL_KNOWN_PORTS``. Otherwise the
-    name is blank.
-    """
-
-    with projection_scope():
-        return _grant_ports(grants, known, machines)
-
-
-def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
-    known = devices() if known is None else known
-    by_name = _by_name(connections.machines_once() if machines is None else machines)
-    namer = _PortNamer(_ssh_ports(), _service_ports())
-    shown = []
-    for grant in grants:
-        targets = _grant_machines(grant.get("dst") or (), known, by_name)
-        ports = []
-        for entry in grant.get("ip") or ():
-            match = _PORT_ENTRY.fullmatch(str(entry))
-            ports.append((entry, namer.name(int(match.group(1)), targets) if match else ""))
-        shown.append({**grant, "ports": tuple(sorted(ports, key=lambda port: _port_order(port[0])))})
-    return tuple(shown)
-
-
-def _by_name(machines) -> dict[str, object]:
-    """Each machine under every name it answers to, lowercased."""
-
-    by_name: dict[str, object] = {}
-    for item in machines:
-        for name in (item.name, *item.aliases):
-            by_name.setdefault(str(name).lower(), item)
-    return by_name
-
-
-def _ssh_ports() -> dict[str, set[int]]:
-    """The port each SSH-shaped connection opens, by connection ref."""
-
-    found: dict[str, set[int]] = {}
-    for row in connection_rows():
-        if not points_at_host(row.endpoint):
-            continue
-        port = split_endpoint(row.endpoint)[1]
-        if port.isdigit():
-            found.setdefault(row.connection_ref, set()).add(int(port))
-    return found
-
-
-@dataclass(frozen=True, slots=True)
-class _ServicePort:
-    """A port a connection to a service names, and where that connection points."""
-
-    ref: str
-    controller: str
-    host: str
-    port: int
-    label: str
-
-
-def _service_ports() -> tuple[_ServicePort, ...]:
-    """The port each connection to a service names in its URL, with the service's name."""
-
-    found = []
-    for row in connection_rows():
-        if row.provider not in CONNECTION_KINDS or points_at_host(row.endpoint):
-            continue
-        host, port = split_endpoint(row.endpoint)
-        if host and port.isdigit():
-            found.append(
-                _ServicePort(row.connection_ref, row.controller_id, host, int(port), provider_label(row.provider))
-            )
-    return tuple(found)
-
-
-def _grant_machines(names, known, by_name) -> tuple:
-    """The machines a grant's destinations name, through their tailnet devices."""
-
-    found = []
-    for device in known.values():
-        if not any(name == "*" or name in device.principals or name in device.addresses for name in names):
-            continue
-        machine = by_name.get(device.label.lower()) or by_name.get(device.name.lower())
-        if machine is not None and machine not in found:
-            found.append(machine)
-    return tuple(found)
-
-
-class _PortNamer:
-    """What answers on a port of a grant's machines: HQ, SSH, a container, a service."""
-
-    def __init__(self, ssh_ports: dict[str, set[int]], service_ports: tuple[_ServicePort, ...] = ()):
-        self.ssh_ports = ssh_ports
-        self.service_ports = service_ports
-        self.hq_port = scoped_served_port()
-
-    def name(self, port: int, targets) -> str:
-        if port == self.hq_port and any(target.runs_hq for target in targets):
-            return site_label()
-        if any(self.opens(target, port) for target in targets):
-            return provider_label("ssh")
-        for target in targets:
-            for running in sorted(target.containers, key=lambda item: item.name):
-                if port in running.ports:
-                    return running.name
-        for target in targets:
-            label = self.service(target, port)
-            if label:
-                return label
-        return WELL_KNOWN_PORTS.get(port, "")
-
-    def service(self, target, port: int) -> str:
-        """The service a connection reads on this port of this machine."""
-
-        refs = {*target.reached_by, *target.opened_by}
-        names = {str(name).lower() for name in (target.name, *target.aliases)}
-        addresses = {host_of(address) for address in target.addresses}
-        for item in self.service_ports:
-            if item.port != port:
-                continue
-            here = is_loopback(item.host) and item.controller.lower() in names
-            if here or item.ref in refs or item.host in addresses:
-                return item.label
-        return ""
-
-    def opens(self, target, port: int) -> bool:
-        refs = {*target.reached_by, *target.opened_by}
-        return any(port in self.ssh_ports.get(ref, ()) for ref in refs)
 
 
 # A fact on the tailnet connection: every port the policy opens on HQ's machine

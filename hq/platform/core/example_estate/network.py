@@ -5,8 +5,10 @@ import json
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
+from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.domains.control_plane.providers import record_spec
 
+from .docker import BY_TAG
 from .names import (
     ADGUARD,
     CLOUDFLARE,
@@ -366,6 +368,53 @@ def short_named():
         held = ProviderInventory.objects.get(kind=kind)
         held.records = [*held.records, record]
         held.save(update_fields=["records"])
+
+
+# The proxy's admin port, which the grant opens beside 443 and the proxy binds
+# only to loopback.
+ADMIN_PORT = 81
+
+
+def loopback_granted():
+    """The grant and its test opening the proxy's admin port too, which the
+    sweep answers for and the proxy binds only to loopback: the machine's
+    page and the policy page draw a granted port beside one that reaches
+    nothing, and the finding about it raises."""
+
+    admin = f"tcp:{ADMIN_PORT}"
+    policy = {
+        **POLICY,
+        "grants": [{**grant, "ip": [*grant["ip"], admin]} for grant in POLICY["grants"]],
+        "tests": [{**test, "accept": [*test["accept"], f"tag:server:{ADMIN_PORT}"]} for test in POLICY["tests"]],
+    }
+
+    def edit(kind, change):
+        held = ProviderInventory.objects.get(kind=kind)
+        held.records = [change(dict(record)) for record in held.records]
+        held.save(update_fields=["records"])
+
+    def granted(record):
+        return {
+            **record,
+            "grants": policy["grants"],
+            "tests": policy["tests"],
+            "document": json.dumps(policy, indent=2),
+        }
+
+    def answered(record):
+        if record["name"] != MACHINE:
+            return record
+        rule = {"who": [OWNER], "to": [f"tag:server:{ADMIN_PORT}"], "line": 1}
+        return {**record, "reach": [*record["reach"], {"port": ADMIN_PORT, "who": [OWNER], "rules": [rule]}]}
+
+    def bound(record):
+        if record.get("container") != BY_TAG:
+            return record
+        return {**record, "port_bindings": [{**item, "host_ip": "127.0.0.1"} for item in record["port_bindings"]]}
+
+    edit("tailscale.policy", granted)
+    edit("tailscale.device", answered)
+    edit(RUNTIME_KIND, bound)
 
 
 def lock_key(name):

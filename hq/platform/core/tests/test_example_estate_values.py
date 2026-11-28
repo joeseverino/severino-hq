@@ -30,6 +30,9 @@ ADMITTED_RANGES = (
     # The range Tailscale numbers every tailnet from, and its IPv6 prefix.
     ip_network("100.64.0.0/10"),
     ip_network("fd7a:115c:a1e0::/48"),
+    # Loopback, which every machine answers on itself.
+    ip_network("127.0.0.0/8"),
+    ip_network("::1/128"),
 )
 # Reserved for examples (RFC 2606, RFC 6761).
 RESERVED = ("example", "test", "invalid", "example.com", "example.net", "example.org")
