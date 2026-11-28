@@ -826,8 +826,8 @@ and no credential. It reads only Docker's event stream and systemd's
 client of the bus speaks for it, and tells HQ only names (the container's,
 Docker's action, id and time; the unit's, the job's result and id) through
 `hq-controller events`, so a forged event costs one read of the containers
-or the units, and one read-only settling read of each run held on a unit
-there, which settles nothing unless it states what the unit did.
+or the units, and one read-only settling read of the run held on the unit
+it names, which settles nothing unless it states what the unit did.
 
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one

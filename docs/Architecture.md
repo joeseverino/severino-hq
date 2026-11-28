@@ -1103,18 +1103,24 @@ itself on the run's machines at its revision, under its correlation
 (`automation_runs.queue_settling`). That read's readings become the held
 run's, and its outcome and what follows it are any run's (`_settled`, then
 `_finish` and `app_update_approval.succeeded`). What wakes HQ to ask is
-level-triggered, as a Kubernetes controller's informer and resync are: a job's
-end on HQ's machine (`unit.job.<result>`) makes `automation.held` due, which
-the host job `automation.settle` reads by asking the read of each run held on
-that machine. The lease's bound asks it once no event did
+level-triggered, as a Kubernetes controller's informer and resync are: the
+end of the held unit's job on HQ's machine (`unit.job.<result>`) makes
+`automation.held` due, which the host job `automation.settle` reads by asking
+the read of each run held there whose unit's end is stored since the run was
+claimed and since its last read, so a unit that ended before its run reported
+the hand-off is asked at the next look. HQ stores a job's end only while a run
+there holds on that unit or may yet hand off (`OutboundWork.reads_due`), so
+another unit's end asks nothing and is not stored, and the watcher leaves out
+HQ's own passes and runs. The lease's bound asks it once no event did
 (`_settle_lapsed_holds`), and a watcher's reconnect asks it as it asks every
-reading its events carry. A held run elsewhere settles at the bound. Its
-security properties:
+reading its events carry. A held run elsewhere settles at the bound, so a
+playbook on a machine whose jobs HQ does not hear waits for its unit and
+states what it did itself. Its security properties:
 
-- An event settles nothing. Which job ended is never read. A read that states
-  no reading settles nothing, so a forged event, or another unit's, costs one
-  read-only read. The bound ends the run as `OutcomeUnknown` only once a read
-  asked at or after it states nothing.
+- An event settles nothing. A read that states no reading settles nothing, so
+  a forged event of the held unit costs one read-only read. The bound ends the
+  run as `OutcomeUnknown` only once a read asked at or after it states
+  nothing.
 - At most one read is in flight per held run. Its key counts the reads that
   have ended, as a workqueue queues a key once while it waits and again once
   it has been processed.

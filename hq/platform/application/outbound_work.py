@@ -9,7 +9,7 @@ and audit entries derive from that one declaration (docs/Plugins.md#outbound-wor
 
 import inspect
 from annotationlib import Format
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated, Any, NotRequired, cast
@@ -87,9 +87,10 @@ class OutboundWork:
     # The kinds of reading the host's own work reads, so an ask for one
     # (``cadence.ask``) starts it: what an event makes due, read in HQ.
     reads: tuple[str, ...] = ()
-    # Whether reading them now would find anything to read, so an ask that
-    # would not starts no job; None: it always might.
-    reads_due: Callable[[], bool] | None = None
+    # Whether reading them now about a subject ("" any) would find anything
+    # to read, so an ask that would not starts no job and an event that asks
+    # only that is not stored (``inbound``); None: it always might.
+    reads_due: Callable[[str], bool] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", Effect(self.effect))
@@ -177,6 +178,18 @@ def reader_of(kind: str) -> str:
     """The host's own work that reads ``kind``, by name, or ""."""
 
     return _readers().get(kind, "")
+
+
+def wanted(kinds: Iterable[str], subject: str) -> tuple[str, ...]:
+    """Of ``kinds``, those a read about ``subject`` would find anything of: a
+    kind HQ reads itself where its work's ``reads_due`` says so, any other always."""
+
+    def due(kind: str) -> bool:
+        name = reader_of(kind)
+        check = _host_named(name).reads_due if name else None
+        return check is None or check(subject)
+
+    return tuple(kind for kind in kinds if due(kind))
 
 
 def declared_work() -> dict[str, OutboundWork]:
@@ -392,7 +405,7 @@ def start_reading(name: str) -> bool:
     or it is already running."""
 
     due = _host_named(name).reads_due
-    return (due is None or due()) and start_for_host(name)
+    return (due is None or due("")) and start_for_host(name)
 
 
 def start_for_host(name: str) -> bool:

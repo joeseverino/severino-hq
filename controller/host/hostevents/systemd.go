@@ -93,9 +93,9 @@ func jobArrival(signal *dbus.Signal, heard time.Time) (runtime.InboundArrival, b
 	if !idOK || !unitOK || !resultOK || unit == "" || !runtime.HostJobResult(result).Valid() {
 		return runtime.InboundArrival{}, false
 	}
-	// HQ's own passes are its work, never a change to read: each pass's end
-	// would ask for the next.
-	if unit == host.ControllerUnit || unit == host.GlanceUnit {
+	// HQ's own passes and runs are its work, never a change to read: each
+	// one's end would ask for the next.
+	if unit == host.ControllerUnit || unit == host.GlanceUnit || unit == host.AutomationUnit {
 		return runtime.InboundArrival{}, false
 	}
 	// The dependency run's end is its outcome, which HQ reads at once

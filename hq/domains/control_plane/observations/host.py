@@ -488,11 +488,13 @@ JOB_ENDS = {
     "done": (AUTOMATION_HELD,),
     **dict.fromkeys(("failed", "timeout", "canceled"), (UNIT_KIND, AUTOMATION_HELD)),
 }
+# The events that say a job ended, by its result.
+UNIT_ENDS = tuple(f"{UNIT_JOB}.{result}" for result in JOB_ENDS)
 INBOUND = {
     PROVIDER: InboundSpec(
         {
             UNIT_FAILED: (UNIT_KIND,),
-            **{f"{UNIT_JOB}.{result}": kinds for result, kinds in JOB_ENDS.items()},
+            **dict(zip(UNIT_ENDS, JOB_ENDS.values(), strict=True)),
             **{
                 f"{DEPENDENCY_RUN}.{result}": (DEPENDENCY_RUN_KIND, *(kind for kind in kinds if kind == UNIT_KIND))
                 for result, kinds in JOB_ENDS.items()

@@ -18,10 +18,11 @@ state until it; a delivery repeated under its own ID is the stored event
 and asks nothing, but GitHub signs the body alone, so its delivery ID is
 outside the signature and a captured body sent again under a new one is a new
 event, bounded by that same coalesced read; an event no declaration names is
-recorded as ignored and asks nothing; a reconnect asks every reading its
-source carries, bounded by the reconnect's own backoff and ``ask``'s one
-request per kind; a provider no declaration names, or a batch outside the
-contract's ``InboundBatch``, is refused whole. Only the bridge's action, which
+recorded as ignored and asks nothing; one whose reads would each find nothing
+of its subject (``OutboundWork.reads_due``) is not stored at all; a
+reconnect asks every reading its source carries, bounded by the reconnect's
+own backoff and ``ask``'s one request per kind; a provider no declaration
+names, or a batch outside the contract's ``InboundBatch``, is refused whole. Only the bridge's action, which
 serves the controller's account alone on a 0700 socket, and the host's jobs
 may import this (``lint:imports``). The events table is the record of what
 was told, kept for the routine window; the reads an event asks are audited
@@ -44,6 +45,7 @@ lazy from hq.domains.control_plane.provider_adapters import INBOUND
 from . import readings
 from .inbound_events import arrives_by, channel
 from .moments import moment
+lazy from . import outbound_work
 lazy from .cadence import ask
 
 # The contract's name for a batch, the one shape every source reports in.
@@ -92,12 +94,18 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
         )
     )
     new: dict[tuple[str, str], InboundEvent] = {}
+    unwanted = 0
     for arrived in arrivals:
         delivery = (arrived["provider"], arrived["delivery_id"])
         if delivery in stored or delivery in new:
             continue
-        kinds = INBOUND[arrived["provider"]].reads(arrived["event"])
+        declared = INBOUND[arrived["provider"]].reads(arrived["event"])
+        kinds = outbound_work.wanted(declared, arrived.get("subject", ""))
         told = _told(arrived)
+        # One whose every read would find nothing, and that tells nothing, has no reader.
+        if declared and not kinds and not told:
+            unwanted += 1
+            continue
         new[delivery] = InboundEvent(
             provider=arrived["provider"],
             event=arrived["event"],
@@ -115,7 +123,8 @@ def apply_events(batch: Mapping[str, Any]) -> dict[str, Any]:
     InboundEvent.objects.bulk_create(new.values(), ignore_conflicts=True)
     counts = {
         "applied": sum(event.outcome == InboundOutcome.APPLIED for event in new.values()),
-        "repeated": len(arrivals) - len(new),
+        "repeated": len(arrivals) - len(new) - unwanted,
+        "unwanted": unwanted,
         "ignored": sum(event.outcome == InboundOutcome.IGNORED for event in new.values()),
     }
     for subject, kinds in asked.items():
