@@ -324,6 +324,19 @@ class WriteTests(TestCase):
         agenda = list_agenda(start=TODAY, days=1)
         self.assertIn("Dentist", [item["title"] for item in agenda["items"]])
 
+    def test_an_entry_repeating_every_few_of_any_unit_is_written(self):
+        principal = web_principal(operator(username="calendar-writer"))
+        for repeat in ("daily", "weekly", "monthly", "yearly"):
+            with self.subTest(repeat=repeat):
+                result = execute_capability(
+                    "calendar.entry.create",
+                    keyed({"title": "Example", "starts_on": "2000-01-01", "repeat": repeat, "interval": 2}),
+                    principal=principal,
+                )
+
+                self.assertTrue(result["ok"], result)
+                self.assertIn("2", result["entry"]["repeat_label"])
+
     def test_removing_needs_the_entry_named_again(self):
         entry = _entry()
         with self.assertRaises(ValidationError):

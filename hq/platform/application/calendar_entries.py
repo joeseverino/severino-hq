@@ -25,13 +25,13 @@ from .calendar import CalendarEvent, CalendarSource, gather
 from .command_fields import Checked, Choices, Describe, Reason, Refers, stored_in
 from .derivations import derivation
 from .integration_specs import Kept, keeps
-from .moments import clock, weekday, when_day, when_range
+from .moments import clock, in_units, weekday, when_day, when_range
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import Notes
 from .record_saves import Held, as_sent, found, held, row, written
 from .security import Principal, person
-from .ui import counted, ended
+from .ui import ended
 from .url_query import with_query
 lazy from . import calendar
 lazy from .calendar_specs import EntryRecord
@@ -180,7 +180,7 @@ def repeat_label(entry: Entry) -> str:
     if not entry.repeat:
         return ""
     unit = {"daily": "day", "weekly": "week", "monthly": "month", "yearly": "year"}[entry.repeat]
-    every = f"Every {unit}" if entry.interval == 1 else f"Every {counted(entry.interval, unit)}"
+    every = f"Every {unit}" if entry.interval == 1 else f"Every {in_units(entry.interval, unit)}"
     if entry.repeat == Entry.Repeat.WEEKLY and entry.weekday_numbers:
         every += " on " + ", ".join(_WEEKDAY_NAMES[day] for day in entry.weekday_numbers)
     if entry.repeat_until:

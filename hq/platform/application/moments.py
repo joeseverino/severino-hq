@@ -265,12 +265,20 @@ class Span(Figure):
 
     def __new__(cls, length: timedelta) -> Self:
         length = max(length, timedelta(0))
-        count, unit = _rung(length)
-        return super().__new__(cls, f"{count:,}\xa0{unit if count == 1 else UNITS[unit]}", length.total_seconds())
+        return super().__new__(cls, in_units(*_rung(length)), length.total_seconds())
 
     # Pickled as the length it says, so a cached read is said again the same way.
     def __getnewargs__(self) -> tuple[timedelta]:  # type: ignore[override]  # Figure declares two arguments
         return (timedelta(seconds=float(self.figure)),)
+
+
+def in_units(count: int, unit: str) -> str:
+    """A count of one of ``UNITS``, the one way a unit of time is counted:
+    "1 day", "2 weeks", kept together by a no-break space. A length says
+    itself as a ``Span``; a count of calendar units (a recurrence's "every
+    2 weeks") has no length to measure."""
+
+    return f"{count:,}\xa0{unit if count == 1 else UNITS[unit]}"
 
 
 def _rung(length: timedelta) -> tuple[int, str]:
