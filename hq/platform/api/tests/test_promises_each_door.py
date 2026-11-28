@@ -248,7 +248,7 @@ def _work(*events):
 
     claimed = claim_next_operation(WORKER, capabilities=CLAIMS)
     operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
-    run_ended(str(operation.pk), WORKER, events=events, success=True, message="Restarted.")
+    run_ended(str(operation.pk), WORKER, events=events, message="Restarted.")
     return str(operation.pk)
 
 

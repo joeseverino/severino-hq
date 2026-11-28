@@ -87,7 +87,7 @@ class DrainTests(unittest.TestCase):
         self.drain(bridge, runner)
 
         self.assertEqual(runner.runs, [])
-        self.assertEqual(bridge.reports[0]["conditions"][0]["reason"], "NoConnection")
+        self.assertEqual(bridge.reports[0]["outcome"]["ending"], "refused")
 
     def test_a_run_of_another_profile_than_the_worker_s_is_refused_before_it_runs(self):
         """Its login is in the connections document, which every worker reads,
@@ -100,7 +100,7 @@ class DrainTests(unittest.TestCase):
         self.drain(bridge, runner)
 
         self.assertEqual(runner.runs, [])
-        self.assertEqual(bridge.reports[0]["conditions"][0]["reason"], "NoConnection")
+        self.assertEqual(bridge.reports[0]["outcome"]["ending"], "refused")
         self.assertEqual(bridge.calls[0][1]["profile"], fakes.PRIVILEGE)
 
     def test_the_token_and_the_key_path_never_reach_a_report(self):

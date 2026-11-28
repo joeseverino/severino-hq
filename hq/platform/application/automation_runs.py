@@ -41,6 +41,7 @@ from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
 from .record_errors import PolicyError, RecordNotFound
+from .run_outcome import OUTCOME, Ending, ended_as
 from .security import Capability, Principal, internal_principal
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
@@ -580,8 +581,6 @@ def _enqueue_run(
 
 
 CANCEL = "automation.run.cancel"
-# The reason a run cancelled before it started carries in its result.
-CANCELLED_REASON = "Cancelled"
 
 
 def run_authority(effect: str) -> Capability:
@@ -658,11 +657,7 @@ def cancel_run(command: CancelRunCommand, *, principal: Principal) -> RunAsked:
         )
     operation.state = OperationRequest.State.CANCELLED
     operation.completed_at = timezone.now()
-    operation.result = {
-        "ok": False,
-        "message": f"{principal.actor} cancelled it before it started.",
-        "reason": CANCELLED_REASON,
-    }
+    operation.result = {OUTCOME: ended_as(Ending.CANCELLED)}
     operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
     return operation_asked(operation, queued=False)
 

@@ -1096,28 +1096,70 @@ func (e ResourceKind) Valid() bool {
 
 // Defines values for RunEventOutcome.
 const (
-	Changed     RunEventOutcome = "changed"
-	Failed      RunEventOutcome = "failed"
-	OK          RunEventOutcome = "ok"
-	Skipped     RunEventOutcome = "skipped"
-	Started     RunEventOutcome = "started"
-	Unreachable RunEventOutcome = "unreachable"
+	RunEventOutcomeChanged     RunEventOutcome = "changed"
+	RunEventOutcomeFailed      RunEventOutcome = "failed"
+	RunEventOutcomeOK          RunEventOutcome = "ok"
+	RunEventOutcomeSkipped     RunEventOutcome = "skipped"
+	RunEventOutcomeStarted     RunEventOutcome = "started"
+	RunEventOutcomeUnreachable RunEventOutcome = "unreachable"
 )
 
 // Valid indicates whether the value is a known member of the RunEventOutcome enum.
 func (e RunEventOutcome) Valid() bool {
 	switch e {
-	case Changed:
+	case RunEventOutcomeChanged:
 		return true
-	case Failed:
+	case RunEventOutcomeFailed:
 		return true
-	case OK:
+	case RunEventOutcomeOK:
 		return true
-	case Skipped:
+	case RunEventOutcomeSkipped:
 		return true
-	case Started:
+	case RunEventOutcomeStarted:
 		return true
-	case Unreachable:
+	case RunEventOutcomeUnreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunOutcomeEnding.
+const (
+	RunOutcomeEndingCancelled   RunOutcomeEnding = "cancelled"
+	RunOutcomeEndingErrored     RunOutcomeEnding = "errored"
+	RunOutcomeEndingLeaseLost   RunOutcomeEnding = "lease_lost"
+	RunOutcomeEndingPaused      RunOutcomeEnding = "paused"
+	RunOutcomeEndingRefused     RunOutcomeEnding = "refused"
+	RunOutcomeEndingSucceeded   RunOutcomeEnding = "succeeded"
+	RunOutcomeEndingTaskFailed  RunOutcomeEnding = "task_failed"
+	RunOutcomeEndingTimedOut    RunOutcomeEnding = "timed_out"
+	RunOutcomeEndingUnknown     RunOutcomeEnding = "unknown"
+	RunOutcomeEndingUnreachable RunOutcomeEnding = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the RunOutcomeEnding enum.
+func (e RunOutcomeEnding) Valid() bool {
+	switch e {
+	case RunOutcomeEndingCancelled:
+		return true
+	case RunOutcomeEndingErrored:
+		return true
+	case RunOutcomeEndingLeaseLost:
+		return true
+	case RunOutcomeEndingPaused:
+		return true
+	case RunOutcomeEndingRefused:
+		return true
+	case RunOutcomeEndingSucceeded:
+		return true
+	case RunOutcomeEndingTaskFailed:
+		return true
+	case RunOutcomeEndingTimedOut:
+		return true
+	case RunOutcomeEndingUnknown:
+		return true
+	case RunOutcomeEndingUnreachable:
 		return true
 	default:
 		return false
@@ -1908,10 +1950,15 @@ type ControllerRegistry struct {
 // ControllerReport defines model for ControllerReport.
 type ControllerReport struct {
 	// Catalog What a scan of an automation source found; an operation other than a scan reports none.
-	Catalog            *SourceCatalog `json:"catalog,omitempty"`
-	Conditions         []Condition    `json:"conditions,omitempty"`
-	Message            string         `json:"message,omitempty"`
-	ObservedGeneration int64          `json:"observed_generation"`
+	Catalog    *SourceCatalog `json:"catalog,omitempty"`
+	Conditions []Condition    `json:"conditions,omitempty"`
+
+	// Message How the work ended, in a line; a run says only what its report leaves out, beside its outcome.
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observed_generation"`
+
+	// Outcome How a run ended; HQ refuses a run's report without one, and any other operation's with one.
+	Outcome *RunOutcome `json:"outcome,omitempty"`
 
 	// Stated What a run's playbook stated beside its result; an operation other than a run reports none.
 	Stated *RunStated `json:"stated,omitempty"`
@@ -3203,6 +3250,24 @@ type RunInput struct {
 	// Revision The reviewed commit the run was asked of.
 	Revision string `json:"revision"`
 }
+
+// RunOutcome How a run ended, as its worker saw it, which HQ words its result from.
+type RunOutcome struct {
+	// Ending How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported.
+	Ending RunOutcomeEnding `json:"ending"`
+
+	// Host The machine it failed on or could not reach; empty unless a task failed or a machine could not be reached.
+	Host string `json:"host"`
+
+	// Message The ending's own words, as written: the result its playbook stated, Ansible's error, why it could not start or why its lease was lost; empty for any other ending.
+	Message string `json:"message"`
+
+	// Task The task that failed first; empty unless a task failed.
+	Task string `json:"task"`
+}
+
+// RunOutcomeEnding How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported.
+type RunOutcomeEnding string
 
 // RunProgress What a claimant says of its work as it renews the lease: a run's tasks so far.
 type RunProgress struct {

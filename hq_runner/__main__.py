@@ -161,8 +161,10 @@ def drain(
         if outcome is None:
             return worked
         worked += 1
+        # A run says how it ended (``RunOutcome``), a scan only whether it read the source and why not.
         conditions = outcome.report.get("conditions") or [{}]
-        ended = "succeeded" if outcome.report["success"] else f"ended {conditions[0].get('reason', 'Failed')}"
+        ending = (outcome.report.get("outcome") or {}).get("ending") or conditions[0].get("reason", "Failed")
+        ended = "succeeded" if outcome.report["success"] else f"ended {ending}"
         print(f"hq_runner: operation {outcome.operation} {ended}", flush=True)
 
 

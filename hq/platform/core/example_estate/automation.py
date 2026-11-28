@@ -41,6 +41,7 @@ from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.machines import machine_catalog
 from hq.platform.application.refusal_status import refused
+from hq.platform.application.run_outcome import Ending, ended_as
 from hq.platform.application.security import (
     MCP_INTERFACE,
     Principal,
@@ -464,10 +465,12 @@ WORKING_LEASE = timedelta(hours=8)
 
 @dataclass(frozen=True, slots=True)
 class Ended:
-    """How a past run ended, as its worker reported it."""
+    """How a past run ended, as its worker reported it: its ending, which
+    names its first task to fail as the worker does, and the result its
+    playbook stated."""
 
-    success: bool
-    message: str
+    ending: Ending
+    message: str = ""
     # Each task, its outcome and what it said, then its warnings where it warned.
     events: tuple[tuple[str, str, str] | tuple[str, str, str, tuple[str, ...]], ...] = ()
     # The readings its playbook stated on its machine, by kind (``RunStated``).
@@ -486,14 +489,12 @@ def _events(
 # How the server's past runs ended, as their worker reported it: a playbook
 # that states no result reports none.
 DONE = Ended(
-    success=True,
-    message="",
+    Ending.SUCCEEDED,
     events=(("Read what it holds", "ok", ""), ("Empty it", "changed", "Emptied."), ("Check it is empty", "ok", "")),
 )
 # A preview of it on the server, whose read warned that it could not examine two paths.
 PREVIEWED = Ended(
-    success=True,
-    message="",
+    Ending.SUCCEEDED,
     events=(
         (
             "Read what it holds",
@@ -509,9 +510,17 @@ PREVIEWED = Ended(
     ),
 )
 FAILED = Ended(
-    success=False,
-    message="A task failed; nothing after it ran.",
+    Ending.TASK_FAILED,
     events=(("Read what it holds", "ok", ""), ("Empty it", "failed", "The service did not answer.")),
+)
+# One whose machine could not be reached, and one cancelled in HQ while it ran.
+UNREACHABLE = Ended(
+    Ending.UNREACHABLE,
+    events=(("Read what it holds", "unreachable", "Failed to connect to the host via ssh: Connection timed out"),),
+)
+CANCELLED = Ended(
+    Ending.CANCELLED,
+    events=(("Read what it holds", "ok", ""), ("Empty it", "changed", "Emptied.")),
 )
 # How far the working run has got: two tasks done, the third under way.
 UNDER_WAY = (
@@ -521,7 +530,7 @@ UNDER_WAY = (
 )
 # How the read ended on the machine it last ran on: the result its playbook stated.
 REPORTED = Ended(
-    success=True,
+    Ending.SUCCEEDED,
     message="/: 120.5 GB of 460.4 GB used (27%)",
     events=(("Read the mount's use", "ok", ""),),
     readings={
@@ -559,8 +568,7 @@ RELEASES = [
     )
 ]
 APPLIED = Ended(
-    success=True,
-    message="",
+    Ending.SUCCEEDED,
     events=(
         ("Fetch the commit", "ok", ""),
         ("Release forgejo", "changed", "Released."),
@@ -616,6 +624,8 @@ def runs(
         (agent, _reported(DONE), CORRELATION),
         (person, _called_off(person), ""),
         (person, _outlived, ""),
+        (person, _reported(UNREACHABLE), ""),
+        (agent, _reported(CANCELLED), ""),
     )
     count = len(endings) if past is None else past
     for index in range(count):
@@ -758,13 +768,20 @@ def _claimed(run: OperationRequest) -> None:
 def _reported(ended: Ended) -> Callable[[OperationRequest], None]:
     def carry_out(run: OperationRequest) -> None:
         _claimed(run)
+        host = run.input["hosts"][0]
         with doors.controller("renew"):
-            renew_operation(str(run.pk), controller_id=WORKER, events=_events(run.input["hosts"][0], ended.events))
+            renew_operation(str(run.pk), controller_id=WORKER, events=_events(host, ended.events))
+        failed = next((task for task, outcome, *_ in ended.events if outcome == "failed"), "")
         report = ControllerReport(
-            success=ended.success,
+            success=ended.ending == Ending.SUCCEEDED,
             observed_generation=run.input["generation"],
-            message=ended.message,
-            stated={"readings": {run.input["hosts"][0]: ended.readings}} if ended.readings else None,
+            outcome=ended_as(
+                ended.ending,
+                task=failed if ended.ending == Ending.TASK_FAILED else "",
+                host=host if ended.ending in (Ending.TASK_FAILED, Ending.UNREACHABLE) else "",
+                message=ended.message,
+            ),
+            stated={"readings": {host: ended.readings}} if ended.readings else None,
         )
         with doors.controller("report"):
             report_operation(str(run.pk), report, controller_id=WORKER)

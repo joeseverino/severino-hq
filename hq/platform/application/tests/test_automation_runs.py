@@ -369,7 +369,7 @@ class LapsedHoldTests(RunTestCase):
 
         lapsed = OperationRequest.objects.get(pk=self.first["id"])
         self.assertEqual(lapsed.get_state_display(), "Stopped early")
-        self.assertEqual(lapsed.result["reason"], "OutcomeUnknown")
+        self.assertEqual(lapsed.result["outcome"]["ending"], "unknown")
 
     def test_a_live_lease_still_holds(self):
         OperationRequest.objects.filter(pk=self.first["id"]).update(lease_expires_at="2999-01-01T00:00:00Z")

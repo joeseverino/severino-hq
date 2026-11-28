@@ -101,11 +101,14 @@ class ApproveUpdateTests(TestCase):
     def applies(self):
         return self.runs().exclude(input__has_key="check")
 
-    def worked(self, *, success=True, events=(), message="", stated=None):
-        """The worker's report of the run it claims next, and what its playbook ``stated``."""
+    def worked(self, *, success=True, events=(), stated=None):
+        """The worker's report of the run it claims next, and what its playbook
+        ``stated``; one that failed names its failed task, as a worker does."""
 
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
-        run_ended(claimed["operation"]["id"], WORKER, events=events, success=success, message=message, stated=stated)
+        failed = next((event for event in events if event["outcome"] == "failed"), {})
+        ending = {} if success else {"ending": "task_failed", "task": failed["task"], "host": failed["host"]}
+        run_ended(claimed["operation"]["id"], WORKER, events=events, stated=stated, **ending)
         return OperationRequest.objects.get(pk=claimed["operation"]["id"])
 
     def settle(self, *, success=True, status=None):

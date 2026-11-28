@@ -36,6 +36,7 @@ from .integration_specs import Kept, command_adapter, keeps
 from .projection import read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, row, written
+from .run_outcome import OUTCOME, Ending, ended_as
 from .security import Principal
 from .tone import Tone, Toned
 lazy from .asks import APPLIES_SHORTLY
@@ -602,8 +603,15 @@ def _save(
 
 
 # How work its record's switch-off called off ends, waiting or claimed
-# (``controller.release_lapsed``); its row names the record.
-CALLED_OFF = {"ok": False, "message": "Switched off", "reason": "SwitchedOff"}
+# (``controller.release_lapsed``); its row names the record, and a run reads
+# as cancelled for it.
+SWITCHED_OFF = "Switched off"
+CALLED_OFF = {
+    "ok": False,
+    "message": SWITCHED_OFF,
+    "reason": "SwitchedOff",
+    OUTCOME: ended_as(Ending.CANCELLED, message=SWITCHED_OFF),
+}
 
 
 def _call_off_waiting(resource: ManagedResource) -> None:

@@ -68,6 +68,15 @@ class JoinTests(SimpleTestCase):
             bridge_registry._enumeration("Example", ("example.a_b", "example_a.b"), "Example")
 
 
+class RunOutcomeTests(SimpleTestCase):
+    def test_hq_words_every_ending_a_worker_may_report(self):
+        from hq.platform.application.run_outcome import Ending
+
+        self.assertEqual(
+            set(Ending), set(_base()["components"]["schemas"]["RunOutcome"]["properties"]["ending"]["enum"])
+        )
+
+
 class CleanTests(SimpleTestCase):
     def test_a_nullable_value_states_one_type(self):
         found = bridge_registry._clean(

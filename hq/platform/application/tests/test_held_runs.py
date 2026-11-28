@@ -20,6 +20,7 @@ from .. import outbound_work
 from ..controller import ControllerReport, claim_next_operation, release_lapsed, report_operation
 from ..inbound import apply_events
 from ..machines import Machine
+from ..run_outcome import Ending, ended_as
 from .procedures import APP, DB, Supply, approved_run, manifest
 
 PULL, LAST_PULL = "example.pull", "example.last_pull"
@@ -72,10 +73,11 @@ class HeldRunTests(TestCase):
         return claim_next_operation(WORKER, capabilities=CLAIMS)
 
     def report(self, run: OperationRequest, stated=None, *, success=True) -> None:
+        outcome = ended_as(Ending.SUCCEEDED if success else Ending.ERRORED)
         report_operation(
             str(run.pk),
             ControllerReport(
-                success=success, observed_generation=run.input["generation"], message="Done.", stated=stated
+                success=success, observed_generation=run.input["generation"], outcome=outcome, stated=stated
             ),
             controller_id=WORKER,
         )
@@ -220,7 +222,7 @@ class HeldRunTests(TestCase):
                 run.refresh_from_db()
                 self.assertEqual(run.state, ended)
                 if stated is None:
-                    self.assertEqual(run.result["reason"], "OutcomeUnknown")
+                    self.assertEqual(run.result["outcome"]["ending"], "unknown")
 
     def test_a_job_s_end_with_no_run_held_starts_nothing_and_is_not_stored(self):
         self.job_ended().assert_not_called()

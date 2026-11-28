@@ -18,6 +18,7 @@ from hq.platform.core.testing import AGENT, declare
 
 from ..capabilities import run_capability
 from ..controller import ControllerReport, claim_next_operation, report_operation
+from ..run_outcome import Ending, ended_as
 from .procedures import APP, DB, RESTART_KEY, RESTART_RUN, Supply, approved_run, manifest, run_payload
 
 WORKER = "example-worker"
@@ -56,15 +57,23 @@ class LeasedRunTestCase(TestCase):
             lease_expires_at=timezone.now() - timedelta(seconds=1)
         )
 
-    def report(self, *, success: bool = True, events=None, **fields):
-        """The run's report, after the renewal that says ``events``, its tasks, where given."""
+    def report(self, *, ending: str = "succeeded", events=None, **fields):
+        """The run's report that it ended as ``ending`` (``RunOutcome``, with
+        its ``task``, ``host`` and ``message`` where given), after the renewal
+        that says ``events``, its tasks, where given."""
 
         if events is not None:
             renew(self.operation_id, events=events)
         operation = self.operation()
+        said = {field: fields.pop(field) for field in ("task", "host", "message") if field in fields}
         return report_operation(
             self.operation_id,
-            ControllerReport(success=success, observed_generation=operation.input["generation"], **fields),
+            ControllerReport(
+                success=ending == "succeeded",
+                observed_generation=operation.input["generation"],
+                outcome=ended_as(Ending(ending), **said),
+                **fields,
+            ),
             controller_id=WORKER,
         )
 
@@ -151,7 +160,7 @@ class RenewTests(LeasedRunTestCase):
         self.assertFalse(answer["continue"], answer)
         self.assertEqual(answer["reason"], "Held")
         self.assertGreater(self.operation().lease_expires_at, before)
-        self.report(success=False, message="Stopped for the pause.")
+        self.report(ending="paused")
         self.assertEqual(self.operation().state, OperationRequest.State.FAILED)
 
     def test_a_cancelled_run_is_told_to_stop(self):
@@ -287,7 +296,7 @@ class LapsedRunTests(LeasedRunTestCase):
 
         operation = self.operation()
         self.assertEqual(operation.state, OperationRequest.State.CANCELLED)
-        self.assertEqual(operation.result["reason"], "OutcomeUnknown")
+        self.assertEqual(operation.result["outcome"]["ending"], "unknown")
         self.assertEqual(operation.attempt_count, 1)
         ended = AuditLog.objects.filter(
             object_type=audited_labels()[OperationRequest], object_id=self.operation_id, operation_id=self.operation_id
@@ -305,13 +314,11 @@ class LapsedRunTests(LeasedRunTestCase):
 
     def test_a_worker_that_reports_its_outcome_unknown_ends_it_as_a_lapse_does(self):
         self.claim()
-        unknown = {"type": "Degraded", "status": True, "reason": "OutcomeUnknown", "message": "It stopped."}
 
-        self.report(success=False, message="It stopped.", conditions=[unknown])
+        self.report(ending="unknown")
 
         self.assertEqual(self.operation().state, OperationRequest.State.CANCELLED)
         self.assertEqual(self.word(), "Stopped early")
-        self.assertEqual(self.operation().result["message"], "Stopped reporting")
 
 
 class ObserveFirstLapsedRunTests(LeasedRunTestCase):
@@ -325,7 +332,7 @@ class ObserveFirstLapsedRunTests(LeasedRunTestCase):
 
         operation = self.operation()
         self.assertEqual(
-            (operation.state, operation.result["reason"]), (OperationRequest.State.CANCELLED, "OutcomeUnknown")
+            (operation.state, operation.result["outcome"]["ending"]), (OperationRequest.State.CANCELLED, "unknown")
         )
 
 
@@ -370,15 +377,18 @@ class RunReportTests(LeasedRunTestCase):
     def test_a_run_s_end_is_one_typed_row_and_never_a_change_to_its_state(self):
         before = AuditLog.objects.order_by("-pk").values_list("pk", flat=True).first()
 
-        self.report(success=False, message="It stopped.", events=[event(), event("failed", host=DB)])
+        failed = event("failed", host=DB)
+        self.report(ending="task_failed", task=failed["task"], host=DB, events=[event(), failed])
 
-        # Its tasks are the run's record's alone: the log holds its end.
+        # Its tasks are the run's record's alone: the log holds its end, which
+        # says the task that failed and its machine, as the run's row does.
         (ended,) = AuditLog.objects.filter(pk__gt=before, object_id=self.operation_id)
         self.assertEqual(ended.action, AuditLog.Action.FAILED)
-        self.assertEqual(ended.message, "It stopped.")
+        self.assertIn(failed["task"], ended.message)
+        self.assertIn(DB, ended.message)
         self.assertEqual(ended.operation_id, self.operation_id)
         self.assertIn("timing", ended.metadata)
-        self.assertEqual(ended.metadata["failure"]["message"], "It stopped.")
+        self.assertEqual(ended.metadata["failure"]["message"], ended.message)
         self.assertEqual(self.operation().state, OperationRequest.State.FAILED)
 
     def test_events_from_work_other_than_a_run_are_refused(self):

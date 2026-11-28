@@ -111,17 +111,23 @@ def channel_heard(source: InboundSource = InboundSource.WORKER, *, silent: bool 
     readings.record(readings.heartbeat(channel(source)), {}, observed_at=observed_at)
 
 
-def run_ended(operation_id: str, worker: str, *, events: Any = (), **report: Any) -> None:
-    """A claimed run's worker saying its tasks, as its renewals do, then how it ended (``ControllerReport``)."""
+def run_ended(operation_id: str, worker: str, *, events: Any = (), ending: str = "succeeded", **report: Any) -> None:
+    """A claimed run's worker saying its tasks, as its renewals do, then how it
+    ended (``ControllerReport``), as ``ending`` with the ``RunOutcome`` fields given."""
 
     from hq.domains.control_plane.models import OperationRequest
     from hq.platform.application.controller import ControllerReport, renew_operation, report_operation
+    from hq.platform.application.run_outcome import Ending, ended_as
 
     if events:
         renew_operation(str(operation_id), controller_id=worker, events=list(events))
     generation = OperationRequest.objects.get(pk=operation_id).input["generation"]
+    said = {field: report.pop(field) for field in ("task", "host", "message") if field in report}
+    outcome = ended_as(Ending(ending), **said)
     report_operation(
-        str(operation_id), ControllerReport(observed_generation=generation, **report), controller_id=worker
+        str(operation_id),
+        ControllerReport(success=ending == Ending.SUCCEEDED, observed_generation=generation, outcome=outcome, **report),
+        controller_id=worker,
     )
 
 
