@@ -14,12 +14,15 @@ lazy from dataclasses import asdict, is_dataclass
 from django import template
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.describe import Describe
 from hq.platform.application.tone import Tone
 from hq.platform.core.held_values import format_html, format_html_join
 from hq.platform.core.part_examples import tags
+from hq.platform.core.template_literals import Reads
+from hq.platform.core.templatetags.icon_tags import drawn
 lazy from hq.platform.application import action_items, asks, decisions
 lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
@@ -29,7 +32,8 @@ lazy from hq.platform.application.pages import PageAction, offered_now
 lazy from hq.platform.application.request_identity import signed_in
 lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.application.ui import button_classes
-lazy from hq.platform.core import queue_table as queue_tables
+lazy from hq.platform.application.url_query import with_query
+lazy from hq.platform.core import live as live_reads, queue_table as queue_tables
 lazy from hq.platform.core.template_parts import Example, Part, answers, slotted
 lazy from hq.platform.core.templatetags.value_tags import (
     OUTSIDE_LINK,
@@ -272,6 +276,43 @@ def _button_words(label, icon="", count=None, onward=False, *, unseen=False):
     return words
 
 
+def _look(look: str) -> str:
+    button_classes(look)
+    return look
+
+
+# The pairings of a button's options it cannot draw (``Part.refuses``).
+
+
+def _one_look(*, look, css):
+    if css and look:
+        raise template.TemplateSyntaxError("button takes look= or css=, not both")
+
+
+def _one_way(*, url, offer, submit, current):
+    posts = offer is not None
+    if posts + submit + bool(current) > 1 or ((posts or submit or current) and url):
+        raise template.TemplateSyntaxError(
+            "button posts an offer (offer=), sends its form (submit=True), names this page (current=True), "
+            "or links to a url"
+        )
+
+
+def _outside(*, outside, url, modal):
+    if outside and (not url or modal):
+        raise template.TemplateSyntaxError("button leads outside (outside=True) to a url, with no hooks or modal")
+
+
+def _sent(*, offer, url, current, name, value, checked, expanded, heard):
+    """A posting button sends what its offer says; a link or this page's name holds no state."""
+
+    unknown = ["name", "value"] if offer is not None and (name or value != "") else []
+    if (offer is not None or url or current) and (checked is not None or expanded is not None or heard):
+        unknown += ["checked", "expanded", "heard"]
+    if unknown:
+        raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
+
+
 def button(
     context,
     label: Annotated[Any, Describe("Its words.")],
@@ -280,7 +321,7 @@ def button(
     outside: Annotated[bool, Describe("Its url is a page outside HQ, opened as every outside link is.")] = False,
     offer: Annotated[Any, Describe("A `PageAction` that posts, which it sends: where, its field and the rest.")] = None,
     submit: Annotated[bool, Describe("Sends its own form.")] = False,
-    look: Annotated[str, Describe("How it looks, its words from `ui.BUTTON_LOOKS`.")] = "",
+    look: Annotated[str, Describe("How it looks, its words from `ui.BUTTON_LOOKS`."), Reads(_look)] = "",
     css: Annotated[str, Describe("Classes in place of its look, for a control not drawn as a button.")] = "",
     title: Annotated[Any, Describe("Its `title`, read where it stands.")] = "",
     disabled: Annotated[bool, Describe("Neither a link nor a form, kept in the tab order.")] = False,
@@ -295,7 +336,7 @@ def button(
     heard: Annotated[Any, Describe("Its name aloud, where its words are a glyph or none and it has no title.")] = "",
     hit: Annotated[bool, Describe("Drawn smaller than a target, so it asks for its hit area.")] = False,
     modal: Annotated[str, Describe("The dialog a link opens where script runs.")] = "",
-    icon: Annotated[str, Describe("The icon its words open with.")] = "",
+    icon: Annotated[str, Describe("The icon its words open with."), Reads(drawn)] = "",
     count: Annotated[Any, Describe("A count of what it holds, after its words.")] = None,
     arrow: Annotated[bool, Describe("Ends with the arrow of a link onward.")] = False,
     **attributes: Annotated[
@@ -312,29 +353,21 @@ def button(
     """
 
     posts = offer is not None
-    if css and look:
-        raise template.TemplateSyntaxError("button takes look= or css=, not both")
-    if posts + submit + bool(current) > 1 or ((posts or submit or current) and url):
-        raise template.TemplateSyntaxError(
-            "button posts an offer (offer=), sends its form (submit=True), names this page (current=True), "
-            "or links to a url"
-        )
+    _one_look(look=look, css=css)
+    _one_way(url=url, offer=offer, submit=submit, current=current)
+    _outside(outside=outside, url=url, modal=modal)
+    _sent(
+        offer=offer, url=url, current=current, name=name, value=value, checked=checked, expanded=expanded, heard=heard
+    )
     # A posting button sends what its offer says, and carries no hooks.
     unknown = sorted(
         key for key in attributes if posts or (not key.startswith("data_") and key not in BUTTON_ATTRIBUTES)
     )
-    if posts and (name or value != ""):
-        unknown += ["name", "value"]
-    if outside and (not url or attributes or modal):
+    if outside and attributes:
         raise template.TemplateSyntaxError("button leads outside (outside=True) to a url, with no hooks or modal")
-    if (posts or url or current) and (checked is not None or expanded is not None or heard):
-        unknown += ["checked", "expanded", "heard"]
     if unknown:
         raise template.TemplateSyntaxError(f"button takes no {', '.join(unknown)}")
-    try:
-        classes = css or button_classes(look)
-    except ValueError as error:
-        raise template.TemplateSyntaxError(str(error)) from error
+    classes = css or button_classes(look)
     if posts:
         return _posting(
             label, offer, classes=classes, title=title, disabled=disabled, pressed=pressed, hit=hit, context=context
@@ -425,12 +458,19 @@ def head_actions(actions, beside=""):
 
 @register.filter
 def as_ask(action):
-    """An emitted ActionLink that asks for work, as the control that follows it:
-    a row's Refresh. It stands idle until pressed; the page's script follows
-    what the press started."""
+    """An emitted ActionLink that asks for a read now, as the control that
+    follows it: a row's Refresh, standing as the read it asks for does."""
 
     values = asdict(action) if is_dataclass(action) else action
-    return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)
+    url = values["url"]
+    return Ask(
+        values["label"],
+        url,
+        standing=asks.read_now_standing(url),
+        follows="estate",
+        title=values.get("reason", ""),
+        compact=True,
+    )
 
 
 def words(
@@ -458,6 +498,14 @@ def refreshing():
 
 
 @answers(register)
+def refused():
+    """``{% refused as failed %}``: how a press refused at once stands, which
+    nothing stores, so the script says it in these words and this tone."""
+
+    return asks.Standing(asks.FAILED)
+
+
+@answers(register)
 def newer_reading():
     """``{% newer_reading %}``: what a page says of a newer reading it could
     not draw in place, before the link that loads it."""
@@ -465,12 +513,17 @@ def newer_reading():
     return asks.NEWER_READING
 
 
-@register.filter
-def follow_every(live):
-    """``{{ live|follow_every }}``: the ``data-fragment-poll`` of a part
-    whose work is under way (``asks.following``), "" once it is not."""
+@answers(register, takes_context=True)
+def live_stream(context):
+    """``{% live_stream %}``: where the page hears what commits, from the
+    change it was drawn after (``core.live``); nowhere for a page drawn for no
+    request, which no stream of this process can answer once it is served."""
 
-    return asks.following(bool(live)).get("fragment-poll", "")
+    request = context.get("request")
+    if request is None:
+        return ""
+    seen = getattr(request, "live_seen", "") or live_reads.now()
+    return with_query(reverse("live"), {"after": seen})
 
 
 @answers(register)
@@ -478,6 +531,21 @@ def show_newer():
     """``{% show_newer %}``: the link that loads a newer reading."""
 
     return asks.SHOW_NEWER
+
+
+def _read_set(name: str) -> str:
+    return name and live_reads.region(name) and name
+
+
+def live_region(
+    name: Annotated[str, Describe("The read set it is drawn from (`core.live`)."), Reads(_read_set)],
+    drawn: Annotated[Any, Describe("Whether it follows that set now.")] = True,
+    at: Annotated[str | None, Describe("Its own address; the page's own when empty.")] = None,
+):
+    """The hooks of a part of a page drawn from a read set (its Part's rules)."""
+
+    fetched = {} if at is None else {"data-fragment": at or True}
+    return html_attributes({"data-fragment-live": name if drawn else "", **fetched})
 
 
 def ask_button(
@@ -544,7 +612,9 @@ slotted(
         press its reader would be refused. `_page_action.html` draws one; a confirmation's is
         `PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
         with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
-        (`partials/_calendar_sources.html`).
+        (`partials/_calendar_sources.html`). What holds a button (a post's own form, an ask) draws no
+        box, so every kind of control is the same box in any container, and a container's rule reaches
+        the `.btn` through it, never the element a kind is drawn as.
 
         The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
         menu row, a toggle, a close mark) starts from nothing painted (`base.css`) and draws itself, so no
@@ -559,6 +629,7 @@ slotted(
             "form's own, or one a script acts on."
         ),
         function=button,
+        refuses=(_one_look, _one_way, _outside, _sent),
         public=True,
         example=tags.BUTTON,
     ),
@@ -571,6 +642,19 @@ slotted(
         function=words,
         public=True,
         example='Press {% words "agent.access.set" %}.',
+    ),
+    library=register,
+)
+slotted(
+    Part(
+        name="live_region",
+        about="The hooks of a part of a page that is drawn again as what it is drawn from commits.",
+        rules="""
+        The one writer of `data-fragment-live`, through `page_parts.html_attributes` as a part's
+        `data_fragment_live` is; its set is one `core.live` declares (`hand_drawn`'s live-region shape).
+        """,
+        function=live_region,
+        example=Example('<div{% live_region "estate" at="" %}>An example line.</div>'),
     ),
     library=register,
 )

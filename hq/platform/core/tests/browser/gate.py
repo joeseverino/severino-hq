@@ -782,12 +782,22 @@ class BrowserGate(SimpleTestCase):
         """What every page asks for, or what this class answers."""
 
         path = urlsplit(route.request.url).path
-        if (served := self.served.get(path)) is not None:
+        if route.request.resource_type == "eventsource":
+            self.stream(route)
+        elif (served := self.served.get(path)) is not None:
             self.fulfill(route, served)
         elif (sheet := _LIFTED_SHEETS.get(path)) is not None:
             route.fulfill(content_type="text/css", body=sheet)
         else:
             self.answer(route)
+
+    def stream(self, route):
+        """A page's live stream (``core.live``). Pages rendered once emit
+        nothing to hear, so it ends at once, empty, and asks the browser to
+        wait out the test before it opens again; a test that drives the
+        stream answers it itself."""
+
+        route.fulfill(headers={"Content-Type": "text/event-stream"}, body="retry: 3600000\n\n")
 
     def answer(self, route):
         path = urlsplit(route.request.url).path

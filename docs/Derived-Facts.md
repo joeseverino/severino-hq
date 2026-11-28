@@ -914,10 +914,13 @@ request reads GitHub.
 
 A project opted in by `project.dependency_updates.set` has its repository
 updated by Renovate once a day and when somebody asks
-(`project.dependency_updates.run`).
+(`project.dependency_updates.run`), and Open PR asks a run of one
+repository (`dependency_updates.request_open`), its ask's subject naming the
+repository and the branch Renovate is to open.
 `hq.platform.application.dependency_updates.plan` hands the controller the
 opted-in repositories, grouped by owner, whether a run is due, and
-`last_started_at`, the latest run HQ holds. When one is due the controller
+`last_started_at`, the latest run HQ holds; for Open PR's ask, the one
+repository and its branches. When one is due the controller
 mints one installation token per owner. Each names exactly that owner's
 repositories and exactly the Renovate grant (`DependencyUpdates` in
 `controller/host/grant.go`, held to `deploy/github-apps.json`). It writes them,
@@ -925,17 +928,23 @@ mode 0600, to `dependency-updates.json` in the directory root gives the pass as
 `HQ_CONTROLLER_OUT`:
 
 ```json
-{"version":1,"runs":[{"owner":"example","repositories":["example/app"],"token":"…","expires_at":"2030-01-01T00:00:00Z"}]}
+{"version":1,"runs":[{"owner":"example","repositories":["example/app"],"branches":["renovate/example-2.x"],"token":"…","expires_at":"2030-01-01T00:00:00Z"}]}
 ```
 
-A pass given no such directory mints nothing and logs why. Root runs Renovate
-and gives the next pass its result read-only, named by `SEVERINO_DEPENDENCY_RUN`:
+`branches` is named only beside one repository, and reaches Renovate as
+`RENOVATE_CHECKED_BRANCHES`, which opens each as a ticked box of its
+Dependency Dashboard would. A pass given no such directory mints nothing and
+logs why. Root runs Renovate with `reportType` `file`, reads each branch's
+`result` and `prNo` from the report, and gives the next pass its result
+read-only, named by `SEVERINO_DEPENDENCY_RUN`:
 
 ```json
-{"version":1,"started_at":"…","finished_at":"…","runs":[{"owner":"example","repositories":["example/app"],"exit_code":0,"outcome":"ok"}]}
+{"version":1,"started_at":"…","finished_at":"…","runs":[{"owner":"example","repositories":["example/app"],"exit_code":0,"outcome":"ok","branches":[{"repository":"example/app","branch":"renovate/example-2.x","result":"pr-created","pull_request":52,"files":["compose/example/compose.yaml"]}]}]}
 ```
 
-`outcome` is `ok`, `failed` or `timeout`; any other shape is refused. The
+`outcome` is `ok`, `failed` or `timeout`; any other shape is refused. The run's
+unit ending is told to HQ as a `dependency_run` host event, which asks the
+reading at once. The
 `github.dependency_run` reading is one record per owner: a run handed off
 (`handed_off`, until its result comes back, so the plan does not hand it off
 again), or the result once it started after `last_started_at`. A token reaches

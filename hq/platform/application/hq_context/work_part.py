@@ -347,7 +347,7 @@ def _run_dot(job: Any) -> Dot:
     return Dot(
         filled=job.state == JobRow.State.SUCCEEDED,
         tip=f"{job_run(job).word}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
-        url=reverse("jobs:status", args=[job.pk]),
+        url=reverse("jobs:list"),
     )
 
 

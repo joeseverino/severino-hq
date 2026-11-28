@@ -19,6 +19,7 @@ waits on a schedule.
 | :--- | :--- | :--- |
 | **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
+| **Check extensions** (`extensions.yml`) | Compose on a pull request; an extension pull request's dispatch | each extension's checks against the host, and the change's extension branches composed onto the host image as a verify-only candidate; for an extension pull request, its result as HQ's check on its head, which that merge's admission stands on ([Cordon admission](Plugins.md#cordon-admission)) |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
@@ -220,7 +221,7 @@ for only what it does:
 | :--- | :--- | :--- |
 | the controller | an SSH Key item in the vault, rendered for openssl only | what each read or report needs; Contents and Pull requests write on one repository to merge a pull request you approved |
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
-| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
+| Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions, Contents and Pull requests read on the extensions' repositories alone; Actions write here: start the next workflow |
 
 Every use under one installation shares its hourly allowance. The controller
 leaves at least 1,000 requests of it to the pipeline and the dependency update
@@ -406,14 +407,14 @@ compare it.
 | :--- | :--- |
 | `severino-hq-web.service` | the web container; the only thing that starts it. Once HQ is ready, a health poll that reads unhealthy stops it and fails the unit, which restarts it, and a supervisor or health read that hangs for 90 seconds misses the watchdog (`WatchdogSec=`), which does the same |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
-| `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
+| `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends. It starts the pass's container only when a grant's token is due or `hq-controller pass-due` in the web container says a pass is (`cadence.pass_due`), or when HQ cannot say; that ask counts as the controller arriving |
 | `severino-hq-glance.service` / `.path` | `hq-controller --glance`, the only pass that reads a dashboard panel, beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
 | `severino-hq-listener.service` | `hq-controller listen`, resident: it holds the inbound-events Worker's socket open, outbound, and posts what it hears to the events bridge. It stops and starts with the web unit (`PartOf=`), so it runs the image HQ runs, and is started again five seconds after it fails. With no events connection it exits 0 and stays stopped; `severino-hq-listener.path` starts it when a render moves a changed connections document into place |
-| `severino-hq-events.service` | `hq-host events`, resident: it reads Docker's event stream for a container on this machine that dies, starts, changes health, runs out of memory or is removed, and systemd's `JobRemoved` for a job of any unit that ended (done, failed, timed out or canceled), and hands each burst to `hq-controller events` in the web container, which makes the container or unit readings due and asks the settling read of each run HQ holds on a unit of this machine. HQ's own runs are left out. Each time it begins reading it tells HQ it reconnected, so HQ reads the containers and units again for whatever it missed. It restarts with the web unit (`PartOf=`), so it runs the release's `hq-host` |
+| `severino-hq-events.service` | `hq-host events`, resident: it reads Docker's event stream for a container on this machine that dies, starts, changes health, runs out of memory or is removed, and systemd's `JobRemoved` for a job of any unit that ended (done, failed, timed out or canceled), and hands each burst to `hq-controller events` in the web container, which makes the container or unit readings due and asks the settling read of a run HQ holds on that unit. HQ's own passes and runs are left out, and HQ stores a job's end that settles no run only where the job failed. Each time it begins reading it tells HQ it reconnected, so HQ reads the containers and units again for whatever it missed. It restarts with the web unit (`PartOf=`), so it runs the release's `hq-host` |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
-| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a scan queued), at each setup on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a scan queued), at each setup on a host with an `automation` entry, else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again. It first asks `hq-controller waiting` in the web container which profiles HQ holds a queued run or scan for, and starts only those profiles' containers, none when nothing is queued, or every one when HQ cannot say |
 | `var-lib-severino\x2dhq-automation.mount` | the worker's journal over itself, `noexec`, `nosuid`, `nodev`, when the worker's unit starts (`RequiresMountsFor`) |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
@@ -558,7 +559,8 @@ The controller reaches HQ over a Unix socket the web container serves
 (`/run/hq-bridge/bridge.sock`, in the `severino_bridge` volume), and the
 automation worker over one of its own
 (`/run/hq-automation-bridge/bridge.sock`, in the `severino_automation_bridge`
-volume), which serves its claim, renewal and report alone. The listener and
+volume), which serves its claim, renewal and report alone, and the host's
+ask of which profiles have queued work (`hq-controller waiting`). The listener and
 `hq-controller events` reach it over a third
 (`/run/hq-events-bridge/bridge.sock`, in the `severino_events_bridge`
 volume), which serves the `events` action alone. Each socket

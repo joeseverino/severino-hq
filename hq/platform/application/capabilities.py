@@ -45,7 +45,7 @@ from .integration_specs import (
 )
 from .integrations import held_graph
 from .labels import human_label
-from .projection import QueryRefusal
+from .projection import QueryRefusal, serialized_reads
 from .record_errors import PolicyError
 from .refusal_codes import Code
 from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
@@ -398,15 +398,20 @@ def _authorized_run(
             sent=frozenset(payload),
         )
 
+    # Every capability is one transaction, holding the write lock only from
+    # its first write, and one projection until then, so nothing it reads or
+    # derives first holds a writer back or is derived twice.
     if not key:
-        return Ran(act())
+        return Ran(serialized_reads(act))
     try:
-        return _once(
-            spec,
-            key,
-            {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
-            act,
-            actor=agent_subject(principal),
+        return serialized_reads(
+            lambda: _once(
+                spec,
+                key,
+                {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
+                act,
+                actor=agent_subject(principal),
+            )
         )
     except idempotency.IdempotencyConflict as exc:
         return Ran(refuse(Code.IDEMPOTENCY_CONFLICT, exc.reason))

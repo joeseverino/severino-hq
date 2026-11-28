@@ -3,6 +3,7 @@
 from hq.platform.core.part_examples import NARROW, table
 from hq.platform.core.part_examples.charts import readings, weeks
 from hq.platform.core.template_parts import Example
+lazy from hq.platform.application.card_items import Kpi
 lazy from hq.platform.application.tables import TableColumn
 
 
@@ -70,6 +71,31 @@ LAYOUT_STATES = {
         + _sections(("Example hosts 2", _WIDE), ("Example facts", _LONG))
         + "{% endlayout %}",
         _hosts,
+    ),
+    # A page's totals beside its trend as a reader opened its data: the chart
+    # grows by its table, and the totals keep the height they had.
+    "pair-opened": Example(
+        '{% layout kind="pair" %}{% section "Example totals" %}{% facts layout="band" size="lead" items=totals %}'
+        "{% foot %}Example of how to read it.{% endsection %}"
+        '{% include "partials/_chart.html" with chart=trend data_open=True %}{% endlayout %}',
+        lambda: {
+            "totals": [Kpi("Example net worth", "$15,500.00", "+$1,240.00 in the last 30 days")],
+            "trend": readings("Example trend", "Example readings over a month.", "Example", unit="$", days=30),
+        },
+    ),
+    # Facts beside a table long enough to run past them: the facts keep the
+    # height they have.
+    "pair-long": Example(
+        '{% layout kind="pair" %}'
+        + _sections(("Example identity 7", NARROW + "{% foot %}Example of how to read it."), ("Example hosts 3", _WIDE))
+        + "{% endlayout %}",
+        lambda: {
+            "hosts": table(
+                "Example hosts",
+                ("Name", TableColumn("State", drop=3), TableColumn("Address", drop=1), TableColumn("Seen", drop=2)),
+                *((f"example-{n:02}", "Online", f"192.0.2.{n}", "Today") for n in range(1, 13)),
+            )
+        },
     ),
     # A main with its companion, a flow of sections drawn as its aside: the
     # companion sized to what it holds, the two sections pairing once they

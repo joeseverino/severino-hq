@@ -6,11 +6,10 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from hq.platform.application.capabilities import CapabilitySpec
+from hq.platform.application.contracts import camel
 from hq.platform.application.domains import Domain, all_domains, domain_navigation
 from hq.platform.application.host_sections import NAVIGATION_GROUPS
 from hq.platform.application.plugins import NavigationItem
-
-from .fragments import camel
 
 # The tag for what belongs to the API itself rather than to one domain: the
 # domain whose page this document is drawn on, so it stands where the bar has it.

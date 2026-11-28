@@ -1,0 +1,338 @@
+name: Check extensions
+
+# The checks an extension passes before admission (tools/pipeline/check-plugin.sh),
+# run against a host, and the extensions composed onto that host as a
+# verify-only candidate. It runs for two kinds of change:
+#
+# - A host pull request, as a job of its composition (compose.yml), with each
+#   extension as that pull request meets it: its same-named branch or its
+#   default branch. Build HQ reuses wheels admitted against main, so only this
+#   sees a host change that breaks an extension before it merges.
+# - An extension pull request, dispatched by the extension's
+#   check-on-host action with the pull request's head commit, and run on host
+#   main or on the host branch of the same name. It reports its result on that
+#   commit as HQ's check, and an admission of the merge stands on a passing
+#   run on main instead of checking again (tools/pipeline/checked-on-host.sh).
+#
+# The workflow holds no credential that writes beyond that one check: no
+# id-token, no registry write, and a token that reads the extensions. A
+# dispatch, forged or not, can name any commit and only ever checks it: what
+# it builds is local to its job, never published, signed or admitted. Branch
+# code runs only in containers that hold none of the job's credentials, and
+# what it prints is sealed for the operator.
+
+run-name: ${{ inputs.commit && format('Check extensions at {0}', inputs.commit) || 'Check extensions' }}
+
+on:
+  workflow_call:
+    inputs:
+      host-image:
+        description: The host image CI built in this run, by digest.
+        type: string
+        required: true
+      runner-image:
+        description: The automation worker's image CI built beside it, by digest.
+        type: string
+        required: true
+    secrets:
+      HQ_APP_CLIENT_ID:
+        required: true
+      HQ_APP_KEY:
+        required: true
+      COMPOSITION_EXTENSIONS:
+        required: true
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: >-
+          The head commit of the extension pull request to check. A commit
+          names no extension, so the public run list names none either.
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  # What a failure withholds from the public log, sealed for the operator by
+  # the last steps. Outside the workspace, so no build context can include it.
+  WITHHELD_DIR: /tmp/severino-hq-withheld
+
+jobs:
+  check:
+    name: Check extensions
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      # Pulling the host image the candidate is built onto.
+      packages: read
+      # Waiting for that image's build, when an extension's check starts first.
+      actions: read
+    steps:
+      - name: Check out host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the extensions and mint their reader
+        id: reader
+        uses: ./.github/actions/extension-reader
+        with:
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
+
+      - name: Find the extension branches this change builds
+        # A host pull request's same-named branches, or the extension pull
+        # request whose head was dispatched.
+        id: coordinated
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+          BRANCH: ${{ github.head_ref }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ -n "$COMMIT" ]; then
+            tools/pipeline/coordinated-branches.sh composition-set.json --commit "$COMMIT" coordinated.txt
+          else
+            tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
+          fi
+
+      - name: Check out each extension as this change meets it
+        # Its coordinated commit when one was found above, else its default
+        # branch. Without .git, so no copy carries the reader token.
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+        run: tools/pipeline/extension-branches.sh checkout composition-set.json coordinated.txt
+
+      - name: Build the extension installer
+        # The host's Python ABI and uv, holding none of this job's
+        # credentials: where extension code is checked and built.
+        run: |
+          docker build -f composition/Dockerfile --target installer-base \
+            -t "severino-hq-installer:$GITHUB_SHA" .
+
+      - name: Check each extension against this host
+        run: tools/pipeline/check-extensions.sh composition-set.json "severino-hq-installer:$GITHUB_SHA"
+
+      # The candidate: every extension built from source as checked out above,
+      # composed onto this host's image, then run as one application. Only
+      # where a branch is built, since a host pull request without one
+      # composes its admitted set in Build HQ.
+      - name: Authenticate to GHCR
+        if: steps.coordinated.outputs.found == 'true'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+
+      - name: Resolve the host image
+        id: host
+        if: steps.coordinated.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HOST_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+          GIVEN: ${{ inputs.host-image }}
+          GIVEN_RUNNER: ${{ inputs.runner-image }}
+          REPOSITORY: ${{ github.repository }}
+        run: tools/pipeline/host-image.sh "$REPOSITORY" "$HOST_REF" "$GIVEN" "$GIVEN_RUNNER"
+
+      - name: Build every extension from its source
+        if: steps.coordinated.outputs.found == 'true'
+        run: tools/pipeline/extension-branches.sh build composition-set.json "severino-hq-installer:$GITHUB_SHA"
+
+      - name: Stage the candidate
+        if: steps.coordinated.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          args=()
+          for wheel in candidate-wheels/*.whl; do args+=(--wheel "$wheel"); done
+          python3 -m tools.pipeline.compose_plugins --candidate "${args[@]}" --out build/candidate
+
+      - name: Build the candidate image
+        # Admission off: these wheels are unsigned source builds. The tag has
+        # no registry, so nothing in this workflow can publish it.
+        if: steps.coordinated.outputs.found == 'true'
+        env:
+          HQ_IMAGE: ${{ steps.host.outputs.image }}
+        run: |
+          set -euo pipefail
+          staged=build/candidate
+          docker build -f composition/Dockerfile --target candidate -t "severino-hq-candidate:$GITHUB_SHA" \
+            --build-arg HQ_IMAGE="$HQ_IMAGE" \
+            --build-arg STAGED=build/candidate \
+            --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" .
+
+      - name: Verify the candidate as one application
+        # The log gets totals and failing host test ids only: an extension's
+        # tests name its models, routes and fixtures (tools/pipeline/composed-suite.sh).
+        if: steps.coordinated.outputs.found == 'true'
+        run: tools/pipeline/composed-suite.sh "severino-hq-candidate:$GITHUB_SHA"
+
+      - name: The candidate comes up healthy
+        if: steps.coordinated.outputs.found == 'true'
+        run: tools/pipeline/image-health.sh "severino-hq-candidate:$GITHUB_SHA"
+
+      - name: Seal the withheld output
+        id: seal
+        if: failure()
+        uses: ./.github/actions/seal-withheld
+        with:
+          job: extensions
+
+      - name: Say where the reason is
+        if: failure() && steps.seal.outputs.sealed == 'true'
+        run: |
+          {
+            echo "### An extension fails this host"
+            echo
+            echo "Withheld output, for the operator: \`mise run failure-logs ${GITHUB_RUN_ID}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The secret scan an admission's checks give (plugin-checks.yml), over the
+  # commits an extension pull request brings. A job of its own, named for the
+  # task it runs.
+  scan:
+    name: Secret scan
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the toolchain pins
+        id: pins
+        run: echo "mise=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+
+      - name: Read the extensions and mint their reader
+        id: reader
+        uses: ./.github/actions/extension-reader
+        with:
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
+
+      - name: Find the extension pull request
+        id: coordinated
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+          COMMIT: ${{ inputs.commit }}
+        run: tools/pipeline/coordinated-branches.sh composition-set.json --commit "$COMMIT" coordinated.txt
+
+      - name: Check out the extension pull request's history
+        # gitleaks reads commits, so this copy keeps its history; removed after the scan.
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WITHHELD_DIR"
+          repository=$(cut -d= -f1 coordinated.txt)
+          if ! gh repo clone "$repository" "$RUNNER_TEMP/history" -- --quiet 2>"$WITHHELD_DIR/history-clone.log"; then
+            echo "::error title=Extension not checked out::The extension repository could not be cloned; the reason is in this run's sealed failure logs."
+            exit 1
+          fi
+
+      - name: Install the pinned gitleaks
+        uses: jdx/mise-action@924e7c586e33d7d4bae9c14e26c5d22e2beb6e78 # v5.3.0
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
+        with:
+          version: ${{ steps.pins.outputs.mise }}
+          install_args: gitleaks
+          cache: false
+
+      - name: No secret in the commits the pull request brings
+        # The evidence an admission's secret scan gives (plugin-checks.yml),
+        # for the commits from the pull request's base to its head. gitleaks
+        # reads the commits and runs none of them; its findings name files,
+        # so they are sealed.
+        env:
+          RANGE: ${{ steps.coordinated.outputs.base }}..${{ inputs.commit }}
+          # gitleaks is the one tool the task runs, installed above.
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: |
+          set -euo pipefail
+          status=0
+          mise run scan:secrets --commits "$RANGE" "$RUNNER_TEMP/history" >"$WITHHELD_DIR/secret-scan.log" 2>&1 || status=$?
+          rm -rf "$RUNNER_TEMP/history"
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Secret scan::The pull request's commits fail the secret scan; the findings are in this run's sealed failure logs."
+            exit 1
+          fi
+
+      - name: Seal the withheld output
+        if: failure()
+        uses: ./.github/actions/seal-withheld
+        with:
+          job: secret-scan
+
+  # HQ's check on the extension pull request's head, in its own job: it runs
+  # no extension code, and the one token that writes is minted here, for
+  # checks on that one repository.
+  report:
+    name: Report on the extension pull request
+    needs: [check, scan]
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out host
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the extensions and mint their reader
+        id: reader
+        uses: ./.github/actions/extension-reader
+        with:
+          extensions: ${{ secrets.COMPOSITION_EXTENSIONS }}
+          app-client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          app-private-key: ${{ secrets.HQ_APP_KEY }}
+
+      - name: Find the extension pull request
+        id: pull
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+          COMMIT: ${{ inputs.commit }}
+        run: tools/pipeline/coordinated-branches.sh composition-set.json --commit "$COMMIT" coordinated.txt
+
+      # The repository's name is masked, so the log shows only that a
+      # repository was named.
+      - name: Mint a token that can only report checks on it
+        id: report
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ secrets.HQ_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HQ_APP_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.pull.outputs.name }}
+          permission-checks: write
+
+      - name: Say on the pull request's head what the host found
+        env:
+          GH_TOKEN: ${{ steps.report.outputs.token }}
+          COMMIT: ${{ inputs.commit }}
+          CHECK: ${{ needs.check.result }}
+          SCAN: ${{ needs.scan.result }}
+          THIS_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          repository=$(cut -d= -f1 coordinated.txt)
+          case "$CHECK $SCAN" in
+            "success success") conclusion=success title="Checked and composed on the host" ;;
+            *cancelled*) conclusion=cancelled title="The host's check was cancelled" ;;
+            *) conclusion=failure title="Fails on the host" ;;
+          esac
+          gh api -X POST "repos/$repository/check-runs" \
+            -f name="Severino HQ · Checks" -f head_sha="$COMMIT" \
+            -f status=completed -f conclusion="$conclusion" \
+            -f details_url="$THIS_RUN" -f external_id="$GITHUB_RUN_ID" \
+            -f "output[title]=$title" \
+            -f "output[summary]=The host's run: $THIS_RUN" >/dev/null

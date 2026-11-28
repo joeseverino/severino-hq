@@ -333,8 +333,16 @@ DJANGO_STATIC_ROOT=/tmp/hq-static mise run manage -- bench_contention
 mise run manage -- bench_contention --no-ahead --seconds 10
 ```
 
-Three rules keep a page from waiting on a writer:
+Four rules keep a page from waiting on a writer:
 
+- A capability's transaction takes the write lock at its first write, never
+  as it opens (`database.serialized`), so what it reads and derives first
+  holds no other writer back. It reads one snapshot, so what it decides
+  without writing is consistent too. Where another writer committed after that
+  snapshot, what it decided may be stale: it never commits, and runs again
+  holding the lock from the start (`hq/platform/core/sqlite`). A
+  writer that gives up names the work that last took the lock, in the error
+  the server error log keeps.
 - A request stores an answer it derived only if the write lock is free
   (`database.without_waiting`). It already has the answer; the pass stores it
   once the writer commits.
@@ -478,16 +486,20 @@ minutes while HQ is in use, and every report moves a revision the estate reads.
 The first request after each would otherwise derive while a person waits.
 
 So every top-level question a request asks is remembered, with its arguments,
-context and seeded projection. `hq.platform.core.ahead` watches every
-statement a connection runs. One that writes a table a remembered question
-reads wakes one thread after its transaction commits, and `derive_ahead` asks
-again whatever no longer stands. The same thread wakes when the earliest
-remembered answer's moment comes.
+context and seeded projection. One thread, `hq.platform.core.ahead`, looks
+four times a second at SQLite's `PRAGMA data_version`, which moves when any
+other connection commits, in this process or another. Once it moves, the
+thread reads the table revisions and finds the tables written since its last
+pass. When a remembered question reads one, `derive_ahead` asks again whatever
+no longer stands. Only then does it tell the pages open on HQ which read sets
+changed (`core.live`), so a page asking again finds its answer stored. The same
+thread wakes when the earliest remembered answer's moment comes.
 
 | Of the pass | Rule |
 |---|---|
 | Where it runs | for the life of the web application (the ASGI lifespan), never inside the writing transaction |
-| A rolled-back write | says nothing |
+| A rolled-back write | says nothing: its revisions never moved |
+| A writer in another process (`manage.py hq_call`) | heard as one in this process is |
 | Writes that land together | one pass, which starts once none has landed for 50 ms and no later than 0.5 s after the first |
 | Writes during a pass | answered by one more |
 | How often a question is derived | at most once per state of its tables, and by one thread when two want it |
@@ -537,9 +549,10 @@ costs nobody:
   notes, a heartbeat, one live job per kind. A project's refresh is one.
 
 The request that asks answers at once, in one shape for both
-(`hq.platform.application.asks`): how the work stands and, while it is live, a
-status resource, with 202. `partials/_ask.html` draws the control and one
-script behavior follows it (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
+(`hq.platform.application.asks`): how the work stands. `partials/_ask.html`
+draws the control from what is stored, and while the work is live the control
+is a region its page asks for again as the live stream says what it is drawn
+from changed (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,
@@ -937,9 +950,9 @@ follow, each held by `controller/providers/github_spend_test.go`:
   a repository whose answer moved from the fingerprint its held record was
   read under, or one HQ's clock makes due. The clock is
   `observations.github.FULL_READ_EVERY`, at a point in the hour of its own for
-  each repository (`hq/platform/application/github_repositories.py`); an
-  event the query cannot see (an alert, a finished workflow run) since its
-  read (`UNPROBED_EVENTS`) makes it due at once. Any
+  each repository (`hq/platform/application/github_repositories.py`). An
+  event read of its repository (`ReadRequest.subject`) reads that one in
+  full and only that one, whatever the query says. Any
   other repository is sent carried, and HQ keeps its record
   (`ObservationSpec.from_last`). A conditional request would not do this job:
   GitHub's ETag follows the token's text, and every sweep mints a new token.
@@ -1091,18 +1104,24 @@ itself on the run's machines at its revision, under its correlation
 (`automation_runs.queue_settling`). That read's readings become the held
 run's, and its outcome and what follows it are any run's (`_settled`, then
 `_finish` and `app_update_approval.succeeded`). What wakes HQ to ask is
-level-triggered, as a Kubernetes controller's informer and resync are: a job's
-end on HQ's machine (`unit.job.<result>`) makes `automation.held` due, which
-the host job `automation.settle` reads by asking the read of each run held on
-that machine. The lease's bound asks it once no event did
+level-triggered, as a Kubernetes controller's informer and resync are: the
+end of the held unit's job on HQ's machine (`unit.job.<result>`) makes
+`automation.held` due, which the host job `automation.settle` reads by asking
+the read of each run held there whose unit's end is stored since the run was
+claimed and since its last read, so a unit that ended before its run reported
+the hand-off is asked once `_hold` stores the hold. HQ stores a job's end only while a run
+there holds on that unit or may yet hand off (`OutboundWork.reads_due`), so
+another unit's end asks nothing and is not stored, and the watcher leaves out
+HQ's own passes and runs. The lease's bound asks it once no event did
 (`_settle_lapsed_holds`), and a watcher's reconnect asks it as it asks every
-reading its events carry. A held run elsewhere settles at the bound. Its
-security properties:
+reading its events carry. A held run elsewhere settles at the bound, so a
+playbook on a machine whose jobs HQ does not hear waits for its unit and
+states what it did itself. Its security properties:
 
-- An event settles nothing. Which job ended is never read. A read that states
-  no reading settles nothing, so a forged event, or another unit's, costs one
-  read-only read. The bound ends the run as `OutcomeUnknown` only once a read
-  asked at or after it states nothing.
+- An event settles nothing. A read that states no reading settles nothing, so
+  a forged event of the held unit costs one read-only read. The bound ends the
+  run as `OutcomeUnknown` only once a read asked at or after it states
+  nothing.
 - At most one read is in flight per held run. Its key counts the reads that
   have ended, as a workqueue queues a key once while it waits and again once
   it has been processed.
@@ -1671,7 +1690,10 @@ approver (`resource_operations.queue_carried_merge`), so a replayed report
 queues nothing and a merge GitHub refused is asked again by the next approval
 at the same head; the controller's settle
 of the merge with its commit queues the apply, that commit as its `revision`
-(`automation_runs.queue_follow_up`). The merge's `then` is the playbook's id,
+(`automation_runs.queue_follow_up`), and an apply that passes, a held one once
+its read settles it, asks the readings a container's change makes due
+(`CONTAINER_CHANGED`), so its health check reads the containers it moved at
+once. The merge's `then` is the playbook's id,
 its adopted revision, its machines and the correlation all three share. Each
 step's result says what it queued, or why nothing was. A preview that fails
 queues nothing, so nothing merges. An agent's call waits for a person every
@@ -1690,28 +1712,29 @@ has an update, <move>", the move from the pull request's pin, else the default
 branch's, else the registry's latest), its one action, and the reason there is
 none. A pull request open is Approve, through `approval_of`: the standing of
 the newest preview or merge at the head once one is asked, the reason the
-press would be refused now (the record's `held`), or the sentence saying what
-the press does. A pin the default branch's head holds that the container does
+press would be refused now, or the sentence saying what the press does. A pin the default branch's head holds that the container does
 not run (the repository record's `compose_images`) is Apply, which queues the
 playbook at that head on the machines the app runs on (`app_update.apply`, through
-`apply_of`). A branch the Dependency Dashboard holds with no pull request
-(`held_branches`, read from the boxes Renovate's `dependency-dashboard.ts`
-writes), or a release Renovate has not seen, is Open PR (`app_update.open`,
-`app_update_open.py`): it ticks the branch's box through a
-`github.dashboard_box` reconcile, whose token holds Issues write on that one
-repository, and asks a dependency run once the tick lands, or asks the run
-alone where there is no box. A repository that holds the app's directory but
+`apply_of`). A branch Renovate holds with no pull request (a branch of the last
+dependency run's report, `dependency_updates.Branch`), or a release Renovate
+has not seen, is Open PR (`app_update.open`, `app_update_open.py`): it asks a
+dependency run of that one repository, naming the held branch as Renovate's
+`checkedBranches`, and its card follows the run's outcome, which names the
+pull request the run opened. A repository that holds the app's directory but
 not the file the container runs from says so, and a container no repository
-holds keeps the upgrade plan's steps by hand. An action is offered only when
-nothing holds it, so a page never shows a press the capability would refuse:
-a machine the playbook does not run on is refused by Approve and Apply at
-their own boundary (`applied_on`). While a step HQ queued works, or once it
+holds keeps the upgrade plan's steps by hand. While something holds the press
+back, the card draws it unusable with that reason and the finding names the
+reason as its one step: a machine the playbook does not run on is refused by
+Approve and Apply at their own boundary (`applied_on`). The update's way from
+its pull request to its health check is one declared sequence
+(`app_update_flow.UPDATE`, through `sequences.SequenceSpec`), each step read
+from the one record that holds it; the card's steps, the line it leads with
+and the `app_updates` resource's `steps` are that one value. While a step HQ queued works, or once it
 applied and until a reading of the containers since says they still run an
 older pin, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A step that is a playbook's run is said as the run
-says it (`work_runs.standing_of`): while it works, its card and the press that
-asked it follow the run's status (`jobs:run_status`) and link to its page, and
-once it ends the card keeps how it went, linked to the run. A preview or an
+says it (`work_runs.standing_of`): while it works, its card follows the run
+through the live stream and links to its page, and once it ends the card keeps how it went, linked to the run. A preview or an
 apply that ended badly names the step it stopped on and what it said, and an
 apply names each app its machine did not release, in the tone the `apps.pull`
 reading declares for that app's result. The applier states two readings of
@@ -1809,10 +1832,13 @@ also name the repository its playbooks come from, whose root is an Ansible
 project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
-HQ knows each profile's worker is there by its claims. Each claim of nothing
-but its work records that profile's arrival (`cadence.note_automation`), so a
-worker that finds nothing to take still counts as seen, and never as the
-controller. One never seen, or not seen within two of its timer's floors
+HQ knows each profile's worker is there by its host's ask and its claims.
+Before it starts any worker, `hq-host automation` asks which profiles have a
+queued run or scan (`hq-controller waiting`, answered by
+`controller.waiting_profiles` from the claim's own selection), and starts only
+those. The ask and each claim record each profile's arrival
+(`cadence.note_automation`), so an idle host still counts its workers as
+seen, and never as the controller. One never seen, or not seen within two of its timer's floors
 while it holds no run's lease, is absent (`cadence.automation_standing`).
 While the read profile's is absent no scan is asked for; while any profile's
 is, each run of that profile is refused with the reason, one already waiting

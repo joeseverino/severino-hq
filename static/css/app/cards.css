@@ -25,8 +25,11 @@
 :is(.pill, .tag) { line-height: 1.4; }
 
 
-/* A control that posts a form of its own (a posting `{% button %}` with `fields`) stands where a button would. */
-.post-form { display: inline-block; margin: 0; }
+/* A control that posts a form of its own (a posting `{% button %}` that sends
+   more than one value) draws no box of its own, as an ask draws none
+   (pages.css), so its button is the box wherever it stands, as every other
+   kind of control's is. */
+.post-form { display: contents; }
 
 /* A record list row's category as its color (`ListRow.category`), before
    its title; the row says the category in words too. */
@@ -150,9 +153,15 @@
 /* Steps that hold a table's region or a command take the frame's whole
    width, one step to a row, so a table keeps its columns and a command its line. */
 .step-list.is-numbered:has(.table-scroll, .command) { grid-template-columns: minmax(0, 1fr); }
+/* A workflow's steps read down in order at every width, one to a row. */
+.step-list.is-sequence { grid-template-columns: minmax(0, 1fr); }
+/* Under the line that leads it, set apart as a section's parts are. */
+* + .step-list.is-sequence { margin-block-start: var(--stack-gap); }
 .step-list.is-numbered:has(.table-scroll, .command, > li:only-child) > li > div { flex: 1; min-inline-size: 0; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+/* A numbered step's tone colors its number, where an icon's would be. */
+.step-list.is-numbered > li:is(.tone-good, .tone-attention, .tone-serious)::before { color: var(--tone-ink); }
 /* One step stands alone, with no number. */
 .step-list.is-numbered > li:only-child::before { content: none; }
 /* Steps that pair a label with its command (partials/_operator_step.html) are
@@ -182,6 +191,8 @@
 .step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .step-list a { font-weight: 600; }
 .step-list .muted { display: block; margin-top: var(--space-1); }
+/* A step's parts (a declared workflow's checks, its apps) each run on one line: its name, its state, its detail. */
+.step-list .stack-list .muted { display: inline; margin-top: 0; }
 
 /* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
    so its title starts at the edge every other card's heading starts at. The

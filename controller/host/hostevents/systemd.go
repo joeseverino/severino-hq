@@ -8,6 +8,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -92,10 +93,21 @@ func jobArrival(signal *dbus.Signal, heard time.Time) (runtime.InboundArrival, b
 	if !idOK || !unitOK || !resultOK || unit == "" || !runtime.HostJobResult(result).Valid() {
 		return runtime.InboundArrival{}, false
 	}
+	// HQ's own passes and runs are its work, never a change to read: each
+	// one's end would ask for the next.
+	if unit == host.ControllerUnit || unit == host.GlanceUnit || unit == host.AutomationUnit {
+		return runtime.InboundArrival{}, false
+	}
+	// The dependency run's end is its outcome, which HQ reads at once
+	// rather than comparing two readings' times.
+	event := runtime.HostEventUnitJob
+	if unit == host.RenovateUnit {
+		event = runtime.HostEventDependencyRun
+	}
 	heard = heard.UTC().Truncate(time.Microsecond)
 	return runtime.InboundArrival{
 		Provider:   runtime.InboundProviderHost,
-		Event:      string(runtime.HostEventUnitJob) + "." + result,
+		Event:      string(event) + "." + result,
 		Subject:    unit,
 		DeliveryID: fmt.Sprintf("job-%d-%d", id, heard.UnixNano()),
 		ReceivedAt: heard,

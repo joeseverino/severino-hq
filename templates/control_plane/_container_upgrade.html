@@ -1,0 +1,42 @@
+{% comment %}
+What upgrading a running container would take (application.upgrades.Plan, the
+upgrades resource's): one line of where its update stands and the person's
+next step, with the press beside it, then its steps
+(application.app_update_flow.UPDATE, the app_updates resource's steps) and
+what it changes in a fold. The page's part "upgrade", drawn again alone while
+its update moves.
+{% endcomment %}
+{% if plan or state %}
+{% section "Upgrade" id="upgrade" data_fragment_name="upgrade" data_fragment_live=state.follows %}
+  {% if state.flow.steps %}
+  {% button_row %}<span><strong>{{ state.flow.about }}.</strong> {{ state.flow.said }}{% if update.brings %} {% status update.brings_said.short tone=update.brings_said.tone pill=False icon="shield" %}{% endif %}</span>{% if act %}{% include "partials/_page_action.html" with action=act only %}{% endif %}{% endbutton_row %}
+  {% steps of=state.flow %}
+  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
+  {% endif %}
+  {% section "What it changes" fold=True line=True %}
+  {% facts layout="band" %}
+    {% if update %}
+    {% fact "Pin" icon="deploy" %}
+      {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Not read{% endfor %}
+    {% detail %}
+      {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% empty %}<small>Its diff is too large to read</small>{% endfor %}
+    {% endfact %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=update.fixes_said %}{% endif %}
+    {% fact "New vulnerabilities" icon="info" value=update.brings_said %}
+    {% elif plan %}
+    {% fact "To" icon="deploy" %}
+      {% entity plan.release.url|outside label=plan.target_tag code=True %}
+    {% detail %}
+      <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text }}{% endif %}</small>
+    {% endfact %}
+    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=plan.fixes_said %}{% endif %}
+    {% endif %}
+    {% if plan %}
+    {% fact "Data" icon="layers" value=plan.data_said %}
+    {% fact "Checked after it by" icon="check-circle" value=plan.verified_said %}
+    {% endif %}
+  {% endfacts %}
+  {% endsection %}
+{% aside %}{% if plan %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}{% endif %}
+{% endsection %}
+{% endif %}

@@ -104,51 +104,6 @@ class ApprovedRunPageTests(TestCase):
         self.assertGreater(events.count, len(events.lines))
 
 
-class LiveRunPageTests(TestCase):
-    """While a run runs, its page's run_status region asks its page again, until the run ends."""
-
-    WORKER = "example-worker"
-
-    def setUp(self):
-        from hq.platform.application.tests.procedures import Supply, manifest
-
-        Supply(self, manifest())
-
-    def worker(self, action: str, payload=None, **query):
-        """One call of the playbook worker, on its own socket."""
-
-        from hq.domains.control_plane.tests import bridge_client
-
-        return bridge_client.call(action, payload, app=bridge_client.worker(), controller_id=self.WORKER, **query)
-
-    def polls(self, pk) -> bool:
-        """Whether the run_status region asks its page again."""
-
-        response = self.client.get(run_page(pk))
-        self.assertEqual(response.status_code, 200)
-        (region,) = (
-            element
-            for element in all_elements(response.content.decode())
-            if element.attrs.get("data-fragment-name") == "run_status"
-        )
-        return bool(region.attrs.get("data-fragment-poll"))
-
-    def test_a_run_s_status_is_asked_again_until_it_ends(self):
-        from hq.platform.application.tests.procedures import approved_run, run_payload
-
-        operation = approved_run(self, run_payload(), principal=AGENT, key="example-live")["operation"]["id"]
-        claimed = self.worker("claim", capability=["automation.operation:run"], lease_seconds=120, attempt="example-1")
-        self.assertEqual(claimed["operation"]["id"], operation)
-        operator(self.client)
-
-        self.assertTrue(self.polls(operation))
-
-        report = {"success": True, "observed_generation": claimed["input"]["generation"], "message": "Done."}
-        self.worker("report", report, operation=operation)
-
-        self.assertFalse(self.polls(operation))
-
-
 class RunHereTests(TestCase):
     """A machine's page offers each playbook that may run on it, its Run page
     opened with the machine chosen, and lists its runs above what it holds."""

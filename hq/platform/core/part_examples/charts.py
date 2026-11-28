@@ -19,14 +19,14 @@ lazy from hq.platform.application.ui import (
 WEEK = date(2026, 1, 5)
 
 
-def readings(title, lede, *names, unit="min", marks=()):
-    """A line chart of a week's readings, one line for each name."""
+def readings(title, lede, *names, unit="min", marks=(), days=7):
+    """A line chart of a run of daily readings, a week unless ``days`` says, one line for each name."""
 
     return line_chart(
         title,
         lede,
         tuple(
-            (name, tuple((WEEK + timedelta(days=day), float((day * slot) % 5 + slot)) for day in range(7)), slot)
+            (name, tuple((WEEK + timedelta(days=day), float((day * slot) % 5 + slot)) for day in range(days)), slot)
             for slot, name in enumerate(names, 1)
         ),
         unit=unit,

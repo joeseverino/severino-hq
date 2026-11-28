@@ -15,7 +15,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import PurePosixPath
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Final, Literal, TypedDict
 
 from django.conf import settings
 from django.db import DatabaseError, transaction
@@ -38,7 +38,7 @@ from .automation_inputs import INPUT_NAME, AdoptedInput, input_type, procedure_i
 from .automation_manifest import AUTHORED, PLAYBOOK, REVISION, OperationManifest, ProcedureTerms, Statement
 from .automation_sources import ProcedureDeclaration
 from .command_fields import Describe, RequiredText
-from .contracts import Effect
+from .contracts import Effect, pascal
 from .integration_specs import CapabilitySpec
 from .projection import read_once
 from .quoted import Quoted
@@ -67,6 +67,8 @@ REFUSED_KINDS = {
     "config": "an ansible.cfg, which changes how every playbook runs",
     "plugins": "a plugins directory, whose code runs with every playbook",
 }
+# Why a refusal's details.refused is what to read.
+REFUSED: Final = "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push."
 # Where a role's own files sit, beside a playbook or at the project's root.
 ROLES = "roles"
 
@@ -302,6 +304,12 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
             continue
         found[procedure.id] = procedure
         sidecars[procedure.id] = name
+    for key, other in _alike(found).items():
+        procedure = found.pop(key)
+        name = sidecars[key]
+        unadoptable[name] = _Unadoptable(
+            key, Quoted(procedure.title or name), (Quoted(_alike_words(key, other)),), frozenset(used[name])
+        )
     for procedure in tuple(found.values()):
         if said := _unsettled(procedure, found):
             name = sidecars[procedure.id]
@@ -310,6 +318,24 @@ def _procedures(proposal: SourceProposal) -> tuple[dict[str, AdoptedProcedure], 
                 procedure.id, Quoted(procedure.title or name), (Quoted(said),), frozenset(used[name])
             )
     return found, unadoptable
+
+
+def _alike(ids: Iterable[str]) -> dict[str, str]:
+    """Each of ``ids`` whose name in the API (its types', its operation's)
+    another holds, by that other: ``pascal`` runs an id's words together, so
+    ``unit_history`` and ``unit.history`` are one name."""
+
+    first: dict[str, str] = {}
+    alike: dict[str, str] = {}
+    for each in sorted(ids):
+        if (holder := first.setdefault(pascal(each), each)) != each:
+            alike[each] = holder
+            alike.setdefault(holder, each)
+    return alike
+
+
+def _alike_words(key: str, other: str) -> str:
+    return f"Its id {key} is named {pascal(key)} in HQ's API, as {other} is; rename one of them."
 
 
 def _unsettled(procedure: AdoptedProcedure, found: Mapping[str, AdoptedProcedure]) -> str:
@@ -688,10 +714,7 @@ def plan(proposal_id: int, playbook: str = "") -> AdoptionPlan:
         adoptable = any(not change.problems for change in planned.changes)
         refused = planned.unplaced if adoptable or not planned.changes else planned.refused
     if refused:
-        raise PolicyError(
-            "This can't be adopted; details.refused lists why. Fix it in the repository; HQ scans the push.",
-            details={"refused": list(refused)},
-        )
+        raise PolicyError(REFUSED, details={"refused": list(refused)})
     return planned
 
 
@@ -774,6 +797,9 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
             catalog.pop(change.key, None)
         else:
             catalog[change.key] = change.procedure
+    # A playbook adopted from another commit may hold the name a chosen one would.
+    if alike := _alike(catalog):
+        raise PolicyError(REFUSED, details={"refused": [_alike_words(key, other) for key, other in alike.items()]})
     ordered = [catalog[key] for key in sorted(catalog)]
     proposal = planned.proposal
     row = AdoptedCatalog.objects.create(

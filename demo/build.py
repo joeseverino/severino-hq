@@ -66,6 +66,9 @@ _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/s
 _PER_RESPONSE_SOURCES = re.compile(r"\s+(?:'nonce-[^']*'|'strict-dynamic')")
 _NONCE_ATTR = re.compile(r'(<script\b[^>]*?)\snonce="[^"]*"')
 _CHARSET = '<meta charset="utf-8">'
+# A saved copy has no HQ behind it to hear what commits (core.live), so the
+# build neither saves its stream's address nor reads it as a script's answer.
+_LIVE_STREAM = re.compile(r'\sdata-live="[^"]*"')
 # Directives a meta tag can't carry; browsers ignore them there and say so.
 _HEADER_ONLY = ("frame-ancestors", "report-uri", "report-to", "sandbox")
 # Links with a query, from the root or from the page they are on ("?page=2"),
@@ -343,7 +346,7 @@ def _inject(page: str, response, *, address: str = "") -> bytes:
     saved copy stands for, and the demo's scripts, after the charset."""
 
     shown = f'<meta name="hq-demo-address" content="{escape(address)}">' if address else ""
-    page = _NONCE_ATTR.sub(r"\1", _real_docs(page))
+    page = _LIVE_STREAM.sub("", _NONCE_ATTR.sub(r"\1", _real_docs(page)))
     return page.replace(_CHARSET, _CHARSET + _meta_policy(response) + shown + _INJECT, 1).encode()
 
 
@@ -393,7 +396,7 @@ class _Offered:
         """What ``page`` at ``path`` offers; ``depth`` is how many copies from
         a page its addresses with a query are, one for a page's own."""
 
-        page = own(page)
+        page = _LIVE_STREAM.sub("", own(page))
         links = {urljoin(path, unescape(address)) for address in _QUERY_HREF.findall(page)}
         links.update(_list_pages(path, page))
         for address in links | _filter_choices(path, page):

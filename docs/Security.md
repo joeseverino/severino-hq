@@ -726,8 +726,8 @@ path from the public internet. Setting it up is
   another token reaching the Durable Object is closed at once.
 - The Durable Object logs each event it sends in its SQLite storage, under an
   id that only grows: the contract's members of the event (provider, event,
-  subject, delivery id, time), the names the socket already carries, never a
-  body. It keeps a window of the newest by count and by age (`LOG_EVENTS`
+  subject, delivery id, time, and a declared fact's values), what the socket
+  already carries, never a body. It keeps a window of the newest by count and by age (`LOG_EVENTS`
   and `LOG_AGE_MS` in `worker/src/hub.ts`), cut from the oldest end, so an
   id it holds has every event after it. A listener that reconnects presents the last id it handled (`Last-Event-ID`, a number) and
   is sent exactly the events after it; one whose id the log no longer holds,
@@ -738,17 +738,24 @@ path from the public internet. Setting it up is
   socket could not already hear.
 - Every event a verified request carries is forwarded, one HQ takes or not,
   so a provider's test event shows on Events; HQ records one it does not
-  take as ignored and reads nothing for it. An event forwards its names alone
-  (provider, event, subject, delivery id, time), never its body, each within
-  the bound the contract's `InboundArrival` gives it
+  take as ignored and reads nothing for it. An event forwards its names
+  (provider, event, subject, delivery id, time) and, for an event its
+  declaration gives a fact (`InboundSpec.facts`), the text at each of the
+  fact's pointers into the signed body: what it is about, when the body says
+  it was said, and each value. It never forwards the body. Each member is
+  within the bound the contract's `InboundArrival` gives it
   (`worker/src/generated/arrival.json`); one over its bound, or with no name
-  or delivery id, is refused alone, never sent. A valid sender can only make HQ
-  re-read a source with HQ's own credentials.
+  or delivery id, is refused alone, never sent. A valid sender can make HQ
+  re-read a source with HQ's own credentials, and show what its fact says as
+  told on a page until that subject's next read (`inbound_events.told`). A
+  fact changes no reading, operation, approval or gate.
 - GitHub signs the body alone, so the delivery and event headers are outside
   the signature: a captured signed body can be sent again under a new
   delivery id, and each is a new event. Its cost is bounded by the read it
-  asks, coalesced with any already asked: an alert's, one full read of its
-  repository.
+  asks, coalesced with any already asked: one full read of its repository. A
+  replayed fact is ordered by the time inside its signed body, so it never
+  stands over a newer one, and one said before its subject's last read is
+  never shown.
 - Tailscale signs its time with the body (`Tailscale-Webhook-Signature`,
   `t=<time>,v1=<HMAC-SHA256 of "<time>.<body>">`), and a request signed more
   than five minutes from the Worker's clock is refused, so a captured one
@@ -819,8 +826,8 @@ and no credential. It reads only Docker's event stream and systemd's
 client of the bus speaks for it, and tells HQ only names (the container's,
 Docker's action, id and time; the unit's, the job's result and id) through
 `hq-controller events`, so a forged event costs one read of the containers
-or the units, and one read-only settling read of each run held on a unit
-there, which settles nothing unless it states what the unit did.
+or the units, and one read-only settling read of the run held on the unit
+it names, which settles nothing unless it states what the unit did.
 
 The deploy token is the one standing secret a workflow holds. Every other
 write a workflow makes is a GitHub token minted for one permission and one

@@ -36,7 +36,7 @@ lazy from django.core.cache import caches
 lazy from django.db import DatabaseError, OperationalError, connection, transaction
 
 lazy from hq.platform.core import revisions
-lazy from hq.platform.core.database import without_waiting
+lazy from hq.platform.core.database import holds_write_lock, without_waiting
 lazy from hq.platform.core.revisions import CACHE_ALIAS, _uncounted
 
 from .projection import projection_scope, read_once, seeded
@@ -442,11 +442,11 @@ def _awaited(key: str | None) -> tuple[Any, datetime | None] | None:
     """The answer and its moment another thread derives for ``key``, waited
     for; None when none is deriving it, or it failed or took too long.
 
-    Never inside a transaction: the other thread may need the write lock this
-    one holds to read what it derives from, and would wait on it.
+    Never while this thread holds the write lock: the other thread may need
+    it to read what it derives from, and would wait on it.
     """
 
-    if key is None or connection.in_atomic_block:
+    if key is None or holds_write_lock():
         return None
     with _IN_FLIGHT_LOCK:
         flight = _IN_FLIGHT.get(key)

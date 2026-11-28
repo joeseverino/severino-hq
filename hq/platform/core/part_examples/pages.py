@@ -202,6 +202,32 @@ PAGE_HEAD_STATES = {
         },
         heads_the_page=True,
     ),
+    # Every kind of control a head draws, beside its title and in its menu,
+    # each a row at the menu's one inset: a link, a post of its own form (the
+    # first the menu copies), one through the page's shared form, a dialog's
+    # opener, an ask and one refused.
+    "every-kind": Example(
+        '{% include "partials/_page_head.html" %}',
+        lambda: {
+            "page": Page(
+                title="Example decisions",
+                actions=(
+                    PageAction("View example", "/example/view/"),
+                    PageAction._built(
+                        label="Adopt all", url="/example/adopt/", method="post", sends={"variant": "all", "at": "1"}
+                    ),
+                    PageAction._built(label="Reject all", url="/example/reject/", method="post"),
+                    PageAction("Edit example", "/example/edit/", modal="example-edit"),
+                    Ask("Example read", "/example/refresh/", title="Reads the example repository again."),
+                    PageAction("Example refused", "/example/refused/", title="Example reason.", disabled=True),
+                ),
+            ),
+            "page_beside": MOST_BESIDE,
+            # The page its own form returns to.
+            "request": RequestFactory().get("/example/"),
+        },
+        heads_the_page=True,
+    ),
 }
 
 
@@ -282,8 +308,8 @@ ASK_STATES = {
             ),
         },
     ),
-    # While its work is under way: busy, its elapsed time ticking, followed
-    # at its status resource.
+    # While its work is under way: busy, its elapsed time ticking, a region
+    # of its page asked for again as what it is drawn from changes.
     "running": Example(
         '{% section "Example readings 3" %}{% include "partials/_ask.html" with ask=ask %}{% endsection %}',
         lambda: {
@@ -296,7 +322,7 @@ ASK_STATES = {
                     since=DRAWN_AT - timedelta(seconds=40),
                     percent=40,
                 ),
-                status_url="/example/read/status/",
+                follows="estate",
                 primary=True,
             )
         },
@@ -329,7 +355,7 @@ ASK_STATES = {
                 "Example read",
                 "/example/read/",
                 standing=Standing(QUEUED, note=WAITING, since=DRAWN_AT - timedelta(seconds=20)),
-                status_url="/example/read/status/",
+                follows="estate",
                 compact=True,
             ),
         ),
@@ -367,7 +393,7 @@ ASK_STATES = {
                             ),
                             since=DRAWN_AT - timedelta(minutes=4),
                         ),
-                        status_url="/example/refresh/status/",
+                        follows="estate",
                     ),
                 ),
             )

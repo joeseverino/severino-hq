@@ -2,22 +2,42 @@ import { DurableObject } from "cloudflare:workers";
 import arrival from "./generated/arrival.json";
 
 /**
- * What reaches a listener for one verified delivery: its names, never its
- * body, as the bridge contract's InboundArrival has them.
+ * What reaches a listener for one verified delivery: its names, and its
+ * fact's values where its declaration gives one, never its body, as the
+ * bridge contract's InboundArrival has them.
  */
-export type InboundEvent = Record<keyof typeof arrival.properties, string>;
+export interface InboundEvent {
+  provider: string;
+  event: string;
+  subject: string;
+  delivery_id: string;
+  received_at: string;
+  about?: string;
+  said_at?: string;
+  fact?: Record<string, string>;
+}
+
+const length = (text: string): number => [...text].length;
 
 /**
  * Whether the event is named, as HQ stores only a named event under a named
- * delivery, and each member is within the length the contract bounds it to,
- * in code points as JSON Schema counts them. HQ refuses a batch holding one
+ * delivery, and each member is within the bounds the contract sets it, in
+ * code points as JSON Schema counts them. HQ refuses a batch holding one
  * event outside it, so such an event is refused here, alone.
  */
 export function withinContract(event: InboundEvent): boolean {
+  const { fact: bound, ...texts } = arrival.properties;
+  const fact = Object.entries(event.fact ?? {});
   return (
     Boolean(event.event && event.delivery_id) &&
-    Object.entries(arrival.properties).every(
-      ([member, shape]) => !("maxLength" in shape) || [...event[member as keyof InboundEvent]].length <= shape.maxLength,
+    Object.entries(texts).every(
+      ([member, shape]) =>
+        !("maxLength" in shape) || length(event[member as keyof typeof texts] ?? "") <= shape.maxLength,
+    ) &&
+    fact.length <= bound.maxProperties &&
+    fact.every(
+      ([field, value]) =>
+        length(field) <= bound.propertyNames.maxLength && length(value) <= bound.additionalProperties.maxLength,
     )
   );
 }
@@ -92,7 +112,7 @@ const ID = /^[1-9]\d{0,14}$/;
  * Each event it sends is appended to a log in its SQLite storage under an id
  * that only grows, so a listener that reconnects naming the last id it
  * handled is sent exactly the events after it, then the live ones. The log
- * holds the contract's members of each event alone, the names the socket
+ * holds the contract's members of each event alone, what the socket
  * carries, never a body. It keeps the last LOG_EVENTS events of the last
  * LOG_AGE_MS, and always the newest, so its ids keep growing; it is cut from
  * its oldest end alone, so an id within it has every event after it.

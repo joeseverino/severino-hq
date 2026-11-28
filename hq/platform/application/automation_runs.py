@@ -37,7 +37,7 @@ lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import REVISION_INPUT, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
-from .contracts import Effect
+from .contracts import Effect, pascal
 from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
@@ -115,12 +115,14 @@ def runs_procedure(name: str) -> bool:
     return name.startswith("automation.") and name.endswith(".run")
 
 
-def run_title(operation_id: str, titles: Mapping[str, str]) -> str:
+def run_title(operation_id: str, titles: Mapping[str, str], *, check: bool = False) -> str:
     """A procedure's run in words, as its command's heading and button and a
     list of work say it: its playbook's title among ``titles``
-    (``automation_adoption.playbook_titles``), else Run and its id."""
+    (``automation_adoption.playbook_titles``), else Run and its id; a run in
+    check mode as a preview of it."""
 
-    return titles.get(operation_id) or f"{OperationRequest.Action.RUN.label} {operation_id}"
+    title = titles.get(operation_id) or f"{OperationRequest.Action.RUN.label} {operation_id}"
+    return f"{PREVIEW.title}: {title}" if check else title
 
 
 def resource_key(operation_id: str) -> str:
@@ -219,7 +221,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
         ),
     ]
     return make_dataclass(
-        f"Run{''.join(part.title() for part in manifest.id.replace('.', '_').split('_'))}",
+        f"Run{pascal(manifest.id)}",
         fields,
         bases=(RunCommand,),
         frozen=True,
@@ -419,7 +421,7 @@ def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationReq
 
     One run per procedure is also the database's rule
     (``one_active_operation_per_resource_action``); one writer per host is
-    this, read under the write lock every request takes.
+    this, read where no other writer commits before the run it queues.
     """
 
     active = OperationRequest.objects.select_related("resource").filter(

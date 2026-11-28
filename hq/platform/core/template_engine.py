@@ -6,8 +6,8 @@ as text (``held_values``).
 A page shows a moment through ``when`` alone, so a template that asks for
 ``date``, ``time``, ``timesince``, ``timeuntil`` or ``{% now %}`` fails as it
 compiles: "Invalid filter: 'date'". A template of HQ or an extension that
-draws by hand a shape a shared part draws (``hand_drawn.SHAPES``) fails as it
-loads.
+draws by hand a shape a shared part draws (``hand_drawn.SHAPES``), or writes a
+literal a filter refuses (``template_literals``), fails as it loads.
 """
 
 import os
@@ -18,12 +18,12 @@ from django.template import TemplateSyntaxError
 from django.template.backends.django import DjangoTemplates
 from django.template.base import Origin
 from django.template.library import Library
-from django.template.loaders import app_directories, base, filesystem
+from django.template.loaders import app_directories, base, cached, filesystem
 lazy from django.apps import apps
 lazy from django.conf import settings
 
 lazy from hq.platform.application.plugins import installed_plugin_apps
-lazy from hq.platform.core import held_values
+lazy from hq.platform.core import held_values, template_literals
 lazy from hq.platform.core.hand_drawn import hand_drawn
 
 # What each builtin library loses, by the module Django names it with: a
@@ -83,7 +83,17 @@ def ours() -> tuple[str, ...]:
     return tuple(f"{Path(directory)}{os.sep}" for directory in directories)
 
 
-class _Refusing(base.Loader):
+class _Read(base.Loader):
+    """A loader whose templates of HQ and its extensions write no literal a
+    filter refuses (``template_literals``), read once as each compiles."""
+
+    @override
+    def get_template(self, template_name, skip=None):
+        template = super().get_template(template_name, skip)
+        return template_literals.held(template) if template.origin.name.startswith(ours()) else template
+
+
+class _Refusing(_Read):
     """A loader whose templates of HQ and its extensions draw no shared
     part's shape by hand (``hand_drawn``), and hold each value an HTML one
     prints as text (``held_values``)."""
@@ -105,3 +115,8 @@ class FilesystemLoader(_Refusing, filesystem.Loader):
 
 class AppDirectoriesLoader(_Refusing, app_directories.Loader):
     """Django's app directories loader, refusing a shape drawn by hand."""
+
+
+class CachedLoader(cached.Loader, _Read):
+    """Django's cached loader, which compiles each template it keeps itself,
+    so it reads each one's literals there."""

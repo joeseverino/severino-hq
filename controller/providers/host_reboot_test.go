@@ -21,7 +21,7 @@ func rebootInventory(t *testing.T, path string) runtime.KindReport {
 	kind := runtime.ResourceKindHostReboot
 	declared := runtime.ControllerRegistry{Observations: map[string]string{string(kind): "host"}}
 	controller := &Controller{Registry: New(runtime.Environment{HostReboot: path}, supplied(), &fakeHTTP{}), Declared: declared}
-	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
+	inventory, err := controller.Inventory(t.Context(), []runtime.ResourceKind{kind}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func edgeRebootInventory(t *testing.T, answers map[string]string) (runtime.KindR
 		ConnectionCredentials: []runtime.ConnectionProvider{runtime.ConnectionProviderSSH},
 		LoggingIn:             []runtime.ResourceKind{kind},
 	}
-	inventory, err := (&Controller{Registry: registry, Declared: declared}).Inventory(t.Context(), []runtime.ResourceKind{kind}, nil)
+	inventory, err := (&Controller{Registry: registry, Declared: declared}).Inventory(t.Context(), []runtime.ResourceKind{kind}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

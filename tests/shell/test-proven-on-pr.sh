@@ -23,8 +23,14 @@ cat >"$bin/gh" <<'STUB'
 #!/bin/sh
 case "$2" in
   */pulls) [ -n "$TEST_PR" ] && echo "$TEST_PR $TEST_HEAD" || echo "null null" ;;
+  */git/commits/"$TEST_HEAD") echo "${TEST_HEAD_TREE-$TEST_COMMIT_TREE}" ;;
   */git/commits/*) echo "$TEST_COMMIT_TREE" ;;
   */runs/*/jobs*) [ -z "$TEST_SKIPPED" ] || echo "$TEST_SKIPPED" ;;
+  # The host's checks of extension commits: the conclusion of the newest
+  # main run whose title names the head the --jq filter names.
+  */example/hq/actions/workflows/extensions.yml/runs*)
+    case "$2" in *"branch=main"*) ;; *) exit 0 ;; esac
+    case "$4" in *"Check extensions at $TEST_HEAD"*) echo "$TEST_CHECKED" ;; esac ;;
   */runs*) echo "42 $TEST_CONCLUSION" ;;
 esac
 # gh run 42 --repo R --name composition --dir DIR: the run's record.
@@ -109,4 +115,18 @@ RECORD="ghcr.io/example/hq/composition:pr-$head_sha" composed_unproven "the reco
 IDENTITY=4567efab composed_unproven "other images or extensions"
 COMPOSED_SIGNED=999 composed_unproven "signed for another pull request"
 COMPOSED_SIGNER=ci.yml composed_unproven "signed by another workflow than Compose"
+# An extension's merge stands on the host's check of its pull request's head.
+checked() {
+  (cd "$repo_dir" && PATH="$bin:$PATH" GITHUB_REPOSITORY=example/extensions GITHUB_SHA="$commit" \
+    TEST_PR="${PR-176}" TEST_HEAD="$head_sha" TEST_COMMIT_TREE="$tree" TEST_HEAD_TREE="${HEAD_TREE-$tree}" \
+    TEST_CHECKED="${CHECKED-success}" \
+    tools/pipeline/checked-on-host.sh example/hq 2>/dev/null)
+}
+[ "$(checked)" = "pr=176
+gates=passed" ] || { echo "an extension merge the host checked was not proven" >&2; exit 1; }
+checked_unproven() { [ -z "$(checked)" ] || { echo "an extension merge was proven: $1" >&2; exit 1; }; }
+CHECKED=failure checked_unproven "the host's last check failed"
+CHECKED="" checked_unproven "no check of the head on the host's main"
+HEAD_TREE=0000000000000000000000000000000000000000 checked_unproven "a head of another tree"
+PR="" checked_unproven "no merged pull request"
 echo "proven-on-pr promotion tests passed"

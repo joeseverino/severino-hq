@@ -18,7 +18,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.cadence_testing import controller_arrived
-from hq.platform.application.markup_testing import hrefs, select
+from hq.platform.application.markup_testing import followed, hrefs, select
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.testing import SignedInTestCase, connection, declare
@@ -113,7 +113,9 @@ class DashboardWorkflowTests(SignedInTestCase):
                 "/dashboard/glance/", form_keyed(), headers={"X-Requested-With": "XMLHttpRequest"}
             )
 
-        self.assertEqual((response.status_code, response.json()["live"]), (202, True))
+        # Answered with the strip, which follows the panel being read.
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("dashboard", followed(response))
         self.assertEqual(
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{machine.pk}"],

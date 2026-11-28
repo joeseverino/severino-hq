@@ -6,7 +6,7 @@
 # it hung in, the hung process dumps its stacks, no process of its tree is
 # left, and it exits 124. A run whose tests keep beginning, one that spends
 # CPU without a test beginning, and a run that holds no test run are never
-# stopped.
+# stopped, nor the gate once its test run has ended.
 set -eu
 
 repo="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -66,10 +66,13 @@ if mode == "hang":
     hang_on_the_way_out()
 PY
 
-measured() { # <mode>
+# The gate goes on for the seconds given once its test run has ended, as uv
+# does for a moment and a verdict for longer.
+measured() { # <mode> [<seconds>]
     status=0
+    # shellcheck disable=SC2016  # the inner shell expands its arguments
     (cd "${work}" && MODE="$1" PIDS="${work}/pids" PYTHONPATH="${repo}" "${repo}/tools/lib/measured" \
-        uv run --project "${repo}" --locked python manage.py test) >"${work}/out" 2>&1 || status=$?
+        sh -c 'uv run --project "$1" --locked python manage.py test && sleep "$2"' sh "${repo}" "${2:-0}") >"${work}/out" 2>&1 || status=$?
 }
 
 measured hang
@@ -83,8 +86,8 @@ for pid in "${hung}" "${child}"; do
 done
 
 for mode in marks busy; do
-    measured "${mode}"
-    [ "${status}" -eq 0 ] || fail "a run of tests making progress (${mode}) was stopped: $(cat "${work}/out")"
+    measured "${mode}" 3
+    [ "${status}" -eq 0 ] || fail "a run of tests making progress (${mode}), its gate going on after it, was stopped: $(cat "${work}/out")"
 done
 
 status=0

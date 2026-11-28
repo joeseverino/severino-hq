@@ -196,47 +196,81 @@ class ApplyEventsTests(TestCase):
 
         self.assertEqual(asked(), [])
 
-    @override_settings(SEVERINO_SWEEP_INTERVAL_ACTIVE_SECONDS=3600, SEVERINO_SWEEP_INTERVAL_IDLE_SECONDS=43200)
-    def test_a_burst_of_events_is_read_at_once_and_once_after_it(self):
+    def test_two_events_for_one_repository_make_one_read_of_it(self):
+        from ..read_requests import forced_reads
+
+        self.apply(worker(PUSH, {**PUSH, "event": "pull_request.opened", "delivery_id": "second"}))
+
+        reads = forced_reads()
+        self.assertEqual(sorted(read.kind for read in reads), PUSHED)
+        self.assertEqual({read.subject for read in reads}, {"example/app"})
+
+    def test_an_ask_made_after_a_pass_took_its_verdict_is_read_by_the_next(self):
         from hq.domains.control_plane.models import ProviderInventory
 
         from ..cadence import sweep_due
         from ..derivation_testing import frozen
+        from ..read_requests import forced_reads, take
 
         start = timezone.now()
-        passes = []
 
         @contextmanager
-        def at(moment):
+        def at(seconds):
+            moment = start + timedelta(seconds=seconds)
             with frozen(moment), mock.patch("django.utils.timezone.now", return_value=moment):
                 yield
 
-        def sweep(moment):
-            """A pass, whenever one is due: it stores what was asked."""
-
-            with at(moment):
-                if sweep_due()["due"]:
-                    passes.append(moment)
-                    for kind in PUSHED:
-                        ProviderInventory.objects.update_or_create(
-                            kind=kind, defaults={"records": [], "reachable": True, "observed_at": moment}
-                        )
-
-        with at(start - timedelta(hours=1)):
+        with at(-3600):
             for kind in PUSHED:
                 ProviderInventory.objects.create(kind=kind, records=[], reachable=True)
-        for second in range(25):
-            with at(start + timedelta(seconds=second)):
-                self.apply(worker({**PUSH, "delivery_id": f"burst-{second}"}))
-            sweep(start + timedelta(seconds=second))
-        for second in range(30, 900, 30):
-            sweep(start + timedelta(seconds=second))
+        with at(0):
+            self.apply(worker(PUSH))
+        with at(1):
+            sweep_due("example-controller", take(forced_reads()))
+        with at(2):
+            self.apply(worker({**PUSH, "event": "pull_request.opened", "delivery_id": "after"}))
+        # The pass that read before the second ask stores after it.
+        with at(3):
+            ProviderInventory.objects.update(observed_at=timezone.now(), updated_at=timezone.now())
+            self.assertEqual(sorted(read.kind for read in forced_reads()), PUSHED)
+            self.assertTrue(sweep_due()["due"])
 
-        self.assertEqual(passes[0], start, "the first event reads at once")
-        self.assertLessEqual(len(passes), 2)
-        for request in ReadRequest.objects.all():
-            read = ProviderInventory.objects.get(kind=request.kind).updated_at
-            self.assertGreater(read, request.requested_at, "the last event's ask was read")
+    def test_each_declared_fact_is_told_from_its_example_until_its_subject_is_read(self):
+        """Walks every fact a declaration gives an event, from its example
+        body as the Worker forwards it; a replay of an older body stands
+        where it was said, and the subject's next read ends what was told."""
+
+        from hq.domains.control_plane.provider_adapters import INBOUND
+        from hq.domains.control_plane.provider_spec import pointed
+
+        from ..inbound_events import told
+        from ..moments import moment
+
+        walked = 0
+        for provider, spec in INBOUND.items():
+            for event, fact in spec.facts.items():
+                with self.subTest(provider=provider, event=event):
+                    said = fact.read(fact.example)
+                    action = pointed(fact.example, spec.action_pointer) if spec.action_pointer else ""
+                    subject = pointed(fact.example, spec.subject_pointer)
+                    arrived = {
+                        **PUSH,
+                        "provider": provider,
+                        "event": f"{event}.{action}" if action else event,
+                        "subject": subject,
+                        "delivery_id": f"fact-{walked}",
+                        **said,
+                    }
+                    self.assertEqual(self.apply(worker(arrived))["applied"], 1)
+                    self.assertFalse(ReadRequest.objects.exists(), "a fact that draws asks nothing")
+                    replayed = {**arrived, "delivery_id": f"replayed-{walked}", "said_at": "2000-01-01T00:00:00Z"}
+                    self.apply(worker(replayed))
+
+                    *_, newest = told(provider, subject, None)[said["about"]]
+                    self.assertEqual(newest.fact, fact.shape.model_validate(said["fact"]))
+                    self.assertEqual(told(provider, subject, moment(said["said_at"])), {})
+                    walked += 1
+        self.assertTrue(walked, "a declaration gives an event a fact")
 
     def test_events_stored_before_the_routine_window_are_deleted_whatever_their_sender_said(self):
         from hq.domains.control_plane.models import InboundEvent

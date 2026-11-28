@@ -132,7 +132,7 @@ class UpdatesSurfaceTests(TestCase):
         listed = [element.attrs["href"] for element in within(response, "id", "updates") if element.tag == "a"]
         self.assertEqual(listed, [UPDATE["url"], estate.UNANSWERED["url"]])
         self.assertIn(LONG_TITLE, text(response))
-        self.assertIn("Checks failing", text(response))
+        self.assertIn("Checks failed", text(response))
         self.assertIn("no fixed version yet", text(response))
         # A person's pull request is listed with the others, never as an update.
         self.assertIn(estate.BUMP["url"], hrefs(response))
@@ -261,7 +261,7 @@ class LastRunSurfaceTests(TestCase):
                     self.assertIn(f"tone-{seen.tone}", tones)
                 self.assertIn("2 hours ago", state.words)
 
-    def test_a_run_asked_for_and_not_yet_handed_off_says_so_and_is_followed(self):
+    def test_a_run_asked_for_and_not_yet_handed_off_says_so(self):
         ran("ok", hours_ago=30)
         self.assertTrue(execute_capability(RUN_NOW, {}, principal=cli_principal())["ok"])
 
@@ -271,10 +271,9 @@ class LastRunSurfaceTests(TestCase):
         asks = run_controls(response)
         self.assertTrue(asks)
         for ask in asks:
-            self.assertTrue(ask.attrs.get("data-ask-status"))
             self.assertEqual(ask.attrs["data-ask-refresh"], "#updates-state")
 
-    def test_the_control_posts_the_run_and_the_page_follows_it(self):
+    def test_the_control_posts_the_run(self):
         response, _ = self.state()
         self.assertTrue(run_controls(response))
 
@@ -282,8 +281,8 @@ class LastRunSurfaceTests(TestCase):
             reverse("projects:updates_run", args=["alpha"]), form_keyed(), HTTP_X_REQUESTED_WITH="XMLHttpRequest"
         )
 
-        self.assertEqual(posted.status_code, 202)
-        self.assertTrue(posted.json()["status"])
+        # Answered with the page it asked from.
+        self.assertEqual(posted.status_code, 302)
         self.assertIsNotNone(asked_at())
 
     def test_a_project_not_opted_in_offers_no_run(self):

@@ -6,9 +6,11 @@ from django import template
 from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.core.part_examples import tags
+from hq.platform.application.tone import tone_of
+from hq.platform.core.part_examples import sequence, tags
 from hq.platform.core.template_parts import Option, Part, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
+from hq.platform.core.templatetags.icon_tags import drawn
 
 register = template.Library()
 
@@ -109,19 +111,31 @@ slotted(
         rules="""
         A list of short steps (`{% steps %}`) is laid out in rows of as many columns as fit, up to four, so
         no column stands empty beside a long step. Each step is `{% step icon=... %}`: its icon, then what it says; `tone` colors the
-        icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
+        icon (a numbered step's number) by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
         done in order are `{% steps numbered=True %}`: wider columns, as many as fit up to three, so a short run fills a wide frame; each step's number stands where its icon would be, so
         its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
         `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
         runs it, and it carries no secret.
+
+        A workflow HQ declares (`sequences.SequenceSpec`) is drawn whole by `{% steps of=sequence %}`,
+        which encloses nothing: one list read down at every width, each step numbered, its title linked to
+        the page that holds it, its state's word and its sentence. A step made of parts (a check, an app)
+        is one line, its word and how many stand where, folding its parts (`{% section line=True %}`): each
+        on a line of its own, its mark and state in its tone, its name linked. A failed part opens the fold
+        as it is drawn. A part an event told HQ of since its record was read says who told it, until the
+        next read replaces it.
         """,
         example='{% steps %}{% step icon="check-circle" tone="good" %}Example check holds.{% endstep %}{% endsteps %}',
-        classes=("is-numbered", "step-list"),
+        classes=("is-numbered", "is-sequence", "step-list"),
         partial="partials/_steps.html",
         pieces=("partials/_operator_step.html",),
         about="A list of short steps or checks, each a `{% step %}`, in as many columns as fit.",
-        options={"numbered": Option(about="Steps done in order: one column, each its number in place of its icon.")},
-        states=tags.STEPS_STATES,
+        options={
+            "numbered": Option(about="Steps done in order: one column, each its number in place of its icon."),
+            "of": Option(about="A `sequences.Sequence`, drawn whole, each step numbered with its parts."),
+        },
+        bare_with="of",
+        states={**tags.STEPS_STATES, **sequence.STATES},
     ),
 )
 slotted(
@@ -134,8 +148,8 @@ slotted(
         partial="partials/_step.html",
         about="One step or check of a `{% steps %}` list: its icon, or its number, then what it says.",
         options={
-            "icon": Option(about="The icon before what it says."),
-            "tone": Option(about="How the step stands, the color of its icon."),
+            "icon": Option(reads=drawn, about="The icon before what it says."),
+            "tone": Option(reads=tone_of, about="How the step stands, the color of its icon."),
             "done": Option(about="A finished step, drawn quiet."),
             "title": Option(about="Its tooltip."),
         },

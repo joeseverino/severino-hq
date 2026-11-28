@@ -81,8 +81,9 @@ SETTINGS = {
 }
 
 # What the Worker never reads: HQ's readings for each event, which of them
-# the events keep current, and what the provider's app must hold.
-OFF_ROUTE = {"events", "complete", "requires"}
+# the events keep current, and what the provider's app must hold. Of each
+# fact it reads the pointers alone.
+OFF_ROUTE = {"events", "complete", "requires", "facts"}
 
 
 def _plain(value: object) -> object:
@@ -99,6 +100,10 @@ def routes() -> list[dict[str, object]]:
             "provider": provider,
             **{field.name: _plain(getattr(spec, field.name)) for field in fields(spec) if field.name not in OFF_ROUTE},
             "events": list(spec.events),
+            "facts": {
+                event: {"values": dict(fact.values), "about": fact.about, "said_at": list(fact.said_at)}
+                for event, fact in spec.facts.items()
+            },
         }
         for provider, spec in INBOUND.items()
         if spec.path
@@ -193,4 +198,23 @@ def emitted() -> dict[Path, str]:
     """Every file, with its content."""
 
     files = _worker_files()
-    return {**files, _tag_file(): _digest(files) + "\n"}
+    told = Path(settings.BASE_DIR) / "worker/spec/generated/facts.json"
+    return {**files, _tag_file(): _digest(files) + "\n", told: json.dumps(examples(), indent=2) + "\n"}
+
+
+def examples() -> list[dict[str, object]]:
+    """Each declared fact's example body, the route and event it is sent
+    as, and what the Worker forwards of it, which the Worker's spec posts and
+    holds it to; never deployed, so outside the deploy tag."""
+
+    return [
+        {
+            "path": spec.path,
+            "event_header": spec.event_header,
+            "event": event,
+            "body": dict(fact.example),
+            "told": fact.read(fact.example),
+        }
+        for spec in INBOUND.values()
+        for event, fact in spec.facts.items()
+    ]

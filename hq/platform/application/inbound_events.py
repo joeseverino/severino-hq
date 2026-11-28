@@ -10,8 +10,9 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final
 
 from django.utils.text import capfirst
+from pydantic import BaseModel
 
-from hq.domains.control_plane.models import InboundSource
+from hq.domains.control_plane.models import InboundEvent, InboundSource, told_fact
 from hq.domains.control_plane.observations.cloudflare import WORKER_KIND
 lazy from hq.domains.control_plane import inbound_worker
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
@@ -42,6 +43,7 @@ HOST_NAMED: Final = "host event reader"
 # InboundHeartbeatSeconds, and so how long a channel may go unheard before it
 # is silent: two of these.
 CHANNEL_EVERY = timedelta(minutes=5)
+SILENT_AFTER = 2 * CHANNEL_EVERY
 
 
 def unheard(source: InboundSource) -> WorkerState:
@@ -74,7 +76,7 @@ def channel_standing(source: InboundSource) -> WorkerStanding:
     seen_at = readings.heard(channel(source))
     if seen_at is None:
         return WorkerStanding(seen_at=None, silent=False, named=named, unheard=unheard(source))
-    silent = passed(seen_at + 2 * CHANNEL_EVERY)
+    silent = passed(seen_at + SILENT_AFTER)
     return WorkerStanding(seen_at=seen_at, silent=silent, here=True, named=named)
 
 
@@ -89,6 +91,17 @@ def covers(kind: str) -> bool:
             if standing.seen_at is not None and not standing.silent:
                 return True
     return False
+
+
+def falls_silent() -> datetime | None:
+    """The earliest moment a channel heard now goes silent, and so stops
+    covering what it kept current; None when none is heard."""
+
+    standings = (channel_standing(source) for source in InboundSource)
+    return min(
+        (standing.seen_at + SILENT_AFTER for standing in standings if standing.seen_at and not standing.silent),
+        default=None,
+    )
 
 
 def arrives_by(spec: InboundSpec) -> InboundSource:
@@ -267,3 +280,28 @@ def _routes(answers: list[dict[str, Any]]) -> tuple[RouteAnswers, ...]:
 
 def _milliseconds(micros: float | None) -> float | None:
     return None if micros is None else micros / 1000
+
+
+@dataclass(frozen=True, slots=True)
+class Told:
+    """What one event's body said of what it is about, and when it says so."""
+
+    said_at: datetime
+    fact: BaseModel
+
+
+def told(provider: str, subject: str, since: datetime | None) -> dict[str, tuple[Told, ...]]:
+    """The facts ``provider``'s events said of ``subject`` after ``since``,
+    when its reading was read, by what each is about, in the order they were
+    said: what a page shows as told until that subject is read again. A body
+    replayed later is ordered where it was said, so it never stands over a
+    newer fact, and one said before the read is gone."""
+
+    events = InboundEvent.objects.filter(provider=provider, subject=subject, said_at__isnull=False).exclude(about="")
+    if since is not None:
+        events = events.filter(said_at__gt=since)
+    found: dict[str, list[Told]] = {}
+    for event in events.order_by("said_at", "applied_at"):
+        if (fact := told_fact(event)) is not None:
+            found.setdefault(event.about, []).append(Told(event.said_at, fact))
+    return {about: tuple(facts) for about, facts in found.items()}

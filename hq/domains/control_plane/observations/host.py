@@ -11,6 +11,7 @@ lazy from hq.platform.application.labels import human_bytes
 
 from ..provider_spec import InboundSpec, SharedValue
 from .contract import ObservationRecord, ObservationSpec, Stamp
+from .github import DEPENDENCY_RUN_KIND
 from .portainer import CONTAINER_KIND, ENVIRONMENT_KIND, IMAGE_KIND, RUNTIME_KIND
 
 
@@ -63,6 +64,8 @@ class HostPerimeterRecord(ObservationRecord):
 # times: one short word each, as the renderer restricts them when it writes
 # (``WordPattern`` in controller/secretstatus). A string that is not one is
 # stored as ``UNREADABLE_WORD``, never as what it said.
+# The machine HQ runs its work on, as the source of what it tells HQ of itself.
+PROVIDER = "host"
 STATUS_WORD = r"^[A-Za-z0-9_.+-]{1,64}$"
 UNREADABLE_WORD = "unreadable"
 # A renderer's name is a fixed word, never a path.
@@ -392,7 +395,7 @@ EDGE_REBOOT_KIND = "host.edge_reboot"
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         FIREWALL_KIND,
-        "host",
+        PROVIDER,
         "Host firewall",
         HostFirewallRecord,
         title=lambda record: str(record.get("interface", "")),
@@ -409,7 +412,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         RENDER_STATUS_KIND,
-        "host",
+        PROVIDER,
         "Credentials refresh",
         HostRenderStatusRecord,
         title=lambda record: str(record.get("renderer", "")),
@@ -417,7 +420,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         UNIT_KIND,
-        "host",
+        PROVIDER,
         "HQ units",
         HostUnitRecord,
         title=lambda record: str(record.get("title") or record.get("unit", "")),
@@ -425,7 +428,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         TAILNET_LOCK_KIND,
-        "host",
+        PROVIDER,
         "Tailnet lock",
         HostTailnetLockRecord,
         title=lambda record: "On" if record.get("enabled") else "Off",
@@ -435,7 +438,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         FILESYSTEM_KIND,
-        "host",
+        PROVIDER,
         "Disk space",
         HostFilesystemRecord,
         title=lambda record: str(record.get("mount", "")),
@@ -446,7 +449,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ),
     ObservationSpec(
         REBOOT_KIND,
-        "host",
+        PROVIDER,
         "Pending restart",
         HostRebootRecord,
         title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
@@ -465,13 +468,18 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 # What HQ's own host jobs say happened: a unit that failed, which every
 # severino-hq unit's OnFailure= reports (``host_work.units.read``); a job
 # systemd ended on HQ's host, for any unit, with its result after a dot; and a
-# container on HQ's host that changed, with Docker's action after a dot, which
-# makes due the container list, each one's inspect and the images pulled, since
-# a sweep of only the environments reads none of them again. The last two are
-# what severino-hq-events.service hears.
+# container on HQ's host that changed, with Docker's action after a dot. The
+# last two are what severino-hq-events.service hears.
 UNIT_FAILED = "unit.failed"
+# What a container's change on a machine makes due: the list, each one's
+# inspect and the images pulled, since a sweep of only the environments reads
+# none of them again.
+CONTAINER_CHANGED = (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND)
 UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
+# A job of the dependency run's unit that ended, told apart from any other so
+# its end reads the run's outcome at once (``controller/host/renovate.go``).
+DEPENDENCY_RUN = "dependency_run"
 # The runs held on a unit their playbook left running on HQ's host, which HQ
 # reads itself by asking each its settling read (``host_work``).
 AUTOMATION_HELD = "automation.held"
@@ -482,19 +490,29 @@ JOB_ENDS = {
     "done": (AUTOMATION_HELD,),
     **dict.fromkeys(("failed", "timeout", "canceled"), (UNIT_KIND, AUTOMATION_HELD)),
 }
+# The events that say a job ended, by its result.
+UNIT_ENDS = tuple(f"{UNIT_JOB}.{result}" for result in JOB_ENDS)
 INBOUND = {
-    "host": InboundSpec(
+    PROVIDER: InboundSpec(
         {
             UNIT_FAILED: (UNIT_KIND,),
-            **{f"{UNIT_JOB}.{result}": kinds for result, kinds in JOB_ENDS.items()},
-            DOCKER_CONTAINER: (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND),
+            **dict(zip(UNIT_ENDS, JOB_ENDS.values(), strict=True)),
+            **{
+                f"{DEPENDENCY_RUN}.{result}": (DEPENDENCY_RUN_KIND, *(kind for kind in kinds if kind == UNIT_KIND))
+                for result, kinds in JOB_ENDS.items()
+            },
+            DOCKER_CONTAINER: CONTAINER_CHANGED,
         }
     )
 }
 # The events severino-hq-events.service tells, and the ends of a job it tells,
 # which the controller spells from the contract.
 SHARED = (
-    SharedValue("HostEvent", (UNIT_JOB, DOCKER_CONTAINER), "An event HQ's own host tells it of from the controller."),
+    SharedValue(
+        "HostEvent",
+        (UNIT_JOB, DEPENDENCY_RUN, DOCKER_CONTAINER),
+        "An event HQ's own host tells it of from the controller.",
+    ),
     SharedValue("HostJobResult", tuple(JOB_ENDS), "How a job HQ's host tells it of ended, as systemd says it."),
     SharedValue("UnitName", UnitName, "A systemd unit's name, as systemd spells it."),
     SharedValue(

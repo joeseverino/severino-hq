@@ -39,13 +39,13 @@ from hq.platform.application.ui import counted, severity_tone
 from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application import standards
-lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_standing, read_status_url
+lazy from hq.platform.application.asks import Ask, AskMixin, Standing, read_standing
 lazy from hq.platform.application.connection_setup import docs_url
 lazy from hq.platform.application.dashboard import finding_rows
 lazy from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at, last_run
-lazy from hq.platform.application.github_estate import repositories, repository_for
+lazy from hq.platform.application.github_estate import check_state, repositories, repository_for
 lazy from hq.platform.application.github_posture import STANDARD, posture_of, postures
-lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile, standing
+lazy from hq.platform.application.github_profile import READ_NOW, profile, standing
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
@@ -140,7 +140,8 @@ def _repository(row) -> tuple[Cell, ...]:
     else:
         found = [Cell("Not read yet", muted=True)] if row["repository_url"] else []
     if row["repository"] and row["repository"].failing:
-        found.append(Cell("Checks failing", tone="serious"))
+        failed = check_state("failure")
+        found.append(Cell(f"Checks {failed.word.lower()}", tone=failed.tone))
     return tuple(found)
 
 
@@ -158,7 +159,7 @@ def run_now_ask(slug: str, principal, asked) -> Ask | None:
         capability_words(RUN_NOW),
         reverse("projects:updates_run", args=[slug]),
         standing=read_standing((RUN_KIND,), asked) if asked is not None else Standing(),
-        status_url=read_status_url((RUN_KIND,), asked) if asked is not None else "",
+        follows="estate",
         refresh=UPDATES_REGION,
     )
 
@@ -200,10 +201,12 @@ class ProjectDetailView(RecordPageMixin, TemplateView):
 
     @cached_property
     def run_asked(self):
-        """When an update run was asked for and not yet handed off. Only an
-        opted-in repository's page asks: the run covers every one of them."""
+        """When a run of the project's repository was asked for and not yet
+        handed off. Only an opted-in repository's page asks."""
 
-        return asked_at() if self.record["dependency_updates"] and self.repository is not None else None
+        if not self.record["dependency_updates"] or self.repository is None:
+            return None
+        return asked_at(self.record["repository_url"])
 
     @override
     def get_context_data(self, **kwargs):
@@ -367,13 +370,12 @@ class WatchingView(PageMixin, TemplateView):
         if not self.login:
             return []
 
-        found = standing()
         return [
             Ask(
                 capability_words(READ_NOW),
                 reverse("watching_refresh"),
-                standing=found,
-                status_url=read_status_url((KIND,), found.since) if found.since else "",
+                standing=standing(),
+                follows="estate",
                 refresh=WATCHING_REGION,
             ),
         ]

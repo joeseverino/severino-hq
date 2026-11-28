@@ -170,6 +170,12 @@ def select(html: Page, attribute: str, value: str | None = None) -> list[Element
     ]
 
 
+def followed(html: Page) -> list[str]:
+    """The live set each region of the page that follows work is asked for again on."""
+
+    return [element.attrs["data-fragment-live"] for element in select(html, "data-fragment-live")]
+
+
 def elements(html: Page, tag: str) -> list[Element]:
     """Every ``tag`` element, in page order."""
 

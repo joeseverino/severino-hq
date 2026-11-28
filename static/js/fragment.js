@@ -14,8 +14,9 @@
 //                             in it by its id.
 //   data-fragment-load        a placeholder: fetched once the page is up, or
 //                             when the disclosure or dialog around it opens
-//   data-fragment-poll="<s>"  asked again every so many seconds for as long
-//                             as the server keeps drawing the attribute
+//   data-fragment-live="<set>" asked again when a change to the read set it
+//                             is drawn from commits, for as long as the
+//                             server keeps drawing the attribute
 //   data-fragment-part="<k>"  inside a region: parts are swapped one by one,
 //                             and only those that changed
 //   data-fragment-links       links and forms inside the region that lead to
@@ -67,7 +68,8 @@ const hqFetch = async (input, options = {}) => {
   const headers = new Headers(rest.headers);
   headers.set("X-Requested-With", "XMLHttpRequest");
   // eslint-disable-next-line no-restricted-properties -- HQ's one request, which every enhanced request crosses
-  const response = await window.fetch(input, { ...rest, headers });
+  const send = () => window.fetch(input, { ...rest, headers });
+  const response = await send().catch((error) => resent(error, rest, send));
   spendKey(rest.body, response);
   const refreshUrl =
     response.status === 403 ? response.headers.get("refresh_url") : "";
@@ -79,14 +81,45 @@ const hqFetch = async (input, options = {}) => {
 };
 window.hqFetch = hqFetch;
 
-// The one loop. Anything that asks again later is a task here: a region that
-// polls, work being followed, a figure that ticks. One timer serves them all.
+// A write that got no answer may still have reached HQ: the network dropped
+// it, or WebKit ended it as the reader began to reload, while the old page
+// stays up until the new one answers. So it is never said to have failed:
+// it is sent again with the same retry key, which HQ acts on once, on the one
+// loop (`hqEvery`), until HQ answers or the hour a follow lasts ends. Its
+// press stays under way meanwhile, and a page that is going away sends it no
+// more. A request without a key, which HQ cannot tell from a second one,
+// fails as it did.
+const resent = (error, { body, signal }, send) => {
+  if (error.name === "AbortError" || !(body instanceof FormData) || !body.get(RETRY_KEY)) throw error;
+  return new Promise((resolve, reject) => {
+    hqEvery(
+      async () => {
+        if (signal?.aborted) {
+          reject(signal.reason);
+          return false;
+        }
+        try {
+          resolve(await send());
+          return false;
+        } catch (again) {
+          if (again.name !== "AbortError") return "failed";
+          reject(again);
+          return false;
+        }
+      },
+      { ms: 2000, follows: true, expired: () => reject(error) },
+    );
+  });
+};
+
+// The one loop. Anything that asks again later is a task here: a write sent
+// again, work being followed, a figure that ticks. One timer serves them all.
 // A hidden tab runs only the tasks that give a hidden pace, and a tab brought
 // back runs what came due while it was away. A task that fails is asked less
 // often, up to eight times its pace, until it answers again.
 //
 // `work` answers false to stop; anything else keeps it going. A task that
-// `follows` work under way (a polled region, an ask) stops after the hour any
+// `follows` work under way (a write sent again, an ask) stops after the hour any
 // work HQ runs has long since said how it ended in, counted from its start
 // whether or not the tab was showing: a shorter bound ends the following of a
 // long playbook run while the server still draws it under way.
@@ -192,10 +225,6 @@ const hqFragment = (() => {
   // Region -> the validator of the answer it shows and the address it came
   // from, presented with the next question so an unchanged part costs a 304.
   const shown = new WeakMap();
-  const polled = new WeakSet();
-  // A polled region that was replaced -> what replaced it, so its one poll
-  // follows it instead of a second one starting.
-  const successor = new WeakMap();
 
   // A notice in a tone, cloned from the empty one the server drew for it
   // (base.html), so a line a script adds is the part the server draws.
@@ -241,6 +270,9 @@ const hqFragment = (() => {
     });
     lines.forEach((line) => say(spot, line));
   };
+
+  // A refusal told to the control pressed, which takes it to say itself.
+  const refusal = (said) => new CustomEvent("hq:refused", { bubbles: true, cancelable: true, detail: said });
 
   // Why a post was refused, as the page it was answered with says it among
   // its messages: the server's own sentence, which nothing else carries once
@@ -397,8 +429,8 @@ const hqFragment = (() => {
 
   // A region that names its parts keeps itself and takes only the parts that
   // changed, so an answer that brings nothing new leaves the page exactly as
-  // it was. Its own attributes follow the server either way: that is how a
-  // poll ends.
+  // it was. Its own attributes follow the server either way: that is how it
+  // stops being live.
   const byParts = (was, next) => {
     const parts = (root) => [...root.querySelectorAll("[data-fragment-part]")];
     const order = (list) => list.map((part) => part.dataset.fragmentPart).join();
@@ -439,10 +471,6 @@ const hqFragment = (() => {
       was.remove();
       return [];
     }
-    if (elements.length === 1 && polled.has(was)) {
-      polled.add(elements[0]);
-      successor.set(was, elements[0]);
-    }
     was.replaceWith(...nodes);
     offsets.forEach(([id, top, left]) => {
       const box = document.getElementById(id);
@@ -451,12 +479,13 @@ const hqFragment = (() => {
     return elements;
   };
 
+  // A part placed may bring the page its first live region.
   const announce = (roots) => {
     roots.forEach((root) => {
       if (!root.isConnected) return;
       root.dispatchEvent(new CustomEvent("hq:fragment", { bubbles: true }));
-      watch(root);
     });
+    listen();
   };
 
   const regionsOf = (target) =>
@@ -586,45 +615,91 @@ const hqFragment = (() => {
     }
   };
 
-  // A region the server marks as still changing is asked again until the
-  // server stops marking it, the region leaves the page, or the hour followed
-  // work is given passes (`hqEvery`). A tick is never a request to leave the page.
-  function watch(region) {
-    within(region, "[data-fragment-poll]").forEach((polling) => {
-      if (polled.has(polling)) return;
-      polled.add(polling);
-      let current = polling;
-      const stop = () => {
-        polled.delete(current);
-        return false;
-      };
-      const latest = () => {
-        while (successor.has(current)) current = successor.get(current);
-      };
-      hqEvery(
-        async () => {
-          latest();
-          if (!current.isConnected || !current.hasAttribute("data-fragment-poll")) return stop();
-          try {
-            await swap(current, { renew: false });
-          } catch (error) {
-            if (error.signIn) {
-              fail(current, error);
-              return stop();
-            }
-            throw error;
-          }
-          latest();
-          return current.isConnected && current.hasAttribute("data-fragment-poll") ? true : stop();
-        },
-        {
-          ms: Math.max(1, Number(polling.dataset.fragmentPoll) || 3) * 1000,
-          follows: true,
-          expired: stop,
-        },
-      );
+  // A region drawn from what HQ holds names the read set it is drawn from
+  // (`data-fragment-live`) and is asked again when a change to that set
+  // commits (hq/platform/core/live.py). The page holds one stream, which says
+  // only which sets changed. A hidden tab holds none, and one brought back
+  // opens it again from the last change it heard. A stream HQ refused, or
+  // could not answer while it restarted, is opened again on the one loop,
+  // less often each time, and each try asks every live region again first,
+  // so a part drawn from what HQ holds is followed while no stream is open.
+  const STREAM = document.body.dataset.live;
+  const REOPEN_MS = 5000;
+  let stream = null;
+  let heard = "";
+  let reopenMs = REOPEN_MS;
+  let reopening = false;
+  const lives = () => within(document.documentElement, "[data-fragment-live]");
+  const quiet = () => {
+    stream?.close();
+    stream = null;
+  };
+
+  // The regions a change names, each asked for once: those one address
+  // answers are found in one answer by their ids.
+  const refresh = (names) => {
+    const due = lives().filter((region) => names.has(region.dataset.fragmentLive));
+    const asked = new Map();
+    due
+      .filter((region) => !due.some((other) => other !== region && other.contains(region)))
+      .forEach((region) => {
+        const url = region.dataset.fragment || window.location.href;
+        const key = region.id ? `${url} ${region.dataset.fragmentName || ""}` : region;
+        asked.set(key, [...(asked.get(key) || []), region]);
+      });
+    asked.forEach((regions) => {
+      const [first] = regions;
+      const asking =
+        regions.length === 1
+          ? swap(first, { renew: false })
+          : swap(
+              regions.map((region) => `#${CSS.escape(region.id)}`),
+              { url: first.dataset.fragment || window.location.href, renew: false, strict: false },
+            );
+      asking.catch((error) => {
+        if (error.signIn) regions.forEach((region) => fail(region, error));
+      });
     });
-  }
+  };
+
+  const listen = () => {
+    if (stream || reopening || !STREAM || document.visibilityState !== "visible" || !lives().length) return;
+    const url = new URL(STREAM, window.location.href);
+    if (heard) url.searchParams.set("after", heard);
+    const source = new EventSource(url);
+    stream = source;
+    const note = (event) => {
+      heard = event.lastEventId || heard;
+    };
+    source.addEventListener("open", () => {
+      reopenMs = REOPEN_MS;
+    });
+    source.addEventListener("beat", note);
+    source.addEventListener("message", (event) => {
+      note(event);
+      refresh(new Set(event.data.split(" ")));
+      if (!lives().length) quiet();
+    });
+    source.addEventListener("error", () => {
+      if (source.readyState !== EventSource.CLOSED || stream !== source) return;
+      stream = null;
+      reopening = true;
+      hqEvery(
+        () => {
+          reopening = false;
+          refresh(new Set(lives().map((region) => region.dataset.fragmentLive)));
+          listen();
+          return false;
+        },
+        { ms: reopenMs },
+      );
+      reopenMs = Math.min(reopenMs * 2, REOPEN_MS * 12);
+    });
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") listen();
+    else quiet();
+  });
 
   // Placeholders: fetched once, when somebody could be reading them. One
   // inside a closed disclosure or dialog waits for it to open. An empty
@@ -767,6 +842,8 @@ const hqFragment = (() => {
       const said = refused || [
         form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.",
       ];
+      // A control that says how its own work went takes it (`hq:refused`).
+      if (submitter && !submitter.dispatchEvent(refusal(said))) return;
       if (status?.isConnected) status.textContent = said.join(" ");
       // A press's region is the page's content, which keeps what it shows:
       // each line is said where the server says how a post went, among the
@@ -826,7 +903,7 @@ const hqFragment = (() => {
   };
 
   reveal(document);
-  watch(document.documentElement);
+  listen();
   // Only the page as drawn: an answer to the form is drawn with it again
   // while a reading is still due, and sending it then would ask forever.
   // eslint-disable-next-line no-restricted-syntax -- sent once per page, never per part placed

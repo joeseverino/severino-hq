@@ -152,6 +152,9 @@ type Registry struct {
 	// Updates is which repositories a dependency update run covers and whether
 	// one is due, from HQ's registry.
 	Updates runtime.DependencyUpdatesPlan
+	// told is the forced reads of a sweep that reads only what they ask,
+	// handed to Inventory.
+	told []runtime.ForcedRead
 	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
 	Picture func(ctx context.Context, address string, limit int) (string, []byte, error)
 	// ACMEHTTP reaches the certificate authority; nil trusts the controller's roots.

@@ -15,19 +15,25 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.observations.contract import ReadingPart
 from hq.domains.control_plane.observations.github import (
     CODE_SCANNING,
     DEPENDABOT,
     LEAKED_CREDENTIALS,
+    PROVIDER,
     PULL_REQUEST_KIND,
     REPOSITORY_KIND,
     WORKFLOW_RUN_KIND,
+    CheckRun,
     JobFailure,
+    PullRequestRecord,
     RepositoryRecord,
 )
 from hq.platform.application.labels import dotted
 
+from . import asks
 from .action_links import read_link
 from .card_items import Badge, ListRow, RowTitle
 from .derivations import whole
@@ -35,8 +41,10 @@ from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
-from .moments import moment, when
+from .inbound_events import told
+from .moments import duration, moment, when
 from .projection import read_once
+from .sequences import Step
 from .thresholds import Threshold
 from .tone import Tone
 from .ui import severity_tone
@@ -53,8 +61,43 @@ ARTIFACT_SERIOUS_DAYS = Threshold(3, "days")
 # A deploy held for approval is fine for a while; hours later it is a
 # scheduled run about to be cancelled.
 WAITING_SERIOUS_AFTER = Threshold(timedelta(hours=1), "time")
+
+
+class CheckState(NamedTuple):
+    """How a check, a workflow run or a head's checks as a whole stand, in
+    the one word every page says it in."""
+
+    word: str
+    # As asked-for work stands (``asks``), which colors it.
+    state: str
+
+    @property
+    def tone(self) -> Tone:
+        return Tone(asks.Standing(self.state, word=self.word).tone or Tone.NEUTRAL)
+
+
+# Each word GitHub says a check in: its conclusion once it completed, else its
+# status, or the head's combined state; one it adds stands idle in its own words.
+CHECK_STATES = {
+    "success": CheckState("Passed", asks.DONE),
+    "failure": CheckState("Failed", asks.FAILED),
+    "timed_out": CheckState("Timed out", asks.FAILED),
+    "action_required": CheckState("Action required", asks.FAILED),
+    "startup_failure": CheckState("Failed to start", asks.FAILED),
+    "pending": CheckState("Running", asks.RUNNING),
+    "in_progress": CheckState("Running", asks.RUNNING),
+    "queued": CheckState("Queued", asks.QUEUED),
+    "waiting": CheckState("Waiting", asks.QUEUED),
+    "requested": CheckState("Queued", asks.QUEUED),
+}
 # A run's conclusions that fail it, as the reading's checks count them.
-FAILED = frozenset({"failure", "timed_out", "action_required", "startup_failure"})
+FAILED = frozenset(name for name, each in CHECK_STATES.items() if each.state == asks.FAILED)
+
+
+def check_state(said: str) -> CheckState:
+    return CHECK_STATES.get(said) or CheckState(capfirst(said.replace("_", " ")), asks.IDLE)
+
+
 # The one severity secret scanning reports: a credential found in the code.
 LEAKED = "leaked"
 # Alert severities, worst first, across every part that reports them.
@@ -69,8 +112,6 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
     DEPENDABOT: "dependabot",
     LEAKED_CREDENTIALS: "secret-scanning",
 }
-# The tone of the head's combined check state.
-_CHECKS_TONES = {"failure": Tone.SERIOUS, "success": Tone.GOOD, "pending": Tone.ATTENTION}
 # The tone of a deployment's state; any other state of one is still going.
 _DEPLOY_TONES = {"success": Tone.GOOD, "failure": Tone.SERIOUS, "error": Tone.SERIOUS}
 # The branches Renovate opens its pull requests from.
@@ -82,20 +123,12 @@ def workflow_run(run: Mapping[str, Any]) -> ListRow:
     the workflow, what it came to (or where it is while it has not finished)
     in its tone, then its branch, commit and age."""
 
-    conclusion, status = str(run.get("conclusion") or ""), str(run.get("status") or "")
-    if conclusion == "success":
-        tone = Tone.GOOD
-    elif conclusion in ("failure", "timed_out"):
-        tone = Tone.SERIOUS
-    elif status != "completed":
-        tone = Tone.ATTENTION
-    else:
-        tone = Tone.NEUTRAL
-    state = (conclusion or status).replace("_", " ").capitalize()
+    said = str(run.get("conclusion") or run.get("status") or "")
+    state = check_state(said) if said else None
     return ListRow(
         RowTitle(str(run.get("name") or "Workflow"), web_url(run.get("url")), external=True),
         meta=dotted(str(run.get("branch") or ""), str(run.get("sha") or "")[:7], _age(run.get("created_at"))),
-        state=Badge(state, tone) if state else None,
+        state=Badge(state.word, state.tone) if state else None,
     )
 
 
@@ -117,14 +150,6 @@ def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", state: Bad
     )
 
 
-# A pull request's checks as its update row says them, by the combined state.
-_PULL_CHECKS = {
-    "failure": ("Checks failing", Tone.SERIOUS),
-    "pending": ("Checks running", Tone.ATTENTION),
-    "success": ("Checks passing", Tone.GOOD),
-}
-
-
 class PullChecks(NamedTuple):
     """A pull request's checks as every page says them: the badge, its tone,
     the failing ones named while they fail, and why, in the failing tool's
@@ -139,7 +164,8 @@ class PullChecks(NamedTuple):
 
 def pull_checks(pull: Mapping[str, Any]) -> PullChecks:
     checks = pull.get("checks") or {}
-    badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", Tone.NEUTRAL))
+    state = check_state(said) if (said := str(checks.get("state") or "")) else None
+    badge, tone = (f"Checks {state.word.lower()}", state.tone) if state else ("No checks", Tone.NEUTRAL)
     if checks.get("state") != "failure":
         return PullChecks(badge, tone, "", "")
     failures = checks.get("failures") or {}
@@ -148,6 +174,34 @@ def pull_checks(pull: Mapping[str, Any]) -> PullChecks:
         *(failure_cause(failures[job]) for job in checks.get("failing") or () if job in failures),
     )
     return PullChecks(badge, tone, ", ".join(checks.get("failing") or ()), next((each for each in causes if each), ""))
+
+
+class PullCheck(NamedTuple):
+    """One check on a pull request's head, and whether GitHub told HQ of it
+    since the pull request was read, which its next read replaces."""
+
+    run: CheckRun
+    told: bool = False
+
+
+def check_step(check: PullCheck) -> Step:
+    """One check of a pull request's head as a step every page draws: its
+    name, ``Passed`` in ``58 s`` or ``Running`` since 2 minutes ago, told
+    where an event said it since the read, linked to its run on GitHub where
+    one is named."""
+
+    run = check.run
+    # One that ended neither passed nor failed (skipped, neutral) stands idle.
+    state = check_state(run.conclusion if run.status == "completed" else run.status)
+    took = ""
+    if run.started_at is not None:
+        took = (
+            str(duration(run.completed_at - run.started_at, short=True))
+            if run.completed_at is not None
+            else f"since {when(run.started_at)}"
+        )
+    standing = asks.Standing(state.state, took, word=state.word, url=web_url(run.url))
+    return Step(run.name, standing, by=PROVIDER, told=check.told)
 
 
 # What GitHub's log marks a step's end with when the tool said nothing of
@@ -201,6 +255,21 @@ class Repository:
             raise AttributeError(item)
         return declared.get_default(call_default_factory=True)
 
+    def pull_check_runs(self) -> dict[int, tuple[PullCheck, ...]]:
+        """Each open pull request's checks by its number: each as it was read,
+        with what a job's event said since that read laid over it as told,
+        the one place a told check stands in for a read one."""
+
+        said = told(PROVIDER, self.name, moment(str(self.record.get("read_at") or "")))
+        found = {}
+        for pull in self.pull_requests:
+            checks = {run.name: PullCheck(run) for run in PullRequestRecord.model_validate(pull).check_runs}
+            for each in said.get(str(pull.get("head") or ""), ()):
+                if isinstance(each.fact, CheckRun):
+                    checks[each.fact.name] = PullCheck(each.fact, told=True)
+            found[int(pull.get("number") or 0)] = tuple(checks.values())
+        return found
+
     @property
     def reading(self) -> Freshness:
         return freshness(REPOSITORY_KIND, self.observed_at)
@@ -217,7 +286,8 @@ class Repository:
     def checks_tone(self) -> str:
         """The head's checks as a tone: none while nothing runs on it."""
 
-        return _CHECKS_TONES.get(self.record.get("checks", {}).get("state"), "")
+        said = str(self.record.get("checks", {}).get("state") or "")
+        return check_state(said).tone if said else ""
 
     @property
     def failing_runs(self) -> tuple[ActionLink, ...]:

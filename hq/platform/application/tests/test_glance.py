@@ -572,7 +572,7 @@ class GlanceRenderingTests(TestCase):
         self.assertEqual((weather["refreshable"], weather["pending"]), (False, False))
 
     def test_each_panels_refresh_is_the_shared_ask_and_fetches_the_strip(self):
-        panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in dashboard_panels())
+        panels = tuple({**panel, "ask": refresh_ask(panel["standing"], panel["id"])} for panel in dashboard_panels())
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
 
         controls = select(html, "data-ask-refresh", GLANCE_REGION)
@@ -628,7 +628,7 @@ class GlanceEndpointTests(TestCase):
 
         self.assertEqual(catalog.call_count, 1)
 
-    def test_a_stale_post_requests_the_stale_panels_and_follows_them_unsaid(self):
+    def test_a_stale_post_requests_the_stale_panels_unsaid(self):
         with doorbells() as rung:
             with self.captureOnCommitCallbacks(execute=True):
                 response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
@@ -639,9 +639,8 @@ class GlanceEndpointTests(TestCase):
             list(DashboardRefreshRequest.objects.values_list("panel_id", flat=True)),
             [f"machine-{self.machine.pk}"],
         )
-        # Nobody pressed for it: the region follows the reading, and the panel
-        # keeps the one it has without saying a refresh is under way.
-        self.assertTrue(select(response, "data-fragment-poll"))
+        # Nobody pressed for it: the panel keeps the reading it has without
+        # saying a refresh is under way.
         (part,) = select(response, "data-fragment-part", f"machine-{self.machine.pk}")
         self.assertNotIn(REFRESHING, part.text)
 
@@ -655,13 +654,11 @@ class GlanceEndpointTests(TestCase):
                     panel_id=panel, defaults={"requested_at": asked, "completed_at": None}
                 )
 
-                response = self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
+                self.client.post(reverse("dashboard_glance"), form_keyed({"scope": "stale"}))
 
                 self.assertEqual(DashboardRefreshRequest.objects.get(panel_id=panel).requested_at > asked, asked_again)
-                # Followed while it is on its way again.
-                self.assertTrue(select(response, "data-fragment-poll"))
 
-    def test_an_ask_left_unanswered_is_followed_no_longer(self):
+    def test_an_ask_left_unanswered_is_said_stale(self):
         DashboardRefreshRequest.objects.create(
             panel_id=f"machine-{self.machine.pk}",
             requested_at=timezone.now() - cadence(MACHINE_KIND).stale_after,
@@ -669,7 +666,6 @@ class GlanceEndpointTests(TestCase):
 
         response = self.client.get(reverse("dashboard_glance"))
 
-        self.assertFalse(select(response, "data-fragment-poll"))
         self.assertContains(response, 'data-reading-age="stale"')
 
     def test_a_stale_post_asks_for_the_weather_never_read(self):

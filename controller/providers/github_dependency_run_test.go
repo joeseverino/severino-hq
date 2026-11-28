@@ -111,7 +111,7 @@ func TestADueRunHandsEachOwnerOneScopedToken(t *testing.T) {
 	want := map[string][]string{"example": {"app", "tool"}, "example-org": {"site"}}
 	for _, entry := range runs {
 		run := entry.(map[string]any)
-		if keys := sortedMapKeys(run); !slices.Equal(keys, []string{"expires_at", "owner", "repositories", "token"}) {
+		if keys := sortedMapKeys(run); !slices.Equal(keys, []string{"branches", "expires_at", "owner", "repositories", "token"}) {
 			t.Fatalf("run %v", keys)
 		}
 		name := run["owner"].(string)
@@ -147,6 +147,30 @@ func TestADueRunHandsEachOwnerOneScopedToken(t *testing.T) {
 		if run.Outcome != "handed_off" || run.ExitCode != nil || run.StartedAt == "" {
 			t.Fatalf("record %+v", run)
 		}
+	}
+}
+
+// Open PR's plan names one repository and the branches Renovate is to open
+// in it: the token names that repository alone, and the hand-off carries the
+// branches for root to give Renovate.
+func TestAnOpenPRHandsOffOneRepositoryAndItsBranches(t *testing.T) {
+	out := t.TempDir()
+	plan := duePlan(runtime.DependencyUpdatesOwner{Owner: "example", Repositories: []string{"example/app"}, Branches: []string{"renovate/example-app-2.x"}})
+	h := newDependencyRunHarness(t, plan, runtime.Environment{Out: out})
+
+	if _, err := h.read(t); err != nil {
+		t.Fatal(err)
+	}
+
+	handoff, _ := readHandoff(t, out, DependencyHandoffName)
+	run := handoff["runs"].([]any)[0].(map[string]any)
+	branches, _ := json.Marshal(run["branches"])
+	repositories, _ := json.Marshal(run["repositories"])
+	if string(branches) != `["renovate/example-app-2.x"]` || string(repositories) != `["example/app"]` {
+		t.Fatalf("run %v", run)
+	}
+	if grant, _ := h.grantOf(githubFakeCall{auth: "Bearer " + run["token"].(string)}); !slices.Equal(grant.Repositories, []string{"app"}) {
+		t.Fatalf("minted %+v", grant)
 	}
 }
 
@@ -191,6 +215,8 @@ func TestAPlanSpanningTwoOwnersInOneTokenIsRefused(t *testing.T) {
 		owner("example", "example/app/extra"),
 		owner("Example!", "Example!/app"),
 		owner("example"),
+		{Owner: "example", Repositories: []string{"example/app", "example/tool"}, Branches: []string{"renovate/app-2.x"}},
+		{Owner: "example", Repositories: []string{"example/app"}, Branches: []string{"renovate/../main"}},
 	} {
 		h := newDependencyRunHarness(t, duePlan(bad), runtime.Environment{Out: t.TempDir()})
 		if _, err := h.read(t); err == nil || errors.Is(err, errCarried) || h.minted() != 0 {
@@ -200,8 +226,9 @@ func TestAPlanSpanningTwoOwnersInOneTokenIsRefused(t *testing.T) {
 }
 
 const dependencyResult = `{"version":1,"started_at":"2030-01-02T03:00:00Z","finished_at":"2030-01-02T03:20:00Z",
-"runs":[{"owner":"example","repositories":["example/app"],"exit_code":0,"outcome":"ok"},
-{"owner":"example-org","repositories":["example-org/site"],"exit_code":1,"outcome":"failed"}]}`
+"runs":[{"owner":"example","repositories":["example/app"],"exit_code":0,"outcome":"ok",
+"branches":[{"repository":"example/app","branch":"renovate/example-app-2.x","result":"pr-created","pull_request":52,"files":["compose/example/compose.yml"]}]},
+{"owner":"example-org","repositories":["example-org/site"],"exit_code":1,"outcome":"failed","branches":[]}]}`
 
 func writeResult(t *testing.T, text string) string {
 	t.Helper()
@@ -228,8 +255,12 @@ func TestTheRunResultIsReadOnceItIsNews(t *testing.T) {
 		failed.StartedAt != "2030-01-02T03:00:00Z" || failed.FinishedAt != "2030-01-02T03:20:00Z" {
 		t.Fatalf("record %+v", failed)
 	}
-	if ok := records[0].(GitHubDependencyRunRecord); ok.ExitCode == nil || *ok.ExitCode != 0 {
+	ok := records[0].(GitHubDependencyRunRecord)
+	if ok.ExitCode == nil || *ok.ExitCode != 0 {
 		t.Fatalf("a run that exited 0 says so: %+v", ok)
+	}
+	if len(ok.Branches) != 1 || ok.Branches[0].Result != "pr-created" || ok.Branches[0].PullRequest == nil || *ok.Branches[0].PullRequest != 52 {
+		t.Fatalf("each branch the run's report names, with its pull request: %+v", ok.Branches)
 	}
 	if h.minted() != 0 {
 		t.Fatal("a run that is not due mints nothing")
@@ -262,6 +293,10 @@ func TestAMalformedRunResultIsRefused(t *testing.T) {
 		"trailing data":  dependencyResult + `]`,
 		"a name twice":   strings.Replace(dependencyResult, `"outcome":"ok"`, `"outcome":"failed","outcome":"ok"`, 1),
 		"a name in case": strings.Replace(dependencyResult, `"outcome":"ok"`, `"Outcome":"ok"`, 1),
+		"no branches":    strings.Replace(dependencyResult, `"branches":[]`, ``, 1),
+		"foreign branch": strings.Replace(dependencyResult, `{"repository":"example/app"`, `{"repository":"example-org/site"`, 1),
+		"bad result":     strings.Replace(dependencyResult, `"pr-created"`, `"PR Created!"`, 1),
+		"no pr number":   strings.Replace(dependencyResult, `"pull_request":52`, `"pull_request":0`, 1),
 	} {
 		h := newDependencyRunHarness(t, runtime.DependencyUpdatesPlan{}, runtime.Environment{DependencyRun: writeResult(t, text)})
 		_, err := h.read(t)

@@ -1,9 +1,12 @@
 """The select: a choice of one, which may say what is chosen in a status tone."""
 
+from typing import Annotated, Literal
+
 from django import template
 
 from hq.platform.application.tone import Tone
 from hq.platform.core.part_examples import tags
+from hq.platform.core.template_literals import Reads
 from hq.platform.core.template_parts import Part, slotted
 
 register = template.Library()
@@ -11,16 +14,26 @@ register = template.Library()
 SELECT_PARTIAL = "partials/_select.html"
 
 
-def select(name, options, chosen=None, label="", id="", tone="", every="", submit_on_change=False) -> dict:
+def _named(name: str) -> str:
+    if not name:
+        raise ValueError("is the name its form posts the choice as")
+    return name
+
+
+def select(
+    name: Annotated[str, Reads(_named)],
+    options,
+    chosen=None,
+    label="",
+    id="",
+    tone: Tone | Literal[""] = "",
+    every="",
+    submit_on_change=False,
+) -> dict:
     """A choice of one: its field's name, each option with whether it is the
     chosen one, and the tone's classes."""
 
-    try:
-        tone = Tone(tone) if tone else ""
-    except ValueError:
-        raise template.TemplateSyntaxError(f"select tone= is one of {', '.join(Tone)}") from None
-    if not name:
-        raise template.TemplateSyntaxError("select takes the name its form posts the choice as")
+    tone = Tone(tone) if tone else ""
     # None chooses the option with no value, as a field left at its default does.
     chosen = str(chosen or "")
     # A value alone is its own words: a year, a port, a machine's name.

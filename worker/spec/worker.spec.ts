@@ -9,6 +9,7 @@ import ping from "./fixtures/ping.json";
 import push from "./fixtures/push.json";
 import tailscaleEvents from "./fixtures/tailscale.json";
 import cloudflareNotifications from "./fixtures/cloudflare.json";
+import facts from "./generated/facts.json";
 
 const github = routes.providers.find((route) => route.provider === "github_app")!;
 const tailscale = routes.providers.find((route) => route.provider === "tailscale")!;
@@ -121,6 +122,24 @@ describe("a GitHub delivery", () => {
       });
       const { received_at } = message as { received_at: string };
       expect(new Date(received_at).toISOString()).toBe(received_at);
+    }
+  });
+
+  it("of an event its declaration gives a fact reaches the listener with what its body says, never the body", async () => {
+    const listener = await listen();
+
+    for (const [index, { path, event, body, told }] of facts.entries()) {
+      expect(path, "a fact is walked on the route that signs it").toBe(github.path);
+      await deliver({ event, payload: body, id: `delivery-fact-${index}` });
+
+      expect(await listener.next()).toStrictEqual({
+        provider: github.provider,
+        event: `${event}.${body.action}`,
+        subject: body.repository.full_name,
+        delivery_id: `delivery-fact-${index}`,
+        received_at: expect.any(String),
+        ...told,
+      });
     }
   });
 

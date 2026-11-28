@@ -49,15 +49,17 @@ DASHBOARD_REFRESH_STALE = "dashboard.panels.refresh_due"
 GLANCE_REGION = "[data-glance]"
 
 
-def refresh_ask(standing: Standing) -> Ask:
+def refresh_ask(standing: Standing, panel: str) -> Ask:
     """A panel's Refresh: an ask for every panel, standing as this one's reading does."""
 
     return Ask(
         capability_words(DASHBOARD_REFRESH),
         reverse("dashboard_glance"),
         standing=standing,
+        follows="dashboard",
         refresh=GLANCE_REGION,
         outcome=True,
+        of=panel,
     )
 
 

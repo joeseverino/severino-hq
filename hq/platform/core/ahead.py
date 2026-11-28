@@ -1,34 +1,37 @@
-"""Derived answers kept current for as long as the web application runs.
+"""Derived answers kept current for as long as the web application runs, and
+the pages open on HQ told once they are.
 
 An answer stops standing when a table it reads is written or its moment comes,
 and with a controller reporting every few minutes the next request would pay to
 derive it again. So one thread asks again once the write commits
 (docs/Architecture.md, Asked again when the change lands). Nothing here decides
 what is true: a request that comes first derives for itself.
+
+The thread learns that anything committed, from any connection in any
+process, through SQLite's ``PRAGMA data_version`` on a connection of its own
+(sqlite.org/pragma.html#pragma_data_version), and which tables were written
+from their revisions (``core.revisions``), which the database moves in the
+writing transaction. A rolled-back write moves neither.
 """
 
 import logging
-import re
+import math
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from time import monotonic
-from typing import Any
 
-from django.db import connections, transaction
-from django.db.backends.signals import connection_created
+from django.db import connection
 from django.utils import timezone
 
 from hq.platform.application import derivations
+from hq.platform.core import doorbell, live, revisions
 from hq.platform.core.outside_requests import connections_of_its_own
 
 logger = logging.getLogger("severino.ahead")
 
-# The table a statement writes, as Django and this repository's own SQL quote it.
-_WRITTEN = re.compile(
-    r'\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE|DELETE\s+FROM)\s+"(\w+)"',
-    re.IGNORECASE,
-)
+# How often the thread looks for a commit, in seconds.
+LOOKS_EVERY = 0.25
 # A pass started by an answer's moment is no closer than this to the last one,
 # in seconds, so an answer that cannot be kept is not derived in a loop.
 RESTS = 1.0
@@ -42,49 +45,83 @@ SETTLES_LONGEST = 5.0
 STOPS_WITHIN = 5.0
 
 
-class _Keeper:
-    """The one thread that asks again, and how it is woken."""
+def _version() -> int:
+    """What this thread's connection last saw committed by any other."""
+
+    with connection.cursor() as cursor:
+        cursor.execute("PRAGMA data_version")
+        (version,) = cursor.fetchone()
+    return int(version)
+
+
+class Keeper:
+    """The one thread that asks again, and what it last saw."""
 
     def __init__(self) -> None:
-        self._woken = threading.Event()
         self._stopping = threading.Event()
+        self._started = threading.Event()
         self._thread: threading.Thread | None = None
-        # Derive in the caller's thread as soon as it is woken: for a test,
-        # whose rows another thread's connection cannot see.
-        self.inline = False
+        # The revisions as the last pass read them; None before the first.
+        self._seen: Mapping[str, int] | None = None
         # How long the next pass may wait for writes to settle.
         self.within = SETTLES_WITHIN
 
-    def wake(self) -> None:
-        if self.inline:
-            derivations.derive_ahead()
-        else:
-            self._woken.set()
-
     def start(self) -> None:
+        """Start the thread, once it has read what it measures later writes from."""
+
         self._stopping.clear()
+        self._started.clear()
         self._thread = threading.Thread(target=self._run, name="hq-derive-ahead", daemon=True)
         self._thread.start()
+        self._started.wait(STOPS_WITHIN)
 
     def stop(self) -> None:
         self._stopping.set()
-        self._woken.set()
         if self._thread is not None:
             self._thread.join(STOPS_WITHIN)
             self._thread = None
 
+    def turn(self, *, due: bool = False) -> set[str]:
+        """One pass: the tables written since the last, every question that
+        reads one asked again (every one, when an answer's moment is ``due``),
+        and only then the pages and the doorbell told. The tables written."""
+
+        found = revisions.read()
+        if found is None:
+            return set()
+        was, self._seen = self._seen, dict(found.counts)
+        changed = (
+            {table for table in was.keys() | self._seen.keys() if was.get(table) != self._seen.get(table)}
+            if was is not None
+            else set()
+        )
+        try:
+            if due or any(map(derivations.asked_of, changed)):
+                derivations.derive_ahead()
+        finally:
+            live.HUB.told(changed)
+            doorbell.heard(changed)
+        return changed
+
     def _run(self) -> None:
-        while True:
-            self._woken.wait(self._pause())
-            if self._stopping.is_set():
-                return
-            self._settle()
-            with connections_of_its_own():
+        version: int | None = None
+        due = -math.inf
+        with connections_of_its_own():
+            while True:
                 try:
-                    derivations.derive_ahead()
+                    now = _version()
+                    if now != version or monotonic() >= due:
+                        # The first pass reads what every later one is measured from.
+                        if version is not None and now != version:
+                            now = self._settle(now)
+                        self.turn(due=monotonic() >= due)
+                        self.interrupted(written=_version() != now)
+                        version, due = now, self._due()
                 except Exception:  # the next pass tries again
                     logger.exception("ahead.pass_failed")
-            self.interrupted(written=self._woken.is_set())
+                self._started.set()
+                if self._stopping.wait(LOOKS_EVERY):
+                    return
 
     def interrupted(self, *, written: bool) -> None:
         """A pass ended, with or without writes landing while it derived.
@@ -96,15 +133,21 @@ class _Keeper:
 
         self.within = min(self.within * 2, SETTLES_LONGEST) if written else SETTLES_WITHIN
 
-    def _settle(self) -> None:
-        """Wait until no write has landed for ``SETTLES``, or for ``within``."""
+    def _settle(self, version: int) -> int:
+        """Wait until no write has landed for ``SETTLES``, or for ``within``; what it settled at."""
 
         latest = monotonic() + self.within
-        while monotonic() < latest:
-            self._woken.clear()
-            if not self._woken.wait(SETTLES) or self._stopping.is_set():
-                return
-        self._woken.clear()
+        while monotonic() < latest and not self._stopping.wait(SETTLES):
+            if (now := _version()) == version:
+                break
+            version = now
+        return version
+
+    def _due(self) -> float:
+        """When, on the monotonic clock, the earliest remembered answer stops standing."""
+
+        pause = self._pause()
+        return math.inf if pause is None else monotonic() + pause
 
     @staticmethod
     def _pause() -> float | None:
@@ -116,59 +159,16 @@ class _Keeper:
         return max(RESTS, (due - timezone.now()).total_seconds())
 
 
-KEEPER = _Keeper()
-
-
-def note_write(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: dict[str, Any]) -> Any:
-    """Run the statement; if it wrote a table a remembered question reads, say
-    so when its transaction commits."""
-
-    result = execute(sql, params, many, context)
-    found = _WRITTEN.match(sql)
-    if found is not None and derivations.asked_of(found[1]):
-        connection = context["connection"]
-        try:
-            transaction.on_commit(KEEPER.wake, using=connection.alias)
-        except transaction.TransactionManagementError:
-            # Autocommit is off and no atomic block is open: the commit is the
-            # caller's to make, and the pass reads only what has committed.
-            KEEPER.wake()
-    return result
-
-
-def _watch(connection: Any, **kwargs: Any) -> None:
-    # First in the list, not last: ``connection.execute_wrapper()`` removes the
-    # last one when its block ends, and a connection can open inside one.
-    if note_write not in connection.execute_wrappers:
-        connection.execute_wrappers.insert(0, note_write)
-
-
-def _unwatch() -> None:
-    connection_created.disconnect(dispatch_uid="hq.ahead")
-    for connection in connections.all(initialized_only=True):
-        if note_write in connection.execute_wrappers:
-            connection.execute_wrappers.remove(note_write)
+KEEPER = Keeper()
 
 
 @contextmanager
-def keeping(*, inline: bool = False) -> Iterator[None]:
-    """Keep derived answers current until the block ends.
+def keeping() -> Iterator[None]:
+    """Keep derived answers current, and tell the pages open on HQ what
+    changed, until the block ends."""
 
-    Every connection opened inside it is watched for writes. ``inline`` derives
-    in the writer's own thread once its transaction commits, and starts no
-    thread.
-    """
-
-    connection_created.connect(_watch, dispatch_uid="hq.ahead", weak=False)
-    for connection in connections.all(initialized_only=True):
-        _watch(connection)
-    KEEPER.inline = inline
-    if not inline:
-        KEEPER.start()
+    KEEPER.start()
     try:
         yield
     finally:
-        if not inline:
-            KEEPER.stop()
-        KEEPER.inline = False
-        _unwatch()
+        KEEPER.stop()

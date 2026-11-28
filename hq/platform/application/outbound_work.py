@@ -9,7 +9,7 @@ and audit entries derive from that one declaration (docs/Plugins.md#outbound-wor
 
 import inspect
 from annotationlib import Format
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated, Any, NotRequired, cast
@@ -87,9 +87,10 @@ class OutboundWork:
     # The kinds of reading the host's own work reads, so an ask for one
     # (``cadence.ask``) starts it: what an event makes due, read in HQ.
     reads: tuple[str, ...] = ()
-    # Whether reading them now would find anything to read, so an ask that
-    # would not starts no job; None: it always might.
-    reads_due: Callable[[], bool] | None = None
+    # Whether reading them now about a subject ("" any) would find anything
+    # to read, so an ask that would not starts no job and an event that asks
+    # only that is not stored (``inbound``); None: it always might.
+    reads_due: Callable[[str], bool] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "effect", Effect(self.effect))
@@ -177,6 +178,20 @@ def reader_of(kind: str) -> str:
     """The host's own work that reads ``kind``, by name, or ""."""
 
     return _readers().get(kind, "")
+
+
+def _finds(name: str, subject: str) -> bool:
+    """Whether the host's own work ``name`` would find anything about ``subject`` (its ``reads_due``)."""
+
+    check = _host_named(name).reads_due if name else None
+    return check is None or check(subject)
+
+
+def wanted(kinds: Iterable[str], subject: str) -> tuple[str, ...]:
+    """Of ``kinds``, those a read about ``subject`` would find anything of: a
+    kind HQ reads itself where its work's ``reads_due`` says so, any other always."""
+
+    return tuple(kind for kind in kinds if _finds(reader_of(kind), subject))
 
 
 def declared_work() -> dict[str, OutboundWork]:
@@ -280,9 +295,9 @@ class WorkRequested(AskedAnswer):
 
 
 def _job_asked(job: Job, message: str) -> AskedAnswer:
-    """How the job doing asked-for work stands, and where a page follows it."""
+    """How the job doing asked-for work stands."""
 
-    return Asked(standing_of(job_run(job)), reverse("jobs:status", args=[job.pk]), message).answer()
+    return Asked(standing_of(job_run(job)), message).answer()
 
 
 def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
@@ -391,8 +406,7 @@ def start_reading(name: str) -> bool:
     it would find anything to read (``reads_due``); False where it would not
     or it is already running."""
 
-    due = _host_named(name).reads_due
-    return (due is None or due()) and start_for_host(name)
+    return _finds(name, "") and start_for_host(name)
 
 
 def start_for_host(name: str) -> bool:
@@ -460,7 +474,7 @@ def ask(
         work.words,
         reverse("jobs:ask", args=[name]),
         standing=standing,
-        status_url=reverse("jobs:status", args=[job.pk]) if job is not None and standing.live else "",
+        follows="run",
         refresh=refresh,
         name=SUBJECT_FIELD,
         value=subject,

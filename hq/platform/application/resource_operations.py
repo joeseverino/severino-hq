@@ -70,8 +70,9 @@ lazy from .integration_specs import requested
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
+lazy from .sequences import follow_on
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
-lazy from .work_runs import WorkRun, run_row, run_rows, run_status_url, seen_as_runs, shown_result, standing_of
+lazy from .work_runs import WorkRun, run_row, run_rows, seen_as_runs, shown_result, standing_of
 
 
 @stored_in(OperationRequest)
@@ -138,13 +139,9 @@ def operation_asked(
     operation: OperationRequest, *, queued: bool, message: str = "", standing: Standing | None = None
 ) -> OperationAsked:
     """What asking for ``operation`` answers: how it stands as a list of work
-    says it (``work_runs.standing_of``) unless the caller words it, and,
-    while it is under way, where a page follows a run or a scan."""
+    says it (``work_runs.standing_of``) unless the caller words it."""
 
-    run = run_row(operation)
-    standing = standing or standing_of(run)
-    following = run_status_url(run.id) if standing.live and run.url else ""
-    asked = Asked(standing, following, message).answer()
+    asked = Asked(standing or standing_of(run_row(operation)), message).answer()
     return {**asked, "queued": queued, "operation": serialize_operation(operation)}
 
 
@@ -470,7 +467,6 @@ def queue_reconcile(
     consented: Consented,
     reason: str,
     replaces: dict[str, Any] | None = None,
-    then: dict[str, Any] | None = None,
 ) -> OperationAsked:
     """Queue a reconcile of a declaration just written, as the write's own act.
 
@@ -478,23 +474,17 @@ def queue_reconcile(
     contact inbox under contacts), so it is checked against the same policy
     as any other reconcile. Keyed on the generation: asking twice for one
     generation queues it once. ``replaces`` is the copy the write replaced,
-    which the claim holds the live record to. ``then`` is the step its
-    success queues (``app_update_approval.succeeded``), asked again on every
-    call while none waits, since what it acts on changes outside HQ.
+    which the claim holds the live record to.
     """
 
-    carries = {
-        # The copy an apply by hand may only replace (``controller.over_live``).
-        **({REPLACES: replaces} if replaces is not None else {}),
-        **({THEN: then} if then is not None else {}),
-    }
     return _queue_operation(
         resource,
         OperationCommand(reason=reason),
         consented=consented,
         action=OperationRequest.Action.RECONCILE,
-        carries=carries or None,
-        once="" if then is not None else f"reconcile:{resource.pk}:g{resource.generation}",
+        # The copy an apply by hand may only replace (``controller.over_live``).
+        carries={REPLACES: replaces} if replaces is not None else None,
+        once=f"reconcile:{resource.pk}:g{resource.generation}",
     )
 
 
@@ -895,3 +885,21 @@ def request_certificate_renewal(
     if not allowed:
         raise PolicyError(explanation)
     return _queue_operation(resource, command, consented=consented, action=OperationRequest.Action.RENEW)
+
+
+def succeeded(operation: OperationRequest) -> None:
+    """Queue the step a declared workflow follows ``operation`` with now that
+    it succeeded (``sequences.SequenceSpec.follow_ons``), and say on it what
+    was queued or why nothing was."""
+
+    then = (operation.input or {}).get(THEN)
+    step = follow_on(operation.action)
+    if not isinstance(then, dict) or step is None:
+        return
+    try:
+        with transaction.atomic():
+            said = step(operation, then)
+    except PolicyError as refused:
+        said = {"refused": str(refused)}
+    operation.result = {**(operation.result or {}), THEN: said}
+    OperationRequest.objects.filter(pk=operation.pk).update(result=operation.result)

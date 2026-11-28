@@ -1,11 +1,9 @@
-"""GitHub as HQ declares it: continuous delivery, the pull requests it merges and the Renovate boxes it ticks.
+"""GitHub as HQ declares it: continuous delivery and the pull requests it merges.
 
 Delivery: the controller (controller/providers/github_delivery.go) compares
 the running image's lock with each extension's latest admission on GitHub and
 reports each stage there; HQ starts nothing. A pull request is merged at the
-head commit a person approved (controller/providers/github_merge.go), and a
-Dependency Dashboard box is ticked so Renovate opens a branch it holds
-(controller/providers/github_dashboard.go).
+head commit a person approved (controller/providers/github_merge.go).
 """
 
 from collections.abc import Mapping
@@ -23,6 +21,7 @@ from ..observations.github import PROVIDER
 from ..permissions import GitHub
 from ..provider_spec import (
     ConnectionKind,
+    EventFact,
     InboundSpec,
     ProviderModel,
     ProviderSpec,
@@ -187,36 +186,7 @@ PULL_REQUEST = ProviderSpec(
     declaration_only=True,
     unobserved_reason="Each merge reports the commit it made.",
 )
-DASHBOARD_BOX_KIND = "github.dashboard_box"
-# The words Renovate marks a box with for a branch it holds with no pull
-# request (its dependency-dashboard.ts): ticked, Renovate opens it.
-HeldMarker = Literal["unpend", "approve", "unschedule", "unlimit"]
-
-
-class GitHubDashboardBoxSpec(ProviderModel):
-    """One box on a repository's Dependency Dashboard, ticked so Renovate opens its branch's pull request."""
-
-    repository: Repository
-    branch: Annotated[str, Describe("", api="The branch Renovate holds.")] = Field(
-        pattern=r"^[A-Za-z0-9_./-]+$", max_length=200, title="Branch"
-    )
-    marker: Annotated[HeldMarker, Describe("", api="The word Renovate marks its box with.")] = Field(title="Marker")
-
-
-DASHBOARD_BOX = ProviderSpec(
-    DASHBOARD_BOX_KIND,
-    "A box HQ ticks on a Dependency Dashboard, so Renovate opens the branch's pull request.",
-    GitHubDashboardBoxSpec,
-    actions={"reconcile": applies()},
-    label="Dashboard box",
-    name=lambda spec: f"{spec.get('repository', '')} {spec.get('branch', '')}",
-    connection_providers=(PROVIDER,),
-    identity=lambda spec: (str(spec["repository"]), str(spec["branch"])),
-    key_hint=lambda spec: f"{spec.get('repository', '')}-{spec.get('branch', '')}".replace("/", "-"),
-    declaration_only=True,
-    unobserved_reason="Renovate rewrites the Dashboard on every run.",
-)
-DEFINITIONS = (DEFINITION, PULL_REQUEST, DASHBOARD_BOX)
+DEFINITIONS = (DEFINITION, PULL_REQUEST)
 OBSERVATIONS = readings.OBSERVATIONS
 
 SHARED = (
@@ -235,11 +205,6 @@ SHARED = (
     ),
     SharedValue(
         "GitHubPullRequestSpec", GitHubPullRequestSpec, "A github.pull_request declaration: what a merge merges."
-    ),
-    SharedValue(
-        "GitHubDashboardBoxSpec",
-        GitHubDashboardBoxSpec,
-        "A github.dashboard_box declaration: the box a reconcile ticks.",
     ),
     SharedValue(
         "GitHubMergeRefusal",
@@ -273,27 +238,35 @@ CONNECTIONS = {
     ),
 }
 
-# What one App webhook sends from every installation, each event making the
-# repositories' reading due, and the webhook's own, since a delivery that
+# What one App webhook sends from every installation, each event making its
+# repository's full read due, and the webhook's own, since a delivery that
 # arrived is one GitHub's log no longer counts as failing; GitHub's docs name
 # the permission each needs
 # (https://docs.github.com/en/webhooks/webhook-events-and-payloads). A
 # deployment review is requested the moment a run starts waiting on a reviewer;
-# a merge group, as a pull request joins or leaves a merge queue.
+# a merge group, as a pull request joins or leaves a merge queue. A job's
+# fact draws it as told on the pull requests its commit heads until their next
+# read, and asks nothing: the check suite's end reads them.
 INBOUND = {
     PROVIDER: InboundSpec(
-        dict.fromkeys(
-            (
-                "push",
-                "check_suite",
-                "pull_request",
-                "deployment_status",
-                "deployment_review",
-                "merge_group",
-                *readings.UNPROBED_EVENTS,
+        {
+            **dict.fromkeys(
+                (
+                    "push",
+                    "check_suite",
+                    "pull_request",
+                    "deployment_status",
+                    "deployment_review",
+                    "merge_group",
+                    "dependabot_alert",
+                    "code_scanning_alert",
+                    "secret_scanning_alert",
+                    "workflow_run",
+                ),
+                (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
             ),
-            (*readings.REPOSITORY_KINDS, readings.WEBHOOK_KIND),
-        ),
+            "workflow_job": (readings.PULL_REQUEST_KIND,),
+        },
         path="/github",
         # "sha256=<hex>" over the body alone (docs.github.com, validating
         # webhook deliveries).
@@ -318,5 +291,41 @@ INBOUND = {
             GitHub.CODE_SCANNING_ALERTS_READ,
             GitHub.SECRET_SCANNING_ALERTS_READ,
         ),
+        facts={
+            # A job's lifecycle, as GitHub's job object says it
+            # (docs.github.com, REST workflow jobs): the one event that says a
+            # check started.
+            "workflow_job": EventFact(
+                readings.CheckRun,
+                {
+                    "name": "/workflow_job/name",
+                    "status": "/workflow_job/status",
+                    "conclusion": "/workflow_job/conclusion",
+                    "started_at": "/workflow_job/started_at",
+                    "completed_at": "/workflow_job/completed_at",
+                    "url": "/workflow_job/html_url",
+                },
+                about="/workflow_job/head_sha",
+                said_at=("/workflow_job/completed_at", "/workflow_job/started_at", "/workflow_job/created_at"),
+                example={
+                    "action": "in_progress",
+                    "workflow_job": {
+                        "id": 2,
+                        "run_id": 1,
+                        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+                        "html_url": "https://github.com/example/app/actions/runs/1/job/2",
+                        "status": "in_progress",
+                        "conclusion": None,
+                        "created_at": "2026-01-15T12:00:00Z",
+                        "started_at": "2026-01-15T12:00:05Z",
+                        "completed_at": None,
+                        "name": "build",
+                        "workflow_name": "CI",
+                        "head_branch": "renovate/example",
+                    },
+                    "repository": {"full_name": "example/app"},
+                },
+            ),
+        },
     ),
 }

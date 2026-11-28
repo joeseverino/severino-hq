@@ -4,11 +4,12 @@ how this browser reaches HQ, how the controller stands and the glance panels,
 one band of facts beside the greeting, on the page's ground.
 
 A fragment region (static/js/fragment.js): while a reading is on its way the
-server draws `data-fragment-poll` and the region is asked again; each panel is
+server draws `data-fragment-live` and the region is asked again as it lands; each panel is
 a part, so only a panel that changed is replaced, and its popover, found by
-its id, is shown again if it was open.
+its id, is shown again if it was open. A panel's Refresh is a press, answered
+with the strip, found by its id.
 {% endcomment %}
-<div data-glance data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="1"{% endif %}>
+{% url 'dashboard_glance' as glance_url %}<div id="glance" data-glance{% live_region "dashboard" dashboard_refreshing at=glance_url %}>
   {% comment %}
   The region asks for its due readings itself, once, when the page is showing.
   Asking by hand is each panel's Refresh (glance_refresh.refresh_ask), an ask whose

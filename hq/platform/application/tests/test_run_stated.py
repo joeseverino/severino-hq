@@ -24,7 +24,10 @@ class RunStatedTestCase(WorkRunsTestCase):
         return report_operation(
             str(run.pk),
             ControllerReport(
-                success=True, observed_generation=run.input["generation"], message="Done.", stated=stated, **fields
+                success=True,
+                observed_generation=run.input["generation"],
+                stated=stated,
+                **{"message": "Done.", **fields},
             ),
             controller_id=WORKER,
         )
@@ -86,3 +89,15 @@ class NotARunTests(RunStatedTestCase):
                 ControllerReport(success=False, observed_generation=scan.input["generation"], stated=STATED),
                 controller_id=WORKER,
             )
+
+
+class HeadlineTests(RunStatedTestCase):
+    def test_a_run_that_stated_a_release_names_no_app_it_left_alone(self):
+        run = self.claimed(self.run_of(APP))
+        released = {"project": "example-app", "result": "ok", "health": "healthy", "changed": True}
+        left = {"project": "example-app-left-alone", "result": "ok", "health": "healthy", "changed": False}
+
+        self.report(run, {"readings": {APP: {"apps.pull": [released, left]}}})
+
+        (found,) = [row for row in self.listed() if row.id == str(run.pk)]
+        self.assertNotIn("example-app-left-alone", found.note)

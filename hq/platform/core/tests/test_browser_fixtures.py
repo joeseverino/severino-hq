@@ -12,17 +12,16 @@ from contextlib import ExitStack, contextmanager
 from datetime import date, timedelta
 from pathlib import Path
 from unittest import mock
-from urllib.parse import urlsplit
 
 from django.test import override_settings
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest
 from hq.platform.application.approvals import entry_event
-from hq.platform.application.asks import REFRESHING
 from hq.platform.application.card_items import Kpi
 from hq.platform.application.contracts import Effect
 from hq.platform.application.drawings import Dot, Dots
+from hq.platform.application.markup_testing import followed
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.links import example_command
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
@@ -358,11 +357,7 @@ def asked_on_opening(client):
                 headers={"X-Requested-With": "XMLHttpRequest"},
                 **REQUEST,
             )
-            status = asked.json()["status"]
-            followed = ask_as_production(client, status)
-    if asked.json()["note"] != REFRESHING or followed.json()["note"] != REFRESHING:
-        raise AssertionError(f"the dashboard's ask was answered {asked.json()} and then {followed.json()}")
-    return {
-        reverse("control_plane:visit").strip("/"): answered(asked),
-        urlsplit(status).path.strip("/"): answered(followed),
-    }
+    # The control answers the press and the stream's asks for it alike, under way.
+    if followed(asked) != ["estate"]:
+        raise AssertionError(f"the dashboard's ask was answered {asked.content.decode()}")
+    return {reverse("control_plane:visit").strip("/"): answered(asked)}

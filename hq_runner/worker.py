@@ -183,14 +183,14 @@ def _ended(
 ) -> tuple[bool, str, str]:
     """Whether a run ansible-runner ended as ``status`` succeeded, and why not.
 
-    A run that succeeded says what its playbook stated it found or did, else
-    what its record says shows it worked, which its checks have just held. A
-    run that failed with no task failed or machine unreached says the error
-    Ansible stopped it with (``events.Stopped``).
+    A run that succeeded says the result its playbook stated, if any; HQ
+    words the rest from what it stated and its tasks. A run that failed with
+    no task failed or machine unreached says the error Ansible stopped it
+    with (``events.Stopped``).
     """
 
     if status == "successful":
-        return True, "", result or " ".join(f"{each.rstrip('.')}." for each in run.verification)
+        return True, "", result or ""
     if status == "failed":
         if stopped and not any(event.outcome in _FAILED for event in events):
             return False, "Failed", stopped

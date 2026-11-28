@@ -32,10 +32,6 @@ REPOSITORY_KINDS: tuple[str, ...] = (REPOSITORY_KIND, WORKFLOW_RUN_KIND, PULL_RE
 # nothing new: the bound on how stale what the query cannot see gets (alerts,
 # variables, runners, environments, branch rules, access, artifacts).
 FULL_READ_EVERY = timedelta(hours=1)
-# The App's events about what the change query cannot see, so one makes its
-# repository's full read due (``github_repositories.plan``): an alert, and a
-# run on a branch no pull request heads.
-UNPROBED_EVENTS: tuple[str, ...] = ("dependabot_alert", "code_scanning_alert", "secret_scanning_alert", "workflow_run")
 
 # Refusable one at a time: a private repository on a free plan has no code
 # scanning, and that should not hide its pull requests.
@@ -190,11 +186,15 @@ class Checks(ObservationRecord):
 
 class CheckRun(ObservationRecord):
     """One check as its last run stands: a workflow run's job, another app's
-    check, or a commit status, in GitHub's words, lower-cased."""
+    check, or a commit status, in GitHub's words, lower-cased, with when it
+    started and finished and its page where GitHub says them."""
 
     name: str = ""
     status: str = ""
     conclusion: str = ""
+    started_at: Stamp = None
+    completed_at: Stamp = None
+    url: str = ""
 
 
 class PullRequestRecord(ObservationRecord):
@@ -308,21 +308,15 @@ class RepositoryRecord(ObservationRecord):
     # not: what it uses in turn is not read here.
     called_workflows: list[str] | None = None
     # Each app's Compose files on the default branch, ``compose/<app>/<file>``,
-    # and the open Dependency Dashboard's address, of a repository opted in to
-    # updates: empty for any other, or where the Compose part was refused.
+    # of a repository opted in to updates: empty for any other, or where the
+    # Compose part was refused.
     compose: list[str] = Field(default=[], max_length=COMPOSE_KEPT)
-    dashboard: str = ""
-    # The login HQ's dependency update run opens its pull requests and its
-    # Dashboard as, the App's bot, read with the Compose part.
+    # The login HQ's dependency update run opens its pull requests as, the
+    # App's bot, read with the Compose part.
     updater: str = ""
     # ``{path, service, image}`` per service of those files as compose-go
     # loads them at the default branch's head (``head``): what a merge pins.
     compose_images: list[dict[str, Any]] = []
-    # ``{branch, marker, apps}`` per branch the Dependency Dashboard lists
-    # with a box to tick and no pull request, the marker's word (``unpend``,
-    # ``approve``, ``unschedule``, ``unlimit``) and the apps whose image its
-    # line names.
-    held_branches: list[dict[str, Any]] = []
     # ``{app, commits}`` per app with a service built on its host: each commit
     # from the newest that changed ``compose/<app>/`` to the head, newest
     # first, the revisions that build what a merge does.
@@ -399,6 +393,23 @@ _DEPENDENCY_RUN_EVERY = timedelta(days=1)
 # The controller reads both from this record's schema in the bridge contract.
 OWNER = r"^[a-z0-9-]{1,39}$"
 REPOSITORY = r"^([a-z0-9-]{1,39})/[a-z0-9._-]{1,100}$"
+# A branch Renovate names, as the hand-off spells one.
+BRANCH = r"^[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}$"
+
+
+class Branch(ObservationRecord):
+    """One branch as the run's report says Renovate left it
+    (``controller/host/renovate.go`` readReport)."""
+
+    repository: str = Field(pattern=REPOSITORY)
+    branch: str = Field(pattern=BRANCH)
+    # Renovate's word for what it did with the branch (its ``BranchResult``):
+    # ``pr-created``, ``needs-approval``, ``pending``, ``not-scheduled``…
+    result: str = Field(pattern=r"^[a-z][a-z-]{0,39}$")
+    # The number of the pull request the branch has, None for none.
+    pull_request: int | None = None
+    # The package files its upgrades change, as the repository names them.
+    files: list[str] = Field(default=[], max_length=20)
 
 
 class DependencyRunRecord(ObservationRecord):
@@ -413,6 +424,8 @@ class DependencyRunRecord(ObservationRecord):
     exit_code: int | None
     started_at: Stamp = None
     finished_at: Stamp = None
+    # Each branch of its repositories its report names, once it has finished.
+    branches: list[Branch] = Field(default=[], max_length=500)
 
 
 ALLOWANCE_KIND = "github.allowance"

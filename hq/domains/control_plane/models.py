@@ -9,6 +9,7 @@ from django.db import models
 from django.db.models.fields.json import KT
 from django.db.models.functions import Coalesce, Lower, NullIf, Trim
 from django.utils import timezone
+from pydantic import BaseModel
 
 from hq.domains.jobs.models import JobState
 from hq.platform.application.labels import dotted
@@ -20,10 +21,12 @@ from hq.platform.core.lapses import Lapse
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, has_text, one_of, singleton
 from hq.platform.core.stored_json import StoredJSONField
+lazy from hq.domains.control_plane.provider_adapters import INBOUND
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+lazy from hq.platform.application import automation_adoption
 lazy from hq.platform.application.approval_review import title as approval_title
-lazy from hq.platform.application.automation_adoption import adopted_procedures, playbook_titles
-lazy from hq.platform.application.automation_runs import run_title
+lazy from hq.platform.application.automation_adoption import adopted_procedures
+lazy from hq.platform.application.automation_runs import CHECK, run_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance_refresh import _panel_names
 lazy from hq.platform.application.security import subject_parts
@@ -340,25 +343,31 @@ class DashboardRefreshRequest(TimestampedModel):
 
 
 class ReadRequest(TimestampedModel):
-    """An operator asking for one connection, one kind, or everything read now.
+    """Somebody, or an event, asking for one connection, one kind, or
+    everything read now, of one ``subject`` where the event names one (a
+    repository).
 
     Blank ``connection_ref`` and ``kind`` is every connection. Answered once
-    every reading it forces was stored after ``requested_at``; see
-    ``application.cadence``.
+    a pass that took it stored every reading it forces; see
+    ``application.read_requests``.
     """
 
     connection_ref = models.CharField(max_length=160, blank=True)
     kind = models.CharField(max_length=64, blank=True)
+    # What of the kind is to be read, as the provider names it; blank is all of it.
+    subject = models.CharField(max_length=255, blank=True)
     requested_at = models.DateTimeField(default=timezone.now)
+    # When a controller's pass took it in its verdict, or None while no pass
+    # has since its latest ask.
+    taken_at = models.DateTimeField(null=True, blank=True)
     # The chain of its latest ask, which the sweep that answers it continues
     # (``sweep.record_sweep``).
     traceparent = queued_chain()
-    # Its latest ask was an event's, which waits a gap after its kind was
-    # stored (``read_requests.EVENT_READ_GAP``).
-    spaced = models.BooleanField(default=False)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("connection_ref", "kind"), name="one_read_request_per_subject")]
+        constraints = [
+            models.UniqueConstraint(fields=("connection_ref", "kind", "subject"), name="one_read_request_per_subject")
+        ]
 
     @override
     def __str__(self) -> str:
@@ -381,11 +390,22 @@ class InboundOutcome(TonedChoices):
     IGNORED = "ignored", Tone.NEUTRAL, "Ignored"
 
 
+def told_fact(event: InboundEvent) -> BaseModel | None:
+    """What ``event``'s body said, as its declaration's fact reads it, or
+    None for an event with no fact."""
+
+    spec = INBOUND.get(event.provider)
+    declared = spec.facts.get(spec.declared(event.event)) if spec else None
+    return declared.shape.model_validate(event.fact) if declared and event.fact else None
+
+
 class InboundEvent(TimestampedModel):
     """One event a provider or HQ's host said happened, once per delivery.
 
-    It holds the event's name and never its body: what changed is read again
-    with HQ's own credentials (``application.inbound``).
+    It holds the event's names and never its body: what changed is read again
+    with HQ's own credentials (``application.inbound``). An event its
+    declaration gives a fact also holds what its body said, which a page shows
+    as told until the next read (``inbound_events.told``).
     """
 
     provider = models.CharField(max_length=64)
@@ -401,6 +421,11 @@ class InboundEvent(TimestampedModel):
     outcome = models.CharField(max_length=16, choices=InboundOutcome.choices)
     # The reading kinds it made due.
     reads = models.JSONField(default=list, blank=True)
+    # Its fact: what it is about, when its signed body says it was said, and
+    # each value, read through its declaration's shape (``told_fact``).
+    about = models.CharField(max_length=255, blank=True)
+    said_at = models.DateTimeField(null=True, blank=True)
+    fact = StoredJSONField(default=dict, blank=True, load=told_fact)
 
     class Meta:
         ordering = ("-applied_at",)
@@ -659,7 +684,10 @@ class OperationRequest(TimestampedModel):
     def __str__(self) -> str:
         # A run and a scan by the title Jobs and their own pages give them.
         if self.action == self.Action.RUN:
-            return run_title(str((self.input or {}).get("operation") or ""), playbook_titles())
+            asked = self.input or {}
+            return run_title(
+                str(asked.get("operation") or ""), automation_adoption.playbook_titles(), check=asked.get(CHECK) is True
+            )
         if self.action == self.Action.SCAN:
             return self.get_action_display()
         return f"{self.get_action_display()}: {self.resource.key}"

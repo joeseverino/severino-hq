@@ -290,10 +290,6 @@ class PlaybooksPageTests(TestCase):
         self.assertEqual({table: revisions.read().counts.get(table, 0) for table in tables}, before)
         self.assertFalse(UpstreamReading.objects.filter(key="automation-heartbeat").exists())
 
-    def test_the_status_of_a_run_hq_never_queued_is_not_found(self):
-        status = reverse("jobs:run_status", args=["00000000-0000-0000-0000-000000000000"])
-        self.assertEqual(self.client.get(status).status_code, 404)
-
     def test_a_scan_of_the_commit_adopted_leaves_nothing_to_decide(self):
         from hq.platform.core.example_estate import automation
 

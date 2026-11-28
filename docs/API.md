@@ -823,8 +823,14 @@ extension inherits is a `$ref` to the base's property
 where it is declared. It is never `allOf` its base, since a closed base refuses
 every key its extension adds. A document holding two identical described
 fragments, a property or parameter that says nothing of what it is, or an
-object naming none of its fields does not build (`fragments.said_once`), the
-composed one included, so an extension's declarations are held too.
+object naming none of its fields fails `fragments.said_once`, in development
+and in every test that builds it, the composed suite's included, so an
+extension's declarations are held too. A playbook's inputs are an operator's
+data, so an input several playbooks declare in the same words is written once
+by the builder (`_Builder.playbook_inputs`), two playbooks whose ids are one
+name in it are refused at adoption, and a served document is never refused:
+what it says wrong, or a part claiming a name another holds, is logged as
+`api.document.refused` (`fragments.said_wrong`).
 
 Each answer names the requests it leads to as OpenAPI links, derived in one
 place (`_Builder.links`) from what the registries say of it: a page links to

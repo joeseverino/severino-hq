@@ -2,7 +2,7 @@ import re
 from collections.abc import Callable, Mapping
 from datetime import date, datetime, timedelta
 from numbers import Number
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
 
@@ -41,12 +41,14 @@ from hq.platform.application.ui import (
     MISSING,
     agreed as _agreed,
     counted as _counted,
+    counted_forms,
     ended as _ended,
     measured as _measured,
     no_value,
 )
 from hq.platform.core.held_values import format_html
 from hq.platform.core.part_examples import tags
+from hq.platform.core.template_literals import Reads, one_of, reading
 from hq.platform.core.template_parts import Option, Part, SlotsNode, answers, slotted
 from hq.platform.core.templatetags.facts_tags import FACT
 from hq.platform.core.templatetags.line_breaks import breakable, button_words, code_spans, held, mark_text
@@ -69,14 +71,15 @@ OUTSIDE_LINK = "partials/_outside_link.html"
 
 
 @register.filter
-def counted(count, phrases):
+@reading
+def counted(count, phrases: Annotated[tuple[str, str], Reads(counted_phrases)]):
     """``{{ n|counted:"project needs output,projects need output" }}``.
 
     One word may stand alone (``{{ n|counted:"change" }}``); a phrase gives both
     forms, comma separated, so its verb agrees too. See ``application.ui.counted``.
     The figure and its first word share a line (``line_breaks.held``).
     """
-    return held(_counted(int(count or 0), *counted_phrases(phrases)))
+    return held(_counted(int(count or 0), *phrases))
 
 
 @register.filter(is_safe=True)
@@ -88,14 +91,16 @@ def ended(text):
 
 
 @register.filter
-def agreed(count, phrases):
+@reading
+def agreed(count, phrases: Annotated[tuple[str, str], Reads(counted_phrases)]):
     """``{{ names|length|agreed:"it,them" }}``: ``counted``'s words without the
     figure, for words that agree with a count said elsewhere."""
-    return _agreed(int(count or 0), *counted_phrases(phrases))
+    return _agreed(int(count or 0), *phrases)
 
 
 @register.filter
-def measured(value, unit):
+@reading
+def measured(value, unit: Annotated[tuple[str, int | None], Reads(measured_unit)]):
     """``{{ miles|measured:"mi,2" }}``: a figure and its unit, or a word the
     count leaves alone (``measured:"more"``), as one value, so the word never
     opens a line alone below its number. A count of decimals after a comma
@@ -106,7 +111,7 @@ def measured(value, unit):
 
     if no_value(value):
         return empty_value()
-    return held(_measured(value, *measured_unit(unit)))
+    return held(_measured(value, *unit))
 
 
 def measured_unit(argument) -> tuple[str, int | None]:
@@ -123,10 +128,11 @@ def measured_unit(argument) -> tuple[str, int | None]:
         ) from None
 
 
-def counted_phrases(phrases) -> tuple[str, str | None]:
-    """The filter argument as ``(one, many)``; ``many`` is None when it is left out."""
+def counted_phrases(phrases) -> tuple[str, str]:
+    """The filter argument as ``(one, many)``, the plural of a word left out
+    spelled for it (``application.ui.counted_forms``)."""
     one, _, many = str(phrases).partition(",")
-    return one.strip(), many.strip() or None
+    return counted_forms(one.strip(), many.strip() or None)
 
 
 def empty_value():
@@ -261,7 +267,8 @@ _WHEN_FORMS = {**_WORDS_FORMS, "mark": _dated_mark}
 
 
 @register.filter
-def when(value, form=""):
+@reading
+def when(value, form: Annotated[str, Reads(one_of(tuple(_WHEN_FORMS)))] = ""):
     """``{{ moment|when }}``: the one way a page shows a moment, a date or an age.
 
     A ``<time>`` whose ``datetime`` is the instant as a machine reads it (what a
@@ -271,10 +278,6 @@ def when(value, form=""):
     missing value; text that names no instant is shown as it came, its names held.
     """
 
-    if form not in _WHEN_FORMS:
-        raise template.TemplateSyntaxError(
-            f"when takes {', '.join(repr(name) for name in _WHEN_FORMS if name)} or nothing; got {form!r}."
-        )
     if no_value(value):
         return empty_value()
     found = _instant(value)
@@ -305,16 +308,13 @@ def reading_age_of(reading=None, at=None, unread=""):
 
 
 @register.filter
-def when_text(value, form=""):
+@reading
+def when_text(value, form: Annotated[str, Reads(one_of(tuple(_WORDS_FORMS)))] = ""):
     """``{{ moment|when_text }}``: the words ``when`` writes in a form,
     as plain text, where a ``<time>`` cannot stand: an attribute, or a line
     in a table cell, which sorts on the first ``<time>`` it holds. Nothing for
     a missing moment or text that names none."""
 
-    if form not in _WORDS_FORMS:
-        raise template.TemplateSyntaxError(
-            f"when_text takes {', '.join(repr(name) for name in _WORDS_FORMS if name)} or nothing; got {form!r}."
-        )
     found = _instant(value)
     return _WORDS_FORMS[form](found) if found is not None else ""
 
@@ -473,7 +473,7 @@ def _named(context, link, *, code, label, mark):
     return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
 
 
-def cell_line(text, url="", *, lines=2):
+def cell_line(text, url="", *, lines: Literal[1, 2] = 2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
     ``url`` is given: its names held as ``breakable`` holds them, its words cut
     by the line's own box, and a cut one reads whole as any cut value does
@@ -482,8 +482,6 @@ def cell_line(text, url="", *, lines=2):
     ``{% cell_line text=... %}`` draws it."""
 
     inside = breakable(text)
-    if lines not in (1, 2):
-        raise ValueError(f"A cell's line takes 1 or 2 lines, never {lines!r}.")
     one = format_html(' data-lines="{}"', lines) if lines == 1 else ""
     if url:
         return format_html('<a class="cell-line"{} href="{}">{}</a>', one, url, inside)

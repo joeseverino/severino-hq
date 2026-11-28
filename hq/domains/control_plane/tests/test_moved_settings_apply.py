@@ -210,7 +210,7 @@ class OnlyWhatNeedsApplyingIsDueTests(_Estate):
         self.assertEqual(cadence.pass_due(), "")
 
     def test_asking_does_not_grow_with_the_estate(self):
-        """Asked once a minute and after every write, so its cost may not follow the record count."""
+        """Asked after every write it reads, so its cost may not follow the record count."""
 
         def asked():
             with CaptureQueriesContext(connection) as queries:

@@ -133,6 +133,10 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	if err := c.Connections(); err != nil {
 		return err
 	}
+	if pass == Apply && !c.due(ctx) {
+		fmt.Fprintln(c.Stdout, "Nothing is due, so no pass runs.")
+		return nil
+	}
 	if !pass.partial() {
 		if err := c.prepareACME(); err != nil {
 			return err
@@ -257,6 +261,21 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		c.takeHandoffs(run)
 	}
 	return err
+}
+
+// due is whether an applying pass has anything to do: a grant's token to
+// mint, or what HQ says is due (`hq-controller pass-due`). A pass runs when
+// HQ cannot say, so a missed answer never strands work.
+func (c *Controller) due(ctx context.Context) bool {
+	if slices.ContainsFunc(c.Grants, func(grant Grant) bool { return grant.Due(c.Now()) }) {
+		return true
+	}
+	var answer runtime.PassDue
+	if err := c.askHQ(ctx, &answer, "pass-due"); err != nil || !answer.OK {
+		fmt.Fprintf(c.Stderr, "HQ did not say whether a pass is due, so one runs: %v\n", err)
+		return true
+	}
+	return answer.Due
 }
 
 // unitSocket lends the pass the unit socket's directory, the only way it

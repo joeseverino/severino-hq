@@ -2,37 +2,40 @@
 
 A request for work that can wait on something outside the process records the
 ask (a read request for the controller, a job for the runner) and answers at
-once; the work reports where its result is stored, and a page watching it asks
-how it stands. One shape says so (``Standing``) whichever mechanism does it, so
-one control (``partials/_ask.html``) and one script behavior follow all of it.
+once; the work reports where its result is stored. One shape says how it
+stands (``Standing``) whichever mechanism does it, drawn from what is stored by
+one control (``partials/_ask.html``), which a page asks for again while the
+work is live (``Ask.follows``, ``core.live``).
 """
 
+import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Annotated, Any, ClassVar, Literal, TypedDict
+from typing import Annotated, Any, ClassVar, Literal, TypedDict, cast
+from urllib.parse import urlsplit
 
 from django.contrib import messages
-from django.core import signing
-from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect
 from django.utils import timezone
-from django.views import View
 
-from hq.platform.application.url_query import with_query
-lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
+lazy from hq.platform.core import live
+lazy from hq.platform.core.web_refusals import refusal_response
 
 from .describe import Describe, listed
 from .moments import duration
+from .projection import read_once
 from .record_errors import Sentence, worded
 from .routes import reverse
 from .ui import button_classes, ended
 lazy from . import cadence
+lazy from .action_links import read_now_payload
 lazy from .cadence import every_sweep
-lazy from .moments import moment
-lazy from .read_requests import read_request_lifetime
+lazy from .read_requests import forced_kinds, read_request_lifetime
 lazy from .refusal_status import refusal_of
 lazy from .security import safe_next
 lazy from .web_writes import execute_posted, run_posted
@@ -55,26 +58,6 @@ NEWER_READING = "A newer reading is in."
 SHOW_NEWER = "Show the reading"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
-
-# How often a part of a page whose work is under way asks its page again, in
-# seconds (``data-fragment-poll``): a queue row, a card.
-FOLLOW_SECONDS = 4
-
-
-def following(live: bool) -> dict[str, str]:
-    """The ``data-`` hooks of a part that asks its page again while ``live``
-    (fragment.js), found by its id in each answer; none once the server
-    stops drawing them, which ends the asking."""
-
-    return {"fragment": "", "fragment-poll": str(FOLLOW_SECONDS)} if live else {}
-
-
-_WATCH_SALT = "hq.platform.application.asks.watch"
-# Longer than any read request lives, so a page left open can still learn that
-# its request went unanswered.
-WATCH_SECONDS = 60 * 60
-# Generous for a signed list of kinds, and far short of a request line's limit.
-WATCH_LIMIT = 4000
 
 
 class StandingAnswer(TypedDict):
@@ -102,7 +85,7 @@ def restates(sentence: str, word: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Standing:
-    """How one piece of asked-for work stands; a status resource answers with ``as_json``."""
+    """How one piece of asked-for work stands; a capability answers with ``as_json``."""
 
     state: str = IDLE
     # What it is doing, or how it ended, in a sentence.
@@ -182,8 +165,9 @@ class Ask:
     label: str
     url: str
     standing: Standing = field(default_factory=Standing)
-    # The resource that says how the work stands while it is live.
-    status_url: str = ""
+    # The read set (``core.live``) its work is drawn from, which the page
+    # hears change while the work is live and draws the control again from.
+    follows: str = ""
     # A CSS selector for the part of the page the result shows in, fetched
     # again when the work ends; without one, the page's content.
     refresh: str = ""
@@ -196,11 +180,25 @@ class Ask:
     disabled: bool = False
     # The ``refresh`` part draws how the work ended, failure included.
     outcome: bool = False
+    # What tells this control apart from another of the same ask on one page
+    # (a panel's), each standing as its own work does.
+    of: str = ""
     # A PageAction is a link or a post; this is neither, and says so.
     is_ask = True
     danger = False
     method = "post"
     modal = ""
+
+    def __post_init__(self) -> None:
+        # A set nothing pulses for would leave the control under way for good.
+        if self.follows:
+            live.region(self.follows)
+
+    @property
+    def anchor(self) -> str:
+        """The control's id on its page, the same each time the page draws it."""
+
+        return f"ask-{hashlib.sha256(f'{self.url} {self.value} {self.of}'.encode()).hexdigest()[:12]}"
 
     @property
     def look(self) -> str:
@@ -214,7 +212,6 @@ class Ask:
 
 
 # Each ask's answer extends AskedAnswer, so each field is described once here.
-type AskedStatusUrl = Annotated[str, Describe("Where to follow the work while it is under way; empty when nothing is.")]
 type AskedMessage = Annotated[
     str, Describe("What asking did, in the sentence a page shows; empty where it says nothing.")
 ]
@@ -225,18 +222,16 @@ class AskedAnswer(TypedDict):
 
     ok: Literal[True]
     standing: StandingAnswer
-    status_url: AskedStatusUrl
     message: AskedMessage
 
 
 @dataclass(frozen=True, slots=True)
 class Asked:
-    """What an ask answers: how its work stands, where a page watches it while
-    it is live, and the sentence a page without script shows. A capability
-    answers ``answer()``; a page reads it back with ``of``."""
+    """What an ask answers: how its work stands, and the sentence a page
+    without script shows. A capability answers ``answer()``; a page reads it
+    back with ``of``."""
 
     standing: Standing
-    status_url: str = ""
     message: str = ""
 
     @classmethod
@@ -245,10 +240,10 @@ class Asked:
         under way yet, and its message says so."""
 
         standing = Standing.of(said["standing"]) if "standing" in said else Standing()
-        return cls(standing, str(said.get("status_url", "")), str(said.get("message", "")))
+        return cls(standing, str(said.get("message", "")))
 
     def answer(self) -> AskedAnswer:
-        return {"ok": True, "standing": self.standing.as_json(), "status_url": self.status_url, "message": self.message}
+        return {"ok": True, "standing": self.standing.as_json(), "message": self.message}
 
 
 # The mode an ask's route runs its command in (``pages.Runs``): one press,
@@ -284,70 +279,43 @@ class AskMixin:
 
         return worded("")
 
-    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
-        """To the page's script: how the work stands and where to watch it, 202
-        while it is live (RFC 9110 15.3.3). To a plain form post: back to the
-        page, which says the same from what is stored, and the ask's sentence."""
+    def answered(self, request: HttpRequest) -> HttpResponse:
+        """What the page's script is answered with once the ask ran: the page
+        it was pressed on, which draws the control from what is stored."""
 
-        # A script's ask is answered in JSON and draws no page, so its answer's
-        # sentence is said only to a plain post, and then in place of the ask's.
+        return redirect(safe_next(request, fallback=self.back()))
+
+    def post(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        """To the page's script: the page again (``answered``), or a refusal's
+        sentence. To a plain form post: back to the page, and the ask's sentence."""
+
+        # A script's ask is answered with the control drawn again, so its
+        # answer's sentence is said only to a plain post, and work that failed
+        # as it was asked, which nothing stores, is said as a refusal.
         scripted = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-        result: dict[str, Any] = {}
         if said := self.cannot():
-            asked = Asked(Standing(FAILED, said))
-        else:
-            call = (request, self.capability, self.payload())
-            target = self.target()
-            result = run_posted(*call, target=target).answer if scripted else execute_posted(*call, target=target)
-            asked = Asked.of(result) if result.get("ok") else Asked(Standing(FAILED, refusal_of(result).message))
-        standing = asked.standing
+            if scripted:
+                return _said(said, 403)
+            messages.error(request, said)
+            return redirect(safe_next(request, fallback=self.back()))
+        call = (request, self.capability, self.payload())
+        target = self.target()
         if scripted:
-            return JsonResponse(
-                {**standing.as_json(), "status": asked.status_url if standing.live else ""},
-                status=202 if standing.live else 200,
-            )
-        failed = standing.state == FAILED
-        if (failed or not result.get("message")) and (note := asked.message or standing.note):
+            answer = run_posted(*call, target=target).answer
+            if not answer.get("ok"):
+                return refusal_response(answer)
+            standing = Asked.of(answer).standing
+            return _said(standing.note, 409) if standing.state == FAILED else self.answered(request)
+        result = execute_posted(*call, target=target)
+        asked = Asked.of(result) if result.get("ok") else Asked(Standing(FAILED, refusal_of(result).message))
+        failed = asked.standing.state == FAILED
+        if (failed or not result.get("message")) and (note := asked.message or asked.standing.note):
             (messages.error if failed else messages.success)(request, note)
         return redirect(safe_next(request, fallback=self.back()))
 
 
-class WatchView(View):
-    """How asked-for work stands, for a page following it: only what HQ signed
-    for that page to watch (``watch_token``), by default a read of kinds."""
-
-    http_method_names: ClassVar[list[str]] = ["get"]
-
-    def standing(self, subject: dict[str, Any]) -> Standing | None:
-        asked = moment(str(subject.get("asked", "")))
-        if asked is None or not isinstance(subject.get("read"), list):
-            return None
-        return read_standing(map(str, subject["read"]), asked, connection_ref=str(subject.get("ref", "")))
-
-    def get(self, request: HttpRequest) -> HttpResponse:
-        token = str(request.GET.get("watch", ""))
-        found = watched(token) if 0 < len(token) <= WATCH_LIMIT else None
-        if (standing := self.standing(found) if found else None) is None:
-            raise Http404("Nothing to watch.")
-        return JsonResponse(standing.as_json())
-
-
-def watch_token(subject: dict[str, Any]) -> str:
-    """What a page may ask the status of, signed, so a status resource reports
-    only on what HQ itself said to watch.
-    """
-
-    return signing.dumps(subject, salt=_WATCH_SALT)
-
-
-def watched(token: str) -> dict[str, Any] | None:
-    """The subject of a token HQ signed, or None for anything else."""
-
-    try:
-        found = signing.loads(token, salt=_WATCH_SALT, max_age=WATCH_SECONDS)
-    except signing.BadSignature:
-        return None
-    return found if isinstance(found, dict) else None
+def _said(sentence: str, status: int) -> HttpResponse:
+    return HttpResponse(sentence, status=status, content_type="text/plain; charset=utf-8")
 
 
 # ----- Reads the controller takes ---------------------------------------------
@@ -356,19 +324,43 @@ def watched(token: str) -> dict[str, Any] | None:
 def asked_read(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "", message: str = "") -> Asked:
     """What an ask for a read of ``kinds`` (none: every kind) at ``asked`` answers."""
 
-    wanted = tuple(kinds)
-    return Asked(
-        read_standing(wanted, asked, connection_ref=connection_ref),
-        read_status_url(wanted, asked, connection_ref=connection_ref),
-        message,
-    )
+    return Asked(read_standing(tuple(kinds), asked, connection_ref=connection_ref), message)
 
 
-def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> str:
-    """Where a page follows a read of ``kinds`` (none: every kind) asked for at ``asked``."""
+def read_now_standing(url: str) -> Standing:
+    """How the read a Read now control posting to ``url`` asks for stands, from
+    the requests it stores: under way while it is, failed with why until it is
+    asked again, and idle once it ended well, the page showing what it stored."""
 
-    token = watch_token({"read": sorted(set(kinds)), "ref": connection_ref, "asked": asked.isoformat()})
-    return with_query(reverse("control_plane:read_status"), {"watch": token})
+    payload = read_now_payload(QueryDict(urlsplit(url).query))
+    refs = cast(list[str], payload.get("connection_refs", []))
+    kinds = cast(list[str], payload.get("kinds", []))
+    every = bool(payload.get("every_connection"))
+
+    def asks_for(ref: str, kind: str) -> bool:
+        if every:
+            return not ref and not kind
+        return (not kind and ref in refs) or (not ref and kind in kinds)
+
+    asked = max((at for ref, kind, at in read_once(_ASKED, _asked) if asks_for(ref, kind)), default=None)
+    if asked is None:
+        return Standing()
+    forced = (*kinds, *(kind for ref in refs for kind in forced_kinds(ref, "") or ()))
+    ref = refs[0] if len(refs) == 1 and not kinds else ""
+    standing = read_standing(dict.fromkeys(forced), asked, connection_ref=ref)
+    return standing if standing.live or standing.state == FAILED else Standing()
+
+
+_ASKED = "asks.read_now"
+
+
+def _asked() -> list[tuple[str, str, datetime]]:
+    """Every read a person asked for that may still be answered, read once
+    for every control a page draws."""
+
+    since = timezone.now() - read_request_lifetime()
+    found = ReadRequest.objects.filter(subject="", requested_at__gte=since)
+    return list(found.values_list("connection_ref", "kind", "requested_at"))
 
 
 def _untried(asked: datetime) -> Standing:

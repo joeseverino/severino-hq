@@ -10,7 +10,7 @@ from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.platform.core.testing import declare
 
 from .. import visit_refresh
-from ..asks import Standing, read_standing, watched
+from ..asks import Standing
 from ..cadence_testing import controller_arrived, controller_never_arrived
 from ..record_errors import RecordNotFound
 from ..security import Principal, cli_principal
@@ -50,20 +50,7 @@ def page(*kinds: str):
 
 
 # What a page is told when nothing is being read for it.
-NOTHING_ASKED = {"ok": True, "standing": Standing().as_json(), "status_url": "", "message": "", "requested": []}
-
-
-def followed(status: str) -> Standing:
-    """How the read behind a status address stands, as its resource would say."""
-
-    from urllib.parse import urlsplit
-
-    from django.http import QueryDict
-
-    from ..moments import moment
-
-    found = watched(QueryDict(urlsplit(status).query)["watch"])
-    return read_standing(found["read"], moment(found["asked"]), connection_ref=found["ref"])
+NOTHING_ASKED = {"ok": True, "standing": Standing().as_json(), "message": "", "requested": []}
 
 
 @SWEEPS
@@ -97,11 +84,11 @@ class VisitRefreshTests(TestCase):
     def test_a_waiting_read_says_what_waits_and_says_so_when_no_controller_will_take_it(self):
         store(FAST, age=OLD)
         with page(FAST):
-            status = self.ask()["status_url"]
-        self.assertEqual(followed(status).state, "queued")
+            self.ask()
+            self.assertEqual(visit_refresh.visit_standing("example", "known").state, "queued")
 
-        controller_arrived(ago=timedelta(hours=2))
-        stalled = followed(status)
+            controller_arrived(ago=timedelta(hours=2))
+            stalled = visit_refresh.visit_standing("example", "known")
 
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")

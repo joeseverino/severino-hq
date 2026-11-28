@@ -204,6 +204,7 @@ and those that hold across parts in [Design](Design.md).
 | `section` | `head` |  | `above`, `inside` | Where its head stands; left empty, the stylesheet decides. |
 | `section` | `id` |  |  | Its own `id`, for a link to it or a region refreshed in place. |
 | `section` | `lede` |  |  | A line under the heading. |
+| `section` | `line` | `False` |  | A fold drawn as one line, its heading and aside the summary, its body under it, unframed. |
 | `section` | `moment` | `None` |  | A moment the heading names, drawn after its words. |
 | `section` | `more_label` |  |  | The label of the aside's link to the whole of what it shows part of. |
 | `section` | `more_url` |  |  | Where that link leads, drawn only when there is somewhere to go. |
@@ -243,6 +244,7 @@ Script hooks: `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit
 | `line-break` | A line broken by hand with `<br>`, where the cell line or the stack list part draws the lines. | `{% cell_line %}`first line`{% detail %}`second line`{% endcell_line %}`, or `{% list %}` for lines read down |
 | `section` | A `<section>` element drawn by hand, where the section part draws it. | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
 | `icon` | An icon drawn by hand, where the icon part draws it. | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
+| `live-region` | A live region's hooks written by hand, where the live region part draws them from a declared read set. | `<div{% live_region "estate" drawn at=url %}>`, or a part's data_fragment_live= option |
 | `form` | A form that writes drawn by hand, where the form part draws it. | `{% include "partials/_form.html" %}`, or `partials/_page_action.html` of a PageAction.command |
 | `filter-bar` | A search field or select drawn by hand, where the filter bar and select parts draw it. | `{% filter_bar search="..." %}``{% choices %}``{% select ... %}``{% endfilter_bar %}` |
 | `button` | A button drawn by hand, where the button tag draws every control that looks like one. | `{% button %}`, which takes a popover, a dialog command and each data_* hook |
@@ -307,7 +309,9 @@ may not run the command, or a `RowOrder`'s or `RowMark`'s press, so a page has n
 press its reader would be refused. `_page_action.html` draws one; a confirmation's is
 `PageAction.post(..., confirms=True)`, loud where it destroys. A toggle that posts is a button
 with `post` and `pressed`; the calendar's sources are a list of them, each in its series color
-(`partials/_calendar_sources.html`).
+(`partials/_calendar_sources.html`). What holds a button (a post's own form, an ask) draws no
+box, so every kind of control is the same box in any container, and a container's rule reaches
+the `.btn` through it, never the element a kind is drawn as.
 
 The push button is `.btn`, and a `<button>` with no class of its own; a button with a class (a
 menu row, a toggle, a close mark) starts from nothing painted (`base.css`) and draws itself, so no
@@ -901,7 +905,9 @@ A run of sibling sections or cards (the sections that close a thing's page, the 
 identity, link and route, a page's run of cards) is one `{% layout %}`, the flow. It lays as many
 to a row as keep each at least `--flow-basis` wide (22rem), and one to a row where that is the whole
 width. A row's last ones share what it leaves, and each stands on a row as tall as the tallest, a
-section's foot at its frame's bottom. Every member grows into what its row leaves and none caps its
+section's foot at its frame's bottom. While a member holds an open fold (a chart's data) or a table of
+nine rows or more, its row stops sharing its height and each member stands at its own, so a partner
+is never stretched into an empty box. Every member grows into what its row leaves and none caps its
 width, so every row ends at the flow's end. It is measured against the box it sits in, so the same
 sections pair in a dialog and on a page. A part that needs more room before it shares a row sets a
 wider basis on itself (the connection panel's route); a run of charts is `kind="charts"`, the flow
@@ -961,6 +967,11 @@ A row of places to go (the dashboard's links, a saved copy's own pages) is `{% l
 HQ. Each link is a chip, a target by its frame and never underlined at rest, and an outside one's
 arrow sits quieter than its name. A run of names inside a line stays a `dots` list.
 
+### live_region (host only)
+
+The one writer of `data-fragment-live`, through `page_parts.html_attributes` as a part's
+`data_fragment_live` is; its set is one `core.live` declares (`hand_drawn`'s live-region shape).
+
 ### muted
 
 Words in the muted voice that name nothing (a context line beside a value, a sentence under it)
@@ -1015,10 +1026,16 @@ drawn again, its line saying the new reading's age. A head with no reading line 
 busy button alone.
 
 Pressing it posts to a view that declares only what it asks (`asks.AskMixin`): the request runs
-the work's capability, stores the ask and answers at once, a refusal as failed work in the
-refusal's own sentence, and the control then says how the work stands. Every capability an ask
-runs answers `asks.Asked` (its standing, where to follow it, and what asking did), so the view
-reads the answer and words nothing of its own.
+the work's capability, stores the ask and answers at once with the page it was pressed on, which
+draws the control from what is stored. Work refused, or failed as it was asked, which nothing
+stores, is answered with its sentence, and the control says it as failed work. Every capability an
+ask runs answers `asks.Asked` (its standing and what asking did), so the view reads the answer and
+words nothing of its own.
+
+While its work is live the control is a region of its page, found by its id and asked for again
+when the live stream says the set it is drawn from changed (`Ask.follows`, `core.live`). No script
+keeps a timer for it: while no stream is open, fragment.js's one loop asks every live region again
+each time it tries the stream.
 
 - The note beside the button is a live region (`role="status"`) that changes only when the state
   does. The elapsed time ticks next to it outside the region, so nothing is read out every second.
@@ -1041,12 +1058,13 @@ in a cell and beside a head's button alike, and the row opens no line for it. A 
 place by saying what the word cannot: what the work waits on, or why it failed.
 
 Without script the same button is a form post back to the page, which draws the control from what
-is stored. So a page loaded while the work is live says so and resumes following it.
+is stored. So a page loaded while the work is live says so and follows it.
 
 A job's panel (`_job_progress.html`) and the readings a page asks for when it opens
-(`_visit_refresh.html`) are the same ask drawn differently; one behavior in `ask.js` follows all
-three. *Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior`;
-`lint:ast-grep` (`ask-answered-by-ask-mixin.yml`);
+(`_visit_refresh.html`, answered alone by `control_plane:visit`) are the same ask drawn
+differently; one behavior in `ask.js` lands all three. *Gates:* `lint:ast-grep`
+(`ask-answered-by-ask-mixin.yml`); `FragmentBrowserTests.test_a_pages_ask_outlives_the_swap`;
+`PressedRefreshBrowserTests`;
 `ComponentLayoutTests.test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to`;
 `hq/platform/core/tests/test_action_budgets.py`.
 
@@ -1648,7 +1666,9 @@ in height. Two of one heading name their own ids, and `id` is the section's own 
 region refreshed in place).
 
 `fold=True` draws it closed with its head as its toggle (`open`, any truthy value such as a form's
-errors, starts it open), its count beside it; never a separate "Show all". What it holds sits on
+errors, starts it open), its count beside it; never a separate "Show all". With `line=True` it is
+a fold inside another part's line (a step's checks): its heading and aside the one summary line,
+its body under it, with no heading element and no frame. What it holds sits on
 a panel like its neighbors: a fold of one table has the table's region, and any other fold is a
 folded section, its body in the section's frame. `css` and `data_*` are the section's, on a
 landmark that never pads itself, whatever `css` names: the frame holds the padding.
@@ -1699,7 +1719,7 @@ Docker's "exited" reads "Exited" beside a model's "Done". Its color is one of th
 (`good`, `attention`, `serious`, `neutral`), never a word of its own: `tone` takes a `Tone`, and a
 subject's state is a `Toned` member that carries its words and its tone (a machine's
 `MachineState`, a model's stored status declared as `TonedChoices`, `ARCHIVED = "archived",
-Tone.NEUTRAL, "Archived"`). Any other word is refused where it is drawn. Several parts are one
+Tone.NEUTRAL, "Archived"`). Any other word is refused, a literal as its template compiles. Several parts are one
 label (`{% status "HQ expects" desired tone="serious" %}`); `href`, `title`, `tip`, `css` and
 `data_*` say the rest. No template or module writes a pill by hand. A pill or a chip sets its own
 line height (cards.css), so it is one height wherever it stands, in a cell or beside a run of links
@@ -1723,11 +1743,19 @@ written as a class.
 
 A list of short steps (`{% steps %}`) is laid out in rows of as many columns as fit, up to four, so
 no column stands empty beside a long step. Each step is `{% step icon=... %}`: its icon, then what it says; `tone` colors the
-icon by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
+icon (a numbered step's number) by how a check stands, `done` draws a finished step quiet, and `title` is its tooltip. Steps
 done in order are `{% steps numbered=True %}`: wider columns, as many as fit up to three, so a short run fills a wide frame; each step's number stands where its icon would be, so
 its steps take no icon. A step an operator takes on their own machine (a `ByHand`) or in words (a
 `Do`), each with its notes, is `partials/_operator_step.html` given `step`: HQ offers it and never
 runs it, and it carries no secret.
+
+A workflow HQ declares (`sequences.SequenceSpec`) is drawn whole by `{% steps of=sequence %}`,
+which encloses nothing: one list read down at every width, each step numbered, its title linked to
+the page that holds it, its state's word and its sentence. A step made of parts (a check, an app)
+is one line, its word and how many stand where, folding its parts (`{% section line=True %}`): each
+on a line of its own, its mark and state in its tone, its name linked. A failed part opens the fold
+as it is drawn. A part an event told HQ of since its record was read says who told it, until the
+next read replaces it.
 
 ### switch (host only)
 

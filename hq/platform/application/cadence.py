@@ -7,6 +7,7 @@ due?"; the controller pulls and executes, so the web process holds no provider
 credential and a compromise of it reaches no provider and opens no shell.
 """
 
+import math
 import os
 import tempfile
 import time
@@ -15,7 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from functools import partial
+from functools import cache, partial
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal
 
@@ -45,7 +46,7 @@ lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, registry_label
 lazy from hq.platform.core.attribution import queued_in
-lazy from hq.platform.core.doorbell import ask_soon
+lazy from hq.platform.core.doorbell import ask_soon, wake
 
 from . import readings, unit_timers
 from .action_links import READ_NOW_CAPABILITY
@@ -57,7 +58,7 @@ from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
 from .moments import duration
 from .projection import read_once
-from .read_requests import ForcedRead, connection_providers, due_reads, forced_kinds, forced_reads
+from .read_requests import ForcedRead, connection_providers, forced_kinds, forced_reads
 from .record_errors import Sentence, worded
 from .refusal_codes import Code
 from .security import Capability, Principal
@@ -67,7 +68,7 @@ lazy from . import outbound_work
 lazy from .adoption import manages_through, observes_only
 lazy from .automation_runs import READ_PROFILE, claimant
 lazy from .facts import stored_snapshots
-lazy from .inbound_events import covers
+lazy from .inbound_events import covers, falls_silent
 
 # A kind HQ stores readings of. Read as a schema is first built, so declaring
 # the command loads no registry.
@@ -146,13 +147,19 @@ def note_activity() -> None:
     """
 
     marker = _path("SEVERINO_ACTIVITY_MARKER", "hq-activity")
-    throttle = _seconds("SEVERINO_ACTIVITY_THROTTLE_SECONDS")
     try:
-        if marker.exists() and time.time() - marker.stat().st_mtime < throttle:
-            return
+        quiet = time.time() - marker.stat().st_mtime
+    except OSError:
+        quiet = math.inf
+    if quiet < _seconds("SEVERINO_ACTIVITY_THROTTLE_SECONDS"):
+        return
+    try:
         _touch(marker)
     except OSError:
         return
+    if quiet > _seconds("SEVERINO_ACTIVE_WINDOW_SECONDS"):
+        # Somebody arrived after a quiet spell: the sweep's interval shortens.
+        wake()
 
 
 def recently_used(now: float | None = None) -> bool:
@@ -502,16 +509,17 @@ def every_sweep(kind: str) -> bool:
     return swept(kind) and own_clock(kind) is None
 
 
-def sweep_due(controller_id: str = "") -> dict[str, object]:
+def sweep_due(controller_id: str = "", forced: tuple[ForcedRead, ...] | None = None) -> dict[str, object]:
     """Whether the controller should sweep now, and why.
 
     The oldest sweep decides, unless a pending ``ReadRequest`` makes it due
     whatever the cadence says. The reason rides along because a controller
     that stopped sweeping and one told not to look are the same from outside,
-    and only one of them is a fault.
+    and only one of them is a fault. ``forced`` is what a controller's pass
+    took (``read_requests.take``), else every pending request.
     """
 
-    forced = due_reads(forced_reads())
+    forced = forced_reads() if forced is None else forced
     interval = sweep_interval()
     oldest = _oldest_sweep()
     verdict: dict[str, object] = {
@@ -534,7 +542,7 @@ def sweep_due(controller_id: str = "") -> dict[str, object]:
         f"every {duration(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
-        reason += ended(f" A refresh was asked for {', '.join(read.subject for read in forced)}")
+        reason += ended(f" A refresh was asked for {', '.join(read.label for read in forced)}")
         # Due only because somebody asked: SSH is left as it was last found,
         # working or not, unless it is what they asked for.
         verdict["carry"] = _carry(controller_id, forced, failing=True)
@@ -625,10 +633,9 @@ def _read_subject(command: ControllerSweepCommand) -> Subjects | None:
 def pass_due() -> str:
     """Why the controller should run a pass now, or "" when a pass would find nothing.
 
-    The doorbell (`hq.platform.core.doorbell`) asks this once a minute, and
-    again as each capability's write commits: a capability's change starts a
-    pass at once, any other writer's within the minute. A dashboard reading
-    is the glance pass's, on its own doorbell, so it starts no pass here.
+    The doorbell (`hq.platform.core.doorbell`) asks this as a write to what
+    it reads commits and when ``next_due`` comes. A dashboard reading is the
+    glance pass's, on its own doorbell, so it starts no pass here.
     """
 
     now = timezone.now()
@@ -640,6 +647,30 @@ def pass_due() -> str:
         return "A record's settings changed and nothing has applied them yet."
     verdict = sweep_due()
     return str(verdict["reason"]) if verdict["due"] else ""
+
+
+def next_due() -> datetime | None:
+    """The earliest moment a pass comes due with time alone, None when none
+    can: the next sweep, a controller's lease running out, or a channel going
+    silent, which returns what it kept current to every sweep."""
+
+    oldest = _oldest_sweep()
+    moments = (
+        None if oldest is None else oldest + sweep_interval(),
+        OPERATION_LAPSE.next(OperationRequest.objects.all(), timezone.now()),
+        falls_silent(),
+    )
+    return min((moment for moment in moments if moment is not None), default=None)
+
+
+@cache
+def makes_due() -> frozenset[str]:
+    """The tables a write to which can make a pass due before ``next_due``:
+    work queued or taken, a record's generation moved, a reading asked for.
+    Every other write ``pass_due`` reads (a sweep's readings, a channel
+    heard) makes the next pass later."""
+
+    return frozenset(model._meta.db_table for model in (OperationRequest, ManagedResource, ReadRequest))
 
 
 RECONCILE = OperationRequest.Action.RECONCILE
@@ -680,7 +711,7 @@ def unapplied() -> list[str]:
 
 def ring_when_due() -> bool:
     """Ring the controller if a pass is due; whether it rang. Asked by the
-    doorbell, once a minute and as an ask commits, so `pass_due` alone decides."""
+    doorbell, so `pass_due` alone decides."""
 
     return bool(pass_due()) and _ring("controller")
 
@@ -807,16 +838,16 @@ def ask(
     panels: Mapping[str, str] | None = None,
     doorbell: Doorbell = "controller",
     activity: bool = False,
-    spaced: bool = False,
+    subject: str = "",
 ) -> datetime:
     """Ask a worker outside this process for work, the one way HQ does: store
     what is asked, in the caller's transaction, and ring ``doorbell`` once
     it commits. When it was asked.
 
     ``activity`` notes that a person asked, so the active cadence decides the
-    sweep and a panel says its reading is under way. ``spaced`` is an
-    event's ask, which waits a gap after its kind was stored
-    (``read_requests.EVENT_READ_GAP``). A kind HQ reads itself starts the
+    sweep and a panel says its reading is under way. ``subject`` narrows a
+    read of ``reads`` to what of them the provider names so, as an event
+    asks for its own repository. A kind HQ reads itself starts the
     host job that declares it (``OutboundWork.reads``) once this commits
     instead, which reads what of it is due. Any other kind HQ stores no
     reading of is refused, since nothing would answer it and it
@@ -840,7 +871,8 @@ def ask(
         ReadRequest.objects.update_or_create(
             connection_ref=connection,
             kind=kind,
-            defaults={"requested_at": now, "traceparent": queued_in(), "spaced": spaced},
+            subject=subject if kind else "",
+            defaults={"requested_at": now, "taken_at": None, "traceparent": queued_in()},
         )
     if panels:
         asked = DashboardRefreshRequest.objects.select_for_update().in_bulk(list(panels), field_name="panel_id")

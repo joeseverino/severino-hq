@@ -9,6 +9,13 @@ lazy from hq.platform.application.drawings import AllocationBar, Share
 lazy from hq.platform.application.tables import TableColumn
 
 SECTION_STATES = {
+    # Folds drawn as one line inside a box, one closed and one the server drew open.
+    "line": Example(
+        '{% card label="Example lines" %}'
+        '{% section "Example checks" fold=True line=True %}<p>An example check.</p>{% aside %}2 of 3 passed{% endsection %}'
+        '{% section "Example apps" fold=True line=True open=True %}<p>An example app.</p>{% aside %}1 failing{% endsection %}'
+        "{% endcard %}"
+    ),
     # A table in a section of its own name, one that fits and one that
     # scrolls in a card of its own name, as a record page and a ledger draw
     # them: each name is one landmark on the page.

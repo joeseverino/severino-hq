@@ -42,6 +42,7 @@ type TokenHandoff struct {
 type TokenHandoffRun struct {
 	Owner        string       `json:"owner"`
 	Repositories []string     `json:"repositories"`
+	Branches     []string     `json:"branches"`
 	Token        secret.Value `json:"token"`
 	ExpiresAt    string       `json:"expires_at"`
 }
@@ -140,7 +141,8 @@ func (r *Registry) mintFor(ctx context.Context, c githubConnection, app GitHubAp
 		return TokenHandoffRun{}, &ProviderError{Message: "GitHub did not say when the token for " + owner.Owner + " expires"}
 	}
 	return TokenHandoffRun{
-		Owner: owner.Owner, Repositories: owner.Repositories, Token: secret.New(minted.Token), ExpiresAt: expires.UTC().Format(time.RFC3339),
+		Owner: owner.Owner, Repositories: owner.Repositories, Branches: append([]string{}, owner.Branches...),
+		Token: secret.New(minted.Token), ExpiresAt: expires.UTC().Format(time.RFC3339),
 	}, nil
 }
 

@@ -10,15 +10,16 @@ from datetime import timedelta
 from typing import Any
 
 from django.conf import settings
+from django.db.models import Max
 from django.utils import timezone
 lazy from django.contrib.sessions.models import Session
 lazy from django.core.management import call_command
 
 lazy from hq.domains.content.content_sync import ContentSyncError, sync_content_index
-lazy from hq.domains.control_plane.models import InboundSource
+lazy from hq.domains.control_plane.models import InboundEvent, InboundSource, OperationRequest
 lazy from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
-lazy from hq.domains.control_plane.observations.host import AUTOMATION_HELD, UNIT_FAILED
+lazy from hq.domains.control_plane.observations.host import AUTOMATION_HELD, PROVIDER as HOST, UNIT_ENDS, UNIT_FAILED
 lazy from hq.domains.jobs import runner
 lazy from hq.domains.jobs.runner import Failed
 lazy from hq.platform.core.audit import prune_routine, record_operation
@@ -30,11 +31,11 @@ from .record_errors import PolicyError, RecordConflict
 from .ui import counted
 lazy from . import approvals, outbound_work, public_registry
 lazy from .automation_adoption import prune_proposals
-lazy from .automation_runs import held_runs, queue_settling
+lazy from .automation_runs import CHECK, operation_registry, queue_settling
 lazy from .hq_self import own_machine
 lazy from .inbound import apply_events, prune_events
 lazy from .public_registry import refresh
-lazy from .resource_operations import HANDOFF
+lazy from .resource_operations import HANDOFF, SETTLES
 
 
 def prune_audit(_progress: Any = None, *, subject: str = "", principal: Any = None) -> dict[str, Any]:
@@ -108,24 +109,62 @@ def _unit_state(progress: Any, *, subject: str, principal: Any) -> dict[str, Any
     return apply_events({"source": InboundSource.HOST, "events": [event]})
 
 
+def _awaiting() -> list[tuple[Any, str]]:
+    """Each claimed run on HQ's own machine that holds on a unit there, with
+    that unit, or that may yet hand off to one, with "": the runs a job's end
+    there may settle. One query while none is claimed, as almost always."""
+
+    claimed = OperationRequest.objects.filter(
+        action=OperationRequest.Action.RUN, state=OperationRequest.State.CLAIMED
+    ).exclude(input__has_key=CHECK)
+    if not claimed.exists() or (here := own_machine()) is None:
+        return []
+    mine = normalized_hostname(here.name)
+    found = []
+    for run in claimed:
+        if mine not in {normalized_hostname(host) for host in (run.input or {}).get("hosts") or ()}:
+            continue
+        if HANDOFF in (run.result or {}):
+            found.extend(
+                (run, unit) for machine, unit in run.result[HANDOFF].items() if normalized_hostname(machine) == mine
+            )
+        elif (manifest := operation_registry().get(str(run.input.get("operation", "")))) and manifest.settled_by:
+            found.append((run, ""))
+    return found
+
+
+def _awaited(subject: str) -> bool:
+    """Whether a job's end of the unit ``subject`` names ("" any) on HQ's
+    machine may settle a run, so HQ stores it: one held on that unit, or one
+    that may yet hand off and so has named none."""
+
+    return any(not unit or not subject or unit == subject for _run, unit in _awaiting())
+
+
 def _held(_progress: Any, *, subject: str, principal: Any) -> dict[str, Any]:
-    """Ask the settling read of each run held on a unit of HQ's own machine:
-    a job there ended, so one of them may have. The read says whether it did;
-    which job ended is never read. A held run elsewhere settles at its bound."""
+    """Ask the settling read of each run held on a unit of HQ's own machine
+    once HQ is told that unit's job ended, since the run was claimed and since
+    its last read: the event says when to look, the read what is true. A held
+    run elsewhere settles at its bound."""
 
     del subject, principal
-    here = own_machine()
-    mine = normalized_hostname(here.name) if here is not None else None
     asked: dict[str, str] = {}
-    for held in held_runs():
-        if mine in {normalized_hostname(machine) for machine in held.result[HANDOFF]}:
-            # One that cannot be asked now is asked again at its bound, which ends it.
-            try:
-                read = queue_settling(held)
-            except PolicyError as refused:
-                asked[str(held.pk)] = f"refused: {refused}"
-            else:
-                asked[str(held.pk)] = str(read.pk) if read else "in flight"
+    for held, unit in _awaiting():
+        if not unit:
+            continue
+        last = OperationRequest.objects.filter(**{f"input__{SETTLES}": str(held.pk)}).aggregate(at=Max("created_at"))
+        since = max(held.claimed_at, last["at"]) if last["at"] else held.claimed_at
+        if not InboundEvent.objects.filter(
+            provider=HOST, event__in=UNIT_ENDS, subject=unit, applied_at__gt=since
+        ).exists():
+            continue
+        # One that cannot be asked now is asked again at its bound, which ends it.
+        try:
+            read = queue_settling(held)
+        except PolicyError as refused:
+            asked[str(held.pk)] = f"refused: {refused}"
+        else:
+            asked[str(held.pk)] = str(read.pk) if read else "in flight"
     return {"asked": asked}
 
 
@@ -179,7 +218,7 @@ def outbound() -> tuple[OutboundWork, ...]:
             "Held runs",
             _held,
             reads=(AUTOMATION_HELD,),
-            reads_due=lambda: held_runs().exists(),
+            reads_due=_awaited,
         ),
         _own("content.sync", "Content sync", _content_index, every=DAILY),
         _own("due", "Scheduled work", _due),

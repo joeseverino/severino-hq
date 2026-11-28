@@ -10,9 +10,7 @@ from hq.platform.application.pages import PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next
 from hq.platform.application.web_writes import run_posted
-from hq.platform.core.held_values import format_html
 from hq.platform.core.web_refusals import refused
-lazy from hq.platform.application.app_update_approval import PLAYBOOKS
 lazy from hq.platform.application.app_updates import UpdateKind, managed_by, update_state
 lazy from hq.platform.application.container_findings import needs_you
 lazy from hq.platform.application.containers import BEHIND, VULNERABLE, containers, standing_of, tally
@@ -42,7 +40,6 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
             "plan": None,
             "state": None,
             "act": None,
-            "held": "",
             "managed": None,
             "edit": None,
         }
@@ -62,8 +59,7 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
         "item": item,
         "plan": plan,
         "state": state,
-        "act": state.action.control(request.get_full_path()) if state is not None and state.action else None,
-        "held": _held(state),
+        "act": _act(state, request.get_full_path()),
         # The repository whose Compose files build its image on its host.
         "managed": managed_by(item) if item is not None and item.standing.built_here else None,
         # Where the operator names what its image is built from, when the image does not say.
@@ -71,16 +67,14 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     }
 
 
-def _held(state: Any) -> str:
-    """Why its update offers no press, with the page that adopts the playbook
-    linked where that is the step; "" when one is offered, or a step of it already stands."""
+def _act(state: Any, back: str) -> Any:
+    """The press beside its card's line while a step is the person's and
+    nothing HQ asked is under way, drawn unusable with its reason while
+    something holds it back."""
 
-    if state is None or not state.reason or state.at_work:
-        return ""
-    if not state.adopt:
-        return state.reason
-    before, page, after = state.reason.partition(PLAYBOOKS)
-    return format_html('{}<a href="{}">{}</a>{}', before, reverse("control_plane:playbooks"), page, after)
+    if state is None or state.action is None or state.at_work or state.flow.next is None:
+        return None
+    return state.action.control(back, refused=state.reason)
 
 
 class ContainerListView(PageMixin, TemplateView):

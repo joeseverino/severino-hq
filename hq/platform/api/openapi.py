@@ -16,8 +16,9 @@ from typing import Any, TypeAliasType, get_args, get_type_hints
 
 from django.urls import URLPattern, reverse
 
+from hq.platform.application.automation_runs import RunCommand
 from hq.platform.application.capabilities import capability_registry, command_spec, describe_capabilities
-from hq.platform.application.contracts import effect_glossary
+from hq.platform.application.contracts import camel as _camel, effect_glossary, pascal as _pascal
 from hq.platform.application.field_masks import FIELD_PATH_PATTERN, WHOLE_RECORD
 from hq.platform.application.held_answer import HELD, AwaitingApproval
 from hq.platform.application.integration_specs import (
@@ -43,7 +44,7 @@ lazy from hq.platform.application.routes import routed
 
 from . import urls, views
 from .components import SCHEMAS, Components
-from .fragments import OpenAPIError, camel as _camel, pascal as _pascal, said_once
+from .fragments import OpenAPIError, said_once
 from .refusal_names import LATER_STATUSES, codes_by_status, refusal_name
 from .tags import API_TAG, Tags
 
@@ -250,6 +251,31 @@ class _Builder:
                 },
             )
         }
+
+    def playbook_inputs(self) -> None:
+        """Each input several playbooks declare in the same words, written once
+        as the component named for the first of them, which each playbook's
+        inputs refer to. A playbook is an operator's data, where no type alias
+        in HQ's code can say it once."""
+
+        held: dict[str, list[tuple[str, str]]] = {}
+        for name in sorted(
+            get_args(get_type_hints(spec.command_type, include_extras=True)["parameters"])[0].__name__
+            for spec in capability_registry()
+            if issubclass(spec.command_type, RunCommand)
+        ):
+            for field, schema in self.components.schemas[name].get("properties", {}).items():
+                held.setdefault(json.dumps(schema, sort_keys=True), []).append((name, field))
+        for said, holders in held.items():
+            first, field = holders[0]
+            named = f"{first.removesuffix('Inputs')}{_pascal(field)}Input"
+            # A playbook's words may name a component HQ declares; that input stays where it is.
+            if len(holders) > 1 and self.components.schemas.setdefault(named, json.loads(said)) == json.loads(said):
+                shared = {"$ref": SCHEMAS + named}
+                for name, field in holders:
+                    schema = self.components.schemas[name]
+                    # Replaced, never edited: the schema is the one json_schemas keeps for every build.
+                    self.components.schemas[name] = {**schema, "properties": {**schema["properties"], field: shared}}
 
     @staticmethod
     def component(section: str, held: dict[str, Any], name: str, value: dict[str, Any]) -> dict[str, Any]:
@@ -797,6 +823,7 @@ def _document(_commands: tuple[CapabilitySpec, ...], _resources: dict[str, Any])
     builder = _Builder()
     for route, pattern in routes():
         builder.route(route, pattern)
+    builder.playbook_inputs()
     return said_once(
         {
             "openapi": OPENAPI_VERSION,

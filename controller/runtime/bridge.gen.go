@@ -176,30 +176,6 @@ func (e FailureClass) Valid() bool {
 	}
 }
 
-// Defines values for GitHubDashboardBoxSpecMarker.
-const (
-	Approve    GitHubDashboardBoxSpecMarker = "approve"
-	Unlimit    GitHubDashboardBoxSpecMarker = "unlimit"
-	Unpend     GitHubDashboardBoxSpecMarker = "unpend"
-	Unschedule GitHubDashboardBoxSpecMarker = "unschedule"
-)
-
-// Valid indicates whether the value is a known member of the GitHubDashboardBoxSpecMarker enum.
-func (e GitHubDashboardBoxSpecMarker) Valid() bool {
-	switch e {
-	case Approve:
-		return true
-	case Unlimit:
-		return true
-	case Unpend:
-		return true
-	case Unschedule:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for GitHubDeliveryProduction.
 const (
 	GitHubDeliveryProductionCurrent GitHubDeliveryProduction = "Every extension's latest admission, confirmed on GitHub"
@@ -460,6 +436,7 @@ func (e GlancePanelID) Valid() bool {
 
 // Defines values for HostEvent.
 const (
+	HostEventDependencyRun   HostEvent = "dependency_run"
 	HostEventDockerContainer HostEvent = "docker.container"
 	HostEventUnitJob         HostEvent = "unit.job"
 )
@@ -467,6 +444,8 @@ const (
 // Valid indicates whether the value is a known member of the HostEvent enum.
 func (e HostEvent) Valid() bool {
 	switch e {
+	case HostEventDependencyRun:
+		return true
 	case HostEventDockerContainer:
 		return true
 	case HostEventUnitJob:
@@ -911,7 +890,6 @@ const (
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
 	ResourceKindDNSReverse                   ResourceKind = "dns.reverse"
 	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
-	ResourceKindGitHubDashboardBox           ResourceKind = "github.dashboard_box"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubOpenPullRequest        ResourceKind = "github.open_pull_request"
@@ -1010,8 +988,6 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindDNSReverse:
 		return true
 	case ResourceKindGitHubAllowance:
-		return true
-	case ResourceKindGitHubDashboardBox:
 		return true
 	case ResourceKindGitHubDelivery:
 		return true
@@ -1947,6 +1923,9 @@ type ControllerReport struct {
 
 // DependencyUpdatesOwner One account's opted-in repositories, each as owner/name under that account: what one token names.
 type DependencyUpdatesOwner struct {
+	// Branches The branches Renovate is to open, as if their boxes on the Dependency Dashboard were ticked (its checkedBranches), each as GitHubDependencyRunRecord's branches name one, in the one repository a run that names any covers; empty for a run of every repository named.
+	Branches []string `json:"branches"`
+
 	// Owner A GitHub login, lower-cased, as GitHubDependencyRunRecord's owner.
 	Owner string `json:"owner"`
 
@@ -1972,6 +1951,9 @@ type ForcedRead struct {
 	Kind        ResourceKind   `json:"kind"`
 	Kinds       []ResourceKind `json:"kinds"`
 	RequestedAt time.Time      `json:"requested_at"`
+
+	// Subject What of the kind is to be read, as its provider names it, such as a repository; empty is all of it.
+	Subject string `json:"subject"`
 }
 
 // GitHubAllowanceRecord One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.
@@ -1986,24 +1968,6 @@ type GitHubAllowanceRecord struct {
 	StartedAt     string `json:"started_at,omitempty"`
 	Used          int    `json:"used"`
 }
-
-// GitHubDashboardBoxSpec A github.dashboard_box declaration: the box a reconcile ticks.
-type GitHubDashboardBoxSpec struct {
-	// Branch The branch Renovate holds.
-	Branch string `json:"branch"`
-
-	// Marker The word Renovate marks its box with.
-	Marker GitHubDashboardBoxSpecMarker `json:"marker"`
-
-	// Repository The repository, as owner/name.
-	Repository GitHubDashboardBoxSpecRepository `json:"repository"`
-}
-
-// GitHubDashboardBoxSpecMarker The word Renovate marks its box with.
-type GitHubDashboardBoxSpecMarker string
-
-// GitHubDashboardBoxSpecRepository The repository, as owner/name.
-type GitHubDashboardBoxSpecRepository = string
 
 // GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
 type GitHubDeliveryProduction string
@@ -2023,14 +1987,25 @@ type GitHubDeliverySpec struct {
 	Workflow string `json:"workflow"`
 }
 
+// GitHubDependencyRunBranch One branch as the run's report says Renovate left it
+// (“controller/host/renovate.go“ readReport).
+type GitHubDependencyRunBranch struct {
+	Branch      string   `json:"branch"`
+	Files       []string `json:"files,omitempty"`
+	PullRequest int      `json:"pull_request,omitempty"`
+	Repository  string   `json:"repository"`
+	Result      string   `json:"result"`
+}
+
 // GitHubDependencyRunRecord One account's update run: what root reported of it, never its log.
 type GitHubDependencyRunRecord struct {
-	ExitCode     int      `json:"exit_code"`
-	FinishedAt   string   `json:"finished_at,omitempty"`
-	Outcome      string   `json:"outcome"`
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories,omitempty"`
-	StartedAt    string   `json:"started_at,omitempty"`
+	Branches     []GitHubDependencyRunBranch `json:"branches,omitempty"`
+	ExitCode     int                         `json:"exit_code"`
+	FinishedAt   string                      `json:"finished_at,omitempty"`
+	Outcome      string                      `json:"outcome"`
+	Owner        string                      `json:"owner"`
+	Repositories []string                    `json:"repositories,omitempty"`
+	StartedAt    string                      `json:"started_at,omitempty"`
 }
 
 // GitHubMergeRefusal Why GitHub refused a merge, as a refused merge's status says it.
@@ -2045,11 +2020,15 @@ type GitHubMergeStatus struct {
 }
 
 // GitHubOpenPullRequestCheckRun One check as its last run stands: a workflow run's job, another app's
-// check, or a commit status, in GitHub's words, lower-cased.
+// check, or a commit status, in GitHub's words, lower-cased, with when it
+// started and finished and its page where GitHub says them.
 type GitHubOpenPullRequestCheckRun struct {
-	Conclusion string `json:"conclusion,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Status     string `json:"status,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Conclusion  string `json:"conclusion,omitempty"`
+	Name        string `json:"name,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	Status      string `json:"status,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubOpenPullRequestChecks A commit's checks, each standing as its last run did, and why each
@@ -2220,14 +2199,12 @@ type GitHubRepositoryRecord struct {
 	Compose           []string               `json:"compose,omitempty"`
 	ComposeImages     []map[string]any       `json:"compose_images,omitempty"`
 	ConnectionRef     string                 `json:"connection_ref"`
-	Dashboard         string                 `json:"dashboard,omitempty"`
 	DefaultBranch     string                 `json:"default_branch,omitempty"`
 	DependabotAlerts  []map[string]any       `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]any       `json:"deployments,omitempty"`
 	Environments      []map[string]any       `json:"environments,omitempty"`
 	Fingerprint       string                 `json:"fingerprint,omitempty"`
 	Head              map[string]any         `json:"head,omitempty"`
-	HeldBranches      []map[string]any       `json:"held_branches,omitempty"`
 	Images            []map[string]any       `json:"images,omitempty"`
 	Pins              []map[string]any       `json:"pins,omitempty"`
 	Private           bool                   `json:"private,omitempty"`
@@ -2330,11 +2307,15 @@ type GitHubWebhookRecord struct {
 }
 
 // GitHubWorkflowRunCheckRun One check as its last run stands: a workflow run's job, another app's
-// check, or a commit status, in GitHub's words, lower-cased.
+// check, or a commit status, in GitHub's words, lower-cased, with when it
+// started and finished and its page where GitHub says them.
 type GitHubWorkflowRunCheckRun struct {
-	Conclusion string `json:"conclusion,omitempty"`
-	Name       string `json:"name,omitempty"`
-	Status     string `json:"status,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	Conclusion  string `json:"conclusion,omitempty"`
+	Name        string `json:"name,omitempty"`
+	StartedAt   string `json:"started_at,omitempty"`
+	Status      string `json:"status,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubWorkflowRunRecord A workflow's newest run on one branch, under the workflow's name now, and each of its jobs. On the default branch a pull request's run is not the branch's; on any other the newest run of either is.
@@ -2712,15 +2693,23 @@ type IdlePassOutput struct {
 	OK   bool     `json:"ok"`
 }
 
-// InboundArrival One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.
+// InboundArrival One event by its names: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; when it arrived; and, for an event its declaration gives one, its fact: the text at each of the declaration's pointers into the signed body, never the body.
 type InboundArrival struct {
+	// About What the fact is about, such as the commit a check ran on.
+	About      string `json:"about,omitempty"`
 	DeliveryID string `json:"delivery_id"`
 	Event      string `json:"event"`
+
+	// Fact Each value of the fact, by its field.
+	Fact map[string]string `json:"fact,omitempty"`
 
 	// Provider A provider whose events HQ takes, as an admitted module's INBOUND declares it.
 	Provider   InboundProvider `json:"provider"`
 	ReceivedAt time.Time       `json:"received_at"`
-	Subject    string          `json:"subject,omitempty"`
+
+	// SaidAt When the body says the fact was said, in the provider's words.
+	SaidAt  string `json:"said_at,omitempty"`
+	Subject string `json:"subject,omitempty"`
 }
 
 // InboundBatch What one source was told happened (inbound.apply_events). No events says it is listening.
@@ -2883,6 +2872,13 @@ type Operation struct {
 	// Result The provider's last result for this operation, as Django stored it.
 	Result any    `json:"result"`
 	State  string `json:"state"`
+}
+
+// PassDue Whether a controller pass is due, and why; the reason is empty when none is.
+type PassDue struct {
+	Due    bool   `json:"due"`
+	OK     bool   `json:"ok"`
+	Reason string `json:"reason"`
 }
 
 // PassMode Whether a pass only looked (plan) or claimed and executed work (apply).
@@ -3173,6 +3169,9 @@ type RunEvent struct {
 	Message string          `json:"message"`
 	Outcome RunEventOutcome `json:"outcome"`
 	Task    string          `json:"task"`
+
+	// Warnings Each warning Ansible gave of the task, in one line; empty when it gave none.
+	Warnings string `json:"warnings"`
 }
 
 // RunEventOutcome defines model for RunEvent.Outcome.
@@ -3397,6 +3396,12 @@ type Verification struct {
 	TimeoutSeconds  int `json:"timeout_seconds"`
 }
 
+// Waiting The profiles asked about that have queued work, in the order asked.
+type Waiting struct {
+	OK       bool     `json:"ok"`
+	Profiles []string `json:"profiles"`
+}
+
 // WorkerAnswersDataset The Analytics Engine dataset HQ's events Worker writes each request it answers to, its route's path the first blob and its status the first double. The controller counts it for a Worker whose serving version binds it.
 type WorkerAnswersDataset string
 
@@ -3518,6 +3523,12 @@ type StepsParams struct {
 type SweepDueParams struct {
 	// ControllerID The reporting controller.
 	ControllerID string `form:"controller-id" json:"controller-id"`
+}
+
+// WaitingParams defines parameters for Waiting.
+type WaitingParams struct {
+	// Profile A privilege profile the host runs a playbook worker for.
+	Profile []string `form:"profile,omitempty" json:"profile,omitempty"`
 }
 
 // AnalyticsJSONRequestBody defines body for Analytics for application/json ContentType.
@@ -3796,6 +3807,11 @@ type ClientInterface interface {
 	// Corresponds with POST /material (the `Material` operationId).
 	Material(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PassDue Say whether a controller pass would find anything to do now, and why.
+	//
+	// Corresponds with POST /pass-due (the `PassDue` operationId).
+	PassDue(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// Peek Read the next compatible operation without leasing it.
 	//
 	// Corresponds with POST /peek (the `Peek` operationId).
@@ -3857,6 +3873,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
 	SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Waiting Name which of the host's worker profiles have queued work their claim would take.
+	//
+	// Corresponds with POST /waiting (the `Waiting` operationId).
+	Waiting(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 // AnalyticsWithBody Record site analytics.
@@ -4138,6 +4159,21 @@ func (c *Client) Material(ctx context.Context, params *MaterialParams, reqEditor
 	return c.Client.Do(req)
 }
 
+// PassDue Say whether a controller pass would find anything to do now, and why.
+//
+// Corresponds with POST /pass-due (the `PassDue` operationId).
+func (c *Client) PassDue(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPassDueRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // Peek Read the next compatible operation without leasing it.
 //
 // Corresponds with POST /peek (the `Peek` operationId).
@@ -4290,6 +4326,21 @@ func (c *Client) Steps(ctx context.Context, params *StepsParams, body StepsJSONR
 // Corresponds with POST /sweep-due (the `SweepDue` operationId).
 func (c *Client) SweepDue(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSweepDueRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// Waiting Name which of the host's worker profiles have queued work their claim would take.
+//
+// Corresponds with POST /waiting (the `Waiting` operationId).
+func (c *Client) Waiting(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWaitingRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -4918,6 +4969,33 @@ func NewMaterialRequest(server string, params *MaterialParams) (*http.Request, e
 	return req, nil
 }
 
+// NewPassDueRequest constructs an http.Request for the PassDue method
+func NewPassDueRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/pass-due"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewPeekRequest constructs an http.Request for the Peek method
 func NewPeekRequest(server string, params *PeekParams) (*http.Request, error) {
 	var err error
@@ -5312,6 +5390,60 @@ func NewSweepDueRequest(server string, params *SweepDueParams) (*http.Request, e
 	return req, nil
 }
 
+// NewWaitingRequest constructs an http.Request for the Waiting method
+func NewWaitingRequest(server string, params *WaitingParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/waiting"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Profile != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "profile", params.Profile, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -5475,6 +5607,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /material (the `Material` operationId).
 	MaterialWithResponse(ctx context.Context, params *MaterialParams, reqEditors ...RequestEditorFn) (*MaterialResponse, error)
 
+	// PassDueWithResponse Say whether a controller pass would find anything to do now, and why.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /pass-due (the `PassDue` operationId).
+	PassDueWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PassDueResponse, error)
+
 	// PeekWithResponse Read the next compatible operation without leasing it.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -5544,6 +5683,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /sweep-due (the `SweepDue` operationId).
 	SweepDueWithResponse(ctx context.Context, params *SweepDueParams, reqEditors ...RequestEditorFn) (*SweepDueResponse, error)
+
+	// WaitingWithResponse Name which of the host's worker profiles have queued work their claim would take.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /waiting (the `Waiting` operationId).
+	WaitingWithResponse(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*WaitingResponse, error)
 }
 
 type AnalyticsResponse struct {
@@ -6074,6 +6220,54 @@ func (r MaterialResponse) ContentType() string {
 	return ""
 }
 
+type PassDueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *PassDue
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PassDueResponse) GetJSON200() *PassDue {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PassDueResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PassDueResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PassDueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PassDueResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PassDueResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type PeekResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6410,6 +6604,54 @@ func (r SweepDueResponse) ContentType() string {
 	return ""
 }
 
+type WaitingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Waiting
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WaitingResponse) GetJSON200() *Waiting {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r WaitingResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r WaitingResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WaitingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WaitingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WaitingResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // AnalyticsWithBodyWithResponse Record site analytics.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
@@ -6631,6 +6873,19 @@ func (c *ClientWithResponses) MaterialWithResponse(ctx context.Context, params *
 	return ParseMaterialResponse(rsp)
 }
 
+// PassDueWithResponse Say whether a controller pass would find anything to do now, and why.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /pass-due (the `PassDue` operationId).
+func (c *ClientWithResponses) PassDueWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PassDueResponse, error) {
+	rsp, err := c.PassDue(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePassDueResponse(rsp)
+}
+
 // PeekWithResponse Read the next compatible operation without leasing it.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -6759,6 +7014,19 @@ func (c *ClientWithResponses) SweepDueWithResponse(ctx context.Context, params *
 		return nil, err
 	}
 	return ParseSweepDueResponse(rsp)
+}
+
+// WaitingWithResponse Name which of the host's worker profiles have queued work their claim would take.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /waiting (the `Waiting` operationId).
+func (c *ClientWithResponses) WaitingWithResponse(ctx context.Context, params *WaitingParams, reqEditors ...RequestEditorFn) (*WaitingResponse, error) {
+	rsp, err := c.Waiting(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWaitingResponse(rsp)
 }
 
 // ParseAnalyticsResponse parses an HTTP response from a AnalyticsWithResponse call
@@ -7124,6 +7392,39 @@ func ParseMaterialResponse(rsp *http.Response) (*MaterialResponse, error) {
 	return response, nil
 }
 
+// ParsePassDueResponse parses an HTTP response from a PassDueWithResponse call
+func ParsePassDueResponse(rsp *http.Response) (*PassDueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PassDueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PassDue
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePeekResponse parses an HTTP response from a PeekWithResponse call
 func ParsePeekResponse(rsp *http.Response) (*PeekResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7338,6 +7639,39 @@ func ParseSweepDueResponse(rsp *http.Response) (*SweepDueResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest SweepVerdict
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWaitingResponse parses an HTTP response from a WaitingWithResponse call
+func ParseWaitingResponse(rsp *http.Response) (*WaitingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WaitingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Waiting
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

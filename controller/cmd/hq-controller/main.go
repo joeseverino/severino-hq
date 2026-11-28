@@ -13,6 +13,13 @@
 // happened: one event per line of its input. Input with no events says the
 // teller is listening.
 //
+// "hq-controller waiting PROFILE..." answers which of the playbook worker's
+// profiles HQ holds queued work for, asked on the worker's own bridge, so the
+// automation host starts only those workers.
+//
+// "hq-controller pass-due" answers whether an applying pass would find
+// anything to do, so the host starts a pass's container only when one would.
+//
 // "hq-controller listen" holds the inbound-events Worker's socket open, the
 // one events connection it is given, and tells HQ each event it hears, until
 // it is stopped. It reaches HQ only through the events bridge, which serves
@@ -62,6 +69,10 @@ func main() {
 		code = job(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "events":
 		code = events(ctx, os.Args[2:], os.Getenv(EventsBridgeSocket), os.Stdin, stdout, os.Stderr)
+	case "waiting":
+		code = waiting(ctx, os.Args[2:], os.Getenv(AutomationBridgeSocket), stdout)
+	case "pass-due":
+		code = passDue(ctx, os.Args[2:], os.Getenv(BridgeSocket), stdout)
 	case "listen":
 		code = listen(ctx, os.Args[2:], stdout)
 	case "ready":
@@ -98,6 +109,10 @@ const BridgeSocket = "SEVERINO_BRIDGE_SOCKET"
 // through.
 const EventsBridgeSocket = "SEVERINO_EVENTS_BRIDGE_SOCKET"
 
+// AutomationBridgeSocket names the variable holding the path of the playbook
+// worker's bridge socket, which `waiting` reaches HQ through.
+const AutomationBridgeSocket = "SEVERINO_AUTOMATION_BRIDGE_SOCKET"
+
 // failure is the one line a pass that could not run prints.
 type failure struct {
 	OK      bool   `json:"ok"`
@@ -131,6 +146,46 @@ func job(ctx context.Context, args []string, socket string, stdout io.Writer) in
 		return 0
 	}
 	return 1
+}
+
+// waiting prints which of the profiles named HQ holds queued work for, as the
+// bridge's Waiting answer.
+func waiting(ctx context.Context, args []string, socket string, stdout io.Writer) int {
+	if len(args) == 0 || slices.Contains(args, "") {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller waiting PROFILE..."})
+		return 2
+	}
+	return asked(ctx, socket, stdout, func(ctx context.Context, bridge *runtime.SocketBridge) (any, error) {
+		profiles, err := bridge.Waiting(ctx, args)
+		return runtime.Waiting{OK: true, Profiles: profiles}, err
+	})
+}
+
+// passDue prints whether a controller pass is due, as the bridge's PassDue answer.
+func passDue(ctx context.Context, args []string, socket string, stdout io.Writer) int {
+	if len(args) != 0 {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: "usage: hq-controller pass-due"})
+		return 2
+	}
+	return asked(ctx, socket, stdout, func(ctx context.Context, bridge *runtime.SocketBridge) (any, error) {
+		return bridge.PassDue(ctx)
+	})
+}
+
+// asked prints the answer of one call on the bridge at socket, or why there
+// was none, exit 1.
+func asked(ctx context.Context, socket string, stdout io.Writer, call func(context.Context, *runtime.SocketBridge) (any, error)) int {
+	bridge, err := runtime.NewSocketBridge(strings.TrimSpace(socket))
+	var answer any
+	if err == nil {
+		answer, err = call(ctx, bridge)
+	}
+	if err != nil {
+		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
+		return 1
+	}
+	_ = json.NewEncoder(stdout).Encode(answer)
+	return 0
 }
 
 // events posts the events of its input, one InboundArrival per line, as HQ's

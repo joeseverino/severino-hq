@@ -27,6 +27,7 @@ from hq.platform.core.attribution import own_operation
 from hq.platform.core.audit import Outcome, work_ended
 from hq.platform.core.facets import Failure
 lazy from hq.domains.control_plane.bridge_contract import declared_names, departs, limit
+lazy from hq.domains.control_plane.observations.host import AUTOMATION_HELD
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 lazy from hq.domains.control_plane.secret_shapes import struck
 
@@ -36,11 +37,10 @@ from .conditions import DRIFTED, PROBLEMS, holding, stamped
 from .infrastructure import CALLED_OFF, controller_contract, resolved_spec, serialize_resource
 from .inventory import read_as, read_since, strike_removed
 from .plugin_admission import admitted_sources
-from .projection import iso
+from .projection import iso, serialized_reads
 from .record_errors import PolicyError
-from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation
-lazy from .app_update_approval import succeeded
-lazy from .automation_runs import held_runs, operation_registry, other_profiles, queue_settling
+from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation, succeeded
+lazy from .automation_runs import claimant, held_runs, operation_registry, other_profiles, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
 lazy from .dependency_updates import plan as dependency_updates
@@ -314,19 +314,22 @@ def _automatic(resource: ManagedResource, controller_id: str, reason: str) -> Pr
     }
 
 
-@transaction.atomic
 def _finding_repairs(controller_id: str, now) -> list[str]:
     """Queue repairs for findings the controller contract already runs itself.
 
     A second source of due work beside `_automatic_action`, which cannot see
     this class of fault: it asks "has the declaration changed, or is something
     reporting broken?" and the failure it misses is the one where nothing
-    changed and nothing looked broken.
+    changed and nothing looked broken. Serialized, so deriving the findings
+    holds no writer back and reads each thing once.
     """
 
     if not settings.SEVERINO_FINDINGS_AUTO_REMEDY:
         return []
+    return serialized_reads(partial(_repairs, controller_id, now))
 
+
+def _repairs(controller_id: str, now) -> list[str]:
     queued: list[str] = []
     manages = manages_through()
     for repair in auto_remediable(principal=cli_principal()):
@@ -392,6 +395,35 @@ def _check_lease(lease_seconds: int) -> None:
         raise ValueError("Lease duration must be between 30 and 3600 seconds.")
 
 
+def _claimable(capabilities: tuple[tuple[str, str], ...], profile: str | None):
+    """The queued operations a claim naming ``capabilities`` and ``profile`` is offered, oldest first."""
+
+    operations = (
+        OperationRequest.objects.select_related("resource")
+        .filter(state=OperationRequest.State.QUEUED)
+        .order_by("created_at")
+    )
+    # The pause and a block stop what an agent already asked for, not only
+    # what it asks next. Left queued, so lifting the brake resumes it.
+    operations = operations.exclude(agent_access.held_askers())
+    operations = _compatible_operations(operations, capabilities)
+    if profile is not None:
+        operations = operations.exclude(other_profiles(profile))
+    return operations
+
+
+@transaction.atomic
+def waiting_profiles(profiles: tuple[str, ...], *, capabilities: tuple[tuple[str, str], ...]) -> list[str]:
+    """Which of ``profiles`` has a queued scan or run its worker's claim of
+    ``capabilities`` would take (``claimant``), so the host starts only those
+    workers. Work whose lease ran out is put back first, as before a claim."""
+
+    release_lapsed(timezone.now())
+    queued = _claimable(capabilities, None).order_by().values_list("action", "resource__spec__privilege").distinct()
+    due = {claimant(action, privilege) for action, privilege in queued}
+    return [profile for profile in profiles if profile in due]
+
+
 @transaction.atomic
 def claim_next_operation(
     controller_id: str,
@@ -429,19 +461,7 @@ def claim_next_operation(
             result = _pending(held, claimed=True)
             result.update(controller_contract(held.resource))
             return result
-    operations = (
-        OperationRequest.objects.select_for_update(skip_locked=True)
-        .select_related("resource")
-        .filter(state=OperationRequest.State.QUEUED)
-        .order_by("created_at")
-    )
-    # The pause and a block stop what an agent already asked for, not only
-    # what it asks next. Left queued, so lifting the brake resumes it.
-    operations = operations.exclude(agent_access.held_askers())
-    operations = _compatible_operations(operations, capabilities)
-    if profile is not None:
-        operations = operations.exclude(other_profiles(profile))
-    operation, contract = _next_resolvable(operations)
+    operation, contract = _next_resolvable(_claimable(capabilities, profile).select_for_update(skip_locked=True))
     if operation is None:
         return {"ok": True, "operation": None}
     operation.state = OperationRequest.State.CLAIMED
@@ -743,13 +763,15 @@ def _hold(operation: OperationRequest, result: dict[str, Any]) -> None:
     (``_settled``), bounded by its declaration's timeout from its claim: an
     event on the unit's machine asks that read sooner (``host_work``), and
     the bound asks it once no event did (``_settle_lapsed_holds``). No worker
-    renews it."""
+    renews it. HQ looks once the hold is stored, since the unit may have
+    ended before the run reported it."""
 
     bound = operation.claimed_at + timedelta(seconds=_settling_timeout(operation) or 0)
     OperationRequest.objects.filter(pk=operation.pk).update(
         result=result, lease_expires_at=bound, updated_at=timezone.now()
     )
     operation.result, operation.lease_expires_at = result, bound
+    ask(reads=(AUTOMATION_HELD,))
 
 
 def _settled(held_id: str, report: ControllerReport) -> None:

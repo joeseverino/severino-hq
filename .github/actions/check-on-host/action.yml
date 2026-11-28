@@ -1,0 +1,76 @@
+name: Check an extension pull request on the host
+description: >-
+  Start the host's Check extensions on this pull request's head, which checks
+  and composes it and reports the result on that commit as HQ's check.
+
+# The checks run in the host's public workflow (.github/workflows/extensions.yml),
+# so the extension repository spends only the seconds this takes. It runs no
+# code from the pull request, and the token it mints can only start a workflow
+# in the host repository and lapses within the hour.
+#
+# The dispatch names only the head commit: the host repository is public, and
+# so is its run list. It runs on the host branch named like this pull
+# request's when the host has one, the other half of a coordinated change,
+# and on main otherwise. Only a run on main stands for the merge at admission.
+
+inputs:
+  app-client-id:
+    description: Client ID of HQ's app, the caller's HQ_APP_CLIENT_ID secret.
+    required: true
+  app-private-key:
+    description: That app's private key, the caller's HQ_APP_KEY secret.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the host ref
+      id: host
+      shell: bash
+      # An unanswered lookup fails rather than falling back to main, which
+      # would check a coordinated change against the wrong host.
+      env:
+        HOST_REPOSITORY: ${{ github.action_repository }}
+        BRANCH: ${{ github.head_ref }}
+      run: |
+        set -euo pipefail
+        ref=main
+        if [ "$BRANCH" != main ] && [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+          status=0
+          git ls-remote --exit-code --heads "https://github.com/$HOST_REPOSITORY.git" \
+            "refs/heads/$BRANCH" >/dev/null || status=$?
+          case "$status" in
+            0) ref="$BRANCH"
+               echo "::notice title=Coordinated host branch::Checking on host branch $BRANCH." ;;
+            2) ;;
+            *) echo "::error::Could not ask the host repository for branch $BRANCH."; exit 1 ;;
+          esac
+        fi
+        {
+          echo "ref=$ref"
+          echo "repository=$HOST_REPOSITORY"
+          echo "owner=${HOST_REPOSITORY%%/*}"
+          echo "name=${HOST_REPOSITORY#*/}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Mint a token that can only start the host's checks
+      id: dispatch
+      uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+      with:
+        client-id: ${{ inputs.app-client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        owner: ${{ steps.host.outputs.owner }}
+        repositories: ${{ steps.host.outputs.name }}
+        permission-actions: write
+
+    - name: Start the host's checks of this head
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.dispatch.outputs.token }}
+        HOST_REPOSITORY: ${{ steps.host.outputs.repository }}
+        REF: ${{ steps.host.outputs.ref }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+        gh workflow run extensions.yml --repo "$HOST_REPOSITORY" --ref "$REF" -f commit="$HEAD_SHA"
+        echo "The host checks $HEAD_SHA and reports on it as Severino HQ · Checks."

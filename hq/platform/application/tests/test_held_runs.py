@@ -1,6 +1,6 @@
 """A run whose playbook hands off to a unit it leaves running is held, and
-settled only by the read its procedure names, asked when a job on HQ's
-machine ends or once its bound passes: an event says when to look, never
+settled only by the read its procedure names, asked when that unit's job on
+HQ's machine ends or once its bound passes: an event says when to look, never
 what is true. Every procedure here is a synthetic ``example.*`` one."""
 
 from datetime import timedelta
@@ -12,7 +12,7 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import Field
 
-from hq.domains.control_plane.models import InboundSource, OperationRequest
+from hq.domains.control_plane.models import InboundEvent, InboundSource, OperationRequest
 from hq.platform.application.contracts import Closed
 from hq.platform.core.testing import AGENT
 
@@ -25,6 +25,7 @@ from .procedures import APP, DB, Supply, approved_run, manifest
 PULL, LAST_PULL = "example.pull", "example.last_pull"
 COMMIT = "0123abcd" * 5
 UNIT = f"example-pull@{COMMIT}.service"
+OTHER = "example-other.service"
 WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
 RECEIPT = {APP: {"host.reboot": [{"required": False}]}}
@@ -86,12 +87,13 @@ class HeldRunTests(TestCase):
         run.refresh_from_db()
         return run
 
-    def job_ended(self) -> mock.MagicMock:
-        """A job's end on HQ's machine, as its watcher tells it: no unit named."""
+    def job_ended(self, unit: str = UNIT, result: str = "done", **batch) -> mock.MagicMock:
+        """The end of ``unit``'s job on HQ's machine, as its watcher tells it."""
 
         event = {
             "provider": "host",
-            "event": "unit.job.done",
+            "event": f"unit.job.{result}",
+            "subject": unit,
             "delivery_id": f"example-{next(_DELIVERIES)}",
             "received_at": timezone.now().isoformat(),
         }
@@ -99,8 +101,11 @@ class HeldRunTests(TestCase):
             mock.patch.object(outbound_work, "start_for_host", side_effect=outbound_work.run_for_host) as start,
             self.captureOnCommitCallbacks(execute=True),
         ):
-            apply_events({"source": InboundSource.HOST, "events": [event]})
+            apply_events({"source": InboundSource.HOST, "events": [event], **batch})
         return start
+
+    def stored(self, unit: str):
+        return InboundEvent.objects.filter(subject=unit)
 
     def reads(self, held: OperationRequest):
         return OperationRequest.objects.filter(input__settles=str(held.pk))
@@ -146,20 +151,46 @@ class HeldRunTests(TestCase):
         self.assertEqual(run.result["stated"], {"readings": rolled_back})
         self.assertNotIn(mock.call(run), self.succeeded.call_args_list)
 
-    def test_an_unrelated_job_s_end_during_the_pull_settles_nothing_and_the_pull_s_end_settles_it(self):
+    def test_only_its_own_unit_s_end_asks_the_read_and_another_unit_s_end_is_not_stored(self):
         run = self.held()
 
-        self.job_ended()
-        self.read_ends(run)
-        run.refresh_from_db()
-        self.assertEqual(run.state, OperationRequest.State.CLAIMED)
+        self.job_ended(OTHER)
+        self.assertFalse(self.reads(run).exists())
+        self.assertFalse(self.stored(OTHER).exists())
 
         self.job_ended()
         self.read_ends(run, {"readings": RECEIPT})
 
         run.refresh_from_db()
         self.assertEqual(run.state, OperationRequest.State.SUCCEEDED)
-        self.assertLess(run.completed_at, run.claimed_at + timedelta(seconds=1500))
+        self.assertEqual(self.reads(run).count(), 1)
+
+    def test_a_read_that_found_the_unit_running_is_not_asked_again_by_another_unit_s_end(self):
+        run = self.held()
+
+        self.job_ended()
+        self.read_ends(run)
+        self.job_ended(OTHER)
+        self.job_ended(OTHER, "failed")
+
+        self.assertEqual(self.reads(run).count(), 1)
+        # A failed job is still told, for the machine's units alone.
+        self.assertEqual(list(self.stored(OTHER).values_list("reads", flat=True)), [["host.unit"]])
+
+    def test_a_pull_that_ended_before_its_hand_off_settles_once_the_hold_is_stored(self):
+        run = self.pull()
+        self.claim()
+
+        self.job_ended()
+        with (
+            mock.patch.object(outbound_work, "start_for_host", side_effect=outbound_work.run_for_host),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            self.report(run, {"handoff": {APP: UNIT}})
+        self.read_ends(run, {"readings": RECEIPT})
+
+        run.refresh_from_db()
+        self.assertEqual(run.state, OperationRequest.State.SUCCEEDED)
 
     def test_forged_events_put_one_read_in_flight_and_settle_nothing(self):
         run = self.held()
@@ -191,8 +222,9 @@ class HeldRunTests(TestCase):
                 if stated is None:
                     self.assertEqual(run.result["reason"], "OutcomeUnknown")
 
-    def test_a_job_s_end_with_no_run_held_starts_nothing(self):
+    def test_a_job_s_end_with_no_run_held_starts_nothing_and_is_not_stored(self):
         self.job_ended().assert_not_called()
+        self.assertFalse(self.stored(UNIT).exists())
 
     def test_a_held_run_on_another_machine_waits_for_its_bound(self):
         run = self.pull(DB)
@@ -225,7 +257,7 @@ class HeldRunTests(TestCase):
         ):
             (row,) = run_rows(seen_as_runs(OperationRequest.objects.filter(pk=run.pk)))
 
-        for fact in (UNIT.partition("@")[0], APP, "example-web-1: started", "example-db-1: stopped"):
+        for fact in (UNIT.partition("@")[0], APP, "example-web-1 so far: started", "example-db-1 so far: stopped"):
             self.assertIn(fact, row.note)
         self.assertNotIn("example-other", row.note)
 

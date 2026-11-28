@@ -527,7 +527,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
                 "Infrastructure",
             ),
         ),
-        integration=PluginIntegration(resources=_provider("hq.platform.application.container_reads:resources")),
+        integration=PluginIntegration(
+            resources=_provider("hq.platform.application.container_reads:resources"),
+            sequences=_provider("hq.platform.application.app_update_flow:sequences"),
+        ),
     ),
     DomainDescriptor(
         id="hq.tailnet",

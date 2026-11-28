@@ -64,6 +64,12 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   .chart-frame-dense .chart-cats .chart-category:first-child,
   .chart-frame-dense .chart-cats .chart-category:last-child { display: inline; }
 }
+/* Labels that fit a phone's card but not a 320px screen's thin out there the same way. */
+@container chart (max-width: 300px) {
+  .chart-frame-cramped .chart-category { display: none; }
+  .chart-frame-cramped .chart-cats .chart-category:first-child,
+  .chart-frame-cramped .chart-cats .chart-category:last-child { display: inline; }
+}
 /* Where a label goes is computed from the data and arrives as its x and y; everything about how it looks is here. */
 .chart-frame .chart-axis {
   color: var(--muted);
@@ -297,6 +303,8 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
   --band-column-gap: var(--space-12);
   --band-rules: none;
   display: grid;
+  /* A band given more height than its facts (a section body stretched to its row) keeps its rows at its top, each value under its label. */
+  align-content: start;
   margin: 0 0 var(--stack-gap);
   /* With no edges there is no rim to clip, and a hovered fact's tint reaches into the gap. */
   overflow: visible;
@@ -447,8 +455,6 @@ td .external-link:has(> code:only-child) > * { min-width: 0; }
 .icon { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 /* An icon leading a link's words is one of them: it stands on their line, its foot as far under the baseline as a letter's descent, so the words beside it keep the baseline every part of their line shares. */
 a:not(.btn) > .icon:first-child { vertical-align: -0.15em; }
-/* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
-.page-actions form { margin: 0; display: inline-flex; }
 
 /* A list read down (`{% list %}`): items read down, each its parts inline. */
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; }

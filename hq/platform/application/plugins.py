@@ -189,6 +189,9 @@ class PluginIntegration:
     # A record's page of each kind ``demo_seed`` writes, by address, which the
     # layout gate and dev:look's ``all`` read beside the host's own.
     demo_pages: Callable[[], Iterable[str]] | None = None
+    # Workflows that cross outside systems: each a ``SequenceSpec`` whose
+    # steps every surface draws and reads (``application.sequences``).
+    sequences: Callable[[], Iterable[Any]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -799,6 +802,10 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
 
 def plugin_outbound_work() -> tuple[Any, ...]:
     return _provided("outbound")
+
+
+def plugin_sequences() -> tuple[Any, ...]:
+    return _provided("sequences")
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:

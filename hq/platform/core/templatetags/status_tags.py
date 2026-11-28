@@ -14,9 +14,11 @@ from django.utils.safestring import SafeString, mark_safe
 from hq.platform.application.describe import Describe
 from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
-from hq.platform.application.tone import Absent, Tone, Toned
+from hq.platform.application.tone import Absent, Tone, Toned, tone_of
 from hq.platform.core.held_values import format_html
+from hq.platform.core.template_literals import Reads, reading
 from hq.platform.core.template_parts import Part, slotted
+from hq.platform.core.templatetags.icon_tags import drawn
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.ui import ended, severity_tone as _severity_tone
 
@@ -25,25 +27,6 @@ register = template.Library()
 # Whose ink a dotted status's words take: its tone's, or the text around it.
 Ink = Literal["tone", "context"]
 INKS = frozenset(get_args(Ink))
-
-
-def _tone(tone: str | Toned) -> str:
-    """The tone a state is drawn in: a subject's state (``Toned``: a
-    machine's, a declared resource's) its own, else a ``Tone`` by its value,
-    else none. A word that is neither (a model's "archived") is refused, so a
-    pill's color is only ever one of the four tones."""
-
-    if isinstance(tone, Toned):
-        return tone.tone
-    if not tone:
-        return ""
-    try:
-        return Tone(tone)
-    except ValueError:
-        raise ValueError(
-            f"A status is drawn in a Tone ({', '.join(Tone)}) or a Toned state; got {tone!r}. "
-            "Declare its subject's states as a Toned enum (TonedChoices for a model's) and pass the member."
-        ) from None
 
 
 def _toned(tone_class: str) -> Tone:
@@ -131,7 +114,7 @@ def status_pill(
     if icon:
         mark = render_to_string("partials/_icon.html", {"name": icon}).strip()
         label = mark_safe(f"{mark} {label}")  # noqa: S308 - the icon part's own markup, and the escaped words
-    classes = _form(_tone(tone), pill=pill, chip=chip, dot=dot, ink=ink)
+    classes = _form(tone_of(tone), pill=pill, chip=chip, dot=dot, ink=ink)
     if not shown:
         classes = f"{classes} toned-alone"
     if css:
@@ -148,17 +131,22 @@ def status_pill(
     return format_html("<{}{}>{}</{}>", element, html_attributes(dict(attributes)), label, element)
 
 
-@register.filter
-def absent(words):
-    """``{% status "not set up"|absent %}``: what is not there yet, in its one
-    wording (``tone.Absent``); words of any other wording are refused."""
-
+def _absence(words: object) -> Absent:
     try:
         return Absent(words)
     except ValueError:
         raise ValueError(
             f"An absence is said as one of {', '.join(repr(str(member)) for member in Absent)}; got {words!r}."
         ) from None
+
+
+@register.filter
+@reading
+def absent(words: Annotated[Absent, Reads(_absence)]) -> Absent:
+    """``{% status "not set up"|absent %}``: what is not there yet, in its one
+    wording (``tone.Absent``); words of any other wording are refused."""
+
+    return words
 
 
 @register.filter
@@ -221,7 +209,7 @@ def drift_tip(reading):
 
 def status(
     *parts: Annotated[Any, Describe("Its words, several being one label, only the first sentence-cased.")],
-    tone: Annotated[Any, Describe("Its tone, or a subject's state in its own words and tone.")] = "",
+    tone: Annotated[Any, Describe("Its tone, or a subject's state in its own words and tone."), Reads(tone_of)] = "",
     css: Annotated[str, Describe("The classes of where it stands.")] = "",
     href: Annotated[Any, Describe("Where it leads.")] = "",
     title: Annotated[Any, Describe("Its `title`.")] = "",
@@ -232,7 +220,7 @@ def status(
     ink: Annotated[
         Ink, Describe("Whose ink its words take beside a dot or an icon: its tone's or the text's.")
     ] = "tone",
-    icon: Annotated[str, Describe("Its words after an icon in its tone, beside `pill=False`.")] = "",
+    icon: Annotated[str, Describe("Its words after an icon in its tone, beside `pill=False`."), Reads(drawn)] = "",
     shown: Annotated[bool, Describe("Its words shown; with `False`, its icon alone, the words said aloud.")] = True,
     **data: Annotated[Any, Describe("Each a `data-` attribute.")],
 ):
@@ -272,7 +260,7 @@ slotted(
         (`good`, `attention`, `serious`, `neutral`), never a word of its own: `tone` takes a `Tone`, and a
         subject's state is a `Toned` member that carries its words and its tone (a machine's
         `MachineState`, a model's stored status declared as `TonedChoices`, `ARCHIVED = "archived",
-        Tone.NEUTRAL, "Archived"`). Any other word is refused where it is drawn. Several parts are one
+        Tone.NEUTRAL, "Archived"`). Any other word is refused, a literal as its template compiles. Several parts are one
         label (`{% status "HQ expects" desired tone="serious" %}`); `href`, `title`, `tip`, `css` and
         `data_*` say the rest. No template or module writes a pill by hand. A pill or a chip sets its own
         line height (cards.css), so it is one height wherever it stands, in a cell or beside a run of links
@@ -294,6 +282,7 @@ slotted(
         """,
         about="One short state, drawn in its tone and said in sentence case, the one way a page draws a state.",
         function=status,
+        refuses=(_refuse_mixed,),
         public=True,
         example='{% status "Blocked" tone="attention" %}',
     ),

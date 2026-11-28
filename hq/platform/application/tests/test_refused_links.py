@@ -111,5 +111,5 @@ class ARefusedCommandIsDrawnUnusableTests(ConnectionsPage):
         with held_jobs() as held:
             response = self.client.post(reverse("jobs:ask", args=[example.REFRESH]), form_keyed(), headers=SCRIPT)
 
-        self.assertEqual((response.status_code, response.json()["note"]), (200, CLOSED))
+        self.assertEqual((response.status_code, response.text), (409, CLOSED))
         self.assertEqual((Job.objects.count(), held.waiting), (0, []))

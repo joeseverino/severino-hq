@@ -347,7 +347,18 @@
       "outcome": "ok",
       "exit_code": 1,
       "started_at": "example",
-      "finished_at": "example"
+      "finished_at": "example",
+      "branches": [
+        {
+          "repository": "example/example",
+          "branch": "example",
+          "result": "example",
+          "pull_request": 1,
+          "files": [
+            "example"
+          ]
+        }
+      ]
     }
   ],
   "github.open_pull_request": [
@@ -421,7 +432,10 @@
         {
           "name": "example",
           "status": "example",
-          "conclusion": "example"
+          "conclusion": "example",
+          "started_at": "example",
+          "completed_at": "example",
+          "url": "example"
         }
       ],
       "carried": true
@@ -666,7 +680,6 @@
       "compose": [
         "example"
       ],
-      "dashboard": "example",
       "updater": "example",
       "compose_images": [
         {
@@ -674,15 +687,6 @@
           "service": "example",
           "image": "example",
           "build": true
-        }
-      ],
-      "held_branches": [
-        {
-          "branch": "example",
-          "marker": "example",
-          "apps": [
-            "example"
-          ]
         }
       ],
       "builds": [
@@ -740,7 +744,10 @@
         {
           "name": "example",
           "status": "example",
-          "conclusion": "example"
+          "conclusion": "example",
+          "started_at": "example",
+          "completed_at": "example",
+          "url": "example"
         }
       ],
       "carried": true

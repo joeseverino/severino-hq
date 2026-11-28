@@ -24,6 +24,13 @@ import (
 // many requests GitHub counted against the installation for it.
 func repositorySweep(t *testing.T, h *githubHarness, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
 	t.Helper()
+	return toldSweep(t, h, nil, held...)
+}
+
+// toldSweep is repositorySweep for a pass told forced (runtime.Told).
+func toldSweep(t *testing.T, h *githubHarness, forced []runtime.ForcedRead, held ...runtime.GitHubRepositoryHeld) (runtime.KindReport, int) {
+	t.Helper()
+	h.r.told = forced
 	done := h.r.BeginSnapshot()
 	defer done()
 	h.mu.Lock()
@@ -116,6 +123,27 @@ func TestOnlyTheRepositoryThatChangedIsRead(t *testing.T) {
 		t.Errorf("read the unchanged one %d times, the changed one %d", repositoryReads(h, "example/app")-app, repositoryReads(h, "example/other")-other)
 	}
 	t.Logf("one repository changed: the sweep spent %d counted requests", spent)
+}
+
+// An event's pass reads its repository in full, though the change query would
+// say nothing moved, and carries the other unprobed.
+func TestAnEventsPassReadsOnlyItsRepository(t *testing.T) {
+	h := newGitHubHarness(t, withSecondRepository(githubRepositoryRoutes()), runtime.Environment{})
+	first, _ := repositorySweep(t, h)
+	held := heldAfter(t, first)
+	app, other := repositoryReads(h, "example/app"), repositoryReads(h, "example/other")
+	told := []runtime.ForcedRead{{
+		Kind: runtime.ResourceKindGitHubOpenPullRequest, Subject: "example/other",
+		Kinds: []runtime.ResourceKind{runtime.ResourceKindGitHubOpenPullRequest, runtime.ResourceKindGitHubRepository, runtime.ResourceKindGitHubWorkflowRun},
+	}}
+	report, spent := toldSweep(t, h, told, held...)
+	if got := carried(report); !report.OK || len(got) != 1 || got[0] != "example/app" {
+		t.Fatalf("the told repository is read and the other carried: %v %+v", got, report)
+	}
+	if repositoryReads(h, "example/app") != app || repositoryReads(h, "example/other") == other {
+		t.Errorf("read the other %d times, the told one %d", repositoryReads(h, "example/app")-app, repositoryReads(h, "example/other")-other)
+	}
+	t.Logf("an event's pass of one repository spent %d counted requests", spent)
 }
 
 // manyRepositories is an installation covering count repositories, each

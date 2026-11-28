@@ -303,7 +303,11 @@ class ContractBindingTests(SimpleTestCase):
     def test_the_routes_are_the_contracts_paths(self):
         routes = [
             route
-            for app in (bridge_application.application, bridge_application.events_application)
+            for app in (
+                bridge_application.application,
+                bridge_application.worker_application,
+                bridge_application.events_application,
+            )
             for route in app.application.routes
         ]
         self.assertEqual({route.path for route in routes}, set(contract()["paths"]))

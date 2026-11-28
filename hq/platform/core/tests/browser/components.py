@@ -1,7 +1,6 @@
 """The layout rules held over single components, drawn on probe pages and pages of the crowded estate."""
 
 import base64
-import json
 import re
 from datetime import date, timedelta
 from unittest import mock
@@ -575,27 +574,22 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_rows_ask_that_succeeds_drops_the_failure_it_last_said(self):
         """A row whose last refresh failed carries the failure as its button's
-        title; pressed again and done, the title says what the button is for.
-        Its result shows in a region beside it, so the control the press drew
-        is still the one on the page."""
+        title; pressed again and done, the page it is answered with draws the
+        title saying what the button is for."""
 
-        failed = Ask(
-            "Refresh",
-            "/example/ask/",
-            Standing(asks.FAILED, "The example could not be read."),
-            title="Read the example again.",
-            refresh="[data-example-region]",
-        )
-        self.pages = {
-            **self.pages,
-            "ask-probe": probe(
+        def drawn(standing):
+            ask = Ask("Refresh", "/example/ask/", standing, title="Read the example again.")
+            return probe(
                 "{% data_table table %}"
-                "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
                 '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
-                table=DataTable("Things", (TableColumn("Name"),), (Row((Cell("A"),), asks=(failed,)),)),
-            ),
-            "example/ask": json.dumps(Standing(asks.DONE).as_json()),
+                table=DataTable("Things", (TableColumn("Name"),), (Row((Cell("A"),), asks=(ask,)),)),
+            )
+
+        self.pages = {
+            **self.pages,
+            "ask-probe": drawn(Standing(asks.FAILED, "The example could not be read.")),
+            "example/ask": drawn(Standing(asks.DONE)),
         }
         self.open("ask-probe", WIDE)
         button = self.page.locator(self.css(SELECTORS["row_ask"] + " [data-ask-button]"))
@@ -611,25 +605,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
         ask says once pressed comes on the line the cell keeps under them, so
         the row grows no taller."""
 
-        self.pages = {
-            **self.pages,
-            "ask-actions-probe": probe(
+        def drawn(standing):
+            ask = Ask("Refresh", "/example/ask/", standing, title="Read the example again.", compact=True)
+            return probe(
                 "{% data_table table %}"
                 '<form id="hq-post" method="post" hidden></form>'
                 '{% include "scripts/fragment.html" %}{% include "scripts/ask.html" %}',
                 table=DataTable(
                     "Things",
                     (TableColumn("Name"),),
-                    (
-                        Row(
-                            (Cell("A"),),
-                            actions=(PageAction("Remove", "/example/remove/"),),
-                            asks=(Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),),
-                        ),
-                    ),
+                    (Row((Cell("A"),), actions=(PageAction("Remove", "/example/remove/"),), asks=(ask,)),),
                 ),
-            ),
-            "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
+            )
+
+        self.pages = {
+            **self.pages,
+            "ask-actions-probe": drawn(Standing()),
+            "example/ask": drawn(Standing(asks.FAILED, "The example could not be read.")),
         }
         for width in (PHONE_SCREEN[0], WIDE):
             with self.subTest(width=width):
@@ -645,7 +637,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 button.press("Enter")
                 self.page.wait_for_selector(self.css(SELECTORS["row_ask"] + '[data-ask-state="failed"]'))
                 self.assertTrue(self.page.locator(self.css(SELECTORS["ask_note"])).first.is_visible())
-                self.assertLessEqual(row.bounding_box()["height"], tall + 1)
+                row = self.page.locator(self.css(SELECTORS["row_ask"])).first.evaluate_handle(
+                    "(ask) => ask.closest('tr')"
+                )
+                self.assertLessEqual(row.as_element().bounding_box()["height"], tall + 1)
 
     @with_script
     def test_every_page_runs_under_the_policy_hq_sends(self):

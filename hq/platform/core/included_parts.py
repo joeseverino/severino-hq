@@ -26,9 +26,10 @@ CHART = _part(
     "A measure over time from `hq_sdk.ui.line_chart`, or quantities that add up from "
     "`hq_sdk.ui.stacked_bar_chart`, or a spatial path from `hq_sdk.ui.PathChart`.",
     *("bar-chart", "chart-axis", "chart-band-*", "chart-category", "chart-cats", "chart-dot", "chart-frame"),
-    *("chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend", "chart-line"),
-    *("chart-mark", "chart-mark-label", "chart-path", "chart-path-frame", "chart-path-marker", "chart-path-scale"),
-    *("chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart", "series-*", "stacked"),
+    *("chart-frame-cramped", "chart-frame-dense", "chart-grid", "chart-hit", "chart-labels", "chart-legend"),
+    *("chart-line", "chart-mark", "chart-mark-label", "chart-path", "chart-path-frame", "chart-path-marker"),
+    *("chart-path-scale", "chart-path-segment", "chart-scroll", "chart-tick", "chart-trend", "line-chart"),
+    *("series-*", "stacked"),
     pieces=("partials/_chart_legend.html", "partials/_chart_path.html"),
     public=True,
     rules="""

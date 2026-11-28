@@ -21,12 +21,15 @@ class InFlight:
     def __init__(self, page: Any) -> None:
         self.page = page
         self.count = 0
-        page.on("request", lambda _request: self.moved(1))
-        page.on("requestfinished", lambda _request: self.moved(-1))
-        page.on("requestfailed", lambda _request: self.moved(-1))
+        page.on("request", lambda request: self.moved(request, 1))
+        page.on("requestfinished", lambda request: self.moved(request, -1))
+        page.on("requestfailed", lambda request: self.moved(request, -1))
 
-    def moved(self, by: int) -> None:
-        self.count += by
+    def moved(self, request: Any, by: int) -> None:
+        # A live page holds its event stream open for as long as it is shown,
+        # so the stream is never a request still on its way.
+        if request.resource_type != "eventsource":
+            self.count += by
 
     def settle(self, what: str, frames: int = 600) -> None:
         """Wait out the page a frame at a time: each frame lets a script start what an answer asked

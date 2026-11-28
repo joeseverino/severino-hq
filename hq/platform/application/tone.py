@@ -88,6 +88,25 @@ class Absent(Toned):
 # The metaclass Python derives from the bases anyway, written out because
 # CodeQL cannot derive it through two enum bases and reads the class as a
 # plain ``type``, so every loop over a member set would be reported.
+def tone_of(tone: str | Toned) -> str:
+    """The tone a state is drawn in: a subject's state (``Toned``: a
+    machine's, a declared resource's) its own, else a ``Tone`` by its value,
+    else none. A word that is neither (a model's "archived") is refused, so a
+    pill's color is only ever one of the four tones."""
+
+    if isinstance(tone, Toned):
+        return tone.tone
+    if not tone:
+        return ""
+    try:
+        return Tone(tone)
+    except ValueError:
+        raise ValueError(
+            f"A status is drawn in a Tone ({', '.join(Tone)}) or a Toned state; got {tone!r}. "
+            "Declare its subject's states as a Toned enum (TonedChoices for a model's) and pass the member."
+        ) from None
+
+
 class TonedChoices(TextChoices, Toned, metaclass=ChoicesType):
     """A model field's stored states, each declared with its tone between its
     value and its label, ``ARCHIVED = "archived", Tone.NEUTRAL, "Archived"``,

@@ -16,13 +16,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils.text import capfirst
 
-from hq.domains.control_plane.models import OperationRequest
-
 from .card_items import Answer
 from .container_words import named
 from .containers import Container, containers, published_digest, standing_of
 from .entity_links import EntityLink
-from .github_estate import PullChecks, Repository, pull_checks, repositories
+from .github_estate import PullCheck, PullChecks, Repository, pull_checks, repositories
 from .image_findings import ranked
 from .images import ImageRef
 from .projection import projection_scope, read_once
@@ -39,18 +37,19 @@ lazy from .app_update_approval import (
     approval_of,
     approve_target,
 )
+lazy from .app_update_flow import UPDATE
 lazy from .app_update_open import OPEN, open_standing, open_target
-lazy from .asks import DONE, RUNNING, Asked, Standing
+lazy from .asks import IDLE, Standing
 lazy from .container_findings import BY_HAND
+lazy from .dependency_updates import last_run
 lazy from .finding_model import Fact
 lazy from .finding_steps import Does
-lazy from .labels import lower_first
+lazy from .labels import dotted, lower_first
 lazy from .pages import PageAction, command_reach
-lazy from .resource_operations import OperationAsked, operation_asked
-lazy from .work_runs import standing_of as run_standing
+lazy from .sequences import PERSON, Sequence
 
 if TYPE_CHECKING:
-    from .work_runs import WorkRun
+    from .dependency_updates import Branch
 
 # What an update's new pins bring of their own, as every page labels it.
 BRINGS = "New vulnerabilities"
@@ -120,6 +119,9 @@ class AppUpdate:
     within_apps: bool
     # Whether HQ read every file GitHub says it changes.
     whole: bool
+    # Each check on its head as its last run stands, or as GitHub told HQ
+    # since (``Repository.pull_check_runs``).
+    check_runs: tuple[PullCheck, ...] = ()
 
     @property
     def label(self) -> str:
@@ -207,9 +209,6 @@ class Managed:
 
     repository: str
     app: str
-    # Its Dependency Dashboard, where Renovate lists an update it has not
-    # opened yet, or "" where it keeps none.
-    dashboard: str
     url: str
 
 
@@ -226,7 +225,7 @@ def _managed() -> dict[str, Managed]:
     found: dict[str, Managed] = {}
     for name, repository in sorted(repositories().items()):
         for path in repository.compose:
-            found.setdefault(_tail(path), Managed(name, _app(path), str(repository.dashboard), str(repository.url)))
+            found.setdefault(_tail(path), Managed(name, _app(path), str(repository.url)))
     return found
 
 
@@ -263,6 +262,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
     running = containers()
     found = []
     for _name, repository in sorted(repositories().items()):
+        checks = repository.pull_check_runs()
         for pull in sorted(repository.update_pulls, key=lambda pull: -int(pull.get("number") or 0)):
             for change in pull.get("apps") or ():
                 app = str(change.get("app") or "")
@@ -274,7 +274,7 @@ def _app_updates() -> tuple[AppUpdate, ...]:
                     )
                     if _app(path) == app
                 }
-                found.append(_update(repository, pull, change, files, running))
+                found.append(_update(repository, pull, change, files, running, checks))
     return tuple(found)
 
 
@@ -284,6 +284,7 @@ def _update(
     change: Mapping[str, Any],
     files: set[str],
     running: list[Container],
+    checks: Mapping[int, tuple[PullCheck, ...]],
 ) -> AppUpdate:
     pins = tuple(
         _pin(
@@ -325,6 +326,7 @@ def _update(
         brings=ranked(brings.values()),
         checks=pull.get("checks") or {},
         artifact_problem=tuple(pull.get("artifact_problem") or ()),
+        check_runs=checks.get(int(pull.get("number") or 0), ()),
         readable=bool(change.get("read")),
         renovates=bool(repository.updater)
         and pull.get("author") == repository.updater
@@ -363,7 +365,7 @@ class UpdateKind(StrEnum):
     OPEN = "open"
     # Its repository's default branch pins it, and the container runs the pin before.
     MERGED = "merged"
-    # Renovate holds its branch on the Dependency Dashboard, with no pull request.
+    # Renovate holds its branch, with no pull request, as its last run's report says.
     HELD = "held"
     # Its repository holds it, and Renovate has opened nothing for the release.
     UNOPENED = "unopened"
@@ -385,82 +387,8 @@ class UpdateAction:
         url, _ = command_reach(self.capability, self.target)
         return Does(self.capability, url=url, method="POST")
 
-    def control(self, back: str) -> PageAction | None:
-        return PageAction.command(self.capability, self.target, primary=True, query={"next": back})
-
-
-@dataclass(frozen=True, slots=True)
-class MergeStanding:
-    """How an approved update stands: its preview, its merge, and the run
-    that applies it."""
-
-    # Where it stands in a word or two ("Waiting", "Apply failed").
-    word: str
-    tone: str
-    # Whether it previews, merges, applies or merged, so no second approval is offered.
-    taken: bool = False
-    # Its fact's detail: what it waits on, or of a preview or an apply that
-    # ended, the step it stopped on, what that said and each app the run did
-    # not release.
-    lines: tuple[str, ...] = ()
-    # The run or reconcile it stands on; None for Renovate's run, which is a
-    # read asked of the controller rather than an operation.
-    operation: OperationRequest | None = None
-    # That operation as every list of work shows it, whose page and standing
-    # each surface that names it shows.
-    run: WorkRun | None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "lines", tuple(map(str, self.answer.because)))
-
-    @property
-    def answer(self) -> Answer:
-        """How it stands as its fact draws it: its word, over why."""
-
-        return Answer(self.word, self.lines, self.tone)
-
-    @property
-    def words(self) -> str:
-        """How it stands as one line of prose, for a message or a reason."""
-
-        return self.answer.said
-
-    @property
-    def run_url(self) -> str:
-        """The page of the run it stands on, the preview or the apply; "" for none."""
-
-        return self.run.url if self.run else ""
-
-    @property
-    def standing(self) -> Standing | None:
-        """How its run stands while it is under way (``work_runs.standing_of``); None otherwise."""
-
-        return run_standing(self.run) if self.live and self.run else None
-
-    @property
-    def live(self) -> bool:
-        """Whether a step of it is under way, so its card asks again until it ends:
-        taken and not yet ended, which is the one standing said in attention."""
-
-        return self.taken and self.tone == Tone.ATTENTION
-
-    @property
-    def again(self) -> Asked:
-        """What pressing it again answers while it stands taken: where it
-        stands, never a refusal, since the first press is still its request."""
-
-        if self.live:
-            return Asked(self.standing or Standing(RUNNING, self.words), message=ended(f"Already asked. {self.words}"))
-        return Asked(Standing(DONE, self.words), message=ended(self.words))
-
-    def asked(self) -> OperationAsked:
-        """``again`` as a repeated ask of the operation it stands on answers
-        it, queuing nothing; only Renovate's run stands on none."""
-
-        if self.operation is None:
-            raise LookupError("Renovate's run is no operation, so its standing answers as ``again``.")
-        said = self.again
-        return operation_asked(self.operation, queued=False, standing=said.standing, message=said.message)
+    def control(self, back: str, refused: str = "") -> PageAction | None:
+        return PageAction.command(self.capability, self.target, primary=True, query={"next": back}, refused=refused)
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,46 +401,54 @@ class UpdateState:
     move: str
     # The sentence beside the title.
     words: str
-    # Where it stands as its fact says it, a word or two over why.
-    answer: Answer
+    # The press it stands on, offered while nothing holds it back.
     action: UpdateAction | None = None
-    # Why no press is offered, "" when one is; and what the press does.
+    # Why the press is held back, "" when it is offered; and what the press does.
     reason: str = ""
     said: str = ""
     # Held because no one adopted playbook applies it: the Playbooks page's step.
     adopt: bool = False
-    # How its approval or its apply stands, once one is asked.
-    standing: MergeStanding | None = None
+    # How its pull request stands before Renovate opened it: its last Open
+    # PR (``app_update_open.open_standing``), else what Renovate waits for.
+    pull: Standing | None = None
     update: AppUpdate | None = None
     managed: Managed | None = None
 
     @property
-    def at_work(self) -> bool:
-        """Whether HQ is moving it now, or moved it: nothing is asked of anyone."""
+    def offered(self) -> UpdateAction | None:
+        """Its press, while nothing holds it back."""
 
-        return self.standing is not None and self.standing.taken
+        return None if self.reason else self.action
 
     @property
-    def standing_label(self) -> str:
-        """The label its standing is said under, on every page: the press it stands on."""
+    def at_work(self) -> bool:
+        """Whether HQ is moving it now, or moved it: nothing is asked of
+        anyone. So it is once the person's steps are done, or while the one
+        they pressed is under way."""
 
-        return {UpdateKind.OPEN: "Approval", UpdateKind.MERGED: "Apply"}.get(self.kind, "Pull request")
+        flow, at = self.flow, self.flow.at
+        return bool(flow.steps) and (flow.next is None or (at is not None and at.by == PERSON and at.live))
+
+    @property
+    def follows(self) -> str:
+        """The read set its card is asked for again on while a step of its way,
+        or a part of one, is under way (``core.live``); "" while none is."""
+
+        return "estate" if self.flow.live else ""
+
+    @property
+    def flow(self) -> Sequence:
+        """Its way to running, step by step (``app_update_flow.UPDATE``)."""
+
+        return UPDATE.of(self)
 
 
 UNOPENED = "Renovate has not seen the release yet."
-# What Renovate waits for, by the marker of the box it holds the branch under
-# (its ``dependency-dashboard.ts``).
-UNTIL = {
-    "unpend": "until its checks pass",
-    "approve": "until it is approved",
-    "unschedule": "until its schedule allows",
-    "unlimit": "while it is at its pull request limit",
-}
 
 
 def update_state(item: Container) -> UpdateState:
     """Where ``item``'s update stands: decided here alone, from the open pull
-    request, its repository's default branch, Renovate's dashboard and the
+    request, its repository's default branch, Renovate's last run and the
     playbook that applies it, so no page and no finding decide it twice."""
 
     plan = plan_for(item)
@@ -524,7 +460,6 @@ def update_state(item: Container) -> UpdateState:
             UpdateKind.OPEN,
             pin.said if pin else latest,
             ended(f"Pull request {update.label} moves it{fixes}"),
-            Answer("Open", (f"Pull request {update.label}",)),
             UpdateAction(APPROVE, approve_target(update)),
             approval_of(update),
             update=update,
@@ -534,9 +469,8 @@ def update_state(item: Container) -> UpdateState:
         if (unmatched := _unmatched(item)) is not None:
             holder, why = unmatched
             words = ended(f"HQ can't match it to the Compose files in {holder}")
-            answer = Answer("Not matched", (f"No Compose file in {holder} matches it",))
-            return UpdateState(UpdateKind.UNMATCHED, latest, words, answer, reason=why)
-        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND, Answer("By hand", ("No repository HQ reads holds it",)))
+            return UpdateState(UpdateKind.UNMATCHED, latest, words, reason=why)
+        return UpdateState(UpdateKind.BY_HAND, latest, BY_HAND)
     repository = repositories()[managed.repository]
     if (move := _behind(item, repository, managed.app)) is not None:
         head = str((repository.head or {}).get("sha") or "")
@@ -544,46 +478,30 @@ def update_state(item: Container) -> UpdateState:
             UpdateKind.MERGED,
             move,
             ended(f"Merged in {managed.repository}, not applied"),
-            Answer("Not applied", (f"Merged in {managed.repository}",)),
             UpdateAction(APPLY, apply_target(managed, head)),
             apply_of(managed.repository, head, (item,)),
             managed=managed,
         )
     action = UpdateAction(OPEN, open_target(managed.repository, managed.app))
-    held = held_branch(repository, managed.app)
-    standing = open_standing(managed.repository, held)
-    # While an Open PR is under way it is held back, as an approval is (``_decided``).
-    offered = {"action": action} if standing is None or not standing.taken else {"reason": standing.words}
-    if held:
-        until = UNTIL.get(str(held.get("marker", "")), "")
-        words = ended(" ".join(("Renovate is holding its branch", until)).strip())
-        said = f"Ticks {held.get('branch', '')} on the Dependency Dashboard, then asks Renovate to run."
-        answer = Answer("Held by Renovate", (capfirst(until),))
-        return UpdateState(
-            UpdateKind.HELD, latest, words, answer, said=said, standing=standing, managed=managed, **offered
-        )
-    return UpdateState(
-        UpdateKind.UNOPENED,
-        latest,
-        UNOPENED,
-        Answer("Not opened", (UNOPENED,)),
-        said="Asks Renovate to run.",
-        standing=standing,
-        managed=managed,
-        **offered,
-    )
+    held = app_branch(managed.repository, managed.app)
+    opening = open_standing(managed.repository, managed.app)
+    if held is not None and held.held:
+        said = ended(f"Asks Renovate to open {held.branch}")
+        pull = opening or Standing(IDLE, dotted(capfirst(held.until), said), word="Held by Renovate")
+        words = ended(f"Renovate is holding its branch {held.until}")
+        return UpdateState(UpdateKind.HELD, latest, words, action, said=said, pull=pull, managed=managed)
+    said = "Asks Renovate to run."
+    pull = opening or Standing(IDLE, dotted(UNOPENED, said), word="Not opened")
+    return UpdateState(UpdateKind.UNOPENED, latest, UNOPENED, action, said=said, pull=pull, managed=managed)
 
 
 def _decided(
-    kind: UpdateKind, move: str, words: str, answer: Answer, action: UpdateAction, approval: Approval, **of: Any
+    kind: UpdateKind, move: str, words: str, action: UpdateAction, approval: Approval, **of: Any
 ) -> UpdateState:
     """A state whose press runs while ``approval`` holds nothing back."""
 
-    if approval.held:
-        return UpdateState(
-            kind, move, words, answer, reason=approval.held, adopt=approval.adopt, standing=approval.standing, **of
-        )
-    return UpdateState(kind, move, words, answer, action, said=approval.said, standing=approval.standing, **of)
+    held = {"reason": approval.held, "adopt": approval.adopt} if approval.held else {"said": approval.said}
+    return UpdateState(kind, move, words, action, **held, **of)
 
 
 def of_app(repository: str, app: str) -> tuple[Container, ...]:
@@ -642,10 +560,12 @@ def _pinned_at_head(item: Container, repository: Any) -> ImageRef | None:
     return None
 
 
-def held_branch(repository: Any, app: str) -> Mapping[str, Any] | None:
-    """The branch Renovate holds on the Dependency Dashboard for ``app``, with no pull request."""
+def app_branch(repository: str, app: str) -> Branch | None:
+    """The branch of ``app``'s update the last run of ``repository`` reported:
+    the first whose upgrades change a file of the app's directory."""
 
-    return next((each for each in repository.held_branches or () if app in (each.get("apps") or ())), None)
+    run = last_run(repository)
+    return next((each for each in run.branches if any(_app(path) == app for path in each.files)), None) if run else None
 
 
 def _unmatched(item: Container) -> tuple[str, str] | None:

@@ -92,9 +92,10 @@ class SpeculativeRequestTests(TestCase):
             if response.status_code == 503:
                 refused.append(name)
 
-        # The exports record that they were taken: each is refused, unrecorded.
+        # The exports record that they were taken, and the live stream holds a
+        # connection open: each is refused, unrecorded.
         self.assertTrue(refused)
-        self.assertTrue(all(name.startswith(("reports:", "hq_api:")) for name in refused), refused)
+        self.assertTrue(all(name == "live" or name.startswith(("reports:", "hq_api:")) for name in refused), refused)
 
     def test_signing_out_is_refused_before_it_runs(self):
         operator(self.client)

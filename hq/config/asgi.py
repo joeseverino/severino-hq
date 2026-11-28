@@ -167,7 +167,8 @@ async def lifespan(_app):
     async with mcp_on_demand.running(), bridge_serving():
         with (
             # Derived answers asked again as their inputs change, so a
-            # request finds its answer stored.
+            # request finds its answer stored, and then the pages open on HQ
+            # told what changed (``core.live``).
             keeping(),
             doorbell.ringing_when_due(),
             # The identity provider's signing keys, read outside every request.

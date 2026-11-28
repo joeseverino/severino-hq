@@ -13,8 +13,10 @@ from django.utils.text import capfirst
 from hq.platform.application.card_items import Answer
 from hq.platform.application.display_words import Code
 from hq.platform.application.page_parts import html_attributes
+from hq.platform.application.tone import tone_of
 from hq.platform.core.part_examples import facts
 from hq.platform.core.template_parts import Option, Part, SlotsNode
+from hq.platform.core.templatetags.icon_tags import drawn
 from hq.platform.core.templatetags.line_breaks import code_breaks
 
 register = template.Library()
@@ -296,9 +298,9 @@ FACT = FactTakes(
         "cut_whole": Option(
             about="What the cut line's tip reads, where that is more than the line; the line by default."
         ),
-        "tone": Option(about="A status tone the fact is colored by, for what it means."),
+        "tone": Option(reads=tone_of, about="A status tone the fact is colored by, for what it means."),
         "zero": Option(about="Its value is nothing counted, drawn quiet."),
-        "icon": Option(about="The icon beside it."),
+        "icon": Option(reads=drawn, about="The icon beside it."),
         "drawing": Option(
             about=(
                 "What its value looks like, beside it: `Dots` for a part of a whole, `Trend` for a direction, "

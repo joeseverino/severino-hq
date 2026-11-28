@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -183,9 +184,14 @@ func TestPortainerRefusalsClassify(t *testing.T) {
 
 // The sweep leaves out the containers of hq-host's runs in flight, a deploy's
 // as well as its own, by the nonces root registered, so a container cannot
-// hide by wearing the label with a value of its choosing.
+// hide by wearing the label with a value of its choosing. A run that ended
+// between the list and the look at its nonce removed its container first, so
+// one Docker no longer has is left out, and one it still has is reported.
 func TestPortainerSweepSkipsOnlyHostRuns(t *testing.T) {
 	const pass, rehearsal, ended = "AAAAAAAAAAAAAAAAAAAAAAAAAA", "BBBBBBBBBBBBBBBBBBBBBBBBBB", "CCCCCCCCCCCCCCCCCCCCCCCCCC"
+	byID := func(id string) string {
+		return "/api/endpoints/1/docker/containers/json?all=1&filters=" + url.QueryEscape(`{"id":["`+id+`"]}`)
+	}
 	root := t.TempDir()
 	runs := filepath.Join(root, "runs")
 	for _, file := range []string{filepath.Join(runs, pass), filepath.Join(runs, rehearsal), filepath.Join(root, "beside")} {
@@ -203,8 +209,11 @@ func TestPortainerSweepSkipsOnlyHostRuns(t *testing.T) {
 			{"Id":"aaaaaaaaaaaaaaaa","Names":["/hq-controller"],"Labels":{"severino-hq.run":"` + pass + `"},"State":"running"},
 			{"Id":"bbbbbbbbbbbbbbbb","Names":["/severino-hq-rehearsal"],"Labels":{"severino-hq.run":"` + rehearsal + `"},"State":"running"},
 			{"Id":"dddddddddddddddd","Names":["/stranger"],"Labels":{"severino-hq.run":"` + ended + `"},"State":"running"},
+			{"Id":"ffffffffffffffff","Names":["/severino-hq-automation-x"],"Labels":{"severino-hq.run":"` + ended + `"},"State":"running"},
 			{"Id":"eeeeeeeeeeeeeeee","Names":["/climber"],"Labels":{"severino-hq.run":"../beside"},"State":"running"},
 			{"Id":"cccccccccccccccc","Names":["/web"],"State":"running"}]`,
+		byID("dddddddddddddddd"): `[{"Id":"dddddddddddddddd","Names":["/stranger"],"State":"running"}]`,
+		byID("ffffffffffffffff"): `[]`,
 	})
 	r := portainerRegistry(t, server.URL, runtime.Environment{Runs: runs})
 	records, err := r.portainerContainerRecords(t.Context())

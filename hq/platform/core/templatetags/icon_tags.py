@@ -4,10 +4,13 @@ name the sheet draws no symbol for, so no icon draws blank."""
 import re
 from functools import cache
 from pathlib import Path
+from typing import Annotated
 
 from django import template
 from django.contrib.staticfiles import finders
 from django.template import TemplateSyntaxError
+
+from hq.platform.core.template_literals import Reads, reading
 
 register = template.Library()
 
@@ -22,10 +25,17 @@ def symbols() -> frozenset[str]:
     return frozenset(re.findall(r'<symbol\s+id="([^"]+)"', drawn))
 
 
-@register.filter
-def symbol(name: str) -> str:
+def drawn(name: str) -> str:
     """``name``, when the sheet draws it."""
 
     if name not in symbols():
         raise TemplateSyntaxError(f"{name!r} is no symbol of {SHEET}: name one it draws, or draw it there.")
+    return name
+
+
+@register.filter
+@reading
+def symbol(name: Annotated[str, Reads(drawn)]) -> str:
+    """``name``, a symbol the sheet draws."""
+
     return name

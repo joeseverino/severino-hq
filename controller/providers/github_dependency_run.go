@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -39,17 +40,23 @@ var (
 	githubRunOwner      = api.MustPattern("GitHubDependencyRunRecord", "properties", "owner")
 	githubRunRepository = api.MustPattern("GitHubDependencyRunRecord", "properties", "repositories", "items")
 	githubRunOutcome    = api.MustPattern("GitHubDependencyRunRecord", "properties", "outcome")
+	githubRunBranch     = api.MustPattern("GitHubDependencyRunBranch", "properties", "branch")
+	githubRunResult     = api.MustPattern("GitHubDependencyRunBranch", "properties", "result")
+	githubRunBranches   = api.MustLimit("GitHubDependencyRunRecord", "properties", "branches", "maxItems")
+	githubRunFiles      = api.MustLimit("GitHubDependencyRunBranch", "properties", "files", "maxItems")
 )
 
 // GitHubDependencyRunRecord is one owner's run: handed off, or as root
-// reported it. ExitCode is null until the run has finished.
+// reported it, with each branch its report names. ExitCode is null until the
+// run has finished.
 type GitHubDependencyRunRecord struct {
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories"`
-	Outcome      string   `json:"outcome"`
-	ExitCode     *int     `json:"exit_code"`
-	StartedAt    string   `json:"started_at"`
-	FinishedAt   string   `json:"finished_at"`
+	Owner        string                      `json:"owner"`
+	Repositories []string                    `json:"repositories"`
+	Outcome      string                      `json:"outcome"`
+	ExitCode     *int                        `json:"exit_code"`
+	StartedAt    string                      `json:"started_at"`
+	FinishedAt   string                      `json:"finished_at"`
+	Branches     []DependencyRunResultBranch `json:"branches"`
 }
 
 // DependencyRunResult is what root reports of the last run.
@@ -61,10 +68,21 @@ type DependencyRunResult struct {
 }
 
 type DependencyRunResultRun struct {
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories"`
-	ExitCode     *int     `json:"exit_code"`
-	Outcome      string   `json:"outcome"`
+	Owner        string                      `json:"owner"`
+	Repositories []string                    `json:"repositories"`
+	ExitCode     *int                        `json:"exit_code"`
+	Outcome      string                      `json:"outcome"`
+	Branches     []DependencyRunResultBranch `json:"branches"`
+}
+
+// DependencyRunResultBranch is one branch as root reported the run's report
+// says it ended (host.BranchReport).
+type DependencyRunResultBranch struct {
+	Repository  string   `json:"repository"`
+	Branch      string   `json:"branch"`
+	Result      string   `json:"result"`
+	PullRequest *int     `json:"pull_request"`
+	Files       []string `json:"files"`
 }
 
 func (r *Registry) admitGitHubDependencyRun() {
@@ -93,7 +111,7 @@ func (r *Registry) githubDependencyRuns(ctx context.Context) ([]any, error) {
 		for _, run := range result.Runs {
 			records = append(records, GitHubDependencyRunRecord{
 				Owner: run.Owner, Repositories: run.Repositories, Outcome: run.Outcome, ExitCode: run.ExitCode,
-				StartedAt: result.StartedAt, FinishedAt: result.FinishedAt,
+				StartedAt: result.StartedAt, FinishedAt: result.FinishedAt, Branches: run.Branches,
 			})
 		}
 	}
@@ -123,11 +141,21 @@ func newerThan(started, held string) bool {
 }
 
 // checkDependencyPlan refuses a plan naming an owner or a repository that is
-// not GitHub's, or a repository under another owner: one token is one account.
+// not GitHub's, or a repository under another owner: one token is one
+// account. Branches are Renovate's for every repository it is given, so an
+// owner that names any names one repository.
 func checkDependencyPlan(plan runtime.DependencyUpdatesPlan) error {
 	for _, owner := range plan.Owners {
 		if err := checkRunRepositories(owner.Owner, owner.Repositories); err != nil {
 			return err
+		}
+		if len(owner.Branches) > 0 && len(owner.Repositories) != 1 {
+			return &ProviderError{Message: owner.Owner + " names branches across more than one repository"}
+		}
+		for _, branch := range owner.Branches {
+			if !githubRunBranch.MatchString(branch) || strings.Contains(branch, "..") {
+				return &ProviderError{Message: fmt.Sprintf("%q is not a branch Renovate names", branch)}
+			}
 		}
 	}
 	return nil
@@ -172,7 +200,7 @@ func (r *Registry) handOffDependencyRuns(ctx context.Context, plan runtime.Depen
 	}
 	records := make([]GitHubDependencyRunRecord, len(handed))
 	for i, owner := range handed {
-		records[i] = GitHubDependencyRunRecord{Owner: owner.Owner, Repositories: owner.Repositories, Outcome: dependencyHandedOff, StartedAt: started}
+		records[i] = GitHubDependencyRunRecord{Owner: owner.Owner, Repositories: owner.Repositories, Outcome: dependencyHandedOff, StartedAt: started, Branches: []DependencyRunResultBranch{}}
 	}
 	return records, nil
 }
@@ -219,10 +247,26 @@ func parseDependencyRunResult(data []byte) (*DependencyRunResult, error) {
 	}
 	for _, run := range result.Runs {
 		finishedRun := run.Outcome != dependencyHandedOff && githubRunOutcome.MatchString(run.Outcome)
-		if checkRunRepositories(run.Owner, run.Repositories) != nil || run.ExitCode == nil || !finishedRun {
+		if checkRunRepositories(run.Owner, run.Repositories) != nil || run.ExitCode == nil || !finishedRun || !reportedBranches(run) {
 			return nil, errDependencyResult
 		}
 	}
 	result.StartedAt, result.FinishedAt = started.UTC().Format(time.RFC3339), finished.UTC().Format(time.RFC3339)
 	return &result, nil
+}
+
+// reportedBranches is whether each branch run reports is one of its
+// repositories', in the shape the record holds, within the record's bounds.
+func reportedBranches(run DependencyRunResultRun) bool {
+	if run.Branches == nil || len(run.Branches) > githubRunBranches {
+		return false
+	}
+	for _, branch := range run.Branches {
+		ours := slices.ContainsFunc(run.Repositories, func(name string) bool { return strings.EqualFold(name, branch.Repository) })
+		shaped := githubRunBranch.MatchString(branch.Branch) && githubRunResult.MatchString(branch.Result) && branch.Files != nil && len(branch.Files) <= githubRunFiles
+		if !ours || !shaped || (branch.PullRequest != nil && *branch.PullRequest < 1) {
+			return false
+		}
+	}
+	return true
 }

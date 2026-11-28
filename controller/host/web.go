@@ -1,11 +1,28 @@
 package host
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"path/filepath"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 )
+
+// askHQ runs `hq-controller` with args in the running web container, the
+// host's way to ask HQ something before it starts a container of its own,
+// and decodes its answer into answer.
+func (m *Machine) askHQ(ctx context.Context, answer any, args ...string) error {
+	ask, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	out, err := m.Command(ask, "docker", append([]string{"exec", hostcore.Container, "hq-controller"}, args...)...).Output()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, bytes.TrimSpace(out))
+	}
+	return json.Unmarshal(out, answer)
+}
 
 // Web is the web container as the host runs it. Everything about how it is
 // run is here, in one typed place: the unit runs `hq-host run-web`, which

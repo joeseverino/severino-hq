@@ -7,19 +7,16 @@ words (``moments.when``, ``ui.MISSING``, a count, a name). How a refusal is
 answered in each setting: docs/Plugins.md#what-a-template-prints.
 """
 
-import logging
 from enum import Enum
 from numbers import Number
 from pathlib import PurePath
 from typing import Any
 from uuid import UUID
 
-from django.conf import settings
 from django.utils.functional import Promise
 
+from . import display_words
 from .ui import MISSING, ended
-
-logger = logging.getLogger("severino.print")
 
 
 class Unprintable(TypeError):
@@ -48,9 +45,7 @@ def refused(reason: str, where: str) -> str:
     raises ``Unprintable`` instead where strict printing holds."""
 
     said = f"{where} printed {ended(reason)} A page shows text or a number: say it in words where it is built."
-    if settings.SEVERINO_STRICT_PRINT:
-        raise Unprintable(said)
-    logger.error(said, extra={"event": "print.refused"})
+    display_words.refused(said, said, Unprintable)
     # Text, not markup: the value may stand in an attribute.
     return MISSING
 

@@ -316,11 +316,13 @@ func (c *Controller) readKind(ctx context.Context, reader Reader) runtime.KindRe
 }
 
 // Inventory is everything each provider holds; with only, just those kinds,
-// and each of carry reported as carried, as a reader not due reports itself.
+// and each of carry reported as carried, as a reader not due reports itself;
+// told is what of each kind the pass was asked for (runtime.Told).
 // Providers are read at once, one provider's kinds in turn, so a credential it
 // refuses is refused once and not by every kind asking at the same moment.
 // An unreachable provider reports as unreachable rather than failing the sweep.
-func (c *Controller) Inventory(ctx context.Context, only, carry []runtime.ResourceKind) (runtime.Inventory, error) {
+func (c *Controller) Inventory(ctx context.Context, only, carry []runtime.ResourceKind, told []runtime.ForcedRead) (runtime.Inventory, error) {
+	c.told = told
 	wantedOnly := map[string]bool{}
 	for _, kind := range only {
 		wantedOnly[string(kind)] = true

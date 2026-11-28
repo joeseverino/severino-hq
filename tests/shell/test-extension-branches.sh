@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Prove a pull request's extensions are checked out at their coordinated
-# commit or their default branch with no .git, that only the extensions a
-# coordinated branch carries at their listed path are built, and that the
-# public log names none of them.
+# commit or their default branch with no .git, that every extension the set
+# lists is built from its listed path, and that the public log names none of
+# them.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -39,13 +39,14 @@ STUB
 cat >"$bin/docker" <<'STUB'
 #!/usr/bin/env bash
 echo "docker $*" >>"$TEST_CALLS"
-out="" package="${*: -1}"
+out="" src="" package="${*: -1}"
 while [ "$#" -gt 0 ]; do
-  case "$1" in --volume) case "$2" in *:/out) out=${2%:/out} ;; esac; shift ;; esac
+  case "$1" in --volume) case "$2" in *:/out) out=${2%:/out} ;; *:/src) src=${2%:/src} ;; esac; shift ;; esac
   shift
 done
 case " $TEST_BROKEN " in *" ${package#/src/} "*) echo "building $package failed"; exit 1 ;; esac
-touch "$out/${package##*/}-1.0-py3-none-any.whl"
+name=${package##*/}; [ "$name" != . ] || name=${src##*/}
+touch "$out/$name-1.0-py3-none-any.whl"
 STUB
 chmod +x "$bin/gh" "$bin/git" "$bin/docker"
 
@@ -65,7 +66,7 @@ branches() {
     "$repo_dir/tools/pipeline/extension-branches.sh" checkout ../set.json ../coordinated.txt &&
     PATH="$bin:$PATH" PYTHONPATH="$repo_dir" TEST_CALLS="$work/calls" WITHHELD_DIR="$work/withheld" \
     TEST_BROKEN="${BROKEN-}" \
-    "$repo_dir/tools/pipeline/extension-branches.sh" build ../set.json ../coordinated.txt example-installer:test) \
+    "$repo_dir/tools/pipeline/extension-branches.sh" build ../set.json example-installer:test) \
     >"$work/out" 2>&1
 }
 fail() { echo "$1" >&2; cat "$work/out" "$work/calls" >&2; exit 1; }
@@ -82,8 +83,8 @@ branches || fail "a coordinated branch did not check out and build"
   fail "only the coordinated repository is not moved to its coordinated commit"
 { [ ! -e "$work/run/extensions/extensions/.git" ] && [ ! -e "$work/run/extensions/gamma/.git" ]; } ||
   fail "a checked-out extension kept its .git"
-[ "$(cd "$work/run/candidate-wheels" && ls)" = "$(printf '%s\n' alpha-1.0-py3-none-any.whl beta-1.0-py3-none-any.whl)" ] ||
-  fail "the coordinated repository's extensions were not each built from their path"
+[ "$(cd "$work/run/candidate-wheels" && ls)" = "$(printf '%s\n' alpha beta gamma | sed 's/$/-1.0-py3-none-any.whl/' | sort)" ] ||
+  fail "every listed extension was not built from its path"
 grep -q 'example-installer:test' "$work/calls" || fail "a branch was built outside the installer"
 ! grep -q -e 'GH_TOKEN' -e 'docker.sock' "$work/calls" || fail "a branch build was handed a credential"
 quiet "a coordinated build"
@@ -91,7 +92,7 @@ quiet "a coordinated build"
 if PACKAGES="example/extensions:alpha:example.alpha example/extensions:beta:example.delta example/gamma:.:example.gamma" branches; then
   fail "a branch carrying another extension at a listed path was built"
 fi
-grep -q '::error title=Coordinated branch did not build::' "$work/out" || fail "a wrong extension at a path did not fail with an error"
+grep -q '::error title=Extension did not build::' "$work/out" || fail "a wrong extension at a path did not fail with an error"
 quiet "a wrong extension at a path"
 
 if BROKEN="beta" branches; then fail "a branch that does not build was composed"; fi
@@ -105,5 +106,5 @@ quiet "a failed clone"
 
 : >"$work/coordinated.txt"
 branches || fail "extensions with no coordinated branch did not check out"
-! grep -q -e '^git ' -e '^docker ' "$work/calls" || fail "an extension with no coordinated branch was moved or built"
+! grep -q '^git ' "$work/calls" || fail "an extension with no coordinated branch was moved"
 echo "extension branch tests passed"

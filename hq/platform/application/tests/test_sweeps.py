@@ -61,9 +61,16 @@ class SweepTests(TestCase):
         for name in self.PAGES:
             self.assertEqual(self.client.get(reverse(name)).status_code, 200, name)
 
+    def _kept(self, write) -> None:
+        """``write``, then the pass the keeper of derived answers makes for it."""
+
+        keeper = ahead.Keeper()
+        keeper.turn()
+        write()
+        keeper.turn()
+
     def _swept(self) -> None:
-        with ahead.keeping(inline=True), self.captureOnCommitCallbacks(execute=True):
-            unchanged_sweep()
+        self._kept(unchanged_sweep)
 
     def test_the_sweep_moves_what_the_estate_is_keyed_on(self):
         self._load()
@@ -131,8 +138,7 @@ class SweepTests(TestCase):
         row = ProviderInventory.objects.exclude(records=[]).order_by("kind").first()
         before = self.client.get(reverse("control_plane:findings")).content
 
-        with ahead.keeping(inline=True), self.captureOnCommitCallbacks(execute=True):
-            ProviderInventory.objects.filter(pk=row.pk).update(reachable=False, error="refused")
+        self._kept(lambda: ProviderInventory.objects.filter(pk=row.pk).update(reachable=False, error="refused"))
 
         with counting() as (ran, _served):
             after = self.client.get(reverse("control_plane:findings")).content

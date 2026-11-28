@@ -8,7 +8,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.markup_testing import hrefs, select, text
+from hq.platform.application.markup_testing import followed, hrefs, select, text
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
@@ -245,10 +245,10 @@ class PageTests(TestCase):
             reverse("watching_refresh"), form_keyed(), headers={"x-requested-with": "XMLHttpRequest"}
         )
 
-        self.assertEqual(response.status_code, 202)
-        answer = response.json()
-        self.assertEqual((answer["state"], answer["live"]), ("queued", True))
-        self.assertEqual(self.client.get(answer["status"]).json()["state"], "queued")
+        self.assertRedirects(response, reverse("watching"), fetch_redirect_response=False)
+        page = self.client.get(reverse("watching"))
+        self.assertEqual(followed(page), ["estate"])
+        self.assertTrue(select(page, "data-ask-state", "queued"))
         # The reading is as it was: nothing was read in the request.
         self.assertEqual(github_profile.profile("example-user")["followers"], 3)
 
@@ -291,24 +291,22 @@ class PageTests(TestCase):
 
         self.assertRedirects(response, reverse("watching"))
         self.assertIn(command_spec(github_profile.READ_NOW).requested("@example-user"), text(response))
-        self.assertContains(response, "data-ask-status=")
+        self.assertEqual(followed(response), ["estate"])
         self.assertTrue(select(response, "aria-disabled", "true"))
         self.assertContains(response, REFRESHING)
 
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
         hold()
-        status = self.client.post(
-            reverse("watching_refresh"), form_keyed(), headers={"x-requested-with": "XMLHttpRequest"}
-        ).json()["status"]
+        self.client.post(reverse("watching_refresh"), form_keyed(), headers={"x-requested-with": "XMLHttpRequest"})
 
         hold({**PROFILE, "followers": 4})
-        self.assertEqual(self.client.get(status).json()["state"], "done")
-        self.assertNotContains(self.client.get(reverse("watching")), "data-ask-status=")
+        self.assertEqual(followed(self.client.get(reverse("watching"))), [])
 
         hold(reachable=False, error="GitHub profile: provider answered 502")
-        failed = self.client.get(status).json()
-        self.assertEqual((failed["state"], failed["note"]), ("failed", "GitHub profile: provider answered 502"))
+        page = self.client.get(reverse("watching"))
+        self.assertTrue(select(page, "data-ask-state", "failed"))
+        self.assertContains(page, "GitHub profile: provider answered 502")
 
     def test_the_account_a_sign_in_names_is_read_once_a_page(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
@@ -319,9 +317,6 @@ class PageTests(TestCase):
             self.assertEqual(self.client.get(reverse("watching")).status_code, 200)
 
         self.assertEqual(sum(f'FROM "{table}"' in query["sql"] for query in captured.captured_queries), 1)
-
-    def test_a_status_hq_did_not_sign_is_not_found(self):
-        self.assertEqual(self.client.get(reverse("control_plane:read_status"), {"watch": "forged"}).status_code, 404)
 
     def test_it_is_clearly_your_profile(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")

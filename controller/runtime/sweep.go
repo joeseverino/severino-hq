@@ -21,7 +21,11 @@ func (w *Worker) sweep(ctx context.Context) error {
 	if len(verdict.OnlyKinds) == 0 || slices.ContainsFunc(verdict.Forced, func(read ForcedRead) bool { return read.ConnectionRef != "" }) {
 		w.connections(ctx, verdict.Carry)
 	}
-	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds, verdict.CarryKinds)
+	var told []ForcedRead
+	if len(verdict.OnlyKinds) != 0 {
+		told = verdict.Forced
+	}
+	inventory, err := w.Providers.Inventory(ctx, verdict.OnlyKinds, verdict.CarryKinds, told)
 	if err != nil {
 		return err
 	}
@@ -41,6 +45,23 @@ func (w *Worker) sweep(ctx context.Context) error {
 	}
 	w.post("analytics", w.Bridge.Analytics(ctx, w.ID, readings))
 	return nil
+}
+
+// Told is what of kind a pass told forced was asked for, as its provider
+// names each (a repository), or nil for all of it: a pass due on its own
+// clock, or one a read of the whole kind forces.
+func Told(forced []ForcedRead, kind ResourceKind) []string {
+	var told []string
+	for _, read := range forced {
+		if read.Kinds != nil && !slices.Contains(read.Kinds, kind) {
+			continue
+		}
+		if read.Subject == "" {
+			return nil
+		}
+		told = append(told, read.Subject)
+	}
+	return told
 }
 
 // connections probes every connection, but the carried, and tells HQ.

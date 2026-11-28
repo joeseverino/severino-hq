@@ -88,6 +88,49 @@
         }
       }
     },
+    "/waiting": {
+      "post": {
+        "operationId": "waiting",
+        "summary": "Name which of the host's worker profiles have queued work their claim would take.",
+        "x-bridge-action": "waiting",
+        "parameters": [
+          {
+            "name": "profile",
+            "in": "query",
+            "required": false,
+            "description": "A privilege profile the host runs a playbook worker for.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Waiting"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/peek": {
       "post": {
         "operationId": "peek",
@@ -401,6 +444,35 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SweepVerdict"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pass-due": {
+      "post": {
+        "operationId": "pass-due",
+        "summary": "Say whether a controller pass would find anything to do now, and why.",
+        "x-bridge-action": "pass-due",
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PassDue"
                 }
               }
             }
@@ -1233,6 +1305,11 @@
           "message": {
             "type": "string",
             "maxLength": 500
+          },
+          "warnings": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none."
           }
         },
         "additionalProperties": false,
@@ -1240,7 +1317,8 @@
           "host",
           "task",
           "outcome",
-          "message"
+          "message",
+          "warnings"
         ],
         "description": "One task on one machine: started while it is under way, else how it ended."
       },
@@ -1747,6 +1825,11 @@
           "kind": {
             "$ref": "#/components/schemas/ResourceKind"
           },
+          "subject": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "What of the kind is to be read, as its provider names it, such as a repository; empty is all of it."
+          },
           "requested_at": {
             "type": "string",
             "format": "date-time"
@@ -1765,6 +1848,7 @@
         "required": [
           "connection_ref",
           "kind",
+          "subject",
           "requested_at",
           "kinds"
         ],
@@ -2479,12 +2563,21 @@
               "type": "string"
             },
             "description": "Repositories as owner/name, lower-cased, as GitHubDependencyRunRecord's repositories."
+          },
+          "branches": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "The branches Renovate is to open, as if their boxes on the Dependency Dashboard were ticked (its checkedBranches), each as GitHubDependencyRunRecord's branches name one, in the one repository a run that names any covers; empty for a run of every repository named."
           }
         },
         "additionalProperties": false,
         "required": [
           "owner",
-          "repositories"
+          "repositories",
+          "branches"
         ]
       },
       "TLSCertificateDomain": {
@@ -2834,7 +2927,7 @@
       "InboundArrival": {
         "type": "object",
         "additionalProperties": false,
-        "description": "One event by its name alone: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; and when it arrived.",
+        "description": "One event by its names: the provider's event, and its action after a dot; what it is about; the sender's delivery ID, which a repeat keeps; when it arrived; and, for an event its declaration gives one, its fact: the text at each of the declaration's pointers into the signed body, never the body.",
         "required": [
           "provider",
           "event",
@@ -2860,6 +2953,69 @@
           "received_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "about": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "What the fact is about, such as the commit a check ran on."
+          },
+          "said_at": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "When the body says the fact was said, in the provider's words."
+          },
+          "fact": {
+            "type": "object",
+            "maxProperties": 12,
+            "propertyNames": {
+              "maxLength": 64
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 512
+            },
+            "description": "Each value of the fact, by its field."
+          }
+        }
+      },
+      "Waiting": {
+        "type": "object",
+        "description": "The profiles asked about that have queued work, in the order asked.",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "profiles"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "profiles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PassDue": {
+        "type": "object",
+        "description": "Whether a controller pass is due, and why; the reason is empty when none is.",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "due",
+          "reason"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "due": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
           }
         }
       }

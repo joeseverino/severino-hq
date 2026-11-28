@@ -6,6 +6,7 @@ much work has run.
 """
 
 import json
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -26,15 +27,15 @@ lazy from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
 lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
-from .automation_runs import capability_name, run_title
+from .automation_runs import CHECK, capability_name, run_title
 from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
 from .quoted import Quoted
-from .routes import reverse
 from .tone import Tone, Toned
+from .ui import counted
+lazy from . import automation_adoption
 lazy from .app_update_approval import PULLED, PULLED_KIND, RECEIPT, RECEIPT_KIND
-lazy from .automation_adoption import playbook_titles
 lazy from .automation_runs import run_profile
 lazy from .cadence import automation_standing
 lazy from .containers import stacks
@@ -196,17 +197,45 @@ class RunEvidence:
 
         return tuple(_worded(str(each["kind"]), str(each["host"]), each["records"]) for each in self.stated)
 
-    @property
-    def amiss(self) -> tuple[tuple[str, Tone], ...]:
-        """Each record of its readings whose kind says it in a tone to act on,
-        said in a line, with that tone."""
-
+    def _toned(self, *tones: Tone) -> tuple[tuple[str, Tone], ...]:
         return tuple(
             (dotted(title, said), Tone(tone))
             for reading in self.readings
             for title, said, tone in reading.records
-            if tone in (Tone.ATTENTION, Tone.SERIOUS)
+            if tone in tones
         )
+
+    @property
+    def amiss(self) -> tuple[tuple[str, Tone], ...]:
+        """Each record of its readings whose kind says it in a tone to act on,
+        then each task's warnings, said in a line, with that tone."""
+
+        warned = tuple(
+            (dotted(str(event.get("task") or ""), str(event["warnings"])), Tone.ATTENTION)
+            for event in self.events
+            if event.get("warnings")
+        )
+        return self._toned(Tone.ATTENTION, Tone.SERIOUS) + warned
+
+    @property
+    def told(self) -> str:
+        """What its readings say it did, in a line: each record to act on,
+        else each its kind says in a good tone; "" where none says either."""
+
+        return "; ".join(line for line, _tone in self.amiss or self._toned(Tone.GOOD))
+
+    @property
+    def tallied(self) -> str:
+        """How its tasks ended, counted by outcome ("4 tasks: 2 ok and 2
+        skipped"); "" with none ended."""
+
+        counts = Counter(str(event.get("outcome") or "") for event in self.events)
+        ended = [(each, counts[each]) for each in TaskOutcome if each != TaskOutcome.STARTED and counts[each]]
+        if len(ended) == 1:
+            ((outcome, count),) = ended
+            return f"{counted(count, 'task')} {outcome}"
+        said = get_text_list([f"{count} {outcome}" for outcome, count in ended], "and")
+        return f"{counted(sum(count for _outcome, count in ended), 'task')}: {said}" if ended else ""
 
     @property
     def raw_readings(self) -> str:
@@ -346,36 +375,27 @@ def _job_title() -> Case:
 
 
 def _run_title() -> Collate:
-    """The run's playbook by its title, ``run_title`` of a procedure no longer
-    adopted, or any other operation's action in words (a scan's among them),
-    as SQL. Case-blind, so the list sorts by it as it reads."""
+    """``run_title`` of a run, a preview's included, or any other operation's
+    action in words (a scan's among them), as SQL. Case-blind, so the list
+    sorts by it as it reads."""
 
-    operation = KT("input__operation")
-    titled = (
-        When(Exact(operation, Value(playbook)), then=Value(title))
-        for playbook, title in playbook_titles().items()
-        if title
-    )
-    unadopted = Concat(Value(run_title("", {})), operation, output_field=CharField())
-    run = Case(
-        *titled,
-        default=unadopted,
-        output_field=CharField(),
-    )
+    operation, titles = KT("input__operation"), automation_adoption.playbook_titles()
+
+    def runs(check: bool) -> Case:
+        titled = (
+            When(Exact(operation, Value(playbook)), then=Value(run_title(playbook, titles, check=check)))
+            for playbook in titles
+        )
+        unadopted = Concat(Value(run_title("", {}, check=check)), operation, output_field=CharField())
+        return Case(*titled, default=unadopted, output_field=CharField())
+
+    run = Case(When(Q(**{f"input__{CHECK}": True}), then=runs(True)), default=runs(False), output_field=CharField())
     acted = (
         When(action=action, then=Value(action.label))
         for action in OperationRequest.Action
         if action != OperationRequest.Action.RUN
     )
     return Collate(Case(*acted, default=run, output_field=CharField()), "NOCASE")
-
-
-def _shown_title(kind: str, title: str) -> str:
-    """The work ``kind`` names as a page draws it: its playbook's title as the
-    author wrote it (``quoted.Quoted``), which SQL's copy of it
-    (``_run_title``) is not; else ``title``."""
-
-    return playbook_titles().get(operation_of(kind)) or title
 
 
 def _run_kind() -> Case:
@@ -469,9 +489,10 @@ def _kinds() -> list[WorkKind]:
         .values_list("named", "title", "seen")
         .order_by()
     )
+    titles = automation_adoption.playbook_titles()
     # Two runs of a kind made in the same instant are both its latest; one names it.
     latest = {
-        named: WorkKind(named, _shown_title(named, title), seen)
+        named: WorkKind(named, run_title(operation, titles) if (operation := operation_of(named)) else title, seen)
         for named, title, seen in jobs.union(runs, all=True).order_by()
     }
     return sorted(latest.values(), key=lambda found: found.title.casefold())
@@ -542,12 +563,6 @@ def run_row(operation: OperationRequest) -> WorkRun:
     """One operation, read again, as the row every list of work draws."""
 
     return run_rows(seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")))[0]
-
-
-def run_status_url(operation_id: str) -> str:
-    """Where a page follows the run or scan ``operation_id`` (``standing_of``)."""
-
-    return reverse("jobs:run_status", args=[operation_id])
 
 
 def run_hosts() -> list[str]:
@@ -698,7 +713,9 @@ def held_note(handoff: Mapping[str, str], since: datetime | None) -> str:
         if (here.name, subject) in stack:
             action = event.removeprefix(prefix)
             done.setdefault(subject, []).append(_CONTAINER_CHANGES.get(action, action))
-    return dotted(f"Waiting on {waits}", *(f"{name}: {', '.join(said)}" for name, said in done.items()))
+    return dotted(
+        f"Waiting on {waits}", *(f"{name} so far: {get_text_list(said, 'and')}" for name, said in done.items())
+    )
 
 
 def _run_row(
@@ -723,11 +740,27 @@ def _run_row(
     )
     started, finished = operation.claimed_at, operation.completed_at
     held = claimed and HANDOFF in result
+    evidence = RunEvidence(
+        hosts=tuple(asked.get("hosts") or ()),
+        correlation=str(asked.get("correlation") or ""),
+        worker=operation.claimed_by if claimed else "",
+        lease_until=operation.lease_expires_at if claimed else None,
+        attempts=operation.attempt_count,
+        events=run_events(result),
+        stated=stated_readings(result),
+        expected=str(status.get("expected_fingerprint_sha256") or ""),
+        consumers=tuple(status.get("consumers") or ()),
+        # A run or a scan has a page of its own, where its record is.
+        raw=""
+        if operation.action in _LISTED or not result
+        else json.dumps(shown_result(result), indent=2, sort_keys=True, default=str),
+    )
     return WorkRun(
         source=RUN,
         id=str(operation.pk),
-        title=_shown_title(kind := _kind_of(operation.action, str(asked.get("operation") or "")), title),
-        kind=kind,
+        # As the author wrote it (``quoted.Quoted``), which SQL's copy is not.
+        title=str(operation) if operation.action == OperationRequest.Action.RUN else title,
+        kind=_kind_of(operation.action, str(asked.get("operation") or "")),
         state=seen.value,
         word=word,
         tone=tone,
@@ -741,28 +774,14 @@ def _run_row(
         if lapsed
         else ""
         if operation.state in UNENDED
-        else _said(operation, problem),
+        else _said(operation, problem, evidence),
         by=by,
         created_at=operation.created_at,
         started=started,
         finished=finished,
         # A lapsed run was last heard from when its lease ran out.
         duration=_seconds(started, finished or (operation.lease_expires_at if lapsed else now)),
-        evidence=RunEvidence(
-            hosts=tuple(asked.get("hosts") or ()),
-            correlation=str(asked.get("correlation") or ""),
-            worker=operation.claimed_by if claimed else "",
-            lease_until=operation.lease_expires_at if claimed else None,
-            attempts=operation.attempt_count,
-            events=run_events(result),
-            stated=stated_readings(result),
-            expected=str(status.get("expected_fingerprint_sha256") or ""),
-            consumers=tuple(status.get("consumers") or ()),
-            # A run or a scan has a page of its own, where its record is.
-            raw=""
-            if operation.action in _LISTED or not result
-            else json.dumps(shown_result(result), indent=2, sort_keys=True, default=str),
-        ),
+        evidence=evidence,
         effect=str((operation.resource.spec or {}).get("effect", "")),
     )
 
@@ -774,16 +793,20 @@ def _kind_of(action: str, procedure: str) -> str:
     return capability_name(procedure) if action == OperationRequest.Action.RUN else action
 
 
-def _said(operation: OperationRequest, problem: dict[str, Any] | None) -> str:
+def _said(operation: OperationRequest, problem: dict[str, Any] | None, evidence: RunEvidence) -> str:
     """How an ended operation went, in a sentence: the condition that says
-    what went wrong before its own message."""
+    what went wrong before its own message; one that ended well says what
+    its readings say it did, else the result its playbook stated, else how
+    its tasks ended."""
 
     result = operation.result or {}
-    said = result.get("message") or operation.reason
+    said = result.get("message") or ""
     if operation.state == OperationState.FAILED:
         active = holding(result.get("conditions"))
-        return Quoted((active[0].get("message") if active else "") or said)
-    return Quoted((problem.get("message") if problem else "") or said)
+        return Quoted((active[0].get("message") if active else "") or said or operation.reason)
+    if problem:
+        return Quoted(problem.get("message") or said or operation.reason)
+    return evidence.told or Quoted(said) or evidence.tallied or Quoted(operation.reason)
 
 
 def shown_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -795,9 +818,13 @@ def shown_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
-    """A run's tasks so far from its result, in the order they started, each in its outcome's tone."""
+    """A run's tasks so far from its result, in the order they started, each in its outcome's tone,
+    with no warnings where its worker reported none."""
 
-    return tuple({**event, "tone": outcome_tone(event.get("outcome", ""))} for event in result.get(RUN_EVENTS) or ())
+    return tuple(
+        {"warnings": "", **event, "tone": outcome_tone(event.get("outcome", ""))}
+        for event in result.get(RUN_EVENTS) or ()
+    )
 
 
 def stated_readings(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:

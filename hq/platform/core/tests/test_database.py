@@ -1,14 +1,14 @@
-"""SQLite refreshes its planner statistics after a migration and nightly, never on a request."""
+"""SQLite's one write lock: refreshed statistics, turns between writers, and a lock taken only to write."""
 
 import threading
 import time
 from unittest.mock import patch
 
-from django.db import connection, transaction
+from django.db import OperationalError, connection, transaction
 from django.test import TestCase, TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 
-from hq.platform.core import database
+from hq.platform.core import bindings, database
 from hq.platform.core.models import AuditLog
 
 
@@ -59,3 +59,69 @@ class GivesWayTests(TransactionTestCase):
 
         # Within two turns of the importer's writing, however long its commits take.
         self.assertLessEqual(landed, 2 * database.HOLDS / held)
+
+
+def another_writer() -> str:
+    """What a write from another connection that will not wait answers: "wrote", or its error."""
+
+    answered = []
+
+    def write():
+        try:
+            with database.without_waiting():
+                AuditLog.objects.create(action="updated", object_type="report", message="another writer")
+            answered.append("wrote")
+        except OperationalError as exc:
+            answered.append(str(exc))
+        finally:
+            connection.close()
+
+    writer = threading.Thread(target=write)
+    writer.start()
+    writer.join()
+    return answered[0]
+
+
+class WriteLockTests(TransactionTestCase):
+    """A serialized transaction holds the write lock from its first write, and
+    never commits a decision another writer's commit made stale."""
+
+    def written(self) -> list[str]:
+        return list(AuditLog.objects.filter(object_type="example").values_list("message", flat=True))
+
+    def test_reading_holds_no_writer_back_and_a_decision_it_made_stale_runs_again(self):
+        seen, after = [], []
+
+        def work():
+            with transaction.atomic():
+                seen.append(AuditLog.objects.filter(object_type="report").count())
+            if len(seen) == 1:
+                self.assertEqual(another_writer(), "wrote")
+            AuditLog.objects.create(action="created", object_type="example", message=f"saw {seen[-1]}")
+            after.append(another_writer())
+
+        database.serialized(work)
+        self.assertEqual(seen, [0, 1])
+        self.assertEqual(self.written(), ["saw 1"])
+        self.assertIn("database is locked", after[-1])
+
+    def test_a_statement_holds_the_lock_only_when_it_writes(self):
+        statements = {
+            "WITH seen AS (SELECT 'delete' AS word) SELECT word FROM seen": False,
+            'WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 3) SELECT "i" FROM n': False,
+            "WITH seen AS (SELECT 1 AS i) INSERT INTO core_auditlog (action) SELECT 'x' FROM seen WHERE 0": True,
+            "UPDATE core_auditlog SET message = '' WHERE 0": True,
+        }
+        for sql, held in statements.items():
+            with self.subTest(sql=sql), connection.optimistically(), transaction.atomic():
+                connection.cursor().execute(sql)
+                self.assertEqual(database.holds_write_lock(), held)
+
+    def test_a_writer_that_gives_up_names_what_holds_the_lock(self):
+        with (
+            bindings.operation_context(interface="web", actor="example", operation="example.slow"),
+            transaction.atomic(),
+        ):
+            refused = another_writer()
+        self.assertIn("database is locked", refused)
+        self.assertIn("example.slow", refused)

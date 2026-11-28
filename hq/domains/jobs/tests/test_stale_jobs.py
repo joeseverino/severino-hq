@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from hq.platform.application import request_context
 from hq.platform.application.markup_testing import text
+from hq.platform.application.work_runs import job_run, standing_of
 from hq.platform.core.bindings import operation_context
 from hq.platform.core.models import AuditLog
 from hq.platform.core.testing import operator
@@ -50,9 +51,9 @@ class StaleJobPageTests(TestCase):
     def test_its_status_says_it_stopped_without_writing(self):
         before = AuditLog.objects.count()
 
-        payload = self.client.get(reverse("jobs:status", args=[self.job.pk])).json()
+        standing = standing_of(job_run(self.job))
 
-        self.assertEqual((payload["state"], payload["live"], payload["label"]), ("failed", False, Job.State.LOST.label))
+        self.assertEqual((standing.state, standing.live, standing.label), ("failed", False, Job.State.LOST.label))
         self.assertUnchanged(before)
 
 

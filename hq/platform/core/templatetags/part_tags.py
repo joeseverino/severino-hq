@@ -15,7 +15,8 @@ from django.utils.safestring import mark_safe
 
 from hq.platform.application.page_parts import LAST_LEVEL, SECTION_PARTIAL, TOP_LEVEL, SectionPart
 from hq.platform.core.part_examples import section
-from hq.platform.core.template_parts import Option, Part, choices_of
+from hq.platform.core.template_literals import choices_of
+from hq.platform.core.template_parts import Option, Part
 
 register = template.Library()
 
@@ -83,7 +84,9 @@ def _section() -> Part:
         region refreshed in place).
 
         `fold=True` draws it closed with its head as its toggle (`open`, any truthy value such as a form's
-        errors, starts it open), its count beside it; never a separate "Show all". What it holds sits on
+        errors, starts it open), its count beside it; never a separate "Show all". With `line=True` it is
+        a fold inside another part's line (a step's checks): its heading and aside the one summary line,
+        its body under it, with no heading element and no frame. What it holds sits on
         a panel like its neighbors: a fold of one table has the table's region, and any other fold is a
         folded section, its body in the section's frame. `css` and `data_*` are the section's, on a
         landmark that never pads itself, whatever `css` names: the frame holds the padding.
@@ -130,6 +133,7 @@ SECTION = _section()
 class SectionNode(TagHelperNode):
     def __init__(self, args, kwargs, parts: dict[str, template.NodeList]) -> None:
         super().__init__(SECTION, takes_context=False, args=args, kwargs=kwargs)
+        SECTION.compiled(kwargs)
         self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
         for name, nodelist in parts.items():
             setattr(self, f"nodelist_{name}", nodelist)

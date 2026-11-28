@@ -267,10 +267,16 @@ UPDATES = {
 }
 
 
-def updates_out():
-    """The registries with a newer release of each app in ``UPDATES``."""
+# A release between what runs and the newest of ``UPDATES``, so a container
+# stands more than one release behind.
+BETWEEN = {"adguard": "v0.107.56"}
 
-    _registries(UPDATES)
+
+def updates_out():
+    """The registries with a newer release of each app in ``UPDATES``, and
+    of each in ``BETWEEN`` one before it."""
+
+    _registries(UPDATES, between=BETWEEN)
 
 
 def images_left():
@@ -300,11 +306,11 @@ def advised():
     _registries(ADVISED_NEWER, ADVISED)
 
 
-def _registries(newer=NEWER, advisories=None):
+def _registries(newer=NEWER, advisories=None, between=None):
     """Each image as its registry publishes it, its source's releases, what its
     publisher attached to each digest it publishes, and those packages checked.
     What runs was released three weeks ago; a newer release, where there is
-    one, four days ago."""
+    one, four days ago, and one ``between`` them eleven days ago."""
 
     published, upstreams, attested, checked = [], [], [], []
     for name, _port, image in CONTAINERS:
@@ -313,6 +319,8 @@ def _registries(newer=NEWER, advisories=None):
         ref = _ref(image)
         source = SOURCES[name]
         releases = {ref.tag: (running_digest(image), timedelta(days=20))}
+        if tag := (between or {}).get(name):
+            releases[tag] = (digest(ref.name, tag), timedelta(days=11))
         if name in newer:
             releases[newer[name]] = (digest(ref.name, newer[name]), timedelta(days=4))
         published.append(

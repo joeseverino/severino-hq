@@ -1,17 +1,23 @@
-"""Fragments in a real browser: a region fetched, refreshed and polled as fragment.js answers it."""
+"""Fragments in a real browser: a region fetched, refreshed and drawn again as fragment.js answers it."""
 
 import re
+import threading
+from datetime import UTC, datetime
 from typing import override
 from urllib.parse import parse_qsl, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import connections, transaction
 from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
+from hq.platform.application.asks import DONE, QUEUED, Standing
 from hq.platform.application.pages import PageAction, PageVisit
+from hq.platform.application.visit_refresh import FOLLOWS
+from hq.platform.core import ahead
+from hq.platform.core.models import UpstreamReading
 from hq.platform.core.tests.browser.gate import BrowserGate, answered, sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -22,13 +28,14 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 _FRAGMENT_JS = render_to_string("scripts/fragment.html", {"csp_nonce": NONCE})
 _ASK_JS = render_to_string("scripts/ask.html", {"csp_nonce": NONCE})
 
-# A region that polls and names its parts, a disclosure and a menu, a
+# A live region that names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
-# whole page.
+# whole page. The page hears what commits from the change it was drawn after
+# (``_STREAM``, filled in as it is answered).
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
-</head><body><main>
-<section data-fragment="/probe-strip/" data-fragment-poll="1">
+</head><body data-live="{{_STREAM}}"><main>
+<section data-fragment="/probe-strip/" data-fragment-live="estate">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
 <div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>as drawn</div></div>
 </section>
@@ -38,7 +45,7 @@ _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <div data-fragment="/probe-page/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
 </main></body></html>"""
 
-_PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
+_PROBE_STRIP = """<section data-fragment="/probe-strip/">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
 <div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>read again</div></div>
 </section>"""
@@ -85,9 +92,28 @@ _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 </main></body></html>"""
 
 
+def _stored():
+    """A reading stored and taken back, each committed, and the keeper's pass
+    that finds them, from a thread of its own: Django refuses this one the
+    database while Playwright's loop runs."""
+
+    def store():
+        try:
+            keeper = ahead.Keeper()
+            keeper.turn()
+            UpstreamReading.objects.create(key="example.live", value={}, observed_at=datetime.now(UTC))
+            UpstreamReading.objects.filter(key="example.live").delete()
+            keeper.turn()
+        finally:
+            connections.close_all()
+
+    writer = threading.Thread(target=store)
+    writer.start()
+    writer.join()
+
+
 # The probes whose answer never changes, by their address.
 _FIXED = {
-    "/probe/": _FRAGMENT_PROBE,
     "/probe-slot/": "<p>read when opened</p>",
     "/probe-page/": _FRAGMENT_PROBE,
     "/probe-form/": _FORM_PROBE,
@@ -130,7 +156,7 @@ def _asking_dialog_probe():
         f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
 {_ASK_JS}
-</head><body><main>
+</head><body data-live="/live/"><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
 </main></body></html>""",
@@ -157,19 +183,24 @@ def _asking_head_probe():
     scripts = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
 {_ASK_JS}
-</head><body>"""
+</head><body data-live="/live/">"""
     return [
         scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"
         for said in ("as last read", "as it is now")
     ]
 
 
-# How the read a page asked for stands: under way, then landed.
-_VISIT_LIVE = (
-    '{"state": "queued", "live": true, "label": "Waiting", "note": "Waiting for a fresh reading.",'
-    ' "status": "/probe-visit-status/", "seconds": 0}'
-)
-_VISIT_DONE = '{"state": "done", "live": false, "label": "Done", "note": "Refreshed just now.", "status": ""}'
+def _visit_control(standing, **named):
+    """The control a visit's view answers, its readings standing as ``standing``."""
+
+    return render_to_string(
+        "partials/_visit_refresh.html", {**named, "visit_standing": standing, "visit_follows": FOLLOWS}
+    )
+
+
+# The readings a page asked for, under way, then landed.
+_VISIT_LIVE = Standing(QUEUED, "Waiting for a fresh reading.")
+_VISIT_DONE = Standing(DONE, "Refreshed just now.")
 
 
 _PROBE_STATE = """(failure) => ({
@@ -177,7 +208,7 @@ _PROBE_STATE = """(failure) => ({
   firstOpen: document.querySelector('[data-fragment-part="first"]').open,
   second: document.querySelector('[data-fragment-part="second"]').textContent,
   secondOpen: document.querySelector('[data-fragment-part="second"] [popover]').matches(':popover-open'),
-  polling: document.querySelector('[data-fragment-poll]') !== null,
+  live: document.querySelector('[data-fragment-live]') !== null,
   slot: document.querySelector('[data-probe="fold"]').textContent,
   page: [...document.querySelectorAll(failure)].map((line) => line.textContent),
   titles: document.querySelectorAll('main title, main main').length,
@@ -326,7 +357,9 @@ class FragmentBrowserTests(BrowserGate):
     def start(self, **options):
         super().start(**options)
         self.asked = []
-        self.strip = [' data-fragment-poll="1"', ""]
+        # The page's stream, held open until a test answers it.
+        self.streams = []
+        self.drawn = ""
         self.asking, *self.panels = _asking_dialog_probe()
         self.heads = _asking_head_probe()
         self.visit = _VISIT_DONE
@@ -368,13 +401,18 @@ class FragmentBrowserTests(BrowserGate):
         server's own, or none at all."""
 
         self.posted.append((answer, _posted(route.request)))
-        if answer == "lost":
+        # The first sending of a write gets no answer; its second, HQ's.
+        if answer == "lost" and sum(each == "lost" for each, _ in self.posted) == 1:
             return route.abort()
         if answer == "broken":
             return route.fulfill(status=500, body="Example failure")
         if answer == "refused":
             return route.fulfill(status=400, content_type="text/plain; charset=utf-8", body="Example refused.")
         return self.fulfill(route, _FIXED["/probe-sent/"])
+
+    @override
+    def stream(self, route):
+        self.streams.append(route)
 
     @override
     def respond(self, route):
@@ -389,11 +427,12 @@ class FragmentBrowserTests(BrowserGate):
             return self.fulfill(route, _keyed_probe())
         if parts.path.startswith("/probe-keyed/"):
             return self.answer_keyed(route, parts.path.removeprefix("/probe-keyed/").strip("/"))
+        if parts.path == "/probe/":
+            return self.fulfill(route, _FRAGMENT_PROBE.replace("{_STREAM}", f"/live/?after={self.drawn}"))
         if (fixed := _FIXED.get(parts.path)) is not None:
             return self.fulfill(route, fixed)
         if parts.path == "/probe-strip/":
-            poll = self.strip.pop(0) if self.strip else ""
-            return self.fulfill(route, _PROBE_STRIP.format(poll=poll))
+            return self.fulfill(route, _PROBE_STRIP)
         if parts.path == "/probe-dialog/":
             return self.fulfill(route, _dialog_probe())
         if parts.path == "/probe-asking-dialog/":
@@ -403,10 +442,11 @@ class FragmentBrowserTests(BrowserGate):
         if parts.path == "/probe-asking-head/":
             return self.fulfill(route, self.heads.pop(0) if len(self.heads) > 1 else self.heads[0])
         if parts.path == reverse("control_plane:visit"):
-            # The read it asked for has already landed, unless a test says it is under way.
-            return self.fulfill(route, self.visit, content_type="application/json")
-        if parts.path == "/probe-visit-status/":
-            return self.fulfill(route, _VISIT_DONE, content_type="application/json")
+            # The control, as the readings it asked for stand: landed, unless a test says under way.
+            posted = re.findall(r'name="(\w+)"\r\n\r\n([^\r]*)', request.post_data or "")
+            form = dict(posted) if request.method == "POST" else dict(parse_qsl(parts.query))
+            named = {name: form.get(name, "") for name in ("subject", "name", "refresh")}
+            return self.fulfill(route, _visit_control(self.visit, **named))
         if (address, part) in self.pages:
             return self.fulfill(route, self.pages[(address, part)])
         return super().respond(route)
@@ -553,42 +593,34 @@ class FragmentBrowserTests(BrowserGate):
         ((sent_to, body),) = self.posted
         self.assertEqual((sent_to, body["action"]), ("/probe-rows/C/", "up"))
 
-    def test_a_polled_region_takes_only_what_changed_and_stops_when_told(self):
-        self.page.clock.install()
-        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
+    def test_a_live_region_is_drawn_again_when_a_change_to_it_commits(self):
+        from hq.platform.core import live
+
+        self.drawn = live.now()
+        with self.page.expect_request(lambda request: urlsplit(request.url).path == "/live/"):
+            self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.evaluate(
             "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
             " first.kept = true; first.open = true;"
             " document.querySelector('[data-fragment-part=\"second\"] [popovertarget]').click(); }"
         )
-        # Its first turn reads it again and keeps polling; the second is told to stop.
-        self.page.clock.run_for(1000)
+        (stream,) = self.streams
+        heard = dict(parse_qsl(urlsplit(stream.request.url).query))["after"]
+        _stored()
+        stream.fulfill(headers={"Content-Type": "text/event-stream"}, body=live.said(*live.HUB.since(heard)))
         self.page.wait_for_function(
             "() => document.querySelector('[data-fragment-part=\"second\"]').textContent.includes('read again')"
         )
-        self.page.clock.run_for(1000)
-        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null")
         state = self.page.evaluate(_PROBE_STATE, self.css(SELECTORS["fragment_failure"]))
 
         # The part that did not change is the same node, still open; the one
-        # that did was replaced, its menu open as the reader left it.
+        # that did was replaced, its menu open as the reader left it. The
+        # answer no longer draws it live, so it is no longer.
         self.assertTrue(state["first"])
         self.assertTrue(state["firstOpen"])
         self.assertEqual(state["second"].strip(), "Secondread again")
         self.assertTrue(state["secondOpen"])
-        asked = self.asked.count(("/probe-strip/", ""))
-        self.page.clock.run_for(5000)
-        # A request after those turns is answered after any they made.
-        self.page.evaluate("() => fetch('/probe-slot/')")
-        self.assertEqual(self.asked.count(("/probe-strip/", "")), asked)
-
-    def test_a_region_drawn_under_way_for_minutes_is_followed_until_it_ends(self):
-        # A playbook's run takes minutes, its card drawn under way all that time.
-        self.page.clock.install()
-        self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
-        self.page.clock.fast_forward(5 * 60 * 1000)
-        self.page.clock.run_for(1000)
-        self.page.wait_for_function("() => document.querySelector('[data-fragment-poll]') === null", timeout=5000)
+        self.assertFalse(state["live"])
 
     def test_a_placeholder_waits_for_its_disclosure_and_refuses_a_whole_page(self):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
@@ -627,8 +659,20 @@ class FragmentBrowserTests(BrowserGate):
         self.page.wait_for_function("() => !document.querySelector('dialog').open")
         self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
 
+    def landed(self):
+        """The readings asked for land, and the page's stream says so."""
+
+        self.page.wait_for_function("() => document.querySelector('[data-fragment-live]')")
+        if not self.streams:
+            with self.page.expect_request(lambda request: urlsplit(request.url).path == "/live/"):
+                pass
+        self.visit = _VISIT_DONE
+        (stream,) = self.streams
+        stream.fulfill(headers={"Content-Type": "text/event-stream"}, body="id: 1\ndata: estate\n\n")
+
     def test_a_dialogs_panel_asks_for_its_readings_once_shown_and_fills_in_place(self):
         visit = (reverse("control_plane:visit"), "")
+        self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-dialog/", wait_until="load")
         self.page.evaluate("() => { window.kept = true; }")
         self.page.evaluate(SETTLE)
@@ -636,6 +680,7 @@ class FragmentBrowserTests(BrowserGate):
         self.assertNotIn(visit, self.asked)
 
         self.page.evaluate("() => document.querySelector('[data-probe=\"open\"]').click()")
+        self.landed()
         self.page.wait_for_function("() => document.querySelector('dialog').textContent.includes('as it is now')")
 
         self.assertEqual(self.asked.count(visit), 1)
@@ -647,20 +692,18 @@ class FragmentBrowserTests(BrowserGate):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
         note = self.css(SELECTORS["page_note"])
-        self.page.evaluate(
-            "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
-            note,
-        )
+        self.page.evaluate("(note) => { document.querySelector(note).was = true; }", note)
+        self.landed()
         # Landed, everything but the ask is drawn again, the note with it,
         # and the new note is the one its form names.
         self.page.wait_for_function("() => document.querySelector('[data-probe=said]').textContent === 'as it is now'")
         state = self.page.evaluate(
-            "(note) => ({kept: document.querySelector('[data-ask]').kept === true,"
+            "(note) => ({asks: document.querySelectorAll('[data-ask]').length,"
             " newNote: document.querySelector(note).was !== true,"
             " named: [...document.querySelector('form[data-ask-auto]').elements].some((field) => field.matches(note))})",
             note,
         )
-        self.assertEqual(state, {"kept": True, "newNote": True, "named": True})
+        self.assertEqual(state, {"asks": 1, "newNote": True, "named": True})
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")
@@ -691,7 +734,10 @@ class FragmentBrowserTests(BrowserGate):
         self.assertFalse(self.page.evaluate("() => window.kept === true"))
 
     def test_a_write_form_takes_a_new_key_once_hq_has_answered_and_keeps_it_when_none_did(self):
-        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", False)):
+        """A write no answer came back for is sent again with its key, so
+        HQ acts on it once, until HQ answers, and is never said to have failed."""
+
+        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", True)):
             with self.subTest(answer):
                 self.start()
                 self.page.goto(f"{ORIGIN}/probe-keyed-form/", wait_until="load")
@@ -707,8 +753,8 @@ class FragmentBrowserTests(BrowserGate):
                 self.page.evaluate(SETTLE)
                 after = self.page.locator(key).input_value()
 
-                ((_, fields),) = [entry for entry in self.posted if entry[0] == answer]
-                self.assertEqual(fields["__retry_key"], before)
+                sent = [fields["__retry_key"] for each, fields in self.posted if each == answer]
+                self.assertEqual(sent, [before] * (2 if answer == "lost" else 1))
                 if spent:
                     self.assertRegex(after, r"^web:[0-9a-f]{48}$")
                 else:

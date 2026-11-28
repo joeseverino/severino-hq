@@ -23,7 +23,7 @@ from pydantic import (
 from .automation_manifest import AUTHORED
 from .automation_sources import InputBound
 from .command_fields import Describe
-from .contracts import Closed
+from .contracts import Closed, pascal
 
 # The names an input may have, as a sidecar's ``inputs`` keys them.
 INPUT_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
@@ -89,8 +89,9 @@ def input_type(operation_id: str, inputs: Mapping[str, AdoptedInput]) -> type[Ba
             fields[name] = (described | None, None)
         else:
             fields[name] = (described, Field(default=spec.default, validate_default=True))
-    title = "".join(part.title() for part in operation_id.replace(".", "_").split("_"))
-    model: type[BaseModel] = create_model(f"{title}Inputs", __base__=_Inputs, __module__=__name__, **fields)
+    model: type[BaseModel] = create_model(
+        f"{pascal(operation_id)}Inputs", __base__=_Inputs, __module__=__name__, **fields
+    )
     return model
 
 

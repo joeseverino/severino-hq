@@ -249,13 +249,62 @@ class SignatureScheme:
 
 
 @dataclass(frozen=True, slots=True)
+class EventFact:
+    """What one event's signed body says, which HQ shows as told until the
+    next read of what it is about, and never stores in a reading or acts on.
+
+    The Worker forwards the text at each pointer, bounded by the bridge
+    contract, and never the body. ``shape`` is what HQ reads the values as.
+    """
+
+    shape: type[BaseModel]
+    # Each of the shape's fields, by the JSON pointer its text is at.
+    values: Mapping[str, str]
+    # Where what it is about is, such as the commit a check ran on.
+    about: str
+    # Where the body says when it was said, the first of them it holds; a
+    # fact is ordered by it, so a body replayed later stands where it was said.
+    said_at: tuple[str, ...]
+    # One body as the provider sends it, which the Worker's test and HQ's
+    # walk to this fact.
+    example: Mapping[str, Any]
+
+    def __post_init__(self) -> None:
+        if not self.values or not set(self.values) <= set(self.shape.model_fields):
+            raise ValueError(f"A fact names its values by the fields of {self.shape.__name__}.")
+        if not (self.about and self.said_at and self.example):
+            raise ValueError("A fact says what it is about, when it was said, and one body it is read from.")
+
+    def read(self, body: Any) -> dict[str, Any]:
+        """What the Worker forwards of ``body``: the text at each pointer, a
+        value the body leaves empty left out, as ``told`` in its index.ts."""
+
+        return {
+            "about": pointed(body, self.about),
+            "said_at": next((said for path in self.said_at if (said := pointed(body, path))), ""),
+            "fact": {field: value for field, path in self.values.items() if (value := pointed(body, path))},
+        }
+
+
+def pointed(body: Any, path: str) -> str:
+    """The text at an RFC 6901 pointer into ``body``, "" where there is none,
+    as ``text(pointer(...))`` in the Worker's index.ts reads it."""
+
+    node = body
+    for token in path.split("/")[1:]:
+        node = node.get(token.replace("~1", "/").replace("~0", "~")) if isinstance(node, Mapping) else None
+    return node if isinstance(node, str) else ""
+
+
+@dataclass(frozen=True, slots=True)
 class InboundSpec:
     """The events one provider tells HQ of, and the readings each makes due.
 
-    An event carries no truth: HQ only asks for the readings it names and
-    reads them with its own credentials (``application.inbound``). The route's
-    fields say how the Worker receives and verifies the provider's request; a
-    source that reports over the bridge alone (HQ's own host jobs) has none.
+    An event carries no truth: HQ asks for the readings it names and reads
+    them with its own credentials (``application.inbound``); what an event's
+    fact says is shown as told, never stored as read. The route's fields say
+    how the Worker receives and verifies the provider's request; a source
+    that reports over the bridge alone (HQ's own host jobs) has none.
     """
 
     # Each event by the provider's name for it, or that name and the
@@ -291,10 +340,14 @@ class InboundSpec:
     # can change with no event (another machine's, a delivery that failed) is
     # left out.
     complete: tuple[str, ...] = ()
+    # What an event's body says, by the event as ``events`` names it.
+    facts: Mapping[str, EventFact] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.events or not all(self.events.values()):
             raise ValueError("An inbound declaration names each event's readings.")
+        if not set(self.facts) <= set(self.events) or (self.facts and not self.path):
+            raise ValueError("A fact is a declared event's, read from a body the Worker receives.")
         if not set(self.complete) <= {kind for kinds in self.events.values() for kind in kinds}:
             raise ValueError("An inbound declaration is complete only for readings its events name.")
         named = (self.event_header, self.event_pointer)
@@ -306,12 +359,19 @@ class InboundSpec:
         if self.unnamed_event and not self.event_pointer:
             raise ValueError("Only an event named in its body can arrive with no name.")
 
-    def reads(self, event: str) -> tuple[str, ...]:
-        """The readings ``event`` makes due: its own entry, else its name's
-        before the action, which follows the last dot; none for an event HQ
-        does not take."""
+    def declared(self, event: str) -> str:
+        """The entry ``event`` is taken by: its own, else its name's before
+        the action, which follows the last dot; "" for one HQ does not take."""
 
-        return self.events.get(event) or self.events.get(event.rpartition(".")[0], ())
+        name = event if event in self.events else event.rpartition(".")[0]
+        return name if name in self.events else ""
+
+    def reads(self, event: str) -> tuple[str, ...]:
+        """The readings ``event`` makes due; none for one HQ does not take,
+        or one with a fact, which only draws."""
+
+        entry = self.declared(event)
+        return () if not entry or entry in self.facts else self.events[entry]
 
 
 class ProviderModel(Closed):

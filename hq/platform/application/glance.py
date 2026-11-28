@@ -659,7 +659,7 @@ def glance_context(
     configuration = configuration or dashboard_configuration()
     panels = dashboard_panels(configuration) if panels is None else panels
     if any(panel["refreshable"] for panel in panels):
-        panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in panels)
+        panels = tuple({**panel, "ask": refresh_ask(panel["standing"], panel["id"])} for panel in panels)
     return {
         "dashboard_panels": panels,
         # The strip is asked again for as long as a reading is on its way,

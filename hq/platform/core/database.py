@@ -2,10 +2,12 @@
 
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from typing import Any
 
-from django.db import DEFAULT_DB_ALIAS, connections
+from django.db import DEFAULT_DB_ALIAS, connections, transaction
+
+from .sqlite import base as sqlite
 
 # SQLite keeps no queue for its write lock: a connection waiting for it
 # sleeps and tries again, at most this long apart once it has waited a while.
@@ -40,6 +42,46 @@ def optimize(using: str = DEFAULT_DB_ALIAS) -> None:
         cursor.execute(OPTIMIZE)
 
 
+def serialized[T](work: Callable[[], T], using: str = DEFAULT_DB_ALIAS) -> T:
+    """Run ``work`` in one transaction that holds the write lock only from its first write.
+
+    For work that reads and derives before it writes, as a capability does: it
+    holds no other writer back while it reads, and reads one snapshot, so what
+    it decides without writing is consistent too. Where another writer
+    committed after its snapshot, or holds the lock, at its first write
+    (``sqlite.Stale``), what it decided may be stale, so it runs again holding
+    the lock from the start.
+    Inside a transaction already open it is part of that one.
+    """
+
+    connection = connections[using]
+    if isinstance(connection, sqlite.DatabaseWrapper) and not connection.in_atomic_block:
+        with suppress(sqlite.Stale), connection.optimistically(), transaction.atomic(using=using):
+            return work()
+    with transaction.atomic(using=using):
+        return work()
+
+
+def writes(using: str = DEFAULT_DB_ALIAS) -> int | None:
+    """How many rows this thread's connection has changed, SQLite's own count
+    (``total_changes``), so a projection knows when what it read may have
+    changed under it; None where HQ cannot count them."""
+
+    connection = connections[using]
+    if not isinstance(connection, sqlite.DatabaseWrapper):
+        return None
+    connection.ensure_connection()
+    return connection.connection.total_changes
+
+
+def holds_write_lock(using: str = DEFAULT_DB_ALIAS) -> bool:
+    """Whether this thread's connection holds the write lock until it commits
+    (``sqlite.DatabaseWrapper``: from its first write, begun optimistically)."""
+
+    connection = connections[using]
+    return connection.holds_write_lock if isinstance(connection, sqlite.DatabaseWrapper) else connection.in_atomic_block
+
+
 @contextmanager
 def without_waiting(using: str = DEFAULT_DB_ALIAS) -> Iterator[None]:
     """Within the block, take the write lock only if it is free.
@@ -47,12 +89,12 @@ def without_waiting(using: str = DEFAULT_DB_ALIAS) -> Iterator[None]:
     For a write worth making and not worth waiting for: a request storing an
     answer it derived. A write that would wait for another writer (an import,
     the controller landing a report) fails at once instead of holding the page
-    for as long as that writer takes. Inside a transaction the connection
-    already holds the lock, so nothing changes.
+    for as long as that writer takes. A connection that already holds the lock
+    keeps it, so nothing changes.
     """
 
     connection = connections[using]
-    if connection.vendor != "sqlite" or connection.in_atomic_block:
+    if connection.vendor != "sqlite" or holds_write_lock(using):
         yield
         return
     with connection.cursor() as cursor:
@@ -69,8 +111,8 @@ def without_waiting(using: str = DEFAULT_DB_ALIAS) -> Iterator[None]:
 class Turns:
     """When a connection writing back to back lets another writer have a turn.
 
-    Writing is a run of statements that take the lock (a ``BEGIN``, or a write
-    outside a transaction) with no gap as long as ``LETS_GO`` between any two
+    Writing is a run of statements that take the lock (a ``BEGIN`` that is not
+    deferred, or a write while the connection holds no lock) with no gap as long as ``LETS_GO`` between any two
     statements. Once a run has lasted ``HOLDS``, the next statement that takes
     the lock waits ``LETS_GO`` first, and a new run starts.
     """
@@ -109,9 +151,9 @@ def gives_way(using: str = DEFAULT_DB_ALIAS, *, sleep: Callable[[float], None] =
     turns = Turns()
 
     def taking_turns(execute: Callable[..., Any], sql: str, params: Any, many: bool, context: Any) -> Any:
-        head = sql.lstrip()[:7].upper()
-        takes_lock = head.startswith("BEGIN") or (
-            not connection.in_atomic_block and head.startswith(("INSERT", "UPDATE", "DELETE", "REPLACE"))
+        head = sql.lstrip()[:14].upper()
+        takes_lock = (head.startswith("BEGIN") and head != "BEGIN DEFERRED") or (
+            not holds_write_lock(using) and sqlite.writes(sql)
         )
         pause = turns.before(takes_lock=takes_lock)
         if pause:

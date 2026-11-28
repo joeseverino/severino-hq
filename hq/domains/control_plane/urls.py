@@ -41,7 +41,6 @@ urlpatterns = [
         name="connections",
     ),
     path("connections/read/", connection_views.ReadNowView.as_view(), name="read_now"),
-    path("connections/read/status/", connection_views.ReadStatusView.as_view(), name="read_status"),
     # Before <slug:key>, which would otherwise swallow "events" as a resource key.
     path("events/", inbound_views.InboundEventListView.as_view(), name="events"),
     # Before <slug:key>: the controller's own page.

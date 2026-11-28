@@ -11,8 +11,9 @@ import (
 // a pass, a worker, a dependency run) registers a nonce in RunsDir, as an
 // empty file of that name, for as long as it runs, and labels each of its
 // containers RunLabel=nonce. A pass leaves out of what it finds any container
-// whose label names a registered run, so HQ never reports its own work as a
-// container nobody started.
+// whose label names a registered run, or a run that ended since the pass
+// listed it and whose container Docker no longer has, so HQ never reports its
+// own work as a container nobody started.
 //
 // Its security properties:
 //   - Only root registers a run, and each nonce is drawn fresh (rand.Text).

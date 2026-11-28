@@ -1,53 +1,8 @@
 {% comment %}
-A running container past its four facts (application.containers.Container and
-application.upgrades.Plan, the same the containers and upgrades resources
-serve): what upgrading it would take, led by the open pull request that would
-move it (application.app_updates.AppUpdate, the app_updates resource's), and
-how it is run against the container standard, with what it uses beside its
-limits. Each said once; the band above has its version and standing.
-{% endcomment %}
-{% if plan or state %}
-{% section "Upgrade" id="upgrade" data_fragment=state.standing.live data_fragment_poll=state.standing.live|follow_every %}
-  {% facts layout="band" %}
-    {% if update %}
-    {% with checks=update.checks_said %}
-    {% fact "Pull request" icon="commit" tone=checks.tone %}
-      {% entity update.url|outside label=update.label %}
-    {% detail %}
-      <small>{{ checks.badge }}{% if checks.failing %}{% dot %}{{ checks.failing }}{% endif %}{% if checks.why %}{% dot %}{{ checks.why }}{% endif %}{% dot %}{{ update.app }}</small>
-    {% endfact %}
-    {% endwith %}
-    {% fact "Pin" icon="deploy" %}
-      {% for pin in update.pins %}{% if pin.before %}{% include "partials/_change.html" with from=pin.before.tag to=pin.after.tag code=True only %}{% else %}<code>{{ pin.after.tag }}</code>{% endif %}{% empty %}Not read{% endfor %}
-    {% detail %}
-      {% for pin in update.pins %}<small>{% if pin.digest %}{% muted tip=pin.digest %}{{ pin.digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}</small>{% empty %}<small>Its diff is too large to read</small>{% endfor %}
-    {% endfact %}
-    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=update.fixes_said %}{% endif %}
-    {% fact "New vulnerabilities" icon="info" value=update.brings_said %}
-    {% elif plan %}
-    {% fact "To" icon="deploy" %}
-      {% entity plan.release.url|outside label=plan.target_tag code=True %}
-    {% detail %}
-      <small>{% if plan.target_digest %}{% muted tip=plan.target_digest %}{{ plan.target_digest|truncatechars:20|breakable }}{% endmuted %}{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|when_text }}{% endif %}</small>
-    {% endfact %}
-    {% if item.standing.known_vulnerabilities %}{% fact "Fixes" icon="shield" value=plan.fixes_said %}{% endif %}
-    {% endif %}
-    {% if state and not update %}{% fact "Pull request" icon="commit" value=state.answer %}{% endif %}
-    {% with merge=state.standing %}{% if merge %}{% fact state.standing_label icon="commit" value=merge.answer url=merge.run_url %}{% endif %}{% endwith %}
-    {% if plan %}
-    {% fact "Data" icon="layers" value=plan.data_said %}
-    {% fact "Checked afterwards by" icon="check-circle" value=plan.verified_said %}
-    {% endif %}
-  {% endfacts %}
-  {% if held or act %}{% button_row %}{% if act %}{% include "partials/_page_action.html" with action=act only %}{% muted %}{{ state.said }}{% endmuted %}{% else %}{% muted %}{{ held }}{% endmuted %}{% endif %}{% endbutton_row %}
-  {% elif plan.waits_on %}{% list %}{% for blocker in plan.waits_on %}<li>{% muted %}{{ blocker.reason }}{% endmuted %}</li>{% endfor %}{% endlist %}
-  {% endif %}
-{% aside %}{% if plan %}{% muted %}{{ plan.change_label|breakable:"·" }}{{ plan.risk }} risk{% endmuted %}{% endif %}
-{% endsection %}
-{% endif %}
-
-{% comment %}
-Source and Runtime each across the page: Runtime holds many more checks
+How a running container is run against the container standard (application.
+containers.Container), with what it uses beside its limits. Each said once;
+the band above has its version and standing, the Upgrade card above what
+upgrading it would take. Source and Runtime each across the page: Runtime holds many more checks
 than Source, each with its fix, so beside it Source would stretch empty.
 {% endcomment %}
 {% with chain=item.supply_chain standing=item.standing %}

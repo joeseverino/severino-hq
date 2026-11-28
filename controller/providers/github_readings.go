@@ -89,18 +89,14 @@ type GitHubRepositoryRecord struct {
 	Variables         []string                                   `json:"variables"`
 	Pins              []GitHubPin                                `json:"pins"`
 	CalledWorkflows   []string                                   `json:"called_workflows"`
-	// Compose is each app's Compose files on the default branch and Dashboard
-	// the open Dependency Dashboard's address, read for a repository opted in
-	// to updates (github_compose.go).
-	Compose   []string `json:"compose"`
-	Dashboard string   `json:"dashboard"`
+	// Compose is each app's Compose files on the default branch, read for a
+	// repository opted in to updates (github_compose.go).
+	Compose []string `json:"compose"`
 	// Updater is the login HQ's dependency update run opens its pull
-	// requests and its Dashboard as: the App's bot (githubBot).
+	// requests as: the App's bot (githubBot).
 	Updater string `json:"updater"`
-	// ComposeImages is each service's image those files pin at the head, and
-	// HeldBranches each branch the Dashboard holds with no pull request.
+	// ComposeImages is each service's image those files pin at the head.
 	ComposeImages []GitHubComposeImage `json:"compose_images"`
-	HeldBranches  []GitHubHeldBranch   `json:"held_branches"`
 	// Builds is each app built on its host and the revisions that build what
 	// the head does.
 	Builds []GitHubBuild `json:"builds"`
@@ -170,6 +166,10 @@ type GitHubCheckRun struct {
 	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
+	// When it started and finished, and its page, where GitHub says them.
+	StartedAt   string `json:"started_at,omitempty"`
+	CompletedAt string `json:"completed_at,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // GitHubWorkflowRunRecord is a github.workflow_run record: one workflow's
@@ -324,9 +324,17 @@ func (r *Registry) githubRead(ctx context.Context) githubPass {
 	for i, repository := range r.Repositories.Held {
 		held[repository.Repository], order[repository.Repository] = repository, i
 	}
+	// A pass an event asked for reads in full the repositories it names, and
+	// any HQ holds no record of, and carries the rest unprobed.
+	told := runtime.Told(r.told, runtime.ResourceKindGitHubRepository)
+	reads := func(name string) bool { _, isHeld := held[name]; return !isHeld || slices.Contains(told, name) }
+	probed := names
+	if told != nil {
+		probed = slices.DeleteFunc(slices.Clone(names), func(name string) bool { return !reads(name) })
+	}
 	// A query that failed leaves every repository unknown, so each is read
 	// in full, as far as the fuse allows.
-	fingerprints, _ := r.githubFingerprints(ctx, c, names)
+	fingerprints, _ := r.githubFingerprints(ctx, c, probed)
 	updater := sync.OnceValues(func() (string, error) { return r.githubBot(ctx, c) })
 	records := make([]*githubRepositoryRead, len(names))
 	failures := make([]error, len(names))
@@ -344,6 +352,12 @@ func (r *Registry) githubRead(ctx context.Context) githubPass {
 	group.SetLimit(githubReadConcurrency)
 	due := []int{}
 	for i, name := range names {
+		if told != nil {
+			if reads(name) {
+				group.Go(func() error { read(i); return nil })
+			}
+			continue
+		}
 		standing, isHeld := held[name]
 		if fingerprint := fingerprints[name]; !isHeld || fingerprint == "" || fingerprint != standing.Fingerprint {
 			group.Go(func() error { read(i); return nil })
@@ -513,7 +527,7 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 	record = GitHubRepositoryRecord{
 		ConnectionRef: g.c.ref, Repository: g.name, Private: repo.Private, Archived: repo.Archived, URL: repo.HTMLURL,
 		DefaultBranch: branch, PushedAt: repo.PushedAt, Head: githubHead(commit), Compose: []string{},
-		ComposeImages: []GitHubComposeImage{}, HeldBranches: []GitHubHeldBranch{}, Builds: []GitHubBuild{},
+		ComposeImages: []GitHubComposeImage{}, Builds: []GitHubBuild{},
 	}
 	if uses, ok := part(ctx, g, runtime.PartWorkflowPins, func() (githubUsesFound, error) { return g.workflowUses(ctx, branch) }); ok {
 		record.Pins, record.CalledWorkflows = uses.pins, uses.called
@@ -522,8 +536,8 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 	var layout []string
 	if g.optedIn() {
 		if apps, ok := part(ctx, g, runtime.PartCompose, func() (githubLayout, error) { return g.apps(ctx, branch, commit.Sha) }); ok {
-			record.Compose, record.Dashboard, record.Updater, layout = apps.compose, apps.dashboard, apps.updater, apps.compose
-			record.ComposeImages, record.HeldBranches, record.Builds = apps.images, apps.held, apps.builds
+			record.Compose, record.Updater, layout = apps.compose, apps.updater, apps.compose
+			record.ComposeImages, record.Builds = apps.images, apps.builds
 		}
 	}
 	workflows, err := json200(g.api.ActionsListRepoWorkflowsWithResponse(ctx, g.owner, g.repo, &githubapi.ActionsListRepoWorkflowsParams{PerPage: new(githubListPage)}))

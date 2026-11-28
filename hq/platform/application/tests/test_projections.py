@@ -775,3 +775,33 @@ class OperationProjectionTests(TestCase):
         self.assertEqual(result["affected"][0]["domain"], "hq.example.com")
         self.assertTrue(result["automatic"])
         json.dumps(get_managed_resource("certificate"))
+
+
+class SerializedReadsTests(TestCase):
+    """What a capability reads is read once between its writes, and afresh after each."""
+
+    def test_a_read_is_shared_between_the_works_writes(self):
+        from hq.platform.application.projection import read_once, serialized_reads
+
+        loads = []
+
+        def write():
+            slug = f"example-{len(loads)}"
+            Project.objects.create(name=slug, slug=slug)
+
+        def written_while_read():
+            write()
+            read_once("example.after", lambda: None)
+            loads.append("written while read")
+
+        def work():
+            for _ in range(3):
+                read_once("example.read", lambda: loads.append("read"))
+            write()
+            for _ in range(3):
+                read_once("example.read", lambda: loads.append("after a write"))
+            for _ in range(2):
+                read_once("example.writes", written_while_read)
+
+        serialized_reads(work)
+        self.assertEqual(loads, ["read", "after a write", "written while read", "written while read"])

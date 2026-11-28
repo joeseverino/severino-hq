@@ -7,9 +7,9 @@ asked and who approved it, when, and how it ended, each reading its playbook dec
 task under way, each task so far, its readings in the words their kinds
 declare) drawn as every row of work draws it, as facts here
 ({% run_evidence %}), and the readings as stated folded under Raw data.
-Its state is the badge beside its title. While it waits or runs, the region asks its page again
-(``asks.following``), so each task's start and outcome shows as its worker
-renews, and the duration counts up.
+Its state is the badge beside its title. While it waits or runs, the region is
+drawn again as what it is read from commits (``core.live``), so each task's
+start and outcome shows as its worker reports or renews.
 While it has not started because no worker reports, the problem that says
 so, with how to set one up, stands above it (`problems`). Below it, folded,
 the chain of the audit log it ran in (`events`, `history.chain_made`): the
@@ -17,7 +17,7 @@ press, approval and merge that set it going, linking the whole chain.
 {% endcomment %}
 {% block content %}
 {% partialdef run_status inline %}
-<div data-fragment="" data-fragment-name="run_status"{% if following_run %} data-fragment-poll="{{ following_run|follow_every }}"{% endif %}>
+<div{% live_region "run" following_run at="" %} data-fragment-name="run_status">
 {% include "partials/_page_head.html" %}
 {% include "partials/_problems.html" with problems=problems %}
 {% layout %}

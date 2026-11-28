@@ -4,17 +4,16 @@ and the one call that registers it (``slotted``)."""
 import inspect
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from functools import wraps
-from itertools import chain
-from types import ModuleType, UnionType
-from typing import Annotated, Any, Literal, Union, get_args, get_origin, get_type_hints
+from types import ModuleType
+from typing import Annotated, Any, Literal, get_args, get_origin, get_type_hints
 
 from django import template
 from django.template.base import token_kwargs
 from django.utils.safestring import SafeData, SafeString, mark_safe
 
 from hq.platform.application.describe import Describe
+from hq.platform.core.template_literals import Reader, choices_of, literal, one_of, read, reader_of, reading
 
 
 class SlotsNode(template.Node):
@@ -22,6 +21,11 @@ class SlotsNode(template.Node):
     the variable it is named for (``slotted``)."""
 
     def __init__(self, part: Part, parts: dict[str, template.NodeList], options: dict) -> None:
+        # Built as the template compiles, so what its shape refuses of the
+        # options together is refused there too when each is a literal.
+        written = part.compiled(options)
+        if part.shape and len(written) == len(options):
+            part.values(written)
         self.part = part
         self.options = options
         self.child_nodelists = tuple(f"nodelist_{name}" for name in parts)
@@ -50,26 +54,15 @@ class Option:
     choices: tuple[object, ...] = ()
     about: str = ""
     required: bool = False
+    # How what a page writes is read (``template_literals``): its choices
+    # held, when it has them and no reader of its own.
+    reads: Reader | None = None
 
     def __post_init__(self) -> None:
         if self.choices and not self.required and self.default not in self.choices:
             raise ValueError(f"An option's default {self.default!r} is one of its choices.")
-
-
-def choices_of(annotation: Any) -> tuple[object, ...]:
-    """The values a field or parameter typed ``annotation`` holds, when the
-    type names them all (a ``Literal``, an enum, a union of those); else none."""
-
-    if get_origin(annotation) is Annotated:
-        return choices_of(get_args(annotation)[0])
-    if get_origin(annotation) is Literal:
-        return get_args(annotation)
-    if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return tuple(member.value for member in annotation)
-    if isinstance(annotation, UnionType) or get_origin(annotation) is Union:
-        each = [choices_of(member) for member in get_args(annotation)]
-        return tuple(chain.from_iterable(each)) if all(each) else ()
-    return ()
+        if self.choices and self.reads is None:
+            object.__setattr__(self, "reads", one_of(self.choices))
 
 
 def about_of(annotation: Any) -> str:
@@ -102,9 +95,11 @@ def _read_options(function: Callable) -> tuple[dict[str, Option], dict[str, Opti
         elif parameter.kind is inspect.Parameter.VAR_KEYWORD:
             options[f"**{parameter.name}"] = Option(about=about)
         elif required and parameter.kind is not inspect.Parameter.KEYWORD_ONLY:
-            ordered[parameter.name] = Option(choices=choices, about=about, required=True)
+            ordered[parameter.name] = Option(choices=choices, about=about, required=True, reads=reader_of(hint))
         else:
-            options[parameter.name] = Option(default=default, choices=choices, about=about, required=required)
+            options[parameter.name] = Option(
+                default=default, choices=choices, about=about, required=required, reads=reader_of(hint)
+            )
     return ordered, options
 
 
@@ -178,6 +173,11 @@ class Part:
     # (the topology page's map): its rules stand only while that page is the
     # one place that draws it (test_part_sheets.py).
     drawing_of: str = ""
+    # A function part's rules over a pairing of its options, each reading
+    # them by name and refusing one it cannot draw; its function holds them
+    # as it draws, and its tag as it compiles where the options a rule reads
+    # are written as literals or left out.
+    refuses: tuple[Callable[..., None], ...] = ()
 
     def __post_init__(self) -> None:
         if not (self.name or self.partial):
@@ -253,49 +253,65 @@ class Part:
 
         return sorted(name for name, option in self.options.items() if option.required and name not in names)
 
-    def held(self, values: Mapping[str, object]) -> None:
-        """Refuse a value given outside its option's choices: the one check
-        of a choice, for every part."""
+    def held(self, values: Mapping[str, object]) -> dict:
+        """``values``, each read as its option reads it (``Option.reads``):
+        the one reading of an option, for every part."""
 
-        for name, option in (self.ordered | self.options).items():
-            if option.choices and name in values and values[name] not in option.choices:
-                said = ", ".join(sorted(map(str, filter(None, option.choices))))
-                raise template.TemplateSyntaxError(f"{self.name} {name}= is one of {said}")
+        every = self.ordered | self.options
+        return {
+            name: read(every[name].reads, value, f"{self.name} {name}=")
+            if name in every and every[name].reads and value != every[name].default
+            else value
+            for name, value in values.items()
+        }
+
+    def compiled(self, given: Mapping[str, Any]) -> dict:
+        """What a use writes as literals of the options ``given`` as its
+        template compiles them, each read as its option reads it: the one
+        place a tag reads a literal (``template_literals``)."""
+
+        return self.held({name: said for name, value in given.items() for known, said in [literal(value)] if known})
+
+    def ruled(self, written: Mapping[str, object], given: set[str]) -> None:
+        """Refuse what a rule (``refuses``) refuses of a use's options, when
+        each it reads is ``written`` as a literal or left out (at its default)."""
+
+        every = self.ordered | self.options
+        for rule in self.refuses:
+            names = inspect.signature(rule).parameters
+            if any(name in given and name not in written for name in names):
+                continue
+            try:
+                rule(**{name: written[name] if name in written else every[name].default for name in names})
+            except (ValueError, template.TemplateSyntaxError) as error:
+                raise template.TemplateSyntaxError(str(error)) from None
 
     def values(self, given: dict) -> dict:
         """What a page gave, each option it left out at its default and each
         one with choices held to them, as the partial's variables."""
 
-        values = {name: option.default for name, option in (self.ordered | self.options).items()} | given
-        self.held(values)
+        values = self.held({name: option.default for name, option in (self.ordered | self.options).items()} | given)
         return self.shape(self.name, values) if self.shape else values
 
 
-def _drawn_by(part: Part) -> Callable:
-    """The function a function tag calls: its own, holding a page's values to
-    their choices first when any option has them."""
+def _given(part: Part, node: Any) -> dict[str, object]:
+    """What a function tag's use gives, by the parameter each fills."""
 
-    function = part.function
-    assert function is not None  # noqa: S101 - only a function part reaches here
-    if not any(option.choices for option in (part.ordered | part.options).values()):
-        return function
-    signature = inspect.signature(function)
-
-    @wraps(function)
-    def held(*args, **kwargs):
-        part.held(signature.bind_partial(*args, **kwargs).arguments)
-        return function(*args, **kwargs)
-
-    return held
+    assert part.function is not None  # noqa: S101 - only a function part reaches here
+    names = list(inspect.signature(part.function).parameters)[int(node.takes_context) :]
+    return {**dict(zip(names, node.args, strict=False)), **node.kwargs}
 
 
-def _placed(compile_: Callable) -> Callable:
-    """A function tag's ``compile_``, its failure as it draws noted with the
-    tag as its template writes it, since the value it was handed no longer
-    says which variable it was read from."""
+def _placed(compile_: Callable, part: Part) -> Callable:
+    """A function tag's ``compile_``: each literal its use writes read as it
+    compiles (``template_literals``), and its failure as it draws noted with
+    the tag as its template writes it, since the value it was handed no
+    longer says which variable it was read from."""
 
     def compiled(parser, token):
         node = compile_(parser, token)
+        given = _given(part, node)
+        part.ruled(part.compiled(given), set(given))
         render = node.render
 
         def rendered(context):
@@ -323,12 +339,12 @@ def slotted(part: Part, *, library: template.Library) -> None:
 
     if part.function is not None:
         takes_context = next(iter(inspect.signature(part.function).parameters), "") == "context"
-        drawn = _drawn_by(part)
+        drawn = reading(part.function)
         if part.partial:
             library.inclusion_tag(part.partial, takes_context=takes_context, name=part.name)(drawn)
         else:
             library.simple_tag(drawn, takes_context=takes_context, name=part.name)
-        library.tags[part.name] = _placed(library.tags[part.name])
+        library.tags[part.name] = _placed(library.tags[part.name], part)
         # The template contract reads a tag's declaration from what it wraps.
         library.tags[part.name].__wrapped__ = part  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
         return

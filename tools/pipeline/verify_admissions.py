@@ -11,9 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable, Sequence
@@ -38,20 +36,6 @@ class Refused(Exception):
 
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def base_policy(policy: Path, base_sha: str, run: Run) -> str:
-    """The policy file's digest at the pull request's base commit."""
-    run(["git", "fetch", "--quiet", "--depth", "1", "origin", base_sha], check=True)
-    shown = run(["git", "show", f"FETCH_HEAD:{policy.as_posix()}"], check=True, stdout=subprocess.PIPE)
-    return sha256(shown.stdout)
-
-
-def coordinated(path: Path) -> set[str]:
-    """The repositories a coordinated change builds from a branch."""
-    if not path.is_file():
-        return set()
-    return {line.split("=", 1)[0] for line in path.read_text().splitlines() if line}
 
 
 def first(directory: Path, pattern: str) -> Path | None:
@@ -104,51 +88,32 @@ def verify_one(extension: dict[str, str], directory: Path, policy_sha: str, cord
     return ["--entry", str(entry), "--wheel", str(wheel)]
 
 
-def verify(
-    composition: dict, policy_sha: str, artifacts_dir: Path, cordon: Path, skip: set[str], run: Run
-) -> tuple[list[str], list[Path]]:
-    """Every admission not built from a branch: compose_plugins' arguments and the verified wheels."""
+def verify(composition: dict, policy_sha: str, artifacts_dir: Path, cordon: Path, run: Run) -> list[str]:
+    """Every admission: compose_plugins' arguments."""
     # The policy is stated once, so a composition of no extensions still names it.
     arguments = ["--policy-sha256", policy_sha]
-    wheels = []
     for extension in composition["extensions"]:
-        if extension.get("repository") in skip:
-            continue
-        found = verify_one(extension, artifacts_dir / str(extension.get("id")), policy_sha, cordon, run)
-        arguments += found
-        wheels.append(Path(found[-1]))
-    return arguments, wheels
+        arguments += verify_one(extension, artifacts_dir / str(extension.get("id")), policy_sha, cordon, run)
+    return arguments
 
 
 def main(argv: Sequence[str] | None = None, run: Run = subprocess.run) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--policy", type=Path, default=Path(POLICY))
     parser.add_argument("--set", type=Path, default=Path("composition-set.json"))
-    parser.add_argument("--coordinated", type=Path, default=Path("coordinated.txt"))
     parser.add_argument("--artifacts", type=Path, default=Path("artifacts"))
     parser.add_argument("--cordon", type=Path, default=Path("cordon"))
     parser.add_argument("--out", type=Path, default=Path("build/compose-args"))
-    parser.add_argument("--candidate-wheels", type=Path, default=Path("candidate-wheels"))
     arguments = parser.parse_args(argv)
-    # A candidate (a pull request with coordinated branches) skips the extensions
-    # built from a branch and verifies the rest under the base branch's policy
-    # (BASE_SHA), which they were signed under, copying their wheels aside.
-    candidate = os.environ.get("CANDIDATE") == "true"
     try:
-        policy = arguments.policy
-        policy_sha = base_policy(policy, os.environ["BASE_SHA"], run) if candidate else sha256(policy.read_bytes())
-        skip = coordinated(arguments.coordinated) if candidate else set()
+        policy_sha = sha256(arguments.policy.read_bytes())
         composition = json.loads(arguments.set.read_text())
-        compose_args, wheels = verify(composition, policy_sha, arguments.artifacts, arguments.cordon, skip, run)
+        compose_args = verify(composition, policy_sha, arguments.artifacts, arguments.cordon, run)
     except Refused as refused:
         print(f"::error::{refused}")
         return 1
     except subprocess.CalledProcessError as failed:
         return failed.returncode or 1
-    if candidate:
-        arguments.candidate_wheels.mkdir(parents=True, exist_ok=True)
-        for wheel in wheels:
-            shutil.copy(wheel, arguments.candidate_wheels)
     arguments.out.parent.mkdir(parents=True, exist_ok=True)
     arguments.out.write_text(" ".join(compose_args) + "\n")
     return 0

@@ -1,9 +1,10 @@
 name: plugin checks
 
-# The reusable pre-admission gate. Every extension repository calls this instead
-# of copying it, so the pinned action SHAs, the Python matrix and the secret
-# scan live in exactly one place: this one, where Renovate already keeps
-# them current.
+# The reusable pre-admission gate, against host main. An extension's
+# admission calls it when the host did not already check the merged tree on
+# its pull request (extensions.yml, tools/pipeline/checked-on-host.sh), so
+# the pinned action SHAs, the Python matrix and the secret scan live in
+# exactly one place: this one, where Renovate already keeps them current.
 #
 # This workflow deliberately does NOT sign anything. A job that runs from a
 # reusable workflow is issued a Sigstore identity naming *this* file, not the
@@ -13,15 +14,6 @@ name: plugin checks
 on:
   workflow_call:
     inputs:
-      hq-ref:
-        description: >-
-          Host ref the contract check runs against. Empty (the default)
-          resolves to the host branch named like the calling branch when the
-          host has one, so a coordinated change checks against its host half,
-          and to main otherwise.
-        required: false
-        type: string
-        default: ""
       python-versions:
         description: >-
           JSON array of Python versions to test against. Overridable so an
@@ -71,39 +63,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Resolve the host ref
-        id: hq
-        # An explicit hq-ref wins. Otherwise a host branch with this branch's
-        # name is the other half of a coordinated change, and main is the rest.
-        # An unanswered lookup fails rather than falling back to main, which
-        # would check a coordinated change against the wrong host.
-        env:
-          REQUESTED: ${{ inputs.hq-ref }}
-          BRANCH: ${{ github.head_ref || github.ref_name }}
-        run: |
-          set -euo pipefail
-          ref="$REQUESTED"
-          if [ -z "$ref" ]; then
-            ref=main
-            if [ "$BRANCH" != main ] && [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-              status=0
-              git ls-remote --exit-code --heads "https://github.com/$HOST_REPOSITORY.git" \
-                "refs/heads/$BRANCH" >/dev/null || status=$?
-              case "$status" in
-                0) ref="$BRANCH"
-                   echo "::notice title=Coordinated host branch::Checking against host branch $BRANCH." ;;
-                2) ;;
-                *) echo "::error::Could not ask the host repository for branch $BRANCH."; exit 1 ;;
-              esac
-            fi
-          fi
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - name: Check out HQ contract
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: ${{ env.HOST_REPOSITORY }}
-          ref: ${{ steps.hq.outputs.ref }}
           path: host
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0

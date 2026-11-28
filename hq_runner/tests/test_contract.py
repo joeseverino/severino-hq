@@ -36,6 +36,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(events.HOST_LIMIT, run_event["host"]["maxLength"])
         self.assertEqual(events.TASK_LIMIT, run_event["task"]["maxLength"])
         self.assertEqual(events.MESSAGE_LIMIT, run_event["message"]["maxLength"])
+        self.assertEqual(events.MESSAGE_LIMIT, run_event["warnings"]["maxLength"])
         self.assertEqual(events.EVENT_LIMIT, self.schemas["RunProgress"]["properties"]["events"]["maxItems"])
         outcomes = {"ok", "changed", *(outcome for outcome in events._OUTCOMES.values())}
         self.assertLessEqual(outcomes, set(run_event["outcome"]["enum"]))

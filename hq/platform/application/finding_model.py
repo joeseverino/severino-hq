@@ -208,11 +208,11 @@ class Finding:
             object.__setattr__(self, "steps", tuple(step for step in shown if step is not None))
         # A card says it as written, so what it says is words, and each
         # reading's label is drawn once with its values beside it.
-        for text in (self.title, self.explanation):
-            in_words(text)
+        in_words(self.title, "Finding.title")
+        in_words(self.explanation, "Finding.explanation")
         for label, value in self.evidence:
-            in_words(label, label=True)
-            in_words(value if isinstance(value, str) else str(value))
+            in_words(label, "Finding.evidence", label=True)
+            in_words(value if isinstance(value, str) else value.label, "Finding.evidence")
 
     @property
     def one_press(self) -> bool:

@@ -37,7 +37,6 @@ from .names import (
     GITHUB,
     HQ_DIGEST,
     HQ_REVISION,
-    MACHINE,
     NEWER,
     OWNER_NAME,
     SOURCES,
@@ -229,11 +228,9 @@ def repositories():
             }
             record["runs"] = [scan]
         if name == APPS:
-            record["pull_requests"] = [_app_update(name)]
-            # Renovate's Dashboard lists the updates it has not opened yet.
+            record["pull_requests"] = [app_update(name)]
             record["compose"] = [f"compose/{app}/compose.yaml" for app in sorted(HELD_APPS)]
             record["compose_images"] = [_built()]
-            record["dashboard"] = f"https://github.com/example/{name}/issues/12"
             record["updater"] = UPDATER
         return record
 
@@ -395,7 +392,7 @@ def _store_repositories(records: list[dict]) -> None:
     store(WORKFLOW_RUN_KIND, *runs)
 
 
-def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
+def app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
     """Renovate's update of ``app``'s pin to the release ``newer`` names,
     checks passing, as GitHub lists the pull request and the reading loads
     its Compose file at base and head."""
@@ -418,6 +415,10 @@ def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
         "head_repository": f"example/{name}",
         "labels": ["dependencies"],
         "checks": {"state": "success", "total": 2, "failing": [], "running": 0, "names": ["validate", "scan"]},
+        "check_runs": [
+            check_run("validate", "success", timedelta(hours=4), seconds=58),
+            check_run("scan", "success", timedelta(hours=4), seconds=131),
+        ],
         "files": [
             {
                 "path": f"compose/{app}/compose.yaml",
@@ -436,6 +437,18 @@ def _app_update(name, app=UPDATED_APP, number=58, newer=NEWER):
             }
         ],
     }
+
+
+def check_run(name, conclusion, age, *, seconds=0):
+    """One check of a pull request's head as GitHub's check run says it: run
+    ``seconds`` from ``age`` ago, or still running given no ``conclusion``."""
+
+    url = f"https://github.com/example/{APPS}/actions/runs/{hexed(name, length=8)}"
+    run = {"name": name, "status": "in_progress", "conclusion": "", "started_at": iso(age), "url": url}
+    if not conclusion:
+        return {**run, "completed_at": None}
+    done = iso(age - timedelta(seconds=seconds))
+    return {**run, "status": "completed", "conclusion": conclusion, "completed_at": done}
 
 
 def _updates(name):
@@ -788,17 +801,6 @@ def worker_image_missing() -> None:
     units(*automation)
 
 
-# How the app update's approval ends in each seed that draws one: its preview
-# waiting for the playbook worker, refused on the host, its merge made and the
-# apply refused, held on the pull unit it started, or applied.
-PREVIEW_QUEUED, PREVIEW_FAILED, NOT_APPLIED, HELD = "queued", "preview-failed", "not-applied", "held"
-# The steps a run stops on when the host refuses to start the pull.
-_REFUSED = (
-    ("Ask sudo whether the deploy login may start the pull unit", "ok", ""),
-    ("Require sudo to let the deploy login start the pull unit", "failed", "sudo refuses to start the pull unit."),
-)
-
-
 # The apps repository's apps whose update stands where home-automation's
 # open one does not: merged and not applied, held by Renovate, and a Compose
 # file HQ can't match; and the app it no longer holds, moved by hand.
@@ -827,6 +829,18 @@ def update_states(newer: dict[str, str]) -> None:
         REPOSITORY_KIND,
         *(_states(record, newer) if record["repository"] == f"example/{APPS}" else record for record in held),
     )
+    # The morning's run left one app's branch held until its release is old enough.
+    held_back = {
+        "repository": f"example/{APPS}",
+        "branch": f"renovate/{HELD_APP}",
+        "result": "pending",
+        "pull_request": None,
+        "files": [f"compose/{HELD_APP}/compose.yaml"],
+    }
+    run = ProviderInventory.objects.get(kind=DEPENDENCY_RUN_KIND)
+    store(
+        DEPENDENCY_RUN_KIND, *({**each, "branches": [held_back]} for each in run.records), observed_at=run.observed_at
+    )
     named = {"connection_ref": GITHUB, "repository": f"example/{APPS}"}
     store(
         PULL_REQUEST_KIND,
@@ -838,7 +852,7 @@ def update_states(newer: dict[str, str]) -> None:
 def resolver_update(newer: dict[str, str]) -> dict:
     """The apps repository's open update of the DNS server, to the release ``newer`` names."""
 
-    return _app_update(APPS, RESOLVER_APP, 59, newer)
+    return app_update(APPS, RESOLVER_APP, 59, newer)
 
 
 def _built() -> dict:
@@ -862,112 +876,4 @@ def _states(record: dict, newer: dict[str, str]) -> dict:
                 "image": f"{ref.name}:{newer[MERGED_APP]}",
             },
         ],
-        "held_branches": [{"branch": f"renovate/{HELD_APP}", "marker": "unpend", "apps": [HELD_APP]}],
     }
-
-
-def _held(applied, merged: str) -> None:
-    """``applied`` held on the pull unit its playbook started, a minute in,
-    while the updated app's container is recreated on HQ's machine."""
-
-    from hq.domains.control_plane.models import InboundEvent, InboundOutcome, InboundSource, OperationRequest
-    from hq.domains.control_plane.observations.host import DOCKER_CONTAINER
-    from hq.platform.application.resource_operations import HANDOFF
-
-    now = timezone.now()
-    claimed = now - timedelta(minutes=1)
-    OperationRequest.objects.filter(pk=applied.pk).update(
-        state=OperationRequest.State.CLAIMED,
-        claimed_by="example-worker",
-        claimed_at=claimed,
-        completed_at=None,
-        lease_expires_at=claimed + timedelta(seconds=1500),
-        result={HANDOFF: {MACHINE: f"example-pull@{merged}.service"}},
-    )
-    for number, (event, ago) in enumerate((("destroy", 40), ("start", 35), ("health_status: healthy", 20)), start=1):
-        InboundEvent.objects.create(
-            provider="host",
-            event=f"{DOCKER_CONTAINER}.{event}",
-            subject=UPDATED_APP,
-            delivery_id=f"00000000-0000-4000-9000-{number:012d}",
-            source=InboundSource.HOST,
-            received_at=now - timedelta(seconds=ago),
-            applied_at=now - timedelta(seconds=ago),
-            outcome=InboundOutcome.APPLIED,
-        )
-
-
-def approval(owner, ended: str) -> None:
-    """The open app update approved and ended as ``ended`` says, each step
-    queued as its approval queues it and ended as its worker leaves it."""
-
-    from hq.domains.control_plane.models import OperationRequest
-    from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
-    from hq.platform.application.automation_runs import CHECK
-    from hq.platform.application.resource_operations import THEN, asked_fields, enqueue
-    from hq.platform.application.security import web_principal
-
-    update = _app_update(APPS)
-    repository = f"example/{APPS}"
-    # A playbook with no run waiting, since a record queues one at a time.
-    waiting = (OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
-    playbook = (
-        ManagedResource.objects.filter(kind=OPERATION_KIND)
-        .exclude(operations__state__in=waiting)
-        .order_by("key")
-        .first()
-    )
-    hosts = [MACHINE]
-    applies = {
-        "operation": playbook.spec["operation"],
-        "revision": playbook.spec["revision"],
-        "hosts": hosts,
-        "correlation": f"{repository}#{update['number']}@{update['head'][:12]}",
-    }
-    events = [{"host": MACHINE, "task": task, "outcome": outcome, "message": said} for task, outcome, said in _REFUSED]
-    at = timezone.now() - timedelta(minutes=5)
-
-    def record(resource, action, state, *, asked, result):
-        fields = asked_fields(web_principal(owner), reason="", **asked)
-        operation, _ = enqueue(action, lambda: (resource, fields))
-        finished = {"state": state, "result": result, "claimed_at": at, "completed_at": at}
-        OperationRequest.objects.filter(pk=operation.pk).update(**finished)
-        return operation
-
-    merging = {"head_sha": update["head"], "apps": [UPDATED_APP], THEN: applies}
-    previewed = {**applies, "parameters": {"revision": update["head"]}, CHECK: True, THEN: merging}
-    if ended == PREVIEW_QUEUED:
-        enqueue("run", lambda: (playbook, asked_fields(web_principal(owner), reason="", **previewed)))
-        return
-    if ended == PREVIEW_FAILED:
-        record(playbook, "run", "failed", asked=previewed, result={"message": "A task failed.", "events": events})
-        return
-    pull = ManagedResource.objects.create(
-        key=f"example-pull-request-{APPS}-{update['number']}",
-        kind=delivery.PULL_REQUEST_KIND,
-        spec={"repository": repository, "number": update["number"], "head_sha": update["head"]},
-    )
-    merged = hexed("merged", APPS, length=40)
-    failed = ended == NOT_APPLIED
-    applied = record(
-        playbook,
-        "run",
-        "failed" if failed else "succeeded",
-        asked={**applies, "parameters": {"revision": merged}},
-        result={"message": "A task failed.", "events": events}
-        if failed
-        else {
-            "stated": {
-                "readings": {MACHINE: {"apps.receipt": [{"revision": merged, "last_attempt": merged, "ok": True}]}}
-            }
-        },
-    )
-    if ended == HELD:
-        _held(applied, merged)
-    record(
-        pull,
-        "merge",
-        "succeeded",
-        asked={**merging, "correlation": applies["correlation"]},
-        result={"status": {"merge_sha": merged}, THEN: {"run": str(applied.pk)}},
-    )

@@ -118,6 +118,7 @@ EXAMPLES = (
                     "dependabot_alert",
                     "code_scanning_alert",
                     "secret_scanning_alert",
+                    "workflow_job",
                 ],
                 raises=(
                     Raised(

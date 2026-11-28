@@ -28,6 +28,7 @@ lazy from hq.platform.application.security import web_principal
 lazy from hq.platform.core import bench, example_estate
 lazy from hq.platform.core.attribution import outside_every_door
 lazy from hq.platform.core.audit import stamped
+lazy from hq.platform.core.example_estate import update_steps
 lazy from hq.platform.core.middleware import request_operation
 
 # The owner of the set whose extension demo is being written, set only while one is.
@@ -254,12 +255,14 @@ def _told_again(owner) -> None:
 
 
 def _approved(ended: str) -> Callable[[Any], None]:
-    """The example estate with its app update approved and ended as
-    ``ended`` says, so its container's Upgrade card draws that standing."""
+    """The example estate with the playbook that applies app updates
+    adopted, and its app update approved and ended as ``ended`` says, so its
+    container's Upgrade card draws that standing."""
 
     def seed(owner) -> None:
         _estate(owner)
-        example_estate.work.approval(owner, ended)
+        example_estate.automation.applies_updates(web_principal(owner), (example_estate.names.MACHINE,))
+        update_steps.approval(owner, ended)
 
     return seed
 
@@ -276,8 +279,6 @@ def _updates(on: str = "") -> Callable[[Any], None]:
     agent's approval of the DNS server's update waits for a person."""
 
     def seed(owner) -> None:
-        from hq.platform.application.security import web_principal
-
         # Declared first, so every scan the estate reports reaches it.
         if on:
             apps.get_model("control_plane", "ManagedResource").objects.create(key=on, kind="machine", spec={"name": on})
@@ -289,6 +290,22 @@ def _updates(on: str = "") -> Callable[[Any], None]:
         example_estate.automation.asks_to_approve(update, f"example/{example_estate.work.APPS}")
 
     return seed
+
+
+def _opening(at: str) -> Callable[[Any], None]:
+    """The update of each app (``_updates``), the one Renovate holds asked to
+    open and left as ``at`` says (``update_steps.opening``)."""
+
+    def seed(owner) -> None:
+        _updates()(owner)
+        update_steps.opening(owner, at)
+
+    return seed
+
+
+def _checks_running(owner) -> None:
+    _updates()(owner)
+    update_steps.checks_running()
 
 
 @contextmanager
@@ -347,6 +364,9 @@ SEEDS: dict[str, Seed] = {
     # The open app update's new image, whose publisher attaches no package list.
     "update-unlisted": Seed(_unlisted, _SET_UP),
     "app-updates": Seed(_updates(), _SET_UP),
+    **{f"app-update-{at}": Seed(_opening(at), _SET_UP) for at in ("asked", "running", "failed", "opened")},
+    # The open app update's checks under way.
+    "app-update-checks-running": Seed(_checks_running, _SET_UP),
     # Applied only by a playbook written for another machine.
     "app-updates-elsewhere": Seed(_updates("edge-01"), _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.

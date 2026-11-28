@@ -11,11 +11,12 @@ from functools import cache
 from http import HTTPStatus
 from itertools import product
 
+from hq.platform.application.contracts import pascal
 from hq.platform.application.refusal_codes import LATER_CODES, Code
 from hq.platform.application.refusal_status import call_doors
 
 from . import views
-from .fragments import OpenAPIError, pascal
+from .fragments import OpenAPIError
 
 
 def codes_by_status(codes: Iterable[Code]) -> dict[int, list[Code]]:

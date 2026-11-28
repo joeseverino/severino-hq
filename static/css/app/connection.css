@@ -29,17 +29,6 @@
   display: flex; flex-direction: column; gap: 1px;
   text-align: left;
 }
-/* The nav panel's own item metrics *and* its type: same color, weight, size
-   and padding, so the two dropdowns read as one object. */
-.overflow-menu-panel a,
-.overflow-menu-panel span,
-.overflow-menu-panel button {
-  padding: var(--space-3) var(--space-5); border-radius: var(--radius-sm);
-  font-size: var(--text-sm); font-weight: 500; color: var(--muted);
-}
-/* A link's row keeps its line as a button's does (page.css). */
-.overflow-menu-panel :is(a, span) { white-space: nowrap; }
-.overflow-menu-panel a:hover, .overflow-menu-panel button:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
 
 .name-list { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; max-width: 40rem; }
 /* Every editable row keeps a column for its Remove, so inputs line up whether

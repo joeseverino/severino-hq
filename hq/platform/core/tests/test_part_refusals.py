@@ -14,7 +14,7 @@ from hq.platform.application.tables import Cell, DataTable, Row, RowEditor, Tabl
 from hq.platform.core.table_layout import TRACKS
 from hq.platform.core.templatetags.action_tags import MOST_BESIDE, head_actions
 from hq.platform.core.templatetags.status_tags import status_pill
-from hq.platform.core.templatetags.value_tags import cell_line, or_empty
+from hq.platform.core.templatetags.value_tags import or_empty
 from hq.platform.core.testing import leaving, render
 
 
@@ -136,7 +136,8 @@ class StatusRefusalTests(SimpleTestCase):
             '{% status "Example" tone=tone icon="shield" pill=False %}',
         ):
             for word in ("goood", "archived", "drifted"):
-                with self.subTest(source, word=word), self.assertRaises(ValueError):
+                refused = self.assertRaises((ValueError, TemplateSyntaxError))
+                with self.subTest(source, word=word), refused:
                     engines["django"].from_string(source).render({"tone": word})
 
 
@@ -214,10 +215,6 @@ class ValueRefusalTests(SimpleTestCase):
     def test_a_value_with_no_words_of_its_own_is_refused(self):
         with self.assertRaises(Unprintable):
             or_empty(type("Named", (), {"__str__": lambda self: "example-operator"})())
-
-    def test_a_cell_line_is_one_line_or_its_own_count(self):
-        with self.assertRaises(ValueError):
-            cell_line("example-agent", lines=3)
 
     def test_a_count_of_decimals_that_is_not_a_number_is_refused(self):
         with self.assertRaises(TemplateSyntaxError):

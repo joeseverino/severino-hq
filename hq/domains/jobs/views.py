@@ -4,10 +4,10 @@ from datetime import timedelta
 from functools import cached_property
 from typing import override
 
-from django.http import Http404, JsonResponse
+from django.http import Http404
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.views.generic import DetailView, TemplateView, View
+from django.views.generic import TemplateView, View
 
 from hq.platform.application.list_pages import ListPageMixin
 from hq.platform.application.pages import PageAction, PageBadge, RecordPageMixin, RouteNamed
@@ -142,26 +142,6 @@ class RunView(RecordPageMixin, TemplateView):
         context["following_run"] = self.following_run
         context.update(run_context(self.record, user=self.request.user))
         return context
-
-
-class JobStatusView(DetailView):
-    """How one job stands, for a page following it: one row, no template."""
-
-    model = Job
-
-    @override
-    def render_to_response(self, context, **response_kwargs):
-        return JsonResponse(work_runs.standing_of(work_runs.job_run(self.object)).as_json())
-
-
-class RunStatusView(View):
-    """How one run or scan stands, for a page following it: one row, no template."""
-
-    def get(self, request, pk):
-        found = work_runs.run_of(str(pk))
-        if found is None:
-            raise Http404("No run has that id.")
-        return JsonResponse(work_runs.standing_of(found[0]).as_json())
 
 
 class WorkAskView(AskMixin, View):

@@ -7,14 +7,14 @@ its legend beside the heading.
 `chart` is application.ui.LineChart, a measure that varies around a level on
 an axis fitted to it, or StackedBarChart, quantities that add up on a
 zero-based axis. The two differ only in their marks (lines or bars), so this
-one frame draws both.
+one frame draws both. `data_open` draws its data's fold open.
 {% endcomment %}
 {% section chart.title lede=chart.description figure=True %}
   {% if chart.spatial %}
     {% if not chart.empty %}{% include "partials/_chart_path.html" %}{% endif %}
   {% elif not chart.empty %}
     <div class="chart-scroll">
-      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}">
+      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% elif chart.cramped %} chart-frame-cramped{% endif %}">
       {% comment %}
       aria-hidden in effect: the exact numbers are in the table below, which a
       screen reader can navigate. Announcing ninety points or sixty bars one at
@@ -59,7 +59,7 @@ one frame draws both.
         </svg>
       </div>
     </div>
-    {% section "View chart data" fold=True %}
+    {% section "View chart data" fold=True open=data_open %}
       {% data_table chart|chart_table %}
     {% endsection %}
   {% endif %}

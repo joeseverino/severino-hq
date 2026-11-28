@@ -30,7 +30,7 @@
 <link rel="stylesheet" href="/static/css/app/surfaces.css">
 <script src="/static/js/transitions.js" ></script>
 </head>
-<body data-sign-in="/accounts/login/" data-ask-refreshing="Refreshing…">
+<body data-sign-in="/accounts/login/" data-ask-refreshing="Refreshing…" data-live="">
 <a class="skip-link" href="#content">Skip to content</a>
 <header class="site-header">
   <a class="brand" href="/">Severino HQ</a>
@@ -43,7 +43,7 @@
 </header>
 <dl class="facts-list"><div class="fact">
   <dt><span class="fact-label">GitHub App</span></dt>
-  <dd class="fact-value"><div class="fact-shown"><ul class="code-list"><li><code>push</code></li><li><code><span class="token" data-sole><span class="whole">check_suite</span></span></code></li><li><code><span class="token" data-sole><span class="whole">pull_request</span></span></code></li><li><code><span class="token" data-sole><span class="whole">deployment_status</span></span></code></li><li><code><span class="token" data-sole><span class="whole">deployment_review</span></span></code></li><li><code><span class="token" data-sole><span class="whole">merge_group</span></span></code></li><li><code><span class="token" data-sole><span class="whole">dependabot_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">code_scanning_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">secret_scanning_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">workflow_run</span></span></code></li></ul></div></dd>
+  <dd class="fact-value"><div class="fact-shown"><ul class="code-list"><li><code>push</code></li><li><code><span class="token" data-sole><span class="whole">check_suite</span></span></code></li><li><code><span class="token" data-sole><span class="whole">pull_request</span></span></code></li><li><code><span class="token" data-sole><span class="whole">deployment_status</span></span></code></li><li><code><span class="token" data-sole><span class="whole">deployment_review</span></span></code></li><li><code><span class="token" data-sole><span class="whole">merge_group</span></span></code></li><li><code><span class="token" data-sole><span class="whole">dependabot_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">code_scanning_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">secret_scanning_alert</span></span></code></li><li><code><span class="token" data-sole><span class="whole">workflow_run</span></span></code></li><li><code><span class="token" data-sole><span class="whole">workflow_job</span></span></code></li></ul></div></dd>
 </div>
   <div class="fact">
   <dt><span class="fact-label">Tailscale</span></dt>
@@ -62,7 +62,7 @@
 <script src="/static/js/fragment.js"  defer></script>
 <script src="/static/js/tables.js"  defer></script>
 <script src="/static/js/app.js"  defer></script>
-<template data-ask-said><span class="ask-word"></span><span class="ask-sentence"></span></template>
+<template data-ask-refused><span class="tone-serious"><span class="ask-word">Failed</span><span class="ask-sentence"></span></span></template>
 <template data-ask-below><tr class="row-detail" data-row-detail><td colspan="1"><dl class="row-columns"><div><dt></dt><dd><span class="ask-why row-below" data-label="" data-ask-why=""></span></dd></div></dl></td></tr></template>
 <template data-ask-newer><span class="ask-sentence">A newer reading is in. </span><a href="">Show the reading</a></template>
 <script src="/static/js/ask.js"  defer></script>

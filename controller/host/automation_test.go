@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/netip"
@@ -49,12 +50,16 @@ type worker struct {
 	running func(args []string)
 	// pulled is whether the host holds the pinned image, as a deploy leaves it.
 	pulled bool
+	// queued is what HQ answers the ask of which profiles have work, given
+	// the profiles asked; every one of them unless a test says otherwise.
+	queued func(asked []string) (string, int)
 }
 
 func newWorker(t *testing.T) *worker {
 	t.Helper()
 	root := t.TempDir()
 	w := &worker{root: root, docker: "exit 0", lent: map[string]map[string][]byte{}, pulled: true}
+	w.queued = func(asked []string) (string, int) { return waitingAnswer(asked), 0 }
 	secrets := filepath.Join(root, "secrets")
 	for _, dir := range []string{filepath.Join(secrets, "ssh"), filepath.Join(root, "journal"), filepath.Join(root, "lib", "deploy", "automation"), filepath.Join(root, "grant")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -147,6 +152,8 @@ func (w *worker) command(ctx context.Context, name string, args ...string) *exec
 		return answer("sha256:4567cdef\n", 0)
 	case name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}):
 		return answer(automationNetworkJSON, 0)
+	case name == "docker" && len(args) > 3 && slices.Equal(args[:4], []string{"exec", hostcore.Container, "hq-controller", "waiting"}):
+		return answer(w.queued(args[4:]))
 	case name == "nft":
 		return exec.CommandContext(ctx, "/bin/sh", "-c", `cat > "$1"`, "sh", filepath.Join(w.root, "loaded.nft"))
 	}
@@ -272,6 +279,54 @@ func TestEachProfilesWorkerIsLentOnlyItsOwnKeys(t *testing.T) {
 	}
 }
 
+// waitingAnswer is `hq-controller waiting`'s answer naming profiles.
+func waitingAnswer(profiles []string) string {
+	answer, _ := json.Marshal(map[string]any{"ok": true, "profiles": profiles})
+	return string(answer)
+}
+
+// A pass starts a worker only for a profile HQ holds a queued run or scan
+// for, so an idle pass starts no container and confines nothing; one HQ
+// cannot answer starts every profile's, so no queued work is stranded.
+func TestAPassStartsOnlyTheWorkersHQHoldsWorkFor(t *testing.T) {
+	cases := []struct {
+		name   string
+		answer string
+		code   int
+		ran    []string
+	}{
+		{"nothing is queued", waitingAnswer([]string{}), 0, nil},
+		{"one profile's run is queued", waitingAnswer([]string{change}), 0, []string{change}},
+		{"HQ does not answer", `{"ok":false,"message":"The bridge has no such action."}`, 1, []string{change, connections.ReadProfile}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorker(t)
+			w.queued = func(asked []string) (string, int) {
+				if !slices.Equal(asked, []string{change, connections.ReadProfile}) {
+					t.Errorf("HQ was asked of %v", asked)
+				}
+				return c.answer, c.code
+			}
+			if err := w.a.Run(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			var ran []string
+			for _, call := range w.calls {
+				if runsContainer(call) {
+					ran = append(ran, environment(call)["HQ_AUTOMATION_PROFILE"])
+				}
+				if c.ran == nil && call[0] == "nft" {
+					t.Error("an idle pass loaded the worker's table")
+				}
+			}
+			if !slices.Equal(ran, c.ran) {
+				t.Errorf("the workers of %v started, want %v", ran, c.ran)
+			}
+		})
+	}
+}
+
 // The worker's network is made and its table loaded, naming exactly the
 // lent connections' destinations, before the container starts on it.
 func TestTheWorkerReachesOnlyItsConnectionsBeyondPublicAddresses(t *testing.T) {
@@ -283,7 +338,7 @@ func TestTheWorkerReachesOnlyItsConnectionsBeyondPublicAddresses(t *testing.T) {
 	for _, call := range w.calls {
 		order = append(order, call[0]+" "+call[1])
 	}
-	if !slices.Equal(order, []string{"docker image", "docker network", "nft -f", "docker run", "docker run"}) {
+	if !slices.Equal(order, []string{"docker image", "docker exec", "docker network", "nft -f", "docker run", "docker run"}) {
 		t.Fatalf("ran %q", w.calls)
 	}
 	loaded, err := os.ReadFile(filepath.Join(w.root, "loaded.nft"))

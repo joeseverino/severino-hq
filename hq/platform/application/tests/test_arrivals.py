@@ -13,6 +13,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.hq import ARRIVAL_KIND
+from hq.platform.core.sqlite import base as sqlite
 from hq.platform.core.testing import READER, declare, operator
 from hq.platform.core.tests.forwarding import arrived
 
@@ -60,11 +61,11 @@ def stored():
 
 
 def writes(queries):
-    return [query for query in queries if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))]
+    return [query for query in queries if sqlite.writes(query["sql"])]
 
 
 def refusing_writes(execute, sql, params, many, context):
-    if sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE")):
+    if sqlite.writes(sql):
         raise DatabaseError("database is locked")
     return execute(sql, params, many, context)
 
