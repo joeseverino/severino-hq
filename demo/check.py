@@ -290,26 +290,23 @@ class DemoSiteTests(unittest.TestCase):
         # no warning or error notice and no failed scan. A playbook Playbooks
         # links has a run a person approved that finished, each task's outcome
         # beside it.
+        def drawn(path):
+            # A <template> is a frame a script fills, never drawn as it stands.
+            page = (OUT / path.strip("/") / "index.html").read_text(encoding="utf-8")
+            return re.sub(r"<template\b.*?</template>", "", page, flags=re.DOTALL)
+
         for path in ("infrastructure/playbooks", "jobs"):
             with self.subTest(path=path):
-                # A <template> is a frame a script fills, never drawn as it stands.
-                page = re.sub(
-                    r"<template\b.*?</template>",
-                    "",
-                    (OUT / path / "index.html").read_text(encoding="utf-8"),
-                    flags=re.DOTALL,
-                )
-                marks = {mark for classes, hook in _MARK.findall(page) for mark in (classes.split() or [hook])}
+                marks = {mark for classes, hook in _MARK.findall(drawn(path)) for mark in (classes.split() or [hook])}
                 self.assertFalse(marks & {"notice-warning", "notice-error", "data-scan-failed"})
-        playbooks = (OUT / "infrastructure" / "playbooks" / "index.html").read_text(encoding="utf-8")
+        playbooks = drawn("infrastructure/playbooks")
         runs = sorted(set(re.findall(r'href="(/commands/[^"/]+\.run/)"', playbooks)))
         self.assertTrue(runs, "Playbooks links each playbook's runs")
         # Each run's own page says who asked and who approved it, and how it ended.
         approved = []
         for path in runs:
-            page = (OUT / path.strip("/") / "index.html").read_text(encoding="utf-8")
-            for run in sorted(set(re.findall(r'href="(/jobs/runs/[^"/]+/)"', page))):
-                shown = (OUT / run.strip("/") / "index.html").read_text(encoding="utf-8")
+            for run in sorted(set(re.findall(r'href="(/jobs/runs/[^"/]+/)"', drawn(path)))):
+                shown = drawn(run)
                 tones = {mark for classes, _ in _MARK.findall(shown) for mark in classes.split()}
                 if (
                     "approved by" in shown
