@@ -280,6 +280,12 @@ class DashboardGlanceView(AskMixin, View):
         return fragments.render(request, self.template_name, lambda: _glance(request), revision=every_revision())
 
     @override
+    def answered(self, request):
+        """A panel's Refresh is answered with the strip, drawn after the ask."""
+
+        return render(request, self.template_name, _glance(request))
+
+    @override
     def post(self, request, *args, **kwargs):
         """A panel's Refresh, or with ``scope=stale`` the due panels, which the
         page posts when it opens on one and is answered with the strip."""

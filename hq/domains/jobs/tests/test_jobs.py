@@ -11,7 +11,7 @@ from django.utils import timezone
 from hq.platform.application.markup_testing import text, with_class
 from hq.platform.application.record_errors import RecordConflict
 from hq.platform.core.models import AuditLog
-from hq.platform.core.testing import SignedInTestCase, operator
+from hq.platform.core.testing import operator
 from hq_sdk.testing import plain
 
 from ..models import HEARTBEAT_GRACE, Job
@@ -249,26 +249,6 @@ class ReapTests(TestCase):
         reap()
 
         Job.objects.create(kind="test.blocked", label="Next")  # must not raise
-
-
-class JobStatusViewTests(SignedInTestCase):
-    def test_status_reports_what_a_watching_page_needs(self):
-        job = Job.objects.create(
-            kind="test.status",
-            label="Reading",
-            state=Job.State.RUNNING,
-            percent=42,
-            note="halfway",
-            started_at=timezone.now(),
-        )
-
-        payload = self.client.get(reverse("jobs:status", args=[job.pk])).json()
-
-        self.assertEqual(payload["percent"], 42)
-        self.assertEqual(payload["note"], "halfway")
-        self.assertTrue(payload["live"])
-        # The word and the tone a following control's pill takes, the run table's.
-        self.assertEqual((payload["label"], payload["tone"]), ("Running", Job.State.RUNNING.tone))
 
 
 class RunOnTheCallingThreadTests(TestCase):

@@ -458,12 +458,19 @@ def head_actions(actions, beside=""):
 
 @register.filter
 def as_ask(action):
-    """An emitted ActionLink that asks for work, as the control that follows it:
-    a row's Refresh. It stands idle until pressed; the page's script follows
-    what the press started."""
+    """An emitted ActionLink that asks for a read now, as the control that
+    follows it: a row's Refresh, standing as the read it asks for does."""
 
     values = asdict(action) if is_dataclass(action) else action
-    return Ask(values["label"], values["url"], title=values.get("reason", ""), compact=True)
+    url = values["url"]
+    return Ask(
+        values["label"],
+        url,
+        standing=asks.read_now_standing(url),
+        follows="estate",
+        title=values.get("reason", ""),
+        compact=True,
+    )
 
 
 def words(
@@ -488,6 +495,14 @@ def refreshing():
     """``{% refreshing %}``: what a reading says while it is fetched again."""
 
     return asks.REFRESHING
+
+
+@answers(register)
+def refused():
+    """``{% refused as failed %}``: how a press refused at once stands, which
+    nothing stores, so the script says it in these words and this tone."""
+
+    return asks.Standing(asks.FAILED)
 
 
 @answers(register)

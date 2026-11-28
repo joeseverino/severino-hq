@@ -293,9 +293,9 @@ class WorkRequested(AskedAnswer):
 
 
 def _job_asked(job: Job, message: str) -> AskedAnswer:
-    """How the job doing asked-for work stands, and where a page follows it."""
+    """How the job doing asked-for work stands."""
 
-    return Asked(standing_of(job_run(job)), reverse("jobs:status", args=[job.pk]), message).answer()
+    return Asked(standing_of(job_run(job)), message).answer()
 
 
 def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> WorkRequested | RefusalEnvelope:
@@ -473,7 +473,7 @@ def ask(
         work.words,
         reverse("jobs:ask", args=[name]),
         standing=standing,
-        status_url=reverse("jobs:status", args=[job.pk]) if job is not None and standing.live else "",
+        follows="run",
         refresh=refresh,
         name=SUBJECT_FIELD,
         value=subject,

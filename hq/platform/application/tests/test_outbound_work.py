@@ -39,11 +39,12 @@ from hq.platform.application import host_work, outbound_work
 from hq.platform.application.capabilities import capability_spec, command_spec, execute_capability
 from hq.platform.application.contracts import Effect
 from hq.platform.application.integration_specs import requested
-from hq.platform.application.markup_testing import elements
+from hq.platform.application.markup_testing import elements, followed
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
 from hq.platform.application.plugin_testing import form_keyed, installed, sibling
 from hq.platform.application.security import Principal, cli_principal, internal_principal
 from hq.platform.application.tests.writers import keyed
+from hq.platform.application.work_runs import job_run, standing_of
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq.platform.core.testing import operator
@@ -127,7 +128,7 @@ class ComposedExample(TestCase):
         self.route = reverse("jobs:ask", args=[example.LOOKUP])
 
     def press(self, subject="first-note", **extra):
-        return self.client.post(self.route, form_keyed({"subject": subject}), **extra)
+        return self.client.post(self.route, form_keyed({"subject": subject, "next": self.page}), **extra)
 
 
 class AnExtensionActionAnswersAtOnceTests(ComposedExample):
@@ -135,28 +136,26 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         with held_jobs() as held:
             response = self.press(headers=SCRIPT)
 
-            answer = response.json()
             job = Job.objects.get(kind=example.LOOKUP)
-            self.assertEqual((response.status_code, answer["state"], answer["live"]), (202, "queued", True))
-            self.assertEqual(answer["status"], reverse("jobs:status", args=[job.pk]))
+            # Answered with the page it was pressed on, which draws the control from what is stored.
+            self.assertRedirects(response, self.page, fetch_redirect_response=False)
             self.assertEqual((job.state, job.started_at, job.result), ("queued", None, {}))
             self.assertEqual((job.requested_by, job.request), (self.user, {"subject": "first-note"}))
             # Nothing reached the registry: the request only recorded the ask.
             self.assertEqual(self.registry.asked, [])
-            self.assertTrue(self.client.get(answer["status"]).json()["live"])
-            # A page loaded while the work is live resumes following it.
-            self.assertContains(self.client.get(self.page), f'data-ask-status="{answer["status"]}"')
+            # A page drawn while the work is live follows it as jobs change.
+            self.assertEqual(followed(self.client.get(self.page)), ["run"])
 
             held.run()
 
         self.assertEqual(self.registry.asked, ["first-note"])
         job.refresh_from_db()
         self.assertEqual((job.state, job.result["entries"]), ("succeeded", ["alpha", "beta"]))
-        standing = self.client.get(reverse("jobs:status", args=[job.pk])).json()
-        self.assertEqual((standing["state"], standing["note"]), ("done", "The registry lists 2 entries."))
+        standing = standing_of(job_run(job))
+        self.assertEqual((standing.state, standing.note), ("done", "The registry lists 2 entries."))
         page = self.client.get(self.page)
         self.assertEqual(entries_shown(page), ["alpha", "beta"])
-        self.assertNotContains(page, "data-ask-status")
+        self.assertEqual(followed(page), [])
         ended = AuditLog.objects.filter(operation_id=str(job.pk), action=AuditLog.Action.DONE).get()
         self.assertEqual((ended.user, ended.metadata["operation"]), (self.user, example.LOOKUP))
 
@@ -218,15 +217,14 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
 
     def test_one_runs_at_a_time(self):
         with held_jobs() as held:
-            first = self.press(headers=SCRIPT).json()
+            self.press(headers=SCRIPT)
             again = self.press(headers=SCRIPT)
             other = self.press("second-note", headers=SCRIPT)
 
             # The same ask again follows the work already asked for.
-            self.assertEqual((again.status_code, again.json()["status"]), (202, first["status"]))
+            self.assertRedirects(again, self.page, fetch_redirect_response=False)
             # Another subject is told, and nothing is queued behind the first.
-            self.assertEqual((other.status_code, other.json()["state"]), (200, "failed"))
-            self.assertEqual(other.json()["note"], outbound_work.ANOTHER_RUNNING)
+            self.assertEqual((other.status_code, other.text), (409, outbound_work.ANOTHER_RUNNING))
             self.assertEqual(Job.objects.count(), 1)
             held.run()
 
@@ -239,8 +237,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         with held_jobs() as held:
             response = self.press(example.ARCHIVED, headers=SCRIPT)
 
-        self.assertEqual((response.status_code, response.json()["state"]), (200, "failed"))
-        self.assertEqual(response.json()["note"], "An archived note is not looked up.")
+        self.assertEqual((response.status_code, response.text), (409, "An archived note is not looked up."))
         self.assertEqual((Job.objects.count(), held.waiting), (0, []))
 
     def test_an_operator_without_the_capability_is_refused(self):
@@ -248,7 +245,7 @@ class AnExtensionActionAnswersAtOnceTests(ComposedExample):
         with held_jobs(), mock.patch("hq.platform.application.web_writes.web_principal", return_value=nobody):
             response = self.press(headers=SCRIPT)
 
-        self.assertEqual(response.json()["state"], "failed")
+        self.assertEqual(response.status_code, 403)
         self.assertFalse(Job.objects.exists())
 
     def test_work_nobody_declared_has_no_route(self):

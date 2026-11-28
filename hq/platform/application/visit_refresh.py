@@ -23,7 +23,7 @@ from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 lazy from hq.domains.control_plane.providers import LOGGING_IN
 
-from .asks import Asked, AskedAnswer, Standing, asked_read
+from .asks import Asked, AskedAnswer, Standing, read_standing
 from .cadence import ask, controller_standing, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
@@ -193,13 +193,23 @@ class VisitRefreshed(AskedAnswer):
     ]
 
 
-def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitRefreshed:
-    """How the page's readings stand, and where to follow them while one is
-    being read."""
-
+def _standing(kinds: tuple[str, ...]) -> Standing:
     watching, asked = _watching(kinds) if kinds else ([], None)
-    standing = Asked(Standing()) if asked is None else asked_read(watching, asked)
-    return {**standing.answer(), "requested": requested}
+    return Standing() if asked is None else read_standing(watching, asked)
+
+
+def visit_standing(subject: str, name: str) -> Standing:
+    """How the readings the page for ``subject`` ``name`` is assembled from
+    stand, as its visit draws them (``partials/_visit_refresh.html``)."""
+
+    reads = reads_of(subject, name)
+    return _standing(reads.kinds if reads else ())
+
+
+def _answer(requested: list[str], kinds: tuple[str, ...]) -> VisitRefreshed:
+    """How the page's readings stand."""
+
+    return {**Asked(_standing(kinds)).answer(), "requested": requested}
 
 
 VISIT_REFRESH = "visit.refresh"

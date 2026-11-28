@@ -572,7 +572,7 @@ class GlanceRenderingTests(TestCase):
         self.assertEqual((weather["refreshable"], weather["pending"]), (False, False))
 
     def test_each_panels_refresh_is_the_shared_ask_and_fetches_the_strip(self):
-        panels = tuple({**panel, "ask": refresh_ask(panel["standing"])} for panel in dashboard_panels())
+        panels = tuple({**panel, "ask": refresh_ask(panel["standing"], panel["id"])} for panel in dashboard_panels())
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": panels})
 
         controls = select(html, "data-ask-refresh", GLANCE_REGION)

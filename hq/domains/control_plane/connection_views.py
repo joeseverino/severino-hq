@@ -15,7 +15,7 @@ from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.unit_findings import on_unit
-lazy from hq.platform.application.asks import Ask, AskMixin, WatchView
+lazy from hq.platform.application.asks import Ask, AskMixin, read_now_standing
 lazy from hq.platform.application.findings import offered
 
 from .connection_tables import connections_table, setup_fields
@@ -56,7 +56,15 @@ class ConnectionListView(PageMixin, TemplateView):
         actions.append(PageAction("Your connection", inspect, modal="connection"))
         read_all = found.read_all
         if read_all:
-            actions.append(Ask(read_all.label, read_all.url, title=read_all.reason))
+            actions.append(
+                Ask(
+                    read_all.label,
+                    read_all.url,
+                    standing=read_now_standing(read_all.url),
+                    follows="estate",
+                    title=read_all.reason,
+                )
+            )
         return tuple(actions)
 
     @override
@@ -83,8 +91,3 @@ class ReadNowView(AskMixin, View):
     @override
     def payload(self):
         return read_now_payload(self.request.GET, self.request.POST)
-
-
-class ReadStatusView(WatchView):
-    """How a read the controller was asked for stands: it asks nothing of
-    anyone, and reads when each kind was last stored."""

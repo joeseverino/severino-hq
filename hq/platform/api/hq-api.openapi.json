@@ -6171,14 +6171,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message"
         ],
         "type": "object"
@@ -6207,10 +6203,6 @@
       },
       "AskedMessage": {
         "description": "What asking did, in the sentence a page shows; empty where it says nothing.",
-        "type": "string"
-      },
-      "AskedStatusUrl": {
-        "description": "Where to follow the work while it is under way; empty when nothing is.",
         "type": "string"
       },
       "AssetCategory": {
@@ -11564,14 +11556,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "due",
           "reason",
@@ -21603,14 +21591,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "queued",
           "operation"
@@ -22320,14 +22304,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "requested"
         ],
@@ -23906,14 +23886,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "login"
         ],
@@ -27738,14 +27714,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "queued",
           "operation"
@@ -32441,14 +32413,10 @@
           },
           "standing": {
             "$ref": "#/components/schemas/StandingAnswer"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "requested"
         ],
@@ -32795,14 +32763,10 @@
           "started": {
             "description": "Whether this call started the work; false when it was already running.",
             "type": "boolean"
-          },
-          "status_url": {
-            "$ref": "#/components/schemas/AskedStatusUrl"
           }
         },
         "required": [
           "standing",
-          "status_url",
           "message",
           "started"
         ],

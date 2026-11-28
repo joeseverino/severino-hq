@@ -206,8 +206,6 @@ class ApproveUpdateTests(TestCase):
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
         self.assertEqual((again["queued"], again["operation"]["id"]), (False, str(self.runs().get().pk)))
-        # Where a page follows the run it stands on.
-        self.assertEqual(again["status_url"], reverse("jobs:run_status", args=[again["operation"]["id"]]))
 
         preview = self.worked()
         succeeded(preview)
@@ -469,7 +467,6 @@ class ApproveUpdateTests(TestCase):
         self.assertTrue(again["ok"], again)
         self.assertTrue(again["standing"]["live"])
         self.assertEqual((again["queued"], again["operation"]["id"]), (False, first["operation"]["id"]))
-        self.assertEqual(again["status_url"], reverse("jobs:run_status", args=[first["operation"]["id"]]))
         self.assertEqual(self.applies().count(), 2)
 
     def test_no_press_is_offered_while_another_run_holds_its_playbook_or_its_machine(self):

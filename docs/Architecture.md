@@ -549,9 +549,10 @@ costs nobody:
   notes, a heartbeat, one live job per kind. A project's refresh is one.
 
 The request that asks answers at once, in one shape for both
-(`hq.platform.application.asks`): how the work stands and, while it is live, a
-status resource, with 202. `partials/_ask.html` draws the control and one
-script behavior follows it (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
+(`hq.platform.application.asks`): how the work stands. `partials/_ask.html`
+draws the control from what is stored, and while the work is live the control
+is a region its page asks for again as the live stream says what it is drawn
+from changed (`partials/_ask.html` in [Shared UI](Shared-UI.md#each-parts-rules)).
 
 The interpreter holds the rule (`hq/platform/core/outbound.py`). Python raises
 an audit event whenever any library opens a connection, resolves a name,
@@ -1732,9 +1733,8 @@ and the `app_updates` resource's `steps` are that one value. While a step HQ que
 applied and until a reading of the containers since says they still run an
 older pin, the update asks nothing of anyone and raises no finding
 (`UpdateState.at_work`). A step that is a playbook's run is said as the run
-says it (`work_runs.standing_of`): while it works, its card and the press that
-asked it follow the run's status (`jobs:run_status`) and link to its page, and
-once it ends the card keeps how it went, linked to the run. A preview or an
+says it (`work_runs.standing_of`): while it works, its card follows the run
+through the live stream and links to its page, and once it ends the card keeps how it went, linked to the run. A preview or an
 apply that ended badly names the step it stopped on and what it said, and an
 apply names each app its machine did not release, in the tone the `apps.pull`
 reading declares for that app's result. The applier states two readings of

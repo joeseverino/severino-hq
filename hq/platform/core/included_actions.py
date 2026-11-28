@@ -22,10 +22,16 @@ ASK = _part(
     busy button alone.
 
     Pressing it posts to a view that declares only what it asks (`asks.AskMixin`): the request runs
-    the work's capability, stores the ask and answers at once, a refusal as failed work in the
-    refusal's own sentence, and the control then says how the work stands. Every capability an ask
-    runs answers `asks.Asked` (its standing, where to follow it, and what asking did), so the view
-    reads the answer and words nothing of its own.
+    the work's capability, stores the ask and answers at once with the page it was pressed on, which
+    draws the control from what is stored. Work refused, or failed as it was asked, which nothing
+    stores, is answered with its sentence, and the control says it as failed work. Every capability an
+    ask runs answers `asks.Asked` (its standing and what asking did), so the view reads the answer and
+    words nothing of its own.
+
+    While its work is live the control is a region of its page, found by its id and asked for again
+    when the live stream says the set it is drawn from changed (`Ask.follows`, `core.live`). No script
+    keeps a timer for it: while no stream is open, fragment.js's one loop asks every live region again
+    each time it tries the stream.
 
     - The note beside the button is a live region (`role="status"`) that changes only when the state
       does. The elapsed time ticks next to it outside the region, so nothing is read out every second.
@@ -48,12 +54,13 @@ ASK = _part(
     place by saying what the word cannot: what the work waits on, or why it failed.
 
     Without script the same button is a form post back to the page, which draws the control from what
-    is stored. So a page loaded while the work is live says so and resumes following it.
+    is stored. So a page loaded while the work is live says so and follows it.
 
     A job's panel (`_job_progress.html`) and the readings a page asks for when it opens
-    (`_visit_refresh.html`) are the same ask drawn differently; one behavior in `ask.js` follows all
-    three. *Gates:* `RequestNeverWaitsTests.test_asked_for_work_is_followed_by_one_script_behavior`;
-    `lint:ast-grep` (`ask-answered-by-ask-mixin.yml`);
+    (`_visit_refresh.html`, answered alone by `control_plane:visit`) are the same ask drawn
+    differently; one behavior in `ask.js` lands all three. *Gates:* `lint:ast-grep`
+    (`ask-answered-by-ask-mixin.yml`); `FragmentBrowserTests.test_a_pages_ask_outlives_the_swap`;
+    `PressedRefreshBrowserTests`;
     `ComponentLayoutTests.test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to`;
     `hq/platform/core/tests/test_action_budgets.py`.
     """,

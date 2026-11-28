@@ -72,7 +72,7 @@ lazy from .moments import when_day
 lazy from .resource_capabilities import public_dns_enabled
 lazy from .sequences import follow_on
 lazy from .tailnet import POLICY_KIND, device_at, may_reach, observer, policy_allowing
-lazy from .work_runs import WorkRun, run_row, run_rows, run_status_url, seen_as_runs, shown_result, standing_of
+lazy from .work_runs import WorkRun, run_row, run_rows, seen_as_runs, shown_result, standing_of
 
 
 @stored_in(OperationRequest)
@@ -139,13 +139,9 @@ def operation_asked(
     operation: OperationRequest, *, queued: bool, message: str = "", standing: Standing | None = None
 ) -> OperationAsked:
     """What asking for ``operation`` answers: how it stands as a list of work
-    says it (``work_runs.standing_of``) unless the caller words it, and,
-    while it is under way, where a page follows a run or a scan."""
+    says it (``work_runs.standing_of``) unless the caller words it."""
 
-    run = run_row(operation)
-    standing = standing or standing_of(run)
-    following = run_status_url(run.id) if standing.live and run.url else ""
-    asked = Asked(standing, following, message).answer()
+    asked = Asked(standing or standing_of(run_row(operation)), message).answer()
     return {**asked, "queued": queued, "operation": serialize_operation(operation)}
 
 

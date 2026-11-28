@@ -16,7 +16,7 @@ from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
-from hq.platform.application.markup_testing import select, within
+from hq.platform.application.markup_testing import followed, select, within
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
@@ -26,6 +26,7 @@ from ..capabilities import execute_capability
 from ..outbound_work import ANOTHER_RUNNING
 from ..projects import REFRESH, refresh_project
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal
+from ..work_runs import job_run, standing_of
 
 REF = "example-github"
 PUSHED = "2026-09-27T12:00:00Z"
@@ -137,19 +138,20 @@ class RefreshButtonTests(TestCase):
 
         with held_jobs() as jobs:
             response = self.press(self.page(), x_requested_with="XMLHttpRequest")
-            answer = response.json()
-            # Answered with the work still to do: nothing was asked of anyone.
-            self.assertEqual((response.status_code, answer["state"], answer["live"]), (202, "queued", True))
+            # Answered with its page, the work still to do: nothing was asked of anyone.
+            self.assertRedirects(response, reverse("projects:detail", args=["alpha"]))
+            self.assertTrue(select(response, "data-ask-state", "queued"))
+            self.assertEqual(followed(response), ["run"])
             self.assertFalse(ReadRequest.objects.exists())
-            self.assertContains(self.page(), f'data-ask-status="{answer["status"]}"')
             jobs.run()
 
         self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", flat=True)), [REF])
-        ended = self.client.get(answer["status"]).json()
-        self.assertEqual((ended["state"], ended["live"]), ("done", False))
-        # The job's last note is what the refresh did.
-        self.assertIn(REF, ended["note"])
         job = Job.objects.get()
+        ended = standing_of(job_run(job))
+        self.assertEqual((ended.state, ended.live), ("done", False))
+        # The job's last note is what the refresh did.
+        self.assertIn(REF, ended.note)
+        self.assertEqual(followed(self.page()), [])
         self.assertEqual((job.kind, job.requested_by.username, job.actor), (REFRESH, "operator", "operator"))
 
     def test_without_script_the_button_returns_to_the_page_it_was_pressed_on(self):
@@ -165,8 +167,7 @@ class RefreshButtonTests(TestCase):
             self.press(self.page("alpha"))
             again = self.press(self.page("beta"), x_requested_with="XMLHttpRequest")
 
-        self.assertEqual((again.status_code, again.json()["state"]), (200, "failed"))
-        self.assertEqual(again.json()["note"], ANOTHER_RUNNING)
+        self.assertEqual((again.status_code, again.text), (409, ANOTHER_RUNNING))
         self.assertEqual(Job.objects.count(), 1)
 
     def test_a_refresh_whose_process_stopped_shows_failed_and_the_page_writes_nothing(self):
@@ -189,10 +190,10 @@ class RefreshButtonTests(TestCase):
 
     def test_pressing_again_while_its_own_refresh_runs_follows_that_one(self):
         with held_jobs():
-            first = self.press(self.page(), x_requested_with="XMLHttpRequest").json()
-            again = self.press(self.page(), x_requested_with="XMLHttpRequest").json()
+            self.press(self.page(), x_requested_with="XMLHttpRequest")
+            again = self.press(self.page(), x_requested_with="XMLHttpRequest")
 
-        self.assertEqual((again["state"], again["status"]), ("queued", first["status"]))
+        self.assertTrue(select(again, "data-ask-state", "queued"))
         self.assertEqual(Job.objects.count(), 1)
 
 

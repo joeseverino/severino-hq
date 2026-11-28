@@ -13,6 +13,7 @@ from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
+from hq.platform.application.asks import DONE, QUEUED, Standing
 from hq.platform.application.pages import PageAction, PageVisit
 from hq.platform.core import ahead
 from hq.platform.core.models import UpstreamReading
@@ -154,7 +155,7 @@ def _asking_dialog_probe():
         f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
 {_ASK_JS}
-</head><body><main>
+</head><body data-live="/live/"><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
 </main></body></html>""",
@@ -181,19 +182,22 @@ def _asking_head_probe():
     scripts = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
 {_ASK_JS}
-</head><body>"""
+</head><body data-live="/live/">"""
     return [
         scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"
         for said in ("as last read", "as it is now")
     ]
 
 
-# How the read a page asked for stands: under way, then landed.
-_VISIT_LIVE = (
-    '{"state": "queued", "live": true, "label": "Waiting", "note": "Waiting for a fresh reading.",'
-    ' "status": "/probe-visit-status/", "seconds": 0}'
-)
-_VISIT_DONE = '{"state": "done", "live": false, "label": "Done", "note": "Refreshed just now.", "status": ""}'
+def _visit_control(standing, **named):
+    """The control a visit's view answers, its readings standing as ``standing``."""
+
+    return render_to_string("partials/_visit_refresh.html", {**named, "visit_standing": standing})
+
+
+# The readings a page asked for, under way, then landed.
+_VISIT_LIVE = Standing(QUEUED, "Waiting for a fresh reading.")
+_VISIT_DONE = Standing(DONE, "Refreshed just now.")
 
 
 _PROBE_STATE = """(failure) => ({
@@ -433,10 +437,11 @@ class FragmentBrowserTests(BrowserGate):
         if parts.path == "/probe-asking-head/":
             return self.fulfill(route, self.heads.pop(0) if len(self.heads) > 1 else self.heads[0])
         if parts.path == reverse("control_plane:visit"):
-            # The read it asked for has already landed, unless a test says it is under way.
-            return self.fulfill(route, self.visit, content_type="application/json")
-        if parts.path == "/probe-visit-status/":
-            return self.fulfill(route, _VISIT_DONE, content_type="application/json")
+            # The control, as the readings it asked for stand: landed, unless a test says under way.
+            posted = re.findall(r'name="(\w+)"\r\n\r\n([^\r]*)', request.post_data or "")
+            form = dict(posted) if request.method == "POST" else dict(parse_qsl(parts.query))
+            named = {name: form.get(name, "") for name in ("subject", "name", "refresh")}
+            return self.fulfill(route, _visit_control(self.visit, **named))
         if (address, part) in self.pages:
             return self.fulfill(route, self.pages[(address, part)])
         return super().respond(route)
@@ -649,8 +654,20 @@ class FragmentBrowserTests(BrowserGate):
         self.page.wait_for_function("() => !document.querySelector('dialog').open")
         self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
 
+    def landed(self):
+        """The readings asked for land, and the page's stream says so."""
+
+        self.page.wait_for_function("() => document.querySelector('[data-fragment-live]')")
+        if not self.streams:
+            with self.page.expect_request(lambda request: urlsplit(request.url).path == "/live/"):
+                pass
+        self.visit = _VISIT_DONE
+        (stream,) = self.streams
+        stream.fulfill(headers={"Content-Type": "text/event-stream"}, body="id: 1\ndata: estate\n\n")
+
     def test_a_dialogs_panel_asks_for_its_readings_once_shown_and_fills_in_place(self):
         visit = (reverse("control_plane:visit"), "")
+        self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-dialog/", wait_until="load")
         self.page.evaluate("() => { window.kept = true; }")
         self.page.evaluate(SETTLE)
@@ -658,6 +675,7 @@ class FragmentBrowserTests(BrowserGate):
         self.assertNotIn(visit, self.asked)
 
         self.page.evaluate("() => document.querySelector('[data-probe=\"open\"]').click()")
+        self.landed()
         self.page.wait_for_function("() => document.querySelector('dialog').textContent.includes('as it is now')")
 
         self.assertEqual(self.asked.count(visit), 1)
@@ -669,20 +687,18 @@ class FragmentBrowserTests(BrowserGate):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
         note = self.css(SELECTORS["page_note"])
-        self.page.evaluate(
-            "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
-            note,
-        )
+        self.page.evaluate("(note) => { document.querySelector(note).was = true; }", note)
+        self.landed()
         # Landed, everything but the ask is drawn again, the note with it,
         # and the new note is the one its form names.
         self.page.wait_for_function("() => document.querySelector('[data-probe=said]').textContent === 'as it is now'")
         state = self.page.evaluate(
-            "(note) => ({kept: document.querySelector('[data-ask]').kept === true,"
+            "(note) => ({asks: document.querySelectorAll('[data-ask]').length,"
             " newNote: document.querySelector(note).was !== true,"
             " named: [...document.querySelector('form[data-ask-auto]').elements].some((field) => field.matches(note))})",
             note,
         )
-        self.assertEqual(state, {"kept": True, "newNote": True, "named": True})
+        self.assertEqual(state, {"asks": 1, "newNote": True, "named": True})
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")

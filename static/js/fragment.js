@@ -271,6 +271,9 @@ const hqFragment = (() => {
     lines.forEach((line) => say(spot, line));
   };
 
+  // A refusal told to the control pressed, which takes it to say itself.
+  const refusal = (said) => new CustomEvent("hq:refused", { bubbles: true, cancelable: true, detail: said });
+
   // Why a post was refused, as the page it was answered with says it among
   // its messages: the server's own sentence, which nothing else carries once
   // that page is not the one shown. An error is the one notice that is an
@@ -618,7 +621,8 @@ const hqFragment = (() => {
   // only which sets changed. A hidden tab holds none, and one brought back
   // opens it again from the last change it heard. A stream HQ refused, or
   // could not answer while it restarted, is opened again on the one loop,
-  // less often each time.
+  // less often each time, and each try asks every live region again first,
+  // so a part drawn from what HQ holds is followed while no stream is open.
   const STREAM = document.body.dataset.live;
   const REOPEN_MS = 5000;
   let stream = null;
@@ -683,6 +687,7 @@ const hqFragment = (() => {
       hqEvery(
         () => {
           reopening = false;
+          refresh(new Set(lives().map((region) => region.dataset.fragmentLive)));
           listen();
           return false;
         },
@@ -837,6 +842,8 @@ const hqFragment = (() => {
       const said = refused || [
         form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.",
       ];
+      // A control that says how its own work went takes it (`hq:refused`).
+      if (submitter && !submitter.dispatchEvent(refusal(said))) return;
       if (status?.isConnected) status.textContent = said.join(" ");
       // A press's region is the page's content, which keeps what it shows:
       // each line is said where the server says how a post went, among the

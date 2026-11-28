@@ -3,9 +3,10 @@ A running job, and what it is doing.
 
   {% include "partials/_job_progress.html" with job=job %}
 
-An ask's standing (partials/_ask.html) drawn as a panel: the page's script
-follows the job's status resource until it stops being live, then loads the
-page once so the surface can render the outcome however it likes. The partial
+An ask's standing (partials/_ask.html) drawn as a panel: while the job is
+live it is a region of its page, asked for again as jobs change, and once it
+is drawn ended the page's script loads the page once so the surface can render
+the outcome however it likes. The partial
 deliberately does not try to render the result itself: what a finished import
 has to say is the extension's business, and a shared partial guessing at it
 would be wrong for every extension after the first. Its state is the run
@@ -26,10 +27,12 @@ waiting its turn says its state's word alone, which the head already holds.
   <progress class="job-bar" aria-label="{{ job.label }}" max="100"{% if run.percent is not None %} value="{{ run.percent }}"{% endif %} data-ask-bar></progress>
   <output class="job-note{% if standing.tone %} {{ standing.tone|tone_class }}{% endif %}" data-ask-note>{{ standing.note }}</output>
 {% endpartialdef %}
-{% comment %}The status resource is given only while the work is live, which is when ask.js follows it; a job whose process stopped is not.{% endcomment %}
-{% if standing.live %}{% url 'jobs:status' job.pk as status_url %}
-{% card element="div" css="job-progress" busy=True data_ask=True data_ask_outcome=True data_ask_status=status_url data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
+{% comment %}A region of the page only while the work is live; a job whose process stopped is not.{% endcomment %}
+{% with pk=job.pk|stringformat:"s" %}{% with anchor="job-"|add:pk %}
+{% if standing.live %}
+{% card element="div" css="job-progress" id=anchor busy=True data_fragment=True data_fragment_live="run" data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
 {% else %}
-{% card element="div" css="job-progress" data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
+{% card element="div" css="job-progress" id=anchor data_ask=True data_ask_outcome=True data_ask_state=standing.state data_state=run.state %}{% partial progress %}{% endcard %}
 {% endif %}
+{% endwith %}{% endwith %}
 {% endwith %}{% endwith %}

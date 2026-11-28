@@ -42,7 +42,7 @@ class ActionBudgetTests(TestCase):
                 # Once to warm what a process caches, then the measured post.
                 _post(client, url, action, seeded)
                 response, _took, _size, statements = _post(client, url, action, seeded)
-                self.assertIn(response.status_code, (200, 202), name)
+                self.assertIn(response.status_code, (200, 302), name)
                 costs[name] = len(statements)
         return costs
 
@@ -87,19 +87,16 @@ class AnswersBeforeTheWorkTests(TestCase):
 
                 response = self.post(name)
 
-                answer = response.json()
-                self.assertEqual((response.status_code, answer["live"]), (202, True))
-                self.assertIn(answer["state"], ("queued", "running"))
+                # Answered with the page, which draws the read as under way.
+                self.assertEqual(response.status_code, 302)
                 self.assertEqual(ReadRequest.objects.count(), asked + 1)
                 # No reading moved: the controller has not been here.
                 self.assertEqual(self.stored(), before)
-                self.assertTrue(self.client.get(answer["status"]).json()["live"])
 
     def test_a_job_is_recorded_and_its_work_has_not_run(self):
         response = self.post("jobs:ask")
 
-        answer = response.json()
         job = Job.objects.get(kind="project.refresh")
-        self.assertEqual((response.status_code, answer["state"]), (202, "queued"))
+        self.assertEqual(response.status_code, 302)
         self.assertEqual((job.state, job.started_at, job.result), ("queued", None, {}))
         self.assertFalse(ReadRequest.objects.exists())

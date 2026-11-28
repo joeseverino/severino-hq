@@ -13,6 +13,7 @@ from hq.domains.control_plane.observations.portainer import CONTAINER_KIND
 from hq.platform.application import cadence
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation
+from hq.platform.application.markup_testing import followed
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
@@ -111,8 +112,7 @@ class ReadBackTests(Estate):
             form_keyed({"subject": "resource", "name": "example-web"}),
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
-        self.assertEqual(following.status_code, 202)
-        self.assertTrue(following.json()["status"])
+        self.assertEqual(followed(following), ["estate"])
 
         containers(("example-web", "exited", 8080))
         ProviderInventory.objects.filter(kind=CONTAINER_KIND).update(updated_at=timezone.now())
@@ -122,7 +122,7 @@ class ReadBackTests(Estate):
             form_keyed({"subject": "resource", "name": "example-web"}),
             headers={"X-Requested-With": "XMLHttpRequest"},
         )
-        self.assertFalse(landed.json()["live"])
+        self.assertEqual(followed(landed), [])
         redrawn = self.client.get(page)
         self.assertContains(redrawn, f'action="{start}"')
         self.assertNotContains(redrawn, stop)

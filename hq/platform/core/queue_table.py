@@ -11,7 +11,7 @@ from django.utils.text import slugify
 
 from hq.platform.application import action_items
 from hq.platform.application.action_links import read_now_link
-from hq.platform.application.asks import Ask
+from hq.platform.application.asks import Ask, read_now_standing
 from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.decisions import decision
 from hq.platform.application.moments import duration
@@ -211,4 +211,11 @@ def refresh(items: Iterable[Mapping[str, Any]], principal: Principal, here: str)
     )
     if read is None:
         return None
-    return Ask(CONTROLLER_REFRESH.words(), with_query(read.url, {"next": here}), title=read.reason, compact=True)
+    return Ask(
+        CONTROLLER_REFRESH.words(),
+        with_query(read.url, {"next": here}),
+        standing=read_now_standing(read.url),
+        follows="estate",
+        title=read.reason,
+        compact=True,
+    )

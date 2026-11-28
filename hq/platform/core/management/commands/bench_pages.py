@@ -108,7 +108,6 @@ SAMPLES: dict[str, Callable[[Seeded], dict[str, Any]]] = {
     "control_plane:edit": lambda s: {"key": s.resource.key},
     "control_plane:remove": lambda s: {"key": s.resource.key},
     "control_plane:report_download": lambda s: {"key": s.resource.key},
-    "jobs:status": lambda s: {"pk": s.job.pk},
     "core:audit_detail": lambda s: {"pk": s.audit.pk},
     "core:approval_entry": lambda s: {"approval_id": s.approval.pk},
     "command": lambda _s: {"name": "expense.create"},

@@ -308,8 +308,8 @@ ASK_STATES = {
             ),
         },
     ),
-    # While its work is under way: busy, its elapsed time ticking, followed
-    # at its status resource.
+    # While its work is under way: busy, its elapsed time ticking, a region
+    # of its page asked for again as what it is drawn from changes.
     "running": Example(
         '{% section "Example readings 3" %}{% include "partials/_ask.html" with ask=ask %}{% endsection %}',
         lambda: {
@@ -322,7 +322,7 @@ ASK_STATES = {
                     since=DRAWN_AT - timedelta(seconds=40),
                     percent=40,
                 ),
-                status_url="/example/read/status/",
+                follows="estate",
                 primary=True,
             )
         },
@@ -355,7 +355,7 @@ ASK_STATES = {
                 "Example read",
                 "/example/read/",
                 standing=Standing(QUEUED, note=WAITING, since=DRAWN_AT - timedelta(seconds=20)),
-                status_url="/example/read/status/",
+                follows="estate",
                 compact=True,
             ),
         ),
@@ -393,7 +393,7 @@ ASK_STATES = {
                             ),
                             since=DRAWN_AT - timedelta(minutes=4),
                         ),
-                        status_url="/example/refresh/status/",
+                        follows="estate",
                     ),
                 ),
             )

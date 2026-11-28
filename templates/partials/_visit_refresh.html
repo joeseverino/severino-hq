@@ -9,13 +9,19 @@ page.html and the dashboard draw it, and its note (`#note`) ends the head's
 first line, naming the form it speaks for. Nobody pressed it, so it says
 nothing while its readings are under way; its slot is as wide as the offer of a
 newer reading (asks.NEWER_READING and SHOW_NEWER), drawn here unseen. A region that fills itself
-(`refresh="[data-connection-panel]"`) holds its own note.
+(`refresh="[data-connection-panel]"`) holds its own note. The control is a
+region its view answers alone (`control_plane:visit`), drawn there as its
+readings stand (`visit_standing`), and asked for again while they are under
+way. A page draws it idle, and its ask on opening is answered with how they
+stand.
 {% endcomment %}
-<div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
+{% firstof visit.subject subject as on %}{% firstof visit.name name as named %}{% url 'control_plane:visit' as visit_url %}{% with_query visit_url subject=on name=named refresh=refresh|default:"" as control_url %}
+<div class="ask ask-quiet" id="visit-{{ on }}-{{ named }}" data-fragment="{{ control_url }}"{% if visit_standing.live %} data-fragment-live="estate"{% endif %} data-ask data-ask-state="{{ visit_standing.state|default:"idle" }}" data-ask-said="{% if visit_standing.state == "failed" %}{{ visit_standing.said }}{% endif %}" data-ask-tone="{{ visit_standing.tone }}" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
   <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
     {% write_token %}
-    <input type="hidden" name="subject" value="{% firstof visit.subject subject %}">
-    <input type="hidden" name="name" value="{% firstof visit.name name %}">
+    <input type="hidden" name="subject" value="{{ on }}">
+    <input type="hidden" name="name" value="{{ named }}">
+    {% if refresh %}<input type="hidden" name="refresh" value="{{ refresh }}">{% endif %}
   </form>
   {% if refresh %}<output class="visit-status" data-ask-note hidden></output>{% endif %}
 </div>

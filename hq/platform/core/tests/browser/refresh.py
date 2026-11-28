@@ -10,15 +10,15 @@ takes no room (static/js/ask.js), and its result is drawn in place. WebKit
 keeps no layout-shift record, so the boxes are read before and after.
 """
 
-import json
+import re
 from typing import override
 from urllib.parse import urlsplit
 
 from hq.platform.application.markup_testing import within
 from hq.platform.core.tests.browser.estate import ExampleEstateGate
+from hq.platform.core.tests.browser.gate import sent
 from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
-lazy from hq.platform.application.asks import DONE, QUEUED, Standing
 
 # A phone and a laptop.
 LANDS_AT = (402, 1360)
@@ -69,10 +69,28 @@ def _innermost(before, after):
     return [f"{before[at][0]} -> {after[at][0]}" for at in sorted(differ - holding)][:12]
 
 
-# Where a pressed ask is followed. The press is answered as asks.answer
-# answers a script, under way with a sentence longer than a head has room
-# for; this address then answers that it is done.
-_FOLLOWED = "/probe-ask-status/"
+# What a press is answered with: the page it was pressed on, its ask drawn
+# under way with a sentence longer than a head has room for. Its stream then
+# says the estate changed, and the page asked again draws it ended.
+_WAITING = "Waiting for HQ's playbook worker to take it, then reading it again."
+_CHANGED = "id: 1\ndata: estate\n\n"
+
+
+def _under_way(page, anchor):
+    """``page`` with the ask ``anchor`` names (and its copy in the head's menu)
+    drawn as asks.Ask draws work under way, followed as the estate changes."""
+
+    def live(found):
+        return (
+            f'{found["open"]} data-fragment="" data-fragment-live="estate" aria-busy="true"'
+            f'{found["between"]}data-ask-state="queued"{found["rest"]}'
+            f'<span class="ask-word">Queued</span><span class="ask-sentence">{_WAITING}</span>'
+        )
+
+    pattern = rf'(?P<open>id="{re.escape(anchor)}(?:-menu)?")(?P<between>[^>]*?)data-ask-state="idle"(?P<rest>.*?data-ask-word>)'
+    return sent(re.sub(pattern, live, str(page), flags=re.DOTALL), page.headers)
+
+
 # Set before the press, so a page loaded again is told apart.
 _MARK = "() => { window.probeDrawn = true; }"
 _STILL_DRAWN = "() => window.probeDrawn === true"
@@ -101,8 +119,11 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
     the work is under way and once it lands nothing on the page has moved,
     and what it read is drawn in place, never offered as a link."""
 
-    # Where the ask pressed posts, which this answers as HQ would.
+    # Where the ask pressed posts, which this answers as HQ would, and the
+    # ask's id and the page it was pressed on.
     pressed = ""
+    asking = ""
+    on = ""
 
     @override
     def start(self, **options):
@@ -115,12 +136,10 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
         request = route.request
         path = urlsplit(request.url).path
         if request.method == "POST" and path == self.pressed:
-            waiting = Standing(QUEUED, "Waiting for HQ's playbook worker to take it, then reading it again.")
-            body = json.dumps({**waiting.as_json(), "status": _FOLLOWED})
-            route.fulfill(status=202, content_type="application/json", body=body)
+            self.fulfill(route, _under_way(self.pages[self.on, ""], self.asking))
             return
-        if path == _FOLLOWED:
-            route.fulfill(content_type="application/json", body=json.dumps(Standing(DONE, "Read.").as_json()))
+        if path == "/live/" and self.pressed:
+            route.fulfill(headers={"Content-Type": "text/event-stream"}, body=_CHANGED)
             return
         if self.pressed and request.headers.get("x-requested-with"):
             self.redrawn.append(path)
@@ -137,6 +156,8 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
             self.page.locator(self.css(SELECTORS["head_menu"] + " > button")).first.click()
             pressing = self.page.locator(self.css(SELECTORS["head_menu_panel"] + " [data-ask-button]")).first
         self.pressed = urlsplit(pressing.get_attribute("formaction") or "").path
+        self.asking = pressing.evaluate("(button) => button.closest('[data-ask]').id.replace(/-menu$/, '')")
+        self.on = urlsplit(self.page.url).path
         self.page.evaluate(_MARK)
         pressing.click()
 

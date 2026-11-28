@@ -1259,8 +1259,7 @@ makes it. So a view or capability handler that calls a provider raises
 `OutboundInRequest` before the call leaves
 ([Architecture](Architecture.md#what-a-request-waits-on)).
 
-An extension does not start threads, poll, or expose a status endpoint to get
-round that. It declares the work, and HQ runs it:
+An extension does not start threads or poll to get round that. It declares the work, and HQ runs it:
 
 ```python
 from hq_sdk.outbound import Failed, OutboundWork, ask
@@ -1301,7 +1300,7 @@ the rest:
 | --- | --- |
 | The job | `run` is called on a job's own thread, where reaching out is allowed. One job of a name is live at a time, held by the database, so a second press or caller starts nothing. |
 | The capability | `notes.lookup`, with the subject as its target. The API, MCP, the command center and `hq_call` ask through it with the same authorization, approval policy and denial record as any command, and are answered at once with the job's id. A command line waits for the work, because nothing there outlives the command. |
-| The route and status | The control posts to `jobs:ask` and follows `jobs:status`. The extension has no URL, view, template or script for either. |
+| The route | The control posts to `jobs:ask`, and while the job is live its page asks for it again as jobs change. The extension has no URL, view, template or script for either. |
 | The control | `ask("notes.lookup", note.slug)` is the shared Ask (`partials/_ask.html`), in the work's own words, standing as the stored job does: live work is followed, failed work says why until asked for again. It may stand among a page's actions. One query. |
 | The audit entries | Who asked, how it ended, how long it took, and the `seen`, `created`, `updated` and `skipped` counts the work returns. |
 

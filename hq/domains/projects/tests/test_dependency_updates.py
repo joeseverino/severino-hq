@@ -271,7 +271,7 @@ class LastRunSurfaceTests(TestCase):
         asks = run_controls(response)
         self.assertTrue(asks)
         for ask in asks:
-            self.assertTrue(ask.attrs.get("data-ask-status"))
+            self.assertEqual(ask.attrs.get("data-fragment-live"), "estate")
             self.assertEqual(ask.attrs["data-ask-refresh"], "#updates-state")
 
     def test_the_control_posts_the_run_and_the_page_follows_it(self):
@@ -282,9 +282,12 @@ class LastRunSurfaceTests(TestCase):
             reverse("projects:updates_run", args=["alpha"]), form_keyed(), HTTP_X_REQUESTED_WITH="XMLHttpRequest"
         )
 
-        self.assertEqual(posted.status_code, 202)
-        self.assertTrue(posted.json()["status"])
+        # Answered with the page it asked from, which follows the run.
+        self.assertEqual(posted.status_code, 302)
         self.assertIsNotNone(asked_at())
+        self.assertEqual(
+            [ask.attrs.get("data-fragment-live") for ask in run_controls(self.client.get(posted.url))], ["estate"]
+        )
 
     def test_a_project_not_opted_in_offers_no_run(self):
         Project.objects.filter(pk=self.project.pk).update(dependency_updates=False)
