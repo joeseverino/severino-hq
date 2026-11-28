@@ -107,9 +107,15 @@ class Answer:
         kept = tuple(line for line in self.because if line and not _restates(line, self.short))
         object.__setattr__(self, "because", kept)
         if re.search(r"[.:;!?](?:\s|\Z)", self.short):
-            refused(f"Answer({self.short!r}) is a sentence: its reason belongs in `because`.", "An answer's sentence")
+            refused(
+                f"Answer({self.short!r}) is a sentence: its reason belongs in `because`.",
+                "An answer's short is a sentence: its reason belongs in `because`.",
+            )
         if self.tone in (Tone.ATTENTION, Tone.SERIOUS) and not kept:
-            refused(f"Answer({self.short!r}) has the {self.tone} tone and no reason for it.", "An answer's tone")
+            refused(
+                f"Answer({self.short!r}) has the {self.tone} tone and no reason for it.",
+                "An answer has a tone to act on and no reason for it.",
+            )
 
     @property
     def said(self) -> str:

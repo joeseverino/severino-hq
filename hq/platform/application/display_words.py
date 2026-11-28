@@ -3,7 +3,8 @@
 Every view model a caller hands HQ to draw is declared with ``@display``, a
 frozen dataclass whose ``__post_init__`` runs ``said_in_words`` first, so a
 stamp, a dumped record or a field's name fails where it was built, with the
-builder in the traceback, and never reaches a page.
+builder in the traceback. Every such refusal is answered by ``refused``,
+which on a served page logs it and shows the value instead.
 """
 
 import logging
@@ -82,12 +83,14 @@ def _machine_text(text: str, *, label: bool = False) -> str:
     return "a field's name" if label and _KEY.fullmatch(text) else ""
 
 
-def in_words(text: str, *, label: bool = False) -> str:
-    """``text``, or ValueError naming what a machine wrote in it."""
+def in_words(text: str, where: str, *, label: bool = False) -> None:
+    """Refuse ``text``, held at ``where``, when a machine wrote in it (``refused``)."""
 
     if found := _machine_text(text, label=label):
-        raise ValueError(f"{text!r} carries {found}: say it in words.")
-    return text
+        refused(
+            f"{where} carries {found}: say it in words. Got {text!r}.",
+            f"{where} carries {found.split(',')[0]}: say it in words.",
+        )
 
 
 @cache
@@ -145,37 +148,39 @@ def said_in_words(view: Any) -> None:
         value = getattr(view, field.name)
         where = f"{type(view).__name__}.{field.name}"
         if (field.type is str and not isinstance(value, str)) or (isinstance(value, bool) and field.type is not bool):
-            raise ValueError(f"{where} is words; got {value!r}.")
+            refused(
+                f"{where} is words; got {value!r}.", f"{where} holds a {type(value).__qualname__} where it holds words"
+            )
         quoted = field.metadata.get("quoted", False)
         if quoted is True or (quoted and getattr(view, quoted)):
             continue
-        for text, holder in _texts(value, value):
-            if found := _machine_text(text, label=field.name.endswith("label")):
-                refused(
-                    f"{where} carries {found}: say it in words. Got {holder!r}.",
-                    f"{where} carries {found.split(',')[0]}",
-                )
+        for text in _texts(value):
+            in_words(text, where, label=field.name.endswith("label"))
 
 
-def refused(said: str, logged: str) -> None:
-    """A view model built in a shape no page may show: where a developer sees
-    it, it fails where it was built; on a served page, text a record holds
-    never takes the page down, so it is shown as it is and ``logged`` says
-    where, never what."""
+def refused(said: str, logged: str, error: type[Exception] = ValueError) -> None:
+    """The one answer to a value built or printed in a shape no page may show.
+
+    Where a developer sees it (``SEVERINO_STRICT_PRINT``), it raises ``error``
+    with ``said`` where it was built. On a served page, a value HQ did not
+    write (a host's message, a registry's answer, an extension's data) never
+    takes the page down, so it is shown as it is and ``logged`` says where,
+    never what.
+    """
 
     if settings.SEVERINO_STRICT_PRINT:
-        raise ValueError(said)
-    logger.error("%s: say it in words.", logged, extra={"event": "print.refused"})
+        raise error(said)
+    logger.error(logged, extra={"event": "print.refused"})
 
 
-def _texts(value: Any, holder: Any) -> Iterator[tuple[str, Any]]:
-    """Each str in ``value``, with the innermost tuple that holds it."""
+def _texts(value: Any) -> Iterator[str]:
+    """Each str in ``value``, in a tuple too."""
 
     if isinstance(value, str):
-        yield value, holder
+        yield value
     elif isinstance(value, tuple):
         for item in value:
-            yield from _texts(item, value)
+            yield from _texts(item)
 
 
 @dataclass_transform(frozen_default=True)
