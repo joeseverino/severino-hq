@@ -468,11 +468,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
 # What HQ's own host jobs say happened: a unit that failed, which every
 # severino-hq unit's OnFailure= reports (``host_work.units.read``); a job
 # systemd ended on HQ's host, for any unit, with its result after a dot; and a
-# container on HQ's host that changed, with Docker's action after a dot, which
-# makes due the container list, each one's inspect and the images pulled, since
-# a sweep of only the environments reads none of them again. The last two are
-# what severino-hq-events.service hears.
+# container on HQ's host that changed, with Docker's action after a dot. The
+# last two are what severino-hq-events.service hears.
 UNIT_FAILED = "unit.failed"
+# What a container's change on a machine makes due: the list, each one's
+# inspect and the images pulled, since a sweep of only the environments reads
+# none of them again.
+CONTAINER_CHANGED = (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND)
 UNIT_JOB = "unit.job"
 DOCKER_CONTAINER = "docker.container"
 # A job of the dependency run's unit that ended, told apart from any other so
@@ -499,7 +501,7 @@ INBOUND = {
                 f"{DEPENDENCY_RUN}.{result}": (DEPENDENCY_RUN_KIND, *(kind for kind in kinds if kind == UNIT_KIND))
                 for result, kinds in JOB_ENDS.items()
             },
-            DOCKER_CONTAINER: (ENVIRONMENT_KIND, CONTAINER_KIND, RUNTIME_KIND, IMAGE_KIND),
+            DOCKER_CONTAINER: CONTAINER_CHANGED,
         }
     )
 }

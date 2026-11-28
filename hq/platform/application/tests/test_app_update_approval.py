@@ -540,6 +540,19 @@ class ApproveUpdateTests(TestCase):
         container = self.container_page().context["container"]
         self.assertEqual((container["state"].at_work, container["act"]), (True, None))
 
+    def test_an_apply_that_passes_asks_its_containers_read_so_its_health_stands_without_a_sweep(self):
+        from django.utils import timezone
+
+        from hq.domains.control_plane.models import ProviderInventory, ReadRequest
+
+        self.merged()
+
+        self.worked(stated=receipt(apps=[{"project": "app", "result": "ok", "changed": True}]))
+
+        self.assertTrue(ReadRequest.objects.filter(kind="portainer.container", taken_at=None).exists())
+        ProviderInventory.objects.filter(kind="portainer.container").update(observed_at=timezone.now())
+        self.assertEqual((self.standing().title, self.standing().tone), ("Health check", "good"))
+
     def test_an_apply_whose_pull_did_not_release_every_app_does_not_stand_applied(self):
         self.merged()
 

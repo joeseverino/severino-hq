@@ -14,7 +14,7 @@ from hq.domains.control_plane.models import OperationRequest
 from hq.domains.control_plane.observations.github import PROVIDER as GITHUB
 from hq.domains.control_plane.observations.host import PROVIDER as HOST
 
-from .app_update_approval import apply_merged, merge_previewed
+from .app_update_approval import apply_merged, run_passed
 from .app_updates import Managed, UpdateKind, UpdateState, of_app, update_state
 from .asks import DONE, FAILED, IDLE, QUEUED, RUNNING, Standing
 from .containers import containers
@@ -277,7 +277,7 @@ UPDATE = SequenceSpec(
     (PULL_REQUEST, CHECKS, APPROVE, PREVIEW, MERGE, APPLY, HEALTH),
     about=_about,
     subject=_subject,
-    follow_ons={OperationRequest.Action.RUN: merge_previewed, OperationRequest.Action.MERGE: apply_merged},
+    follow_ons={OperationRequest.Action.RUN: run_passed, OperationRequest.Action.MERGE: apply_merged},
     examples={
         "held": Example("app-updates", _HELD, PULL_REQUEST, IDLE),
         "opening": Example("app-update-running", _HELD, PULL_REQUEST, RUNNING),

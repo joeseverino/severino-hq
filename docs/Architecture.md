@@ -1689,7 +1689,10 @@ approver (`resource_operations.queue_carried_merge`), so a replayed report
 queues nothing and a merge GitHub refused is asked again by the next approval
 at the same head; the controller's settle
 of the merge with its commit queues the apply, that commit as its `revision`
-(`automation_runs.queue_follow_up`). The merge's `then` is the playbook's id,
+(`automation_runs.queue_follow_up`), and an apply that passes, a held one once
+its read settles it, asks the readings a container's change makes due
+(`CONTAINER_CHANGED`), so its health check reads the containers it moved at
+once. The merge's `then` is the playbook's id,
 its adopted revision, its machines and the correlation all three share. Each
 step's result says what it queued, or why nothing was. A preview that fails
 queues nothing, so nothing merges. An agent's call waits for a person every

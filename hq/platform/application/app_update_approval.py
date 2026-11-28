@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMMIT, PULL_REQUEST_KIND, REPOSITORY
 lazy from hq.domains.control_plane.names import normalized_hostname
+lazy from hq.domains.control_plane.observations.host import CONTAINER_CHANGED
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from .command_fields import Describe
@@ -34,6 +35,7 @@ from .security import Capability, PolicyDenied
 from .tone import Tone
 from .ui import counted, ended
 from .work_runs import StatedKind
+lazy from . import cadence
 lazy from .app_update_flow import again
 lazy from .app_updates import AppUpdate, app_updates, merged_of, update_state
 lazy from .approval_review import ChangePreview
@@ -368,18 +370,28 @@ def apply_update(command: ApplyUpdateCommand, *, consented: Consented) -> Operat
             "parameters": _parameters(manifest, command.head_sha),
             "hosts": list(hosts),
             "correlation": f"{command.repository}@{command.head_sha[:12]}",
+            THEN: {},
         },
         reason="",
         consented=consented,
     )
 
 
-def merge_previewed(preview: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
-    """Queue the merge a preview carries, now that it passed."""
+def run_passed(run: OperationRequest, then: dict[str, Any]) -> dict[str, Any]:
+    """What follows a run of the applier that passed: a preview's merge, and
+    after an apply a read of the containers it moved, so its health check
+    reads them now rather than at the next sweep."""
 
     # Only a preview carries a merge: a run that acted merges nothing.
-    if (preview.input or {}).get(CHECK) is not True:
-        raise PolicyError("Only a preview queues a merge, so nothing merged.")
+    if (run.input or {}).get(CHECK) is True:
+        return _merge_previewed(run, then)
+    cadence.ask(reads=CONTAINER_CHANGED)
+    return {"read": list(CONTAINER_CHANGED)}
+
+
+def _merge_previewed(preview: OperationRequest, then: dict[str, Any]) -> dict[str, str]:
+    """Queue the merge a preview carries, now that it passed."""
+
     pull = (
         ManagedResource.objects.select_for_update()
         .filter(kind=PULL_REQUEST_KIND, key=str(then.get("pull_request", "")))
@@ -412,6 +424,7 @@ def apply_merged(merge: OperationRequest, then: dict[str, Any]) -> dict[str, str
         "parameters": _parameters(manifest, sha),
         "hosts": hosts,
         "correlation": str(then.get("correlation", "")),
+        THEN: {},
     }
     return {"run": str(queue_follow_up(manifest, bound, asked=merge, once=f"{manifest.id}:{sha}").pk)}
 
