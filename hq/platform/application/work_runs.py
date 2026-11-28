@@ -32,7 +32,6 @@ from .conditions import PROBLEMS, holding
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
 from .quoted import Quoted
-from .routes import reverse
 from .tone import Tone, Toned
 from .ui import counted
 lazy from . import automation_adoption
@@ -571,12 +570,6 @@ def run_row(operation: OperationRequest) -> WorkRun:
     """One operation, read again, as the row every list of work draws."""
 
     return run_rows(seen_as_runs(OperationRequest.objects.filter(pk=operation.pk).select_related("resource")))[0]
-
-
-def run_status_url(operation_id: str) -> str:
-    """Where a page follows the run or scan ``operation_id`` (``standing_of``)."""
-
-    return reverse("jobs:run_status", args=[operation_id])
 
 
 def run_hosts() -> list[str]:
