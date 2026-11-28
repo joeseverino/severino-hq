@@ -58,8 +58,12 @@ const (
 	// operator to start or read, so HQ declares them.
 	SecretsUnit    = string(runtime.SecretsUnit)
 	ControllerUnit = string(runtime.ControllerUnit)
-	// GlanceUnit runs one glance pass, beside a controller pass.
-	GlanceUnit = "severino-hq-glance.service"
+	// GlanceUnit runs one glance pass, beside a controller pass; HQ keeps
+	// its last run for each release.
+	GlanceUnit = string(runtime.GlanceUnit)
+	// DriftUnit runs `hq-host verify` daily; HQ keeps its last run for each
+	// release too.
+	DriftUnit = string(runtime.DriftUnit)
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.

@@ -6099,14 +6099,18 @@
       },
       "HostService": {
         "type": "string",
-        "description": "A unit of HQ's host that HQ tells an operator to start or read.",
+        "description": "A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.",
         "enum": [
           "severino-hq-controller.service",
-          "severino-hq-secrets.service"
+          "severino-hq-secrets.service",
+          "severino-hq-glance.service",
+          "severino-hq-script-drift.service"
         ],
         "x-enum-varnames": [
           "ControllerUnit",
-          "SecretsUnit"
+          "SecretsUnit",
+          "GlanceUnit",
+          "DriftUnit"
         ]
       },
       "HostTailnetLockRecord": {

@@ -527,6 +527,8 @@ func (e HostRenderStatusRecordState) Valid() bool {
 // Defines values for HostService.
 const (
 	ControllerUnit HostService = "severino-hq-controller.service"
+	DriftUnit      HostService = "severino-hq-script-drift.service"
+	GlanceUnit     HostService = "severino-hq-glance.service"
 	SecretsUnit    HostService = "severino-hq-secrets.service"
 )
 
@@ -534,6 +536,10 @@ const (
 func (e HostService) Valid() bool {
 	switch e {
 	case ControllerUnit:
+		return true
+	case DriftUnit:
+		return true
+	case GlanceUnit:
 		return true
 	case SecretsUnit:
 		return true
@@ -2649,7 +2655,7 @@ type HostRenderStatusSecretRenderSuccess struct {
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
-// HostService A unit of HQ's host that HQ tells an operator to start or read.
+// HostService A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.
 type HostService string
 
 // HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.

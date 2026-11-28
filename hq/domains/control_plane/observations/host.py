@@ -70,11 +70,14 @@ STATUS_WORD = r"^[A-Za-z0-9_.+-]{1,64}$"
 UNREADABLE_WORD = "unreadable"
 # A renderer's name is a fixed word, never a path.
 RENDERER_NAME = r"^[a-z][a-z0-9-]{0,31}$"
-# The units of HQ's host a finding tells an operator to start or read, as
-# deploy/systemd names them, and each secret renderer the launcher names, by
-# the unit that runs it. The host's layout takes them from the contract.
+# The units of HQ's host a finding tells an operator to start or read, or a
+# release keeps the last run of, as deploy/systemd names them, and each secret
+# renderer the launcher names, by the unit that runs it. The host's layout
+# takes them from the contract.
 CONTROLLER_UNIT = "severino-hq-controller.service"
 SECRETS_UNIT = "severino-hq-secrets.service"
+GLANCE_UNIT = "severino-hq-glance.service"
+DRIFT_UNIT = "severino-hq-script-drift.service"
 RENDERER_UNITS = {"hq": SECRETS_UNIT}
 # Every word a renderer files a failed run under (``Class`` in
 # controller/secrets, whose constants are generated from the contract), and
@@ -530,9 +533,9 @@ SHARED = (
     ),
     SharedValue(
         "HostService",
-        (CONTROLLER_UNIT, SECRETS_UNIT),
-        "A unit of HQ's host that HQ tells an operator to start or read.",
-        varnames=("ControllerUnit", "SecretsUnit"),
+        (CONTROLLER_UNIT, SECRETS_UNIT, GLANCE_UNIT, DRIFT_UNIT),
+        "A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.",
+        varnames=("ControllerUnit", "SecretsUnit", "GlanceUnit", "DriftUnit"),
     ),
     SharedValue("SecretRenderer", tuple(RENDERER_UNITS), "A secret renderer the host's launcher names."),
     SharedValue("RenderFailure", tuple(FAILURE_CLASSES), "A word a secret renderer files a failed run under."),
