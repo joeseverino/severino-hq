@@ -509,9 +509,12 @@ def live(drawn, name):
 @answers(register, takes_context=True)
 def live_stream(context):
     """``{% live_stream %}``: where the page hears what commits, from the
-    change it was drawn after (``core.live``)."""
+    change it was drawn after (``core.live``); nowhere for a page drawn for no
+    request, which no stream of this process can answer once it is served."""
 
     request = context.get("request")
+    if request is None:
+        return ""
     seen = getattr(request, "live_seen", "") or live_reads.now()
     return with_query(reverse("live"), {"after": seen})
 
