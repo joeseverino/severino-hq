@@ -66,7 +66,8 @@ _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/s
 _PER_RESPONSE_SOURCES = re.compile(r"\s+(?:'nonce-[^']*'|'strict-dynamic')")
 _NONCE_ATTR = re.compile(r'(<script\b[^>]*?)\snonce="[^"]*"')
 _CHARSET = '<meta charset="utf-8">'
-# A saved copy has no HQ behind it to hear what commits (core.live).
+# A saved copy has no HQ behind it to hear what commits (core.live), so the
+# build neither saves its stream's address nor reads it as a script's answer.
 _LIVE_STREAM = re.compile(r'\sdata-live="[^"]*"')
 # Directives a meta tag can't carry; browsers ignore them there and say so.
 _HEADER_ONLY = ("frame-ancestors", "report-uri", "report-to", "sandbox")
@@ -395,7 +396,7 @@ class _Offered:
         """What ``page`` at ``path`` offers; ``depth`` is how many copies from
         a page its addresses with a query are, one for a page's own."""
 
-        page = own(page)
+        page = _LIVE_STREAM.sub("", own(page))
         links = {urljoin(path, unescape(address)) for address in _QUERY_HREF.findall(page)}
         links.update(_list_pages(path, page))
         for address in links | _filter_choices(path, page):
