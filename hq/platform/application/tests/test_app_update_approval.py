@@ -68,8 +68,9 @@ def stopped(task=REFUSED_TASK, message=REFUSED_SAID):
             "outcome": "ok",
             "message": "",
             "warnings": [],
+            "data": "",
         },
-        {"host": APP, "task": task, "outcome": "failed", "message": message, "warnings": []},
+        {"host": APP, "task": task, "outcome": "failed", "message": message, "warnings": [], "data": ""},
     ]
 
 

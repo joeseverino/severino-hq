@@ -451,6 +451,7 @@
               "reads.sight.parts.part.provider",
               "reads.sight.parts.refusal",
               "reads.sight.parts.reason",
+              "reads.sight.parts.detail",
               "reads.sight.parts.scope",
               "reads.sight.parts.connection_ref",
               "reads.sight.parts.address",
@@ -796,6 +797,7 @@
               "sights.parts.part.provider",
               "sights.parts.refusal",
               "sights.parts.reason",
+              "sights.parts.detail",
               "sights.parts.scope",
               "sights.parts.connection_ref",
               "sights.parts.address",
@@ -2262,6 +2264,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.data",
               "events.warnings",
               "events.tone",
               "expected",
@@ -2947,6 +2950,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.data",
               "events.warnings",
               "events.tone",
               "expected",
@@ -26540,6 +26544,11 @@
             "description": "The connection it was refused to; empty for none.",
             "type": "string"
           },
+          "detail": {
+            "default": "",
+            "description": "The cause's own text behind the reason; empty for none.",
+            "type": "string"
+          },
           "kind": {
             "description": "The type the refused part belongs to.",
             "type": "string"
@@ -26549,7 +26558,7 @@
           },
           "reason": {
             "default": "",
-            "description": "The service's words for the refusal; empty for none.",
+            "description": "HQ's words for the refusal; empty for none.",
             "type": "string"
           },
           "refusal": {
@@ -26567,6 +26576,7 @@
           "part",
           "refusal",
           "reason",
+          "detail",
           "scope",
           "connection_ref",
           "address"
@@ -26582,6 +26592,9 @@
           },
           "connection_ref": {
             "$ref": "#/components/schemas/RefusedPart/properties/connection_ref"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/RefusedPart/properties/detail"
           },
           "kind": {
             "$ref": "#/components/schemas/RefusedPart/properties/kind"
@@ -27912,12 +27925,16 @@
         "additionalProperties": false,
         "description": "One task's outcome on one machine, as the worker reported it.",
         "properties": {
+          "data": {
+            "description": "What the task said as data, as JSON; empty when it said words or nothing.",
+            "type": "string"
+          },
           "host": {
             "description": "The machine the task ran on, as the playbook's inventory names it.",
             "type": "string"
           },
           "message": {
-            "description": "What the task said; empty when it said nothing.",
+            "description": "What the task said in words; empty when it said nothing or data.",
             "type": "string"
           },
           "outcome": {
@@ -27945,6 +27962,7 @@
           "task",
           "outcome",
           "message",
+          "data",
           "warnings",
           "tone"
         ],
@@ -27954,6 +27972,9 @@
         "additionalProperties": false,
         "description": "One task's outcome on one machine, as the worker reported it.",
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RunTask/properties/data"
+          },
           "host": {
             "$ref": "#/components/schemas/RunTask/properties/host"
           },

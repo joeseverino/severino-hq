@@ -83,7 +83,7 @@ def _report(operation_id: str) -> None:
             operation_id,
             controller_id=automation.WORKER,
             events=[
-                {"host": host, "task": "Run the playbook", "outcome": "ok", "message": "", "warnings": []}
+                {"host": host, "task": "Run the playbook", "outcome": "ok", "message": "", "warnings": [], "data": ""}
                 for host in run.input["hosts"]
             ],
         )

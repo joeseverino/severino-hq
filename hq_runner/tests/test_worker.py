@@ -131,6 +131,15 @@ class SuccessTests(PassTestCase):
         (warning,) = event["warnings"]
         self.assertIn("Skipped '/srv/example/closed/inner' path", warning)
 
+    def test_a_task_that_said_data_reports_it_as_json_apart_from_its_words(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner(fakes.SAID_DATA))
+
+        said = [json.loads(event["data"]) for event in bridge.events]
+        self.assertEqual(said, [event["event_data"]["res"]["msg"] for event in fakes.SAID_DATA])
+        self.assertEqual([event["message"] for event in bridge.events], ["", ""])
+
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
         bridge = fakes.Bridge(fakes.pending())
 

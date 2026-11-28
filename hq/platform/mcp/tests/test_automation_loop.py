@@ -22,7 +22,14 @@ from .test_held_tasks import CreatedTask, Tasks, _task
 
 WORKER = "example-worker"
 LOGS = "example.service_logs"
-TASK = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted.", "warnings": []}
+TASK = {
+    "host": APP,
+    "task": "Restart the service",
+    "outcome": "changed",
+    "message": "Restarted.",
+    "warnings": [],
+    "data": "",
+}
 
 
 @override_settings(SEVERINO_SITE_HOST="hq.example.com")

@@ -3222,6 +3222,8 @@ type ResourceKind string
 
 // RunEvent One task on one machine: started while it is under way, else how it ended.
 type RunEvent struct {
+	// Data The task's message as JSON when it said data rather than words, with message empty; empty when it said words or nothing.
+	Data    string          `json:"data"`
 	Host    string          `json:"host"`
 	Message string          `json:"message"`
 	Outcome RunEventOutcome `json:"outcome"`

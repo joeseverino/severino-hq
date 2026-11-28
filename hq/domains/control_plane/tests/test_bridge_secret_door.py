@@ -35,6 +35,7 @@ EXAMPLES: dict[str, Any] = {
                 "outcome": "changed",
                 "message": "Restarted.",
                 "warnings": [],
+                "data": "",
             }
         ]
     },

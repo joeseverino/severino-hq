@@ -29,6 +29,7 @@ lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import CHECK, capability_name, run_title
 from .conditions import PROBLEMS, holding
+from .display_words import Code
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
 from .quoted import Quoted
@@ -181,6 +182,10 @@ class RunEvidence:
     expected: str = ""
     consumers: tuple[dict[str, Any], ...] = ()
     raw: str = ""
+
+    def __post_init__(self) -> None:
+        # Every way a run's evidence is built reads its tasks through one parser.
+        object.__setattr__(self, "events", tuple(run_event(event) for event in self.events))
 
     @property
     def under_way(self) -> tuple[dict[str, Any], ...]:
@@ -857,13 +862,22 @@ def shown_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
-    """A run's tasks so far from its result, in the order they started, each in its outcome's tone,
-    with no warnings where its worker reported none."""
+    """A run's tasks so far from its result, in the order they started."""
 
-    return tuple(
-        {"warnings": [], **event, "tone": outcome_tone(event.get("outcome", ""))}
-        for event in result.get(RUN_EVENTS) or ()
-    )
+    return tuple(result.get(RUN_EVENTS) or ())
+
+
+def run_event(reported: Mapping[str, Any]) -> dict[str, Any]:
+    """One task as a page draws it, in its outcome's tone: what it said as the
+    playbook's own words, and what it said as data as code."""
+
+    return {
+        **reported,
+        "message": Quoted(reported.get("message") or ""),
+        "data": Code(reported.get("data") or ""),
+        "warnings": list(reported.get("warnings") or ()),
+        "tone": outcome_tone(reported.get("outcome", "")),
+    }
 
 
 def stated_readings(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:

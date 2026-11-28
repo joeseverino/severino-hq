@@ -1320,6 +1320,11 @@
             },
             "maxItems": 10,
             "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none."
+          },
+          "data": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "The task's message as JSON when it said data rather than words, with message empty; empty when it said words or nothing."
           }
         },
         "additionalProperties": false,
@@ -1328,7 +1333,8 @@
           "task",
           "outcome",
           "message",
-          "warnings"
+          "warnings",
+          "data"
         ],
         "description": "One task on one machine: started while it is under way, else how it ended."
       },

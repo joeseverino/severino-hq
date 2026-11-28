@@ -481,7 +481,7 @@ def _events(
     host: str, events: tuple[tuple[str, str, str] | tuple[str, str, str, tuple[str, ...]], ...]
 ) -> list[dict[str, Any]]:
     return [
-        {"host": host, "task": task, "outcome": outcome, "message": said, "warnings": list(warned)}
+        {"host": host, "task": task, "outcome": outcome, "message": said, "warnings": list(warned), "data": ""}
         for task, outcome, said, warned in ((*each, ())[:4] for each in events)
     ]
 
