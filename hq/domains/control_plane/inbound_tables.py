@@ -33,7 +33,8 @@ EVENT_COLUMNS = (
 
 def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
     """``table``'s rows, one per item in order, under the channel each came
-    by, each channel's rows in the list's own order."""
+    by: the channels in the order the list's sort first reaches each, and
+    each channel's rows in that order too."""
 
     by_source: dict[str, list[Row]] = {}
     for item, row in zip(items, table.rows, strict=True):
@@ -41,7 +42,7 @@ def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
     return replace(
         table,
         rows=(),
-        groups=tuple(Group(source.label, tuple(by_source[source])) for source in InboundSource if source in by_source),
+        groups=tuple(Group(InboundSource(source).label, tuple(rows)) for source, rows in by_source.items()),
     )
 
 
