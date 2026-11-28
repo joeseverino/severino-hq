@@ -434,7 +434,7 @@ and item names for you to fill in.
 
 3. Create the `inbound-worker` environment, deploying from `main` alone, and
    give it the token, the account and the hostname. Deploy Worker runs there
-   on each merge that changes the Worker:
+   once each release is live:
 
    ```sh
    gh api -X PUT repos/OWNER/REPO/environments/inbound-worker -F 'deployment_branch_policy[protected_branches]=false' -F 'deployment_branch_policy[custom_branch_policies]=true'
@@ -456,8 +456,9 @@ and item names for you to fill in.
    gh secret set HQ_INBOUND_HOSTNAME --repo OWNER/REPO --env inbound-worker --body events.example.com
    ```
 
-4. Deploy the Worker the first time, with its secrets. A later deploy keeps
-   them; run this again after rotating one:
+4. Deploy the Worker the first time, with its secrets, from a checkout of the
+   commit production runs, the only one `worker:deploy` deploys. A later
+   deploy keeps them; run this again after rotating one:
 
    ```sh
    CLOUDFLARE_API_TOKEN='op://Example Vault/example worker deploy/credential' CLOUDFLARE_ACCOUNT_ID=0123abcd HQ_INBOUND_HOSTNAME=events.example.com GITHUB_WEBHOOK_SECRET='op://Example Vault/example events/GITHUB_WEBHOOK_SECRET' TAILSCALE_WEBHOOK_SECRET='op://Example Vault/example events/TAILSCALE_WEBHOOK_SECRET' CLOUDFLARE_WEBHOOK_SECRET='op://Example Vault/example events/CLOUDFLARE_WEBHOOK_SECRET' SOCKET_TOKEN='op://Example Vault/example events/SOCKET_TOKEN' op run -- mise run worker:deploy --with-secrets

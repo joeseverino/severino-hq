@@ -1,11 +1,20 @@
 name: Deploy Worker
 
 # The inbound-events Worker (worker/), deployed to Cloudflare by
-# `mise run worker:deploy` on each push to main that changes it, or by hand
-# from main. The merge to main is the approval, and a Worker deploy takes
-# nothing down, so its environment has no reviewer; the environment deploys
-# from main alone, so no other branch's workflow reaches the token, and the
-# job holds nothing else.
+# `mise run worker:deploy` from the commit production runs, so the Worker never
+# serves routes production HQ lacks. worker:deploy refuses any other commit,
+# and with --if-changed deploys nothing when Cloudflare already serves a
+# version deployed from a commit with the same Worker files.
+#
+# The Deploy workflow calls it once a release, or a rollback to an older
+# commit, is live, as its Worker job. A person may run it by hand, which
+# deploys the same commit, never main's tip. Called, it runs inside the Deploy
+# run, for main alone; by hand, the environment holds it to main.
+#
+# The release's approval is the approval, and a Worker deploy takes nothing
+# down, so its environment has no reviewer; the environment deploys from main
+# alone, so no other branch's workflow reaches the token, and the job holds
+# nothing else.
 #
 # The environment's secrets are the token, the account and the hostname. The
 # account and the hostname are secrets, though neither grants anything, so
@@ -13,25 +22,21 @@ name: Deploy Worker
 # secrets are never here: they are set on the Worker once and every deploy
 # keeps them (worker:deploy --with-secrets, docs/Security.md).
 on:
-  push:
-    branches: [main]
-    paths:
-      - "worker/**"
-      - "mise-tasks/worker/**"
-      # What worker:deploy serves beside the Worker's pages.
-      - "static/css/**"
-      - "static/fonts/**"
-      - "static/img/**"
-      - "static/js/**"
+  # The environment's secrets reach a called workflow only when its caller
+  # passes them by name. None is required here: the caller holds no
+  # environment, and worker:deploy refuses one left empty.
+  workflow_call:
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      HQ_INBOUND_HOSTNAME:
+        required: false
   workflow_dispatch:
 
 permissions:
   contents: read
-
-# One deploy at a time; a newer one waiting takes the place of an older.
-concurrency:
-  group: deploy-worker
-  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -40,15 +45,35 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     environment: inbound-worker
+    # One deploy at a time; a newer one waiting takes the place of an older.
+    concurrency:
+      group: deploy-worker
+      cancel-in-progress: false
+    # deployments: read, to read the commit production runs.
+    permissions:
+      contents: read
+      deployments: read
     env:
       # node and the npm it carries, which install and run the pinned wrangler.
       MISE_ENABLE_TOOLS: node
       # No package install script runs in a job that holds a secret.
       npm_config_ignore_scripts: "true"
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
+      # Every commit's trees without their files' contents, so --if-changed
+      # can compare this commit with the one Cloudflare's version came from.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
+          filter: blob:none
           persist-credentials: false
+      - name: Check out the commit production runs
+        run: |
+          set -euo pipefail
+          commit=$(python3 -m tools.pipeline.production running)
+          git switch --quiet --detach "$commit"
+          echo "Deploys the Worker from ${commit:0:12}, the commit production runs." >> "$GITHUB_STEP_SUMMARY"
       - name: Read the pinned mise
         id: mise
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
@@ -65,4 +90,4 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           HQ_INBOUND_HOSTNAME: ${{ secrets.HQ_INBOUND_HOSTNAME }}
-        run: mise run worker:deploy
+        run: mise run worker:deploy --if-changed

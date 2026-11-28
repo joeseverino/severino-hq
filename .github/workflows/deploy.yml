@@ -15,6 +15,9 @@ name: Deploy
 #            declares for the deploy's exit: live, live with a check after it
 #            failed, not deployed, a rollback that failed, interrupted after
 #            hq-host began, or not approved
+#   Worker   once a release is live, deploys the inbound-events Worker from
+#            the commit production runs (deploy-worker.yml), so the Worker
+#            never serves routes production lacks and a rollback takes it back
 #
 # The deployment is GitHub's own record of where a commit stands: on the
 # commit, the merged pull request and the environment's page. It is created
@@ -224,6 +227,9 @@ jobs:
     permissions:
       actions: read
       contents: read
+    # What production runs after it: the release, the previous image, or unknown.
+    outputs:
+      production: ${{ steps.status.outputs.production }}
     steps:
       - *deployments-token
       # The deploy outcomes, and the module that reads which release
@@ -235,6 +241,7 @@ jobs:
             deploy
             tools/pipeline
       - name: Set the deployment's status
+        id: status
         env:
           GH_TOKEN: ${{ steps.deployments.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -287,6 +294,7 @@ jobs:
           description=$(jq -r .description <<<"$outcome")
           production=$(jq -r .production <<<"$outcome")
           check_failed=$(jq -r .check_failed <<<"$outcome")
+          echo "production=$production" >> "$GITHUB_OUTPUT"
           jq -n --arg state "$state" --arg log "$RUN_URL" --arg description "$description" \
             '{state: $state, log_url: $log, description: $description}' \
             | gh api "repos/$GITHUB_REPOSITORY/deployments/$DEPLOYMENT/statuses" --input - --silent
@@ -319,3 +327,20 @@ jobs:
               echo "What the deploy, sync and installer printed is in /var/log/severino-hq on the deploy host."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    name: Worker
+    needs: report
+    # Only a release now live moves what production runs. Report's own success
+    # is what counts: a deploy live with a failed check fails its job.
+    if: always() && needs.report.result == 'success' && needs.report.outputs.production == 'release'
+    uses: ./.github/workflows/deploy-worker.yml
+    permissions:
+      contents: read
+      deployments: read
+    # Named, since only the called workflow's job holds the inbound-worker
+    # environment they live on.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      HQ_INBOUND_HOSTNAME: ${{ secrets.HQ_INBOUND_HOSTNAME }}

@@ -2,8 +2,10 @@
 
 ``previous COMMIT`` prints the commit production ran before COMMIT, or nothing
 when no other release was live: the Deploy workflow's compare link, and the
-base `mise run release:report` measures against. Stdlib only: the job that
-runs it sets up no toolchain.
+base `mise run release:report` measures against. ``running`` prints the commit
+production runs now, and fails while none is live or what runs is unknown: the
+one the Deploy Worker workflow deploys the Worker from. Stdlib only: the jobs
+that run it set up no toolchain.
 """
 
 from __future__ import annotations
@@ -100,14 +102,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m tools.pipeline.production")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("previous", help="the commit production ran before COMMIT").add_argument("commit")
+    commands.add_parser("running", help="the commit production runs now")
     args = parser.parse_args(argv)
     try:
-        found = releases(args.commit, gh(DEPLOYMENTS), statuses)
+        found = releases(getattr(args, "commit", ""), gh(DEPLOYMENTS), statuses)
     except (OSError, ValueError, subprocess.TimeoutExpired) as failed:
         print(f"GitHub's deployments were not read: {failed}", file=sys.stderr)
         return 1
-    if found.previous:
-        print(found.previous)
+    if args.command == "previous":
+        if found.previous:
+            print(found.previous)
+        return 0
+    if found.unknown_since:
+        print(f"What production runs is unknown since the deploy of {found.unknown_since}.", file=sys.stderr)
+        return 1
+    if found.running is None:
+        print("No release of HQ is live.", file=sys.stderr)
+        return 1
+    print(found.running)
     return 0
 
 

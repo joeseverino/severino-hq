@@ -21,6 +21,12 @@ waits on a schedule.
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
 | **Check extensions** (`extensions.yml`) | Compose on a pull request; an extension pull request's dispatch | each extension's checks against the host, and the change's extension branches composed onto the host image as a verify-only candidate; for an extension pull request, its result as HQ's check on its head, which that merge's admission stands on ([Cordon admission](Plugins.md#cordon-admission)) |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
+| **Deploy Worker** (`deploy-worker.yml`) | Deploy, once a release or a rollback is live; a person | deploys the inbound-events Worker from the commit production runs, in the `inbound-worker` environment, or nothing when the Worker Cloudflare serves came from a commit with the same Worker files |
+
+The Worker follows the release rather than the merge, so it never serves a
+route production HQ lacks, and a rollback takes it back with HQ:
+`worker:deploy` refuses any commit but the one production runs, as GitHub's
+deployments record it (`tools/pipeline/production.py`), a manual run included.
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
