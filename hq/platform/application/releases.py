@@ -30,7 +30,7 @@ from .tables import Cell, DataTable, TableColumn
 from .ui import measured
 lazy from . import hq_self
 lazy from .hq_context.release_part import repository
-lazy from .moments import duration
+lazy from .moments import Span
 
 RELEASES = "releases"
 
@@ -203,7 +203,7 @@ def _ran(run: Mapping[str, Any] | None) -> Cell:
     if run is None or not run["result"]:
         return Cell("Not run")
     ended = Job.State.SUCCEEDED.label if run["result"] == "success" else f"Failed: {run['result']}"
-    took = duration(timedelta(seconds=run["seconds"]), short=True) if run["seconds"] is not None else ""
+    took = str(Span(timedelta(seconds=run["seconds"]))) if run["seconds"] is not None else ""
     return Cell(lines=(Cell(ended), Cell(took))) if took else Cell(ended)
 
 
