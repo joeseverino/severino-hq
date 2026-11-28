@@ -133,13 +133,15 @@ time { white-space: nowrap; }
 code .mark { -webkit-user-select: none; user-select: none; }
 /* A link's line runs under its name and stops before the sentence's mark.
    The mark keeps its place in the name's box, so it still never starts a
-   line, but is laid out unseen, and no engine draws a line under unseen text;
-   its glyph is drawn again over that place, out of the flow the line is
-   drawn along. Positioned, the mark clips its glyph wherever the name is cut.
-   A wrapper around the link and a mark after it would not hold: a line may
-   break after the name's box whatever `white-space` says. */
-a .mark { position: relative; visibility: hidden; }
-a .mark::before { content: attr(data-mark) / ""; position: absolute; inset-inline-start: 0; visibility: visible; }
+   line, held by a copy laid out unseen, and no engine draws a line under
+   unseen text; its glyph is set over that place, out of the flow the line
+   is drawn along, so a link's line never reaches it, and stays text, which a
+   reader hears where it is heard at all (line_breaks). Positioned, the mark clips its glyph wherever
+   the name is cut. A wrapper around the link and a mark after it would not
+   hold: a line may break after the name's box whatever `white-space` says. */
+a .mark { position: relative; }
+a .mark::before { content: attr(data-mark) / ""; visibility: hidden; }
+a .mark > .mark-glyph { position: absolute; inset-inline-start: 0; text-decoration: none; }
 /* A chip that is a link reads as one: the link color, underlined on hover. */
 a code { color: var(--accent-2); }
 a:hover code { color: var(--accent); text-decoration: underline; }

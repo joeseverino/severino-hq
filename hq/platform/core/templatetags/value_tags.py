@@ -153,7 +153,7 @@ def dot():
 def arrow():
     """The arrow that ends a link onward, after its last word, held to it by
     a no-break space and never read: the link's words say where it goes."""
-    return mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
+    return mark_safe('<span aria-hidden="true">&nbsp;&rarr;</span>')
 
 
 @register.filter(name="bytes")

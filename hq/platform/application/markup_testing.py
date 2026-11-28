@@ -8,7 +8,7 @@ from django.http import HttpResponse
 
 _VOID = frozenset({"area", "br", "col", "hr", "img", "input", "link", "meta", "source", "wbr"})
 # The spans `|breakable` writes for a token, which are no edge in its text.
-_TOKEN_PARTS = frozenset({"strut", "token", "whole", "part", "joined", "seam", "mark"})
+_TOKEN_PARTS = frozenset({"strut", "token", "whole", "part", "joined", "seam", "mark", "mark-glyph"})
 # Elements whose text is their name or their value: a mark held inside one is the sentence's.
 _NAMED = frozenset({"a", "button", "code"})
 

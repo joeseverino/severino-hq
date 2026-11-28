@@ -896,6 +896,13 @@ ENTITY_STATES = {
         '{% entity "machine"|entity_of:name lead="on" %}</p>',
         context={"name": "example-host-01"},
     ),
+    # A link whose words end on a mark the loader holds to the value before
+    # it, in a line too narrow for the link: the mark keeps the value's line,
+    # its glyph clear of the link's line and heard in the link's name.
+    "closing-mark": Example(
+        '<p style="inline-size: 9rem">Example runs: <a href="/example/">Run{% dot %}1.7 mi ({{ state }})</a></p>',
+        context={"state": "done"},
+    ),
 }
 
 

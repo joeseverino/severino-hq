@@ -119,10 +119,11 @@ def human_bytes(value: int | float) -> Sentence:
 
 # The dot between two parts of one line, held to the part before it by a
 # no-break space so no line starts with it or holds it alone. {% dot %} draws
-# it as DOT_MARKUP, which hides the mark from a reader; so does `breakable`,
-# drawing text that holds it.
+# it as DOT_MARKUP, which hides the mark and that space from a reader, who
+# hears the parts one space apart; so does `breakable`, drawing text that
+# holds it.
 DOT = "\u00a0· "
-DOT_MARKUP = '&nbsp;<span aria-hidden="true">·</span> '
+DOT_MARKUP = '<span aria-hidden="true">&nbsp;·</span> '
 
 
 def _drawn(part: object) -> bool:

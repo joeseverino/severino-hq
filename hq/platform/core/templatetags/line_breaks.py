@@ -239,11 +239,16 @@ def _marked(drawn: list[str], mark: str) -> list[str]:
 
     if not mark:
         return drawn
-    # Hidden from the accessibility tree: in a link it would be heard as part
-    # of the link's name. ``data-mark`` is what a link draws in its place,
-    # clear of its underline (base.css).
+    # In a link, ``data-mark`` keeps the mark's place on the line unseen and
+    # its glyph is drawn over that place, clear of the link's underline
+    # (base.css). A closing bracket ends words the name opened, so a reader
+    # hears it in the link's name; any other mark is the sentence's, or an
+    # arrow no one reads, and stays out of it.
     shown = conditional_escape(mark)
-    return _inside_last(drawn, f'<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>')
+    unheard = "" if mark[:1] in ")]" else ' aria-hidden="true"'
+    return _inside_last(
+        drawn, f'<span class="mark" data-mark="{shown}"{unheard}><span class="mark-glyph">{shown}</span></span>'
+    )
 
 
 def _inside_last(drawn: list[str], markup: str) -> list[str]:
