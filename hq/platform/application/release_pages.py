@@ -3,6 +3,7 @@ beside the previous release's (``release_snapshots`` keeps both), for the
 ``releases`` resource and the release's page."""
 
 from collections.abc import Callable, Mapping
+from http import HTTPStatus
 from typing import Annotated, Any, TypedDict
 
 from hq.platform.core.page_costs import bytes_per_row, page_bytes, page_queries
@@ -90,7 +91,8 @@ def _answered(page: Mapping[str, Any]) -> Cell:
     """The status it answered, serious where the rehearsal fails a release for it."""
 
     status = page["status"]
-    return Cell(str(status), tone="" if status == 200 or status // 100 == 3 else str(Tone.SERIOUS))
+    fails = status != HTTPStatus.OK and not HTTPStatus(status).is_redirection
+    return Cell(str(status), tone=str(Tone.SERIOUS) if fails else "")
 
 
 def table(release: Mapping[str, Any]) -> DataTable:
