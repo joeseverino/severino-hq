@@ -225,7 +225,7 @@ def _need_cells(group: Mapping[str, Any]) -> tuple[Cell, ...]:
         known,
         Cell(
             lines=tuple(
-                Cell(item.running.name, item.url, muted=True, parts=(Cell(f"on {item.machine.name}"),))
+                Cell(item.running.name, item.url, muted=True, parts=(Cell("on"), Cell(item.machine.name)))
                 for item in group["containers"]
             )
         ),

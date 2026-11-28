@@ -509,7 +509,7 @@ def _content(cell: DrawnCell, drawing: _Drawing) -> SafeString:
         parts = [_safe("<li>", _value(part, cell, drawing, own=False), "</li>") for part in value.parts]
         drawn.append(line_run(parts, kind="dots"))
     else:
-        drawn = [_joined(drawn[0], value.parts, cell, drawing)]
+        drawn = [_joined(value, drawn[0], value.parts, cell, drawing)]
     # A gist takes the room its line leaves (cuts.css), so the line is a box of its own.
     if value.lead or any(each.shows == "gist" for each in (value, *value.parts)):
         drawn = [_safe('<div class="row-line">', *drawn, "</div>")]
@@ -536,7 +536,7 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
             continue
         shown = f' class="{SHOWN[line.shows]}"' if line.shows else ""
         drawn = _value(line, cell, drawing, own=False, whole=True, hushed=line.muted)
-        drawn = _joined(drawn, line.parts, cell, drawing, hushed=line.muted)
+        drawn = _joined(line, drawn, line.parts, cell, drawing, hushed=line.muted)
         items.append(
             _safe("<li", shown, data_attributes(line.data), ">", muted(drawn) if line.muted else drawn, "</li>")
         )
@@ -546,19 +546,40 @@ def _block(lines: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing) -
 
 
 def _joined(
-    drawn: SafeString, parts: tuple[Cell, ...], cell: DrawnCell | None, drawing: _Drawing, *, hushed: bool = False
+    first: Cell,
+    drawn: SafeString,
+    parts: tuple[Cell, ...],
+    cell: DrawnCell | None,
+    drawing: _Drawing,
+    *,
+    hushed: bool = False,
 ) -> SafeString:
     """A value, then each part after it on its line: after a space, or after
-    its dot, which is drawn inside the box before it and shows as the part does."""
+    its dot, which is drawn inside the box before it and shows as the part
+    does. A value of one word ("on") leads the part after it, held to it as
+    ``entity``'s ``lead`` is (`led`), so it never ends a line alone."""
 
+    pieces = [drawn]
+    before = first
     for part in parts:
         value = _value(part, cell, drawing, own=False, hushed=hushed)
         if part.dot:
             shown = SHOWN[part.shows] if part.shows and part.shows != "gist" else ""
-            drawn = _safe(dot_held(drawn, shown), value)
+            pieces[-1] = dot_held(pieces[-1], shown)
+            pieces.append(value)
+        elif _leads(before):
+            pieces[-1] = _safe('<span class="led">', pieces[-1], " <span>", value, "</span></span>")
         else:
-            drawn = _safe(drawn, " ", value)
-    return drawn
+            pieces += [SafeString(" "), value]
+        before = part
+    return _safe(*pieces)
+
+
+def _leads(value: Cell) -> bool:
+    """Whether a value is one plain word, which leads what follows it."""
+
+    plain = not (value.url or value.link or value.status or value.tone or value.piece or value.name)
+    return plain and value.text.isalpha() and value.moment is None and value.amount is None
 
 
 def _value(

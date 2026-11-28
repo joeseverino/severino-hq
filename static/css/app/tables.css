@@ -41,11 +41,12 @@
   --tick-box: 16px;
   /* What stands before a row's first cell of words, at the table's start: the tick-boxes' column where rows are selected (below). A row of one cell across the table, and an open line, start past it. */
   --row-lead: 0px;
-  /* A column's share of its region while every column stands: the region's width over one more than the table's count of columns, read from its headings, less a cell's padding. The one more is kept for what a column asks past its share (a state's line). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
+  /* A column's share of its region while every column stands: the region's width over the table's count of columns, read from its headings, and a spare for each column of states (`--spares`, one at least), less a cell's padding. A spare is kept for what a column asks past its share (a state's line). What a value holds whole, or the line a long one keeps, is never more than that share, so the table's columns together never ask more than their region. */
   --columns: 1;
+  --spares: 1;
   /* Whether its box is narrow enough that a held value wraps (below), its own and never a table's around it. */
   --held-wraps: 0;
-  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + 1) - 2 * var(--cell-pad));
+  --share: calc(100cqi / (var(--columns) - var(--gone-1, 0) - var(--gone-2, 0) - var(--gone-3, 0) - var(--gone-4, 0) - var(--gone-5, 0) - var(--gone-wide, 0) + var(--spares)) - 2 * var(--cell-pad));
   /* The column that names the rows is `auto`, the one track the room left past every column's values goes to; every other is `fit-content(100%)`, which grows as `auto` does and takes none of that room. A row's tick-box leads (`--lead`), and what stands beneath a row's name starts at `name`. Sixteen tracks hold any table's columns (`table_layout.TRACKS`), and a track no cell stands in is no width. */
   display: grid; grid-template-columns: var(--lead,) [name] auto repeat(15, fit-content(100%));
   inline-size: 100%;
@@ -118,6 +119,9 @@
 .data-table[data-columns="8"] { --columns: 8; }
 .data-table[data-columns="9"] { --columns: 9; }
 .data-table[data-columns="10"] { --columns: 10; }
+.data-table[data-spares="2"] { --spares: 2; }
+.data-table[data-spares="3"] { --spares: 3; }
+.data-table[data-spares="4"] { --spares: 4; }
 /* A short value's box is no box on the open line, unless it is the value's own list, and nor is a state's. */
 .cell-short:not(ul, ol), .cell-state { display: contents; }
 /* A state keeps its line; one of several parts (`cell-part`) keeps it up to its share, as a short value does, and past it wraps only between them, its one track `fit-content()` of the share (below). */

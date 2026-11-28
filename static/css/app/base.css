@@ -93,8 +93,10 @@ pre code { background: transparent; padding: 0; color: inherit; }
    with no seams breaks inside only when it alone is longer than its line. A
    part that cuts it instead (a chip cut at its end, cuts.css) sets it inline.
    What a row's toggle opens or cuts (its open line, its gist) lays out its
-   own identifiers (figures.css, cuts.css), except code in a sentence there. */
-:is(code, .token, .whole):not(pre *, tr.row-detail *, .row-gist *),
+   own identifiers (figures.css, cuts.css), except code in a sentence there.
+   One behind a lead (`.led`) runs as text: a box held whole could only drop
+   to the next line and leave the lead alone. */
+:is(code, .token, .whole):not(pre *, .led *, tr.row-detail *, .row-gist *),
 :is(tr.row-detail, .row-gist) :is(p, li:not(:is(.stack-list, .code-list) > li), [data-cell~=data], [data-cell~=prose]) :is(code, code .token, code .whole):not(pre *) {
   display: inline-block; max-width: 100%; overflow-wrap: break-word; text-decoration: inherit;
   /* As wide as what it says: a sized item is not stretched to its column,
@@ -103,7 +105,9 @@ pre code { background: transparent; padding: 0; color: inherit; }
   /* In a table its column starts at it whole, up to the column's share
      (`--share`, tables.css), so it breaks only where it alone is longer than
      that, never while a column of words beside it takes the room. Outside a
-     table nothing sets a share and it asks nothing. */
+     table nothing sets a share and it asks nothing. Its padding (a chip's)
+     is inside that share. */
+  box-sizing: border-box;
   min-inline-size: calc-size(max-content, min(size, var(--share)));
   /* Wrapped, it sits on its first line: an inline block's baseline is its
      last, which a row aligned on baselines would lift over the rows above.
@@ -112,6 +116,9 @@ pre code { background: transparent; padding: 0; color: inherit; }
      a smaller face would sit off the line. */
   baseline-source: first;
 }
+/* In a chip the chip is the box held to the share, its padding inside it;
+   the words it holds ask nothing more. */
+code :is(.token, .whole) { --share: initial; }
 :is(code, .token):is(td *, th *) { overflow-wrap: break-word; }
 /* In a cell, a token among words (no `data-sole`) flows as they do, so the
    word before it keeps its line; only its hyphenated parts stay whole. */
