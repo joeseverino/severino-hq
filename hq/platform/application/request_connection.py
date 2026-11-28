@@ -310,7 +310,7 @@ class Connection:
             return self.presence.handshake
         age = when(self.presence.last_handshake, now=self.tailnet_observed_at)
         if age == "just now":
-            return "At the read"
+            return "at the read"
         return f"{age.removesuffix(' ago')} before the read"
 
     @property

@@ -39,10 +39,10 @@ lazy from .npm_sections import access
 lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
-lazy from .paths import hq_path
 lazy from .projects import last_push
 lazy from .reach import network_of
 lazy from .record_timeline import record_timeline
+lazy from .request_path import request_path
 lazy from .security import Capability, Principal
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
@@ -664,7 +664,7 @@ _HEALTH_READERS: dict[str, Callable[[Any, int], tuple[str, Tone] | None]] = {
 def routes_for(service, request) -> tuple:
     """The routes the page draws: the walked ones, except that on HQ's own name,
     viewed through that very name, the first is the route this request took,
-    each hop joined to what the request showed (``paths.hq_path``).
+    each hop joined to what the request showed (``request_path.request_path``).
 
     Only then: a request for another name traveled a different path and proves
     nothing about this one. The evidence itself is the connection page's.
@@ -674,8 +674,8 @@ def routes_for(service, request) -> tuple:
     asked = normalized_hostname(split_host_port(request.get_host())[0])
     if asked != service.hostname or not routes:
         return routes
-    walked = hq_path(request)
-    if walked is None or walked.primary is None:
+    walked = request_path(request).path
+    if walked.primary is None:
         return routes
     return (walked.primary, *routes[1:])
 

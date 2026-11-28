@@ -71,7 +71,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% fact "Connection" %}{% include "partials/_connection_peering.html#carriage" with peering=connection.peering only %}{% endfact %}
       {% endif %}
       {% if connection.presence.direct_endpoint %}{% fact "WireGuard endpoint" %}<code>{{ connection.presence.direct_endpoint }}</code>{% endfact %}{% endif %}
-      {% if connection.presence %}{% fact "Last handshake" value=connection.handshake %}{% endif %}
+      {% if connection.presence %}{% fact "Last handshake" value=connection.handshake|capfirst %}{% endif %}
       {% if connection.carried %}{% fact "Node traffic" value=connection.carried %}{% endif %}
       {% fact "Browser round trip" %}<span data-rtt>{% empty_value %}</span><span hidden data-rtt-measure="{% url 'health_live' %}">{% include "partials/_connection_loading.html#frame" %}</span>{% endfact %}
       {% fact "Encryption" value=connection.transport_path %}

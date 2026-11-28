@@ -48,8 +48,7 @@ from .problems import problem_counts
 from .projection import iso, page_of, projection_scope, read_once
 from .read_requests import forced_reads
 from .record_errors import RecordNotFound
-from .request_connection import connection as request_connection
-from .request_path import joined
+from .request_path import request_path
 from .security import Principal
 from .standards import Measurement
 from .tone import Tone
@@ -498,7 +497,9 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
         inputs = estate_inputs(groups)
         standard = posture(inputs)
         estate = connection_security_posture(inputs, standard)
-        found = request_connection(request) if request is not None else None
+        # The request as its own page reads it, so both pages show one path.
+        asked = request_path(request) if request is not None else None
+        found = asked.connection if asked is not None else None
         walked = hq_path()
         return ConnectionsContext(
             groups=groups,
@@ -524,7 +525,7 @@ def connections_context(*, principal: Principal, request: Any = None) -> Connect
             standard=standard,
             posture=(connection_security_posture(inputs, standard, connection=found) if found is not None else estate),
             hq_path=walked,
-            caller_path=(joined(walked, request, found) if walked is not None and request is not None else None),
+            caller_path=asked.path if asked is not None and walked is not None else None,
             read_all=read_now_link(principal, every_connection=True),
             reading_everything_since=everything,
             answers_request=request is not None,

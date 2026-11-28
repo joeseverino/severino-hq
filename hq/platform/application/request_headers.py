@@ -93,7 +93,6 @@ class ResponseCheck:
 # never spot in it; a directive dropped in configuration shows as absent.
 RESPONSE_CHECKS = (
     ResponseCheck("x-served-by", "Which reverse-proxy hostname actually served this response"),
-    ResponseCheck("x-request-id", "Joins this browser response to HQ's structured request log"),
     ResponseCheck("content-security-policy", "Which origins may load script, style and frames"),
     ResponseCheck("strict-transport-security", "Refuses plain HTTP for this host from now on"),
     ResponseCheck("x-content-type-options", "Stops the browser guessing a type it was not sent"),

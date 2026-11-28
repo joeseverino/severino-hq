@@ -17,7 +17,6 @@ from hq.platform.core.tests.forwarding import arrived
 from hq_sdk.testing import plain
 
 from ..path_model import Hop
-from ..paths import hq_path
 from ..projection import projection_scope
 from ..request_path import (
     _Context,
@@ -212,17 +211,6 @@ class RequestPathTests(TestCase):
         self.assertEqual(roles["device"], ["judged"])
         self.assertEqual(roles["ingress"], ["proxy"])
         self.assertEqual([item.value for item in found.chain], [LAPTOP, PROXY])
-
-    def test_the_page_path_is_hq_path(self):
-        request = a_request(**NPM_HEADERS)
-        with projection_scope():
-            page = request_path(request).path
-            walked = hq_path(request)
-
-        self.assertEqual(
-            [(hop.step, hop.name) for hop in page.primary.hops],
-            [(hop.step, hop.name) for hop in walked.primary.hops],
-        )
 
     def test_a_request_to_a_deployment_with_no_name_still_has_a_path(self):
         with override_settings(SEVERINO_SITE_HOST="", ALLOWED_HOSTS=["*"]):

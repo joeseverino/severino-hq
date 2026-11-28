@@ -782,9 +782,9 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
 
 def hq_path(request: Any = None, *, found: Any = None) -> ServicePath | None:
     """HQ's own path; for a request, from the caller's device, each hop joined
-    to what the request shows (``request_path.joined``).
-
-    ``found`` is the request's ``connection.Connection`` when the caller holds it.
+    to what the request shows (``request_path.joined``), with ``found`` its
+    ``request_connection.Connection``. Only ``request_path`` asks with one, so
+    every page that draws a request's path draws the one it reads.
     """
 
     own = hq_service(request, catalog=connections.machines_once())
