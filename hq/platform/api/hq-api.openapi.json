@@ -40591,23 +40591,21 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "description": "The order the records come in; absent, the best match first for a search, else recently published.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
+                "-published_at",
+                "published_at",
                 "title",
                 "-title",
                 "content_type",
                 "-content_type",
                 "status",
-                "-status",
-                "-published_at",
-                "published_at"
+                "-status"
               ],
               "type": "string"
             },
@@ -41004,15 +41002,15 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "description": "The order the records come in; absent, the best match first for a search, else newest change.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
+                "-last_reviewed",
+                "last_reviewed",
                 "doc_id",
                 "-doc_id",
                 "title",
@@ -41021,8 +41019,6 @@
                 "-doc_type",
                 "environment",
                 "-environment",
-                "last_reviewed",
-                "-last_reviewed",
                 "status",
                 "-status",
                 "sensitivity",
@@ -42893,15 +42889,13 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently edited.",
+            "description": "The order the records come in; absent, the best match first for a search, else name A\u2013Z.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
                 "name",
                 "-name",
                 "status",
@@ -44875,10 +44869,11 @@
             "schema": {
               "enum": [
                 "failed",
+                "-failed",
                 "-created_at",
                 "created_at",
                 "title",
-                "state"
+                "-title"
               ],
               "type": "string"
             },

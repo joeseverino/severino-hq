@@ -44,12 +44,11 @@ class DocumentationQuery(BoundedQuery):
 
 # Each order the list is read in, the first where none is asked.
 SORTS = (
-    *ListSort.both("-updated_at", "Recently updated", "Least recently updated"),
+    *ListSort.both("-last_reviewed", "Newest change", "Oldest change"),
     *ListSort.both("doc_id", "ID"),
     *ListSort.both("title", "Title"),
     *ListSort.both("doc_type", "Type"),
     *ListSort.both("environment", "Environment"),
-    *ListSort.both("last_reviewed", "Oldest change", "Newest change"),
     *ListSort.both("status", "Status"),
     *ListSort.both("sensitivity", "Sensitivity"),
 )
@@ -99,6 +98,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ),
                 title_field="title",
                 badge_field="doc_id",
+                timestamp_field="last_reviewed",
             ),
             web_route="docs_index:list",
         ),

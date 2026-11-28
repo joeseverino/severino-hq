@@ -152,6 +152,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 Receipt,
                 "pk",
                 ("original_filename", "vendor", "notes"),
+                timestamp_field="date",
             ),
             web_route="receipts:list",
         ),

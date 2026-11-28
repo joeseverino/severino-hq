@@ -167,6 +167,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 Entry,
                 "uid",
                 ("title", "location", "notes"),
+                timestamp_field="starts_on",
                 title_field="title",
             ),
             web_route="calendar:month",

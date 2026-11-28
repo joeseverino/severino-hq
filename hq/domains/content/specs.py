@@ -60,11 +60,10 @@ NO_DOCS = ListToggle(
 
 # Each order the list is read in, the first where none is asked.
 SORTS = (
-    *ListSort.both("-updated_at", "Recently updated", "Least recently updated"),
+    *ListSort.both("-published_at", "Recently published", "Oldest published"),
     *ListSort.both("title", "Title"),
     *ListSort.both("content_type", "Type"),
     *ListSort.both("status", "Status"),
-    *ListSort.both("-published_at", "Recently published", "Oldest published"),
 )
 
 
@@ -121,6 +120,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 ContentItem,
                 "slug",
                 ("title", "slug", "topic", "tags", "notes"),
+                timestamp_field="published_at",
                 title_field="title",
             ),
             web_route="content:list",

@@ -132,6 +132,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 "slug",
                 ("item_name", "slug", "vendor", "serial_number", "category", "notes"),
                 title_field="item_name",
+                timestamp_field="purchase_date",
             ),
             web_route="assets:list",
         ),

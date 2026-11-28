@@ -129,6 +129,7 @@ def resources() -> tuple[ResourceSpec, ...]:
                 Expense,
                 "pk",
                 ("vendor", "item", "category", "business_purpose", "notes"),
+                timestamp_field="date",
             ),
             web_route="expenses:list",
         ),

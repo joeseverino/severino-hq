@@ -364,7 +364,8 @@ class GlobalSearchTests(TestCase):
         (item,) = group["items"]
         self.assertEqual(item["title"], "Vault engine")
         self.assertEqual(item["url"], project.get_absolute_url())
-        self.assertIsNotNone(item["timestamp"])
+        # A project stores no moment of its own, and its row's save time is none.
+        self.assertIsNone(item["timestamp"])
         # Matched terms are flagged so the template can highlight safely.
         self.assertTrue(any(hit for _, hit in item["snippet"]))
         matched = "".join(t for t, hit in item["snippet"] if hit).lower()

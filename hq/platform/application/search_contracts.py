@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Self
-lazy from datetime import datetime
+lazy from datetime import date
 
 lazy from django.db.models import Model
 
@@ -63,7 +63,9 @@ class SearchDefinition:
     label: str = ""
     title_field: str = ""
     badge_field: str = ""
-    timestamp_field: str = "updated_at"
+    # The moment of the thing itself a result shows (an expense's date), never
+    # the row's own save time; blank for a thing with none.
+    timestamp_field: str = ""
     # A property holding readable text for the result; blank uses the indexed body.
     snippet_field: str = ""
 
@@ -79,8 +81,7 @@ class SearchDefinition:
 
     # Each name is a lookup on the model, as the index without FTS5 filters by
     # it, so the body reads it through the model's fields too: a name that is
-    # no field (a property) fails here, under either backend. The default
-    # timestamp names a field a model may not have.
+    # no field (a property) fails here, under either backend.
     def body(self, instance: Model) -> str:
         return "\n".join(line for field in self.fields for line in search_lines(looked_up(instance, field)))
 
@@ -90,8 +91,8 @@ class SearchDefinition:
     def badge(self, instance: Model) -> str:
         return str(getattr(instance, self.badge_field)) if self.badge_field else ""
 
-    def timestamp(self, instance: Model) -> datetime | None:
-        return getattr(instance, self.timestamp_field, None)
+    def timestamp(self, instance: Model) -> date | None:
+        return getattr(instance, self.timestamp_field) if self.timestamp_field else None
 
     def snippet_text(self, instance: Model) -> str:
         """What a result shows under its title, or "" to cut it from the body."""
