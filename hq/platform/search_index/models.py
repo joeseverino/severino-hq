@@ -8,6 +8,9 @@ class SearchDocument(models.Model):
 
     scope = models.CharField(max_length=40)
     object_id = models.CharField("object ID", max_length=200)
+    # The columns the full-text index holds (``SearchDefinition.columns``).
+    title = models.TextField(default="")
+    identifiers = models.TextField(default="")
     body = models.TextField()
     updated_at = models.DateTimeField(auto_now=True)
 

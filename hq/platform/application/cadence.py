@@ -56,7 +56,7 @@ from .contracts import Effect
 from .derivations import asked_ahead, holds_until, passed, present, since
 from .integration_specs import CapabilitySpec, requested
 from .labels import sentence
-from .moments import duration
+from .moments import Span
 from .projection import read_once
 from .read_requests import ForcedRead, connection_providers, forced_kinds, forced_reads
 from .record_errors import Sentence, worded
@@ -269,7 +269,7 @@ class WorkerStanding:
         if self.seen_at is None or not self.here:
             late = worded("")
         elif self.silent:
-            late = duration(since(self.seen_at, now=now))
+            late = worded(Span(since(self.seen_at, now=now)))
         else:
             return worded("")
         if not doing:
@@ -538,8 +538,8 @@ def sweep_due(controller_id: str = "", forced: tuple[ForcedRead, ...] | None = N
     age = timezone.now() - oldest
     due = age >= interval
     reason = (
-        f"The oldest reading is {duration(age)} old and everything is read "
-        f"every {duration(interval)}: {'due' if due else 'not due'}."
+        f"The oldest reading is {Span(age)} old and everything is read "
+        f"every {Span(interval)}: {'due' if due else 'not due'}."
     )
     if not due and forced:
         reason += ended(f" A refresh was asked for {', '.join(read.label for read in forced)}")

@@ -38,12 +38,13 @@ from .ui import ended
 lazy from . import asks, automation_adoption, pages
 lazy from .action_links import capability_action_link, command_url
 lazy from .approval_review import grouped, marked
-lazy from .automation_runs import READ_PROFILE, access_words, anywhere, capability_name
+lazy from .automation_runs import READ_PROFILE, access_words, capability_name
 lazy from .cadence import ask, automation_standing
 lazy from .entity_links import entity_link
 lazy from .findings import rule_for
 lazy from .github_estate import repository_for
 lazy from .infrastructure import ManagedResourceCommand, save_sourced
+lazy from .playbook_reach import reachable
 lazy from .record_errors import RecordNotFound
 lazy from .resource_operations import Prepared, asked_fields, enqueue
 lazy from .routes import reverse
@@ -221,7 +222,7 @@ def scan_when_due(*, principal: Principal) -> OperationRequest | None:
     repository makes due, so a push is scanned with nobody asking.
     """
 
-    head = _moved_past(models.SourceProposal.objects.order_by("-pk").first())
+    head = _moved_past(automation_adoption.scan_result())
     if head is None:
         return None
     return queue_scan(principal=principal, once=f"scan:{head or 'unnamed'}:{timezone.now().date().isoformat()}")
@@ -330,7 +331,7 @@ def reviewed(proposal: SourceProposal) -> Reviewed:
     """``proposal`` as a person decides on it, compared with the catalog adopted now."""
 
     planned = automation_adoption.judged(proposal.pk)
-    newest = not models.SourceProposal.objects.filter(pk__gt=proposal.pk).exists()
+    newest = automation_adoption.scan_result() == proposal
     if not planned.changes:
         return Reviewed(proposal, None, newest)
     compared = planned.compared
@@ -357,8 +358,7 @@ def standing(proposal: int | None = None) -> SourceStanding:
     reviewed, or the newest one when none is named; RecordNotFound for a
     proposal it no longer holds."""
 
-    proposals = models.SourceProposal.objects.order_by("-pk")
-    found = proposals.filter(pk=proposal).first() if proposal is not None else proposals.first()
+    found = automation_adoption.scan_result(proposal)
     if proposal is not None and found is None:
         raise RecordNotFound("No scan result has that ID.")
     scans = _scans().order_by("-created_at")
@@ -514,12 +514,12 @@ def _row(
         empty = Cell(blank=True)
         return title, Row((Cell(title, lines=refused), empty, empty, empty, state), actions=shown, data=data)
     url = command_url(capability_name(procedure.id)) if adopted else ""
-    hosts = tuple(Cell.of(entity_link("machine", host)) for host in procedure.hosts)
+    hosts = tuple(Cell.of(entity_link("machine", host)) for host in reachable(procedure))
     return procedure.title, Row(
         (
             Cell(procedure.title, url, lines=refused),
             Cell(procedure.effect.label),
-            Cell(lines=hosts) if hosts else Cell(anywhere(procedure.target_kinds)),
+            Cell(lines=hosts),
             Cell(access_words(procedure.privilege)),
             state,
         ),

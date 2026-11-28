@@ -12,7 +12,7 @@
   {% if discovery_sections %}
   {% layout %}
     {% for section in discovery_sections %}
-    {% section section.label count=section.rows|length %}
+    {% section section.label counts=section.rows %}
       {% include "partials/_record_list.html" with rows=section.rows label=section.label whole_rows=True only %}
     {% endsection %}
     {% endfor %}
@@ -22,7 +22,7 @@
   {% comment %}Drawn in the results, so a new search brings its own groups.{% endcomment %}
   {% if result_navigation %}{% include "partials/_page_navigation.html" with navigation=result_navigation %}{% endif %}
   {% for section in result_sections %}
-  {% section section.label count=section.rows|length id=section.id more_label=section.more_label more_url=section.more_url %}
+  {% section section.label counts=section.rows id=section.id more_label=section.more_label more_url=section.more_url %}
     {% include "partials/_record_list.html" with rows=section.rows label=section.label only %}
   {% endsection %}
   {% endfor %}

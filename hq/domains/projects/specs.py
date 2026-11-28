@@ -132,7 +132,7 @@ def _updating() -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 def _archived_last() -> tuple[str, str]:
-    """An archived project edited after an active one still comes after it."""
+    """An archived project named ahead of an active one still comes after it."""
 
     Project.objects.create(name="ZZZ active", slug="zzz-active", status=Project.Status.ACTIVE)
     Project.objects.create(name="AAA archived", slug="aaa-archived", status=Project.Status.ARCHIVED)
@@ -175,12 +175,11 @@ FILTERS = (
 # Each order the list is read in, the first where none is asked. Archived
 # projects come last in every one, ranked so by ``list_projects``.
 SORTS = (
-    ListSort("-updated_at", "Recently edited", ("archive_rank", "-updated_at"), _archived_last),
+    ListSort("name", "Name A–Z", ("archive_rank", "name"), _archived_last),
     *(
         ListSort(sort.name, sort.label, ("archive_rank", *sort.ordering))
         for sort in (
-            ListSort("updated_at", "Least recently edited"),
-            *ListSort.both("name", "Name"),
+            ListSort("-name", "Name Z–A"),
             *ListSort.both("status", "Status"),
             *ListSort.both("category", "Category"),
             *ListSort.both("technologies_used", "Technology"),
@@ -230,10 +229,6 @@ class ProjectRow(TypedDict):
         str | None,
         Describe("When its repository was last pushed to, an ISO 8601 date-time; null until HQ has read it."),
     ]
-    last_active_at: Annotated[
-        str,
-        Describe("When it last moved, its repository's last push or its last edit, the later, an ISO 8601 date-time."),
-    ]
     dependency_updates: projects.DependencyUpdates
     deployment_notes: projects.DeploymentNotes
     security_notes: projects.SecurityNotes
@@ -277,7 +272,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 Project,
                 "slug",
-                ("name", "slug", "description", "technologies_used", "notes"),
+                ("description", "technologies_used", "notes"),
+                identifiers=("slug",),
                 title_field="name",
             ),
             web_route="projects:list",

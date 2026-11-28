@@ -33,9 +33,9 @@ from .tailnet import (
     Policy,
     declaration,
     devices,
-    grant_ports,
     policy,
 )
+from .tailnet_ports import grant_ports
 from .tailnet_signers import Signer, signers
 from .topology import derive_topology
 lazy from .connection_records import PolicyRulePart, Tailnet, UnreadPart
@@ -95,12 +95,6 @@ class TailnetContext:
     @property
     def known(self) -> bool:
         return self.policy.known
-
-    @property
-    def group_rows(self) -> int:
-        """The rows of the one table that lists groups and then tags."""
-
-        return len(self.policy.groups) + len(self.tags)
 
     def as_dict(self) -> Tailnet:
         """The derived facts, for the API, MCP, CLI and SDK."""

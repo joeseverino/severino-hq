@@ -18,7 +18,7 @@ Report = dict[str, Any]
 # only under the same, so a number never stands beside one computed another way:
 # raise it when a computation changes.
 FORMAT = 4
-# What the query probe counts of each page, each a key of its `server` numbers.
+# What `manage.py page_costs` counts of each page, each a key of its `server` numbers.
 QUERIES = ("queries", "repeated_queries")
 # How far apart, in one-minute load average, a kept report's load and this run's may be for it to
 # stand in. Cold start swings most with load, by more than a change moves it: within 2, a kept

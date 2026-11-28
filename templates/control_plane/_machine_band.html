@@ -23,13 +23,8 @@ for: one band under the head, as a service's and HQ's own page open.
     Where the page lists its names in a table, the band counts them and
     leads there; the names themselves are said once, in the table.
     {% endcomment %}
-    {% if names_listed %}<a href="#names">{{ names_listed|counted:"name" }}</a>{% elif serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label }}{% endif %}
-  {% detail %}
-    {% if names_listed %}
-    {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
-    {% else %}
-    {% list kind="dots" %}{% for link in serves_links %}<li>{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label }})</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span></li>{% endfor %}{% endlist %}
-    {% endif %}
+    {% if names_listed %}<a href="#names">{{ names_listed|counted:"name" }}</a>{% elif serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}{% endif %}
+  {% detail %}{% if names_listed and machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% elif serves_links and not names_listed %}{% list kind="dots" %}{% for link in serves_links %}<li>{% entity link %}{% if link.identity in machine.hq_hostnames %} (<a href="{% url 'hq_self' %}">{{ hq_label }})</a>{% endif %}</li>{% endfor %}{% for role in machine.roles %}<li><span tabindex="0" data-tip="{{ role.detail }}">{{ role.label }}</span></li>{% endfor %}{% endlist %}{% endif %}
   {% endfact %}
   {% endif %}
 {% endfacts %}{% endcard %}

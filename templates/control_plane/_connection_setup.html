@@ -7,14 +7,14 @@ and the list is in the order to connect them (`connection_setup.setups`). An
 empty page links to one row as `?setup=<provider>#setup-<provider>`, which
 opens it. With ``again``, once every provider has a connection, the same steps
 make a second one: another account of a service already connected.
-`count` is how many rows the list holds, and `fields` each provider's item fields
+`rows` is every row the list holds, and `fields` each provider's item fields
 (`connection_tables.setup_fields`).
 A connection family with a setup of its own (``others``) is a row of the same
 list, with what it says and where it is set up, so everything not yet
 connected is in one place.
 {% endcomment %}
 {% load value_tags %}
-{% section again|yesno:"Add another account,Add a connection" count=count id="connection-setup" %}
+{% section again|yesno:"Add another account,Add a connection" counts=rows id="connection-setup" %}
     {% for setup in setups %}
         {% if opened == setup.provider %}{% firstof "open" as shown %}{% else %}{% firstof "" as shown %}{% endif %}
         {% section setup.label lede=setup.gives fold=True open=shown id="setup-"|add:setup.provider %}

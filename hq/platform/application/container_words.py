@@ -14,7 +14,7 @@ from django.utils.text import capfirst, get_text_list
 from .card_items import Answer
 from .entity_links import EntityLink, declared_link
 from .images import version
-from .ui import counted
+from .ui import counted, ended
 
 # Whether a newer version is published, apart from what is known against it.
 UPDATE_AVAILABLE = "available"
@@ -52,7 +52,7 @@ class ImageStandingWords:
         if not self.checkable:
             return "cannot check"
         if self.unfixed:
-            return f"{len(self.unfixed)} serious" + ("" if self.fix_unread else ", no fix yet")
+            return f"{len(self.known_vulnerabilities)} serious" + ("" if self.fix_unread else f", {self.unfixed_said}")
         return "none serious" if self.findings else "none known"
 
     @property
@@ -62,26 +62,47 @@ class ImageStandingWords:
         if self.advisories:
             return "Its own project says this version is affected."
         if self.urgent:
-            return f"Critical or high. {self.latest} fixes them."
+            them = "them" if len(self.urgent) == len(self.known_vulnerabilities) else f"{len(self.urgent)} of them"
+            return ended(f"Critical or high. {self.latest} fixes {them}")
         if self.awaiting_read:
             return self.unread or "HQ has not read its source's advisories yet."
         if not self.checkable:
             return "The image does not say where its source is, and its publisher provides no package list."
         if self.unfixed and self.fix_unread:
             return f"The packages of {self.latest} are not checked yet."
+        if self.packaged_fix:
+            fixed = len(self.packaged_fix)
+            some = "" if fixed == len(self.unfixed) else f"{fixed} of {len(self.unfixed)} "
+            return capfirst(f"{some}fixed in their packages.")
         if self.unfixed:
-            return "No release fixes them yet."
+            return "No fix is published yet."
         return self.checked_against
+
+    @property
+    def unfixed_said(self) -> str:
+        """Why nothing raises what no release fixes, as a reading says it:
+        no release carries a fix its packages name, or no fix is published."""
+
+        return "no release yet" if self.packaged_fix else "no fix yet"
 
     @property
     def checked_against(self) -> str:
         """What was checked for what is known against it, as a reason says it."""
 
         parts = [
-            *((counted(int(self.checked.get("checked") or 0), "package"),) if self.checked else ()),
+            *((self._packages_checked,) if self.checked else ()),
             *(("its project's advisories",) if self.upstream_read_at is not None else ()),
         ]
         return f"Checked {get_text_list(parts, 'and')}" if parts else ""
+
+    @property
+    def _packages_checked(self) -> str:
+        """How many packages OSV was asked about, of the ones its publisher
+        lists where it asked about fewer, so it agrees with that list."""
+
+        checked = int(self.checked.get("checked") or 0)
+        listed = self.packages
+        return f"{checked} of {counted(listed, 'package')}" if listed > checked else counted(checked, "package")
 
     @property
     def vulnerabilities_said(self) -> Answer:
@@ -92,7 +113,7 @@ class ImageStandingWords:
         lower = (f"{len(minor)} of lower severity",) if minor and not self.urgent else ()
         return Answer(
             capfirst(self.vulnerabilities),
-            (*lower, self.vulnerabilities_note, *named(self.known_vulnerabilities or self.unfixed)),
+            (*lower, self.vulnerabilities_note, *named(self.known_vulnerabilities)),
             self.vulnerability_tone,
         )
 

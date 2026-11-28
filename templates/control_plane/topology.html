@@ -19,7 +19,7 @@
 {% include "partials/_topology_map.html" %}
 
 {% if topology_links.rows %}
-{% section "Links shown" count=topology_links.rows|length id="topology-relations" %}
+{% section "Links shown" counts=topology_links.rows id="topology-relations" %}
   {% data_table topology_links %}
 {% endsection %}
 {% endif %}

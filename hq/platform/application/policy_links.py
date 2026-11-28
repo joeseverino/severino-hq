@@ -3,8 +3,8 @@
 A policy names a device by an alias for one of its addresses (``hosts``), a tag
 or its owner. An alias resolves through the address to the machine the catalog
 says answers there; one machine's aliases (its IPv4 and IPv6 addresses) are one
-link with both names in its title. A tag lists its devices; users and
-unresolved names stay as the policy writes them.
+link with both names in its title, and a machine's own name links to it. A tag
+lists its devices; users and unresolved names stay as the policy writes them.
 """
 
 from collections.abc import Iterable
@@ -13,8 +13,8 @@ from typing import Annotated, Any
 
 from .describe import Describe
 from .entity_links import EntityLink, entity_link
-from .locate import host_of
 lazy from . import connections
+lazy from .locate import machines_index
 lazy from .tailnet import policy
 
 
@@ -31,11 +31,20 @@ class PolicyNames:
 
     def __init__(self, hosts: dict | None = None, machines: Iterable[Any] | None = None):
         catalog = tuple(connections.machines_once() if machines is None else machines)
-        self._owners = {host_of(str(address)): item.name for item in catalog for address in item.addresses}
+        # The one index every address is placed through, its names folded
+        # into the catalog machine each is an alias of.
+        self._machines = machines_index()
+        self._catalog = {alias: item.name for item in catalog for alias in (item.name, *item.aliases)}
         self._hosts = dict(policy().hosts if hosts is None else hosts)
 
     def machine_at(self, address: str) -> str:
-        return self._owners.get(host_of(str(address).partition("/")[0]), "")
+        return self._catalog.get(self._machines.at(str(address).partition("/")[0]), "")
+
+    def machine_for(self, name: str) -> str:
+        """The machine a policy name stands for, an alias through its address; "" for none."""
+
+        text = str(name)
+        return self.machine_at(self._hosts[text]) if text in self._hosts else self._catalog.get(text, "")
 
     def of(self, names: Iterable[str]) -> tuple[PolicyName, ...]:
         """Each name, with the aliases of one machine folded into one link."""
@@ -44,7 +53,7 @@ class PolicyNames:
         by_machine: dict[str, int] = {}
         for name in names:
             text = str(name)
-            owner = self.machine_at(self._hosts.get(text, "")) if text in self._hosts else ""
+            owner = self.machine_for(text)
             if not owner:
                 found.append(PolicyName(text))
                 continue

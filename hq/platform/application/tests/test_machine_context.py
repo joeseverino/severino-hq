@@ -15,6 +15,7 @@ from django.utils import timezone
 from hq.domains.analytics.models import AnalyticsSite, RumDaily
 from hq.platform.core.testing import declare
 
+from ..facts import Subject
 from ..machine_context import sections_for
 from ..security import Capability, Principal
 from ..ui import MISSING
@@ -38,6 +39,7 @@ def a_machine(*hostnames, resources=(), name="probe", declaration="", device="")
         aliases=(),
         addresses=(),
         runs_hq=False,
+        subject=Subject.of(machines=(name,)),
     )
 
 
@@ -55,7 +57,9 @@ def measure(host, *, pageviews=100, visits=60, sample_interval=1):
 
 
 def by_id(machine):
-    return {section.id: section for section in sections_for(machine, principal=OPERATOR)}
+    # The names a machine serves are the catalog's grouping by path; here, the ones it is handed.
+    with mock.patch("hq.platform.application.machine_context.served_on", return_value=machine.hostnames):
+        return {section.id: section for section in sections_for(machine, principal=OPERATOR)}
 
 
 def row_for(machine, hostname):

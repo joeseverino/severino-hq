@@ -9,6 +9,7 @@ from unittest import mock
 from hq.domains.control_plane.models import OperationRequest
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
+from ..run_outcome import Ending, ended_as
 from .procedures import APP
 from .test_work_runs import WORKER, WorkRunsTestCase
 
@@ -27,7 +28,8 @@ class RunStatedTestCase(WorkRunsTestCase):
                 success=True,
                 observed_generation=run.input["generation"],
                 stated=stated,
-                **{"message": "Done.", **fields},
+                outcome=ended_as(Ending.SUCCEEDED),
+                **fields,
             ),
             controller_id=WORKER,
         )

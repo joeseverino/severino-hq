@@ -165,14 +165,6 @@ def last_push(project: Project) -> datetime | None:
     return (moment(repository.pushed_at) if repository is not None else None) or project.last_push_at
 
 
-def last_active(project: Project) -> datetime:
-    """A project's date wherever it is shown or ordered: the newest of its
-    repository's last push and its record's last edit."""
-
-    pushed = last_push(project)
-    return max(pushed, project.updated_at) if pushed is not None else project.updated_at
-
-
 def serialize_project(project: Project, *, relationships: bool = False) -> dict[str, Any]:
     fields = row(
         project,
@@ -180,7 +172,6 @@ def serialize_project(project: Project, *, relationships: bool = False) -> dict[
         url=entity_link(Kind.PROJECT, project.slug).url,
         technologies=project.tech_list,
         last_push_at=last_push(project),
-        last_active_at=last_active(project),
     )
     if repository_key(project.repository_url):
         fields["updates"] = _updates(project)

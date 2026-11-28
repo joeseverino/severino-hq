@@ -55,7 +55,8 @@ def _agent(standing: AgentStanding, actions: Any) -> Row:
         lines=_dotted(_about(standing)),
         below=_held(standing),
     )
-    granted = [Cell(f"{len(standing.in_force)} of {len(identity.granted)}")]
+    # Of what it may hold: in force, and offered but not granted, which the line below counts.
+    granted = [Cell(f"{len(standing.in_force)} of {len(standing.in_force) + len(standing.missing)}")]
     if standing.beyond_role:
         granted.append(Cell(f"{len(standing.beyond_role)} beyond its person's role", muted=True))
     if standing.missing:
@@ -184,7 +185,7 @@ def devices(found: Sequence[tuple[AgentStanding, Sequence[tuple[DeviceRow, Any]]
         Group(
             standing.label,
             tuple(_device(device, actions) for device, actions in rows),
-            count=len(rows),
+            counted=True,
             id=f"devices-{standing.identity.pk}",
             data={"agent-devices": standing.subject},
         )
@@ -253,8 +254,7 @@ def offers(endpoint: Any) -> DataTable:
 
     columns = (TableColumn("Name", kind="identifier"), TableColumn("Description"))
     groups = tuple(
-        Group(offer.label, tuple(_offered(item) for item in offer.items), count=len(offer.items))
-        for offer in endpoint.offers
+        Group(offer.label, tuple(_offered(item) for item in offer.items), counted=True) for offer in endpoint.offers
     )
     return DataTable("MCP server", columns, groups=groups)
 

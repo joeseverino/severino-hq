@@ -33,7 +33,7 @@ from hq.domains.control_plane.observations.github import (
 )
 from hq.platform.application.labels import dotted
 
-from . import asks
+from . import asks, deploy_outcomes
 from .action_links import read_link
 from .card_items import Badge, ListRow, RowTitle
 from .derivations import whole
@@ -42,7 +42,7 @@ from .expiry import days_until
 from .freshness import Freshness, freshness
 from .image_findings import SERIOUS
 from .inbound_events import told
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .projection import read_once
 from .sequences import Step
 from .thresholds import Threshold
@@ -112,10 +112,10 @@ ALERT_PAGES: Mapping[ReadingPart, str] = {
     DEPENDABOT: "dependabot",
     LEAKED_CREDENTIALS: "secret-scanning",
 }
-# The tone of a deployment's state; any other state of one is still going.
-_DEPLOY_TONES = {"success": Tone.GOOD, "failure": Tone.SERIOUS, "error": Tone.SERIOUS}
 # The branches Renovate opens its pull requests from.
 UPDATE_BRANCH = "renovate/"
+# The environment whose deployments are releases, as Deploy names it.
+PRODUCTION = "production"
 
 
 def workflow_run(run: Mapping[str, Any]) -> ListRow:
@@ -196,7 +196,7 @@ def check_step(check: PullCheck) -> Step:
     took = ""
     if run.started_at is not None:
         took = (
-            str(duration(run.completed_at - run.started_at, short=True))
+            str(Span(run.completed_at - run.started_at))
             if run.completed_at is not None
             else f"since {when(run.started_at)}"
         )
@@ -464,7 +464,7 @@ class Repository:
 
     @property
     def production_environment(self) -> Mapping[str, Any] | None:
-        return next((item for item in self.record.get("environments") or () if item.get("name") == "production"), None)
+        return next((item for item in self.record.get("environments") or () if item.get("name") == PRODUCTION), None)
 
     @property
     def production_verified(self) -> bool | None:
@@ -485,22 +485,26 @@ class Repository:
         return "\n".join(f"{step.get('name')}: {step.get('conclusion') or 'not run'}" for step in steps)
 
     @property
+    def releases(self) -> tuple[Mapping[str, Any], ...]:
+        """Production's deployments the reading keeps, newest first."""
+
+        return tuple(item for item in self.record.get("deployments") or () if item.get("environment") == PRODUCTION)
+
+    @property
     def production(self) -> Mapping[str, Any] | None:
-        return next(
-            (item for item in self.record.get("deployments") or () if item.get("environment") == "production"),
-            None,
-        )
+        return next(iter(self.releases), None)
+
+    @property
+    def production_said(self) -> str:
+        """How production's last deploy ended, in a few words: "" where there is none."""
+
+        return deploy_outcomes.said(self.production)[0] if self.production else ""
 
     @property
     def production_tone(self) -> str:
         """Production's last deploy as a tone: none where there is none."""
 
-        if not self.production:
-            return ""
-        tone = _DEPLOY_TONES.get(self.production.get("state"), Tone.ATTENTION)
-        # Live, with a check after the deploy failed: the controller reads it
-        # from the outcome the deployment's status declares.
-        return Tone.ATTENTION if tone == Tone.GOOD and self.production.get("check_failed") else tone
+        return deploy_outcomes.said(self.production)[1] if self.production else ""
 
     @property
     def verified_tone(self) -> str:

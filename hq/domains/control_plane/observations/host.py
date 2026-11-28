@@ -70,11 +70,14 @@ STATUS_WORD = r"^[A-Za-z0-9_.+-]{1,64}$"
 UNREADABLE_WORD = "unreadable"
 # A renderer's name is a fixed word, never a path.
 RENDERER_NAME = r"^[a-z][a-z0-9-]{0,31}$"
-# The units of HQ's host a finding tells an operator to start or read, as
-# deploy/systemd names them, and each secret renderer the launcher names, by
-# the unit that runs it. The host's layout takes them from the contract.
+# The units of HQ's host a finding tells an operator to start or read, or a
+# release keeps the last run of, as deploy/systemd names them, and each secret
+# renderer the launcher names, by the unit that runs it. The host's layout
+# takes them from the contract.
 CONTROLLER_UNIT = "severino-hq-controller.service"
 SECRETS_UNIT = "severino-hq-secrets.service"
+GLANCE_UNIT = "severino-hq-glance.service"
+DRIFT_UNIT = "severino-hq-script-drift.service"
 RENDERER_UNITS = {"hq": SECRETS_UNIT}
 # Every word a renderer files a failed run under (``Class`` in
 # controller/secrets, whose constants are generated from the contract), and
@@ -192,12 +195,17 @@ UNIT_REQUIRES = 32
 _ESCAPE = re.compile(rb"\\x([0-9a-f]{2})")
 
 
-def unescaped(unit: str) -> str:
-    """A unit's name as a person reads it, as ``systemd-escape --unescape``
-    gives it: each ``\\xNN`` its byte. Only words take it; whatever
-    addresses the unit keeps the name systemd has."""
+class SystemdName(str):
+    """A unit's name as systemd has it, which whatever addresses the unit
+    (a command, a match) uses, read once from its record. ``said`` is the name
+    as a person reads it, as ``systemd-escape --unescape`` gives it: each
+    ``\\xNN`` its byte."""
 
-    return _ESCAPE.sub(lambda escape: bytes([int(escape[1], 16)]), unit.encode()).decode(errors="replace")
+    __slots__ = ()
+
+    @property
+    def said(self) -> str:
+        return _ESCAPE.sub(lambda escape: bytes([int(escape[1], 16)]), self.encode()).decode(errors="replace")
 
 
 def _or_blank(pattern: str) -> str:
@@ -383,6 +391,53 @@ class HostEdgeRebootRecord(HostRebootRecord):
     connection_ref: str = Field(description="The edge's SSH transport, which names the machine it reads.")
 
 
+# A page as the rehearsal's walk names one: its path in printable ASCII. A
+# release is its whole commit. A walk that read nothing says why in a short
+# line of printable ASCII. The controller reads each from this record's schema
+# in the bridge contract and refuses a document that breaks one.
+REHEARSAL_PAGE = r"^/[!-~]*$"
+REHEARSAL_PAGE_LENGTH = 255
+REHEARSAL_PAGES = 400
+REHEARSAL_REVISION = r"^[0-9a-f]{40}$"
+REHEARSAL_UNREAD = r"^[ -~]*$"
+REHEARSAL_UNREAD_LENGTH = 200
+
+
+class RehearsedPage(ObservationRecord):
+    """What one page cost to draw in a release's rehearsal, as
+    ``manage.py page_costs`` measured it (``hq.platform.core.page_costs``)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    page: str = Field(pattern=REHEARSAL_PAGE, max_length=REHEARSAL_PAGE_LENGTH, description="The page's path.")
+    status: int = Field(ge=100, le=599, description="The HTTP status it answered.")
+    queries: int = Field(ge=0, description="Every SQL statement it sent.")
+    repeated_queries: int = Field(ge=0, description="Each repeat of a statement it had already sent.")
+    rows: int = Field(ge=0, description="The records its tables drew.")
+    html_bytes: int = Field(ge=0, description="The bytes of HTML it answered.")
+    row_html_bytes: int = Field(ge=0, description="The bytes of HTML its records' rows took.")
+
+
+class HostRehearsalRecord(ObservationRecord):
+    """What every page cost in the last release's rehearsal on a copy of
+    production's data: the host.rehearsal reading's one record. Root keeps
+    the walk's document for itself (``controller/host/rehearse.go``) and the
+    launcher gives the controller a copy."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    revision: str = Field(pattern=REHEARSAL_REVISION, description="The release's commit.")
+    reason: str = Field(
+        default="",
+        pattern=REHEARSAL_UNREAD,
+        max_length=REHEARSAL_UNREAD_LENGTH,
+        description="Why the walk measured no page; empty when it measured them.",
+    )
+    pages: tuple[RehearsedPage, ...] = Field(
+        default=(), max_length=REHEARSAL_PAGES, description="Each page it walked, by path."
+    )
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
@@ -391,6 +446,7 @@ TAILNET_LOCK_KIND = "host.tailnet_lock"
 FILESYSTEM_KIND = "host.filesystem"
 REBOOT_KIND = "host.reboot"
 EDGE_REBOOT_KIND = "host.edge_reboot"
+REHEARSAL_KIND = "host.rehearsal"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -423,7 +479,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "HQ units",
         HostUnitRecord,
-        title=lambda record: str(record.get("title") or record.get("unit", "")),
+        title=lambda record: str(record.get("title") or SystemdName(record.get("unit", "")).said),
         relation="HQ units on",
     ),
     ObservationSpec(
@@ -462,6 +518,14 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostEdgeRebootRecord,
         title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
         relation="Restart state of",
+    ),
+    ObservationSpec(
+        REHEARSAL_KIND,
+        PROVIDER,
+        "Release rehearsal",
+        HostRehearsalRecord,
+        title=lambda record: str(record.get("revision", ""))[:7],
+        relation="Release rehearsed on",
     ),
 )
 
@@ -502,7 +566,10 @@ INBOUND = {
                 for result, kinds in JOB_ENDS.items()
             },
             DOCKER_CONTAINER: CONTAINER_CHANGED,
-        }
+        },
+        # A unit's event names it as systemd does; a container's name holds
+        # no escape, so it reads the same.
+        worded=lambda subject: SystemdName(subject).said,
     )
 }
 # The events severino-hq-events.service tells, and the ends of a job it tells,
@@ -522,9 +589,9 @@ SHARED = (
     ),
     SharedValue(
         "HostService",
-        (CONTROLLER_UNIT, SECRETS_UNIT),
-        "A unit of HQ's host that HQ tells an operator to start or read.",
-        varnames=("ControllerUnit", "SecretsUnit"),
+        (CONTROLLER_UNIT, SECRETS_UNIT, GLANCE_UNIT, DRIFT_UNIT),
+        "A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.",
+        varnames=("ControllerUnit", "SecretsUnit", "GlanceUnit", "DriftUnit"),
     ),
     SharedValue("SecretRenderer", tuple(RENDERER_UNITS), "A secret renderer the host's launcher names."),
     SharedValue("RenderFailure", tuple(FAILURE_CLASSES), "A word a secret renderer files a failed run under."),

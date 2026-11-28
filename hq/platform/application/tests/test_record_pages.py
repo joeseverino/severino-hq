@@ -5,11 +5,12 @@ moves onto either is held here without a test of its own."""
 
 from unittest import mock
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.views.generic.base import TemplateResponseMixin
 
 from hq.platform.core import seeds
+from hq.platform.core.example_estate.names import HQ_SOURCE
 from hq.platform.core.example_estate.testing import throwaway_media
 
 from ..pages import RecordListMixin, RecordPageMixin
@@ -18,6 +19,8 @@ from ..routes import routed
 from ..security import web_principal
 
 
+# HQ's releases are those of the repository its build names.
+@override_settings(SEVERINO_HQ_SOURCE=HQ_SOURCE)
 class RecordPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):

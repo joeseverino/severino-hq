@@ -28,7 +28,7 @@ class CoreConfig(AppConfig):
 
 
 def _audit_people_and_agents() -> None:
-    """Each change to a person's settings or an agent's standing is its row's audit event."""
+    """Each change to a person's settings or an agent's standing, and each release HQ kept, is its row's audit event."""
 
     from .audit import register_audit
     from .models import (
@@ -40,6 +40,7 @@ def _audit_people_and_agents() -> None:
         LinkedAccount,
         OwnDevice,
         PersonRole,
+        ReleaseSnapshot,
     )
 
     # Each commits with its row or not at all.
@@ -61,3 +62,5 @@ def _audit_people_and_agents() -> None:
     # a grant, a person, an approval or a block is the event.
     register_audit(AgentIdentity, "Agent identity", observation=("last_seen", "interfaces", "signs_in"), required=True)
     register_audit(AgentDevice, "Agent device", observation=("last_seen", "name", "os", "owner"), required=True)
+    # What HQ kept of a release it ran, written as HQ.
+    register_audit(ReleaseSnapshot, "Release snapshot", required=True)

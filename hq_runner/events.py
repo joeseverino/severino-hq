@@ -1,6 +1,6 @@
 """A run's task outcomes, struck of secrets and held to the bridge's bounds, and what its playbook stated.
 
-An event takes five fields of what Ansible said, never its whole result, so
+An event takes six fields of what Ansible said, never its whole result, so
 what a module returned beside its message and its warnings never leaves the
 worker, and no program's output does. A task that polls with ``until:`` stands as started
 until it ends: a pass that goes again is no event. HQ strikes known
@@ -19,6 +19,7 @@ from typing import Any
 HOST_LIMIT = 253
 TASK_LIMIT = 200
 MESSAGE_LIMIT = 500
+WARNINGS_LIMIT = 10
 EVENT_LIMIT = 200
 
 REDACTED = "[redacted]"
@@ -62,17 +63,21 @@ class Event:
     task: str
     outcome: str
     message: str
-    # Each warning in Ansible's result, in one line: a fact beside the outcome,
-    # which stays what the task did.
-    warnings: str = ""
+    # Each warning in Ansible's result, each in one line: a fact beside the
+    # outcome, which stays what the task did.
+    warnings: tuple[str, ...] = ()
+    # The task's message as JSON when it said data rather than words (a
+    # debug of a variable), which ``message`` then leaves empty.
+    data: str = ""
 
-    def as_report(self) -> dict[str, str]:
+    def as_report(self) -> dict[str, Any]:
         return {
             "host": self.host,
             "task": self.task,
             "outcome": self.outcome,
             "message": self.message,
-            "warnings": self.warnings,
+            "warnings": list(self.warnings),
+            "data": self.data,
         }
 
 
@@ -128,12 +133,12 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
     if outcome == "ok" and result.get("changed") is True:
         outcome = "changed"
     warned = result.get("warnings")
-    warnings = (
-        "; ".join(_one_line(each) for each in warned if isinstance(each, str)) if isinstance(warned, list) else ""
-    )
+    warnings = [each for each in warned if isinstance(each, str)][:WARNINGS_LIMIT] if isinstance(warned, list) else []
     # "censored" is Ansible's own stand-in for the result of a task marked no_log.
     hidden = "censored" in result
-    message = HIDDEN if hidden else strike(_one_line(result.get("msg", "")), secrets)
+    said = result.get("msg", "")
+    message = HIDDEN if hidden else strike(_one_line(said), secrets) if isinstance(said, str) else ""
+    returned = "" if hidden or isinstance(said, str) else strike(json.dumps(said, sort_keys=True, default=str), secrets)
     host = strike(_one_line(data.get("host", "")), secrets)
     task = strike(_one_line(data.get("task", "")), secrets)
     return Event(
@@ -141,7 +146,8 @@ def from_ansible(event: Mapping[str, Any], secrets: Collection[str] = ()) -> Eve
         _clip(task, TASK_LIMIT),
         outcome,
         _clip(message, MESSAGE_LIMIT),
-        "" if hidden else _clip(strike(warnings, secrets), MESSAGE_LIMIT),
+        () if hidden else tuple(_clip(strike(_one_line(each), secrets), MESSAGE_LIMIT) for each in warnings),
+        _clip(returned, MESSAGE_LIMIT),
     )
 
 

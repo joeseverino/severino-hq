@@ -4,9 +4,11 @@ and the public zone at Cloudflare."""
 import json
 from datetime import timedelta
 
-from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 from hq.domains.control_plane.providers import record_spec
 
+from .docker import BY_TAG
 from .names import (
     ADGUARD,
     CLOUDFLARE,
@@ -20,6 +22,7 @@ from .names import (
     OWNER,
     PHONE,
     PHONE_NAME,
+    PROXY_REF,
     PUBLIC,
     SERVICES,
     TAILNET,
@@ -230,6 +233,56 @@ def zone():
         store(kind)
 
 
+# What a zone left to itself drifts into, one of each thing HQ finds wrong
+# about a domain (``zone_findings``): challenges an issuance left behind, a CAA
+# record that refuses the authority renewing its certificate, an SPF past its
+# lookup limit, a DMARC policy that delivers forgeries, a weaker TLS posture
+# than its neighbor's, and a registration that will not renew.
+NEGLECTED = (
+    ("challenge", f"_acme-challenge.{ZONE}", "TXT", "example-challenge-token-one", None, False),
+    ("challenge-www", f"_acme-challenge.www.{ZONE}", "TXT", "example-challenge-token-two", None, False),
+    ("caa", ZONE, "CAA", '0 issue "ca.example.net"', None, False),
+    (
+        "spf",
+        ZONE,
+        "TXT",
+        "v=spf1 " + " ".join(f"include:_spf{number}.example.net" for number in range(11)) + " -all",
+        None,
+        False,
+    ),
+    ("dmarc", f"_dmarc.{ZONE}", "TXT", "v=DMARC1; p=none; rua=mailto:dmarc-reports@example.com", None, False),
+)
+NEIGHBOR = "example.net"
+
+
+def neglected():
+    """The domain as ``NEGLECTED`` leaves it, beside a neighbor held to a stronger posture."""
+
+    # Each record of the zone, one of the same key as it was left instead,
+    # declared as it was left, so HQ's record and the zone agree.
+    dropped = {"caa-wild", "caa-pki"}
+    ManagedResource.objects.filter(key__in=[f"{ZONE_KEY}-{key}" for key in dropped]).delete()
+    for key, *fields in NEGLECTED:
+        spec = record_spec("cloudflare.dns_record", _record(*fields))
+        ManagedResource.objects.filter(key=f"{ZONE_KEY}-{key}").update(spec=spec)
+    kept = {key: fields for key, *fields in (*PUBLIC_RECORDS, *NEGLECTED) if key not in dropped}
+    store("cloudflare.dns_record", *(_record(*fields) for fields in kept.values()))
+    store(
+        "cloudflare.zone",
+        {
+            "zone": ZONE,
+            "connection_ref": DNS,
+            "posture": {"ssl": "full", "min_tls_version": "1.0"},
+            "registration": {
+                "registrar": "Cloudflare, Inc.",
+                "expires_at": (now() + timedelta(days=40)).isoformat(),
+                "auto_renew": False,
+            },
+        },
+        {"zone": NEIGHBOR, "connection_ref": DNS, "posture": {"ssl": "strict", "min_tls_version": "1.2"}},
+    )
+
+
 def adguard():
     """The rewrites as AdGuard holds them, its settings, clients and lookups."""
 
@@ -289,6 +342,82 @@ def adguard():
             for hostname, _container, port, _image in SERVICES
         ),
     )
+
+
+# What the machine's owner named its tailnet device, and what the LAN calls
+# it by: one spelling, a machine's name and a DNS name at once.
+SHORT_NAME = "homebox"
+
+
+def short_named():
+    """The machine's tailnet device renamed to its short LAN name, which an
+    AdGuard rewrite also answers and the LAN looks up: the machine's page
+    shows the device and never that name's lookups or rewrite."""
+
+    devices = ProviderInventory.objects.get(kind="tailscale.device")
+    for device in devices.records:
+        if device["name"] == MACHINE:
+            device.update(name=SHORT_NAME, dns_name=magic_dns(SHORT_NAME))
+    devices.save(update_fields=["records"])
+    for kind, record in (
+        ("adguard.rewrite", {"domain": SHORT_NAME, "answer": LAN, "connection_ref": ADGUARD}),
+        (
+            "adguard.query_summary",
+            {"connection_ref": ADGUARD, "domain": SHORT_NAME, "queries": 42, "last_seen": iso(timedelta(minutes=2))},
+        ),
+    ):
+        held = ProviderInventory.objects.get(kind=kind)
+        held.records = [*held.records, record]
+        held.save(update_fields=["records"])
+
+
+# The proxy's admin port, which the grant opens beside 443 and the proxy binds
+# only to loopback.
+ADMIN_PORT = 81
+
+
+def loopback_granted():
+    """The grant and its test opening the proxy's admin port too, which the
+    sweep answers for and the proxy binds, and is read on, only at loopback:
+    the machine's page and the policy page draw a granted port beside one
+    that reaches nothing, and the finding about it raises."""
+
+    admin = f"tcp:{ADMIN_PORT}"
+    policy = {
+        **POLICY,
+        "grants": [{**grant, "ip": [*grant["ip"], admin]} for grant in POLICY["grants"]],
+        "tests": [{**test, "accept": [*test["accept"], f"tag:server:{ADMIN_PORT}"]} for test in POLICY["tests"]],
+    }
+
+    def edit(kind, change):
+        held = ProviderInventory.objects.get(kind=kind)
+        held.records = [change(dict(record)) for record in held.records]
+        held.save(update_fields=["records"])
+
+    def granted(record):
+        return {
+            **record,
+            "grants": policy["grants"],
+            "tests": policy["tests"],
+            "document": json.dumps(policy, indent=2),
+        }
+
+    def answered(record):
+        if record["name"] != MACHINE:
+            return record
+        rule = {"who": [OWNER], "to": [f"tag:server:{ADMIN_PORT}"], "line": 1}
+        return {**record, "reach": [*record["reach"], {"port": ADMIN_PORT, "who": [OWNER], "rules": [rule]}]}
+
+    def bound(record):
+        if record.get("container") != BY_TAG:
+            return record
+        return {**record, "port_bindings": [{**item, "host_ip": "127.0.0.1"} for item in record["port_bindings"]]}
+
+    edit("tailscale.policy", granted)
+    edit("tailscale.device", answered)
+    edit(RUNTIME_KIND, bound)
+    # Its admin read the way a proxy bound to loopback is, from the machine itself.
+    ProviderConnection.objects.filter(connection_ref=PROXY_REF).update(endpoint=f"http://127.0.0.1:{ADMIN_PORT}")
 
 
 def lock_key(name):

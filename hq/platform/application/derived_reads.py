@@ -44,7 +44,8 @@ lazy from .relationship_records import JoinedReadingPart, RelationshipsRecord
 lazy from .relationships import readout_records, relationships_for
 lazy from .request_path import request_path, serialize_request_path
 lazy from .search import global_search
-lazy from .service_list import services_by_zone
+lazy from .service_list import served_on, services_by_zone
+lazy from .tailnet_ports import ports_of
 lazy from .tailnet_signers import signer_of
 lazy from .topology import relation_graph
 lazy from .zones import ZONE_KIND, find_zone, told_apart
@@ -102,7 +103,16 @@ def _presence(machine: Any) -> PresencePart | None:
         lan_address=tailnet_sightings().lan_address(presence),
         signs_tailnet_lock=signer_of(machine.name) is not None,
         peering=row(presence, PeeringPart, path=presence.peer_path) if presence.peered else None,
-        openings=[{"port": port, "open_to": list(who)} for port, who in presence.openings],
+        openings=[
+            {
+                "port": port.number,
+                "open_to": list(port.open_to),
+                "serves": port.label,
+                "bound_at": list(port.bound_at),
+                "open": port.open,
+            }
+            for port in ports_of(machine.name)
+        ],
     )
 
 
@@ -121,6 +131,7 @@ def serialize_machine(machine: Any) -> MachineRecord:
         state=machine.state.label,
         tone=machine.state.tone,
         tailnet_device=machine.route_approval_key,
+        hostnames=list(served_on(machine.name)),
         header_addresses=[
             {"label": kind, "address": address, "holder": holder} for kind, address, holder in header_addresses(machine)
         ],

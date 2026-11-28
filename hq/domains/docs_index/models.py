@@ -87,7 +87,7 @@ class DocumentationRecord(TimestampedModel):
     related_expenses = models.ManyToManyField("expenses.Expense", blank=True, related_name="documentation_records")
 
     class Meta:
-        ordering = ("-updated_at",)
+        ordering = ("-last_reviewed",)
         indexes = [
             models.Index(fields=("status",)),
             models.Index(fields=("doc_type",)),

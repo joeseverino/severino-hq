@@ -29,8 +29,8 @@ What the listing does not say:
   pull request's Composition job's. A check that reads files and can be
   handed the ones a change touched is an hk step with a glob and a `-whole`
   twin (`hk.pkl`), which fast hands those files; a change to what the
-  extensions' contract check reads runs that check for each composed
-  extension (`fast:extensions`).
+  extensions' contract check reads runs that check for the example extension
+  and each composed one (`fast:extensions`).
 - A fix is proven by the walk that holds its class: a Part's `example` or
   `states`, a seed, the OpenAPI contract, a finding's or capability's
   example. A test is written only where no walk reaches the class, proven to

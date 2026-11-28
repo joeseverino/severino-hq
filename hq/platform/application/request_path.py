@@ -155,10 +155,9 @@ def _device_gap(found: Connection) -> str:
 # ----- Joining the request to the walked path ----------------------------------
 
 
-def joined(walked: ServicePath | None, request, found: Connection | None = None) -> ServicePath:
+def joined(walked: ServicePath | None, request, found: Connection) -> ServicePath:
     """``walked`` from the caller's device, each hop joined to ``request``."""
 
-    found = found if found is not None else connection(request)
     host = split_host_port(request.get_host())[0]
     primary = walked.primary if walked is not None else None
     hops = primary.hops if primary is not None else (_hq_only(host),)

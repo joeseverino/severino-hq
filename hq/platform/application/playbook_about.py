@@ -14,7 +14,6 @@ from .automation_runs import (
     PREVIEW,
     RETRY_WORDS,
     access_words,
-    anywhere,
     capability_name,
     run_title,
     stated_words,
@@ -34,6 +33,7 @@ lazy from .history import asked_by
 lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .moments import when
 lazy from .payload_words import ChangeRow, field_words, value_words
+lazy from .playbook_reach import reachable
 lazy from .routes import reverse
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
 lazy from .work_runs import recent_runs, wording
@@ -46,13 +46,11 @@ def _rule_fact(label: str, rules: tuple[str, ...]) -> tuple[CommandFact, ...]:
     return (CommandFact(label, titles),) if titles else ()
 
 
-def _runs_on(manifest: OperationManifest) -> CommandFact:
-    """The machines a procedure runs on: each it names by its link, else any
-    of the kinds it is written for."""
+def _runs_on(manifest: OperationManifest) -> tuple[CommandFact, ...]:
+    """The machines a run of the procedure can be asked on now, each by its link."""
 
-    if manifest.hosts:
-        return CommandFact("Runs on", links=tuple(entity_link("machine", host) for host in manifest.hosts))
-    return CommandFact("Runs on", anywhere(manifest.target_kinds))
+    links = tuple(entity_link("machine", host) for host in reachable(manifest))
+    return (CommandFact("Runs on", links=links),) if links else ()
 
 
 def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSection | None:
@@ -89,7 +87,7 @@ def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
     inputs are the form's own fields."""
 
     facts = (
-        _runs_on(manifest),
+        *_runs_on(manifest),
         CommandFact("Effect", manifest.effect.label),
         CommandFact("Access", access_words(manifest.privilege)),
         CommandFact("Timeout", timeout_words(manifest.timeout_seconds)),

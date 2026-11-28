@@ -49,6 +49,9 @@ STATES_LEAVE = RANKS + 1
 # How many columns at most a table's share is counted over (`data-columns`),
 # one rule each in tables.css.
 COUNTED = 10
+# How many spare shares at most a table keeps for its columns of states
+# (`data-spares`), one rule each in tables.css.
+SPARES = 4
 # How many columns at most a table draws, its row's controls among them: the
 # tracks of its grid (tables.css) after a row's tick-box, which leads.
 TRACKS = 16
@@ -168,6 +171,11 @@ def lay_out(rows: list[RowFacts], *, sorts: bool = True) -> TableFacts:
     counted = heads[-1] if heads else max((row.cells for row in records), key=len, default=[])
     if (columns := min(COUNTED, sum(index not in empty for index in range(len(counted))))) > 1:
         table.marks.append(f' data-columns="{columns}"')
+    # Each column of states may ask for its line past its share, so the share
+    # is counted over a spare for each (`data-spares`, tables.css).
+    states = sum(kinds.get(at) == "status" for at in range(len(counted)) if at not in empty and at != named)
+    if columns > 1 and (spares := min(SPARES, states)) > 1:
+        table.marks.append(f' data-spares="{spares}"')
     # Of those, the ones a narrow box does not draw (`wide-only`), and the
     # columns of a row's choices, which it stands each on a line of its own
     # beneath the row's name (tables.css): its share is counted over neither.

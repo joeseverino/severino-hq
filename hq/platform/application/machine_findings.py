@@ -11,11 +11,12 @@ from datetime import timedelta
 
 from .derivations import reached
 from .finding_model import Finding, FindingEstate, FindingRule, opens
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .references import Kind
 from .tone import Tone
 from .ui import counted
 lazy from .estate import estate_reading
+lazy from .service_list import served_on
 
 OFFLINE = "machine-offline"
 # A machine that holds something for the estate and has been offline this long
@@ -24,7 +25,9 @@ OFFLINE_AFTER = timedelta(hours=1)
 
 
 def _holds_something(machine) -> bool:
-    return bool(machine.declaration or machine.hostnames or machine.containers or machine.roles or machine.runs_hq)
+    return bool(
+        machine.declaration or served_on(machine.name) or machine.containers or machine.roles or machine.runs_hq
+    )
 
 
 def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
@@ -37,15 +40,14 @@ def _offline(_estate: FindingEstate) -> tuple[Finding, ...]:
         if seen is None or seen.year < 2000 or not reached(seen + OFFLINE_AFTER):
             continue
         what = ", ".join(role.label for role in machine.roles)
+        serves = served_on(machine.name)
         found.append(
             Finding(
                 rule=OFFLINE,
                 subject=Kind.MACHINE.of(machine.name),
                 title=f"{machine.name} is offline",
-                severity=Tone.SERIOUS if machine.hostnames or machine.roles or machine.runs_hq else Tone.ATTENTION,
-                explanation=f"It serves {counted(len(machine.hostnames), 'name')}."
-                if machine.hostnames
-                else "Nothing on it can be reached.",
+                severity=Tone.SERIOUS if serves or machine.roles or machine.runs_hq else Tone.ATTENTION,
+                explanation=f"It serves {counted(len(serves), 'name')}." if serves else "Nothing on it can be reached.",
                 evidence=(("Last seen by Tailscale", when(seen)), *((("Role", what),) if what else ())),
                 primary=opens("Open machine", machine.url),
             )
@@ -63,8 +65,8 @@ RULES: tuple[FindingRule, ...] = (
         operator_action="Bring it back at the machine: power, network, then Tailscale.",
         no_help_reason="HQ has no power or console access to machines.",
         bars={
-            Tone.SERIOUS: f"a machine that serves a name or a role has been away for {duration(OFFLINE_AFTER)}",
-            Tone.ATTENTION: f"a machine that serves no name or role has been away for {duration(OFFLINE_AFTER)}",
+            Tone.SERIOUS: f"a machine that serves a name or a role has been away for {Span(OFFLINE_AFTER)}",
+            Tone.ATTENTION: f"a machine that serves no name or role has been away for {Span(OFFLINE_AFTER)}",
         },
         clears="Tailscale sees the machine again",
         domain="hq.estate",

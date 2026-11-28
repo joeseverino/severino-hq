@@ -43,12 +43,12 @@
   const unpressed = (control) => control.matches(".ask-quiet");
   const isLive = (control) => ["queued", "running"].includes(control.dataset.askState);
 
-  // The server's short `moments.duration`, each figure held to its unit.
+  // The server's `moments.Span` under a day: the largest whole unit alone.
   const elapsed = (seconds) => {
-    const [hours, minutes] = [Math.floor(seconds / 3600), Math.floor(seconds / 60)];
-    const [larger, unit, smaller, smallUnit] = hours ? [hours, "h", minutes % 60, "min"] : [minutes, "min", seconds % 60, "s"];
-    if (!larger) return `${smaller}\u00a0s`;
-    return smaller ? `${larger}\u00a0${unit} ${smaller}\u00a0${smallUnit}` : `${larger}\u00a0${unit}`;
+    const [count, unit] = [[3600, "hour"], [60, "minute"], [1, "second"]]
+      .map(([size, name]) => [Math.floor(seconds / size), name])
+      .find(([whole]) => whole >= 1) ?? [0, "second"];
+    return `${count}\u00a0${unit}${count === 1 ? "" : "s"}`;
   };
   const tick = (control) => {
     const slot = control.querySelector("[data-ask-elapsed]");

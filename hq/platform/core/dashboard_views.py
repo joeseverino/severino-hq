@@ -138,10 +138,9 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         highlights = dashboard_highlights(principal)
         glance = glance_context()
         for project in snapshot["active_projects"]:
-            project["last_active_at"] = moment(project["last_active_at"])
+            project["last_push_at"] = moment(project["last_push_at"])
         for collection in (snapshot["draft_content"], snapshot["recent_published"]):
             for item in collection:
-                item["updated_at"] = moment(item["updated_at"], naive="keep")
                 item["published_at"] = stamp_day(item["published_at"])
         # What waits on this person, counted as the header's count endpoint
         # counts it: everything open that needs doing and is not set aside.
@@ -170,7 +169,6 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             ListRow(
                 entity_link(Kind.WRITEUP, item["slug"], label=item["title"]),
                 meta=item["content_type_label"],
-                at=item["updated_at"],
             )
             for item in snapshot["draft_content"]
         ]
@@ -179,7 +177,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 entity_link("project", project["slug"], label=project["name"]),
                 detail=project["category_label"],
                 category=project["category"],
-                at=project["last_active_at"],
+                at=project["last_push_at"],
             )
             for project in snapshot["active_projects"]
         ]
@@ -190,7 +188,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                     item["published_url"] or page_url(Kind.WRITEUP, item["slug"]),
                     external=bool(item["published_url"]),
                 ),
-                at=item["published_at"] or item["updated_at"],
+                at=item["published_at"],
             )
             for item in snapshot["recent_published"]
         ]

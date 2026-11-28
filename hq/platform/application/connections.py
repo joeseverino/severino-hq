@@ -50,7 +50,7 @@ from .ui import ended
 from .visit_refresh import VISIT_REFRESH, VisitRefreshCommand, request_visit_refresh
 lazy from . import connection_context, derived_reads, machines
 lazy from .connection_records import ConnectionStandingRecord, ConnectionStandingRow, CredentialRecord, CredentialRow
-lazy from .credential_sight import credential_sight, sight_by_connection
+lazy from .credential_sight import credential_sight, fed_kinds, sight_by_connection
 lazy from .freshness import freshness
 lazy from .infrastructure import enabled_resources
 lazy from .locate import index_of
@@ -93,6 +93,8 @@ class ConnectionReading:
     # it. A connection can answer every probe and refuse every operation, and
     # `reachable` only ever describes the probe.
     failing_steps: tuple[tuple[str, str], ...] = ()
+    # A failed probe's cause in its own text, behind ``detail``.
+    cause: str = ""
 
 
 def _machines_reached(row, known, located) -> tuple[tuple[str, str], ...]:
@@ -297,6 +299,7 @@ def connection_readings() -> tuple[ConnectionReading, ...]:
             reachable=row.reachable,
             probed=row.probed,
             detail=row.detail,
+            cause=row.cause,
             observed_at=row.reported_at or row.observed_at,
             probed_at=(row.observed_at if row.reported_at and row.reported_at > row.observed_at else None),
             machines=_machines_reached(row, known, located),
@@ -403,11 +406,16 @@ def _controller_instances(
                 detail=reading.detail,
                 endpoint=reading.endpoint,
                 observed_at=reading.observed_at,
-                # A reading another connection of its provider took is that one's.
+                # A kind its provider's sweeps read through each connection
+                # (a reading, an edge's Caddy routes) is the connection's only
+                # where its own sweep read it, so a shell into shared hosting
+                # is never said to change an edge's routes.
                 ability_names=tuple(
                     name
                     for name in ability_names.get(reading.provider, ())
-                    if sight is None or name not in OBSERVATIONS or any(seen.kind == name for seen in sight.sights)
+                    if sight is None
+                    or name not in fed_kinds(reading.provider)
+                    or any(seen.kind == name for seen in sight.sights)
                 ),
                 targets=targets,
                 dependencies=dependencies,

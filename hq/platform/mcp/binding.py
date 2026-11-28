@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import timedelta
 from difflib import get_close_matches
 from functools import partial
 from typing import Any
@@ -16,6 +17,7 @@ from pydantic_core import InitErrorDetails
 from hq.platform.application import agent_admission
 from hq.platform.application.access import ANYONE
 from hq.platform.application.input_errors import misnamed, takes
+from hq.platform.application.moments import Span
 from hq.platform.application.refusal_codes import Code
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.resources import name_refusal
@@ -108,7 +110,7 @@ class Tool:
         )
         return refuse(
             Code.CALL_TIMED_OUT,
-            f"HQ stopped waiting for this call after {seconds} seconds. It may still finish: read "
+            f"HQ stopped waiting for this call after {Span(timedelta(seconds=seconds))}. It may still finish: read "
             "before repeating it, and repeat a change with the same idempotency_key.",
         )
 

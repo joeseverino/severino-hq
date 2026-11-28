@@ -13,7 +13,7 @@ from hq.platform.application import cadence, first_seen, freshness, pins, proble
 from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 from hq.platform.core.network import SOCKET_PEER
 
-from . import agents, automation, docker, events, failures, history, infra, network, records, web, work
+from . import agents, automation, docker, events, failures, history, infra, network, records, rehearsals, web, work
 from .names import HQ, LAPTOP, OWNER, OWNER_NAME, OWNER_USERNAME, PROXY, SSO
 
 # The services the operator starred, to keep at the top of the list.
@@ -80,6 +80,8 @@ def _seed(owner):
         network.tailnet()
         work.repositories()
         work.units()
+        rehearsals.walked()
+        work.releases()
         events.told()
         work.jobs()
         records.calendar()

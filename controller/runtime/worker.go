@@ -240,8 +240,10 @@ func (w *Worker) applyOne(ctx context.Context) (bool, *ProviderError, error) {
 	if err != nil && !errors.As(err, &refusal) {
 		return true, nil, err
 	}
+	var message, detail string
 	if refusal != nil {
-		message := ReportText(err.Error())
+		reason, cause := Said(err)
+		message, detail = ReportText(reason), ReportText(cause)
 		result = Result{Status: refusal.Status, Message: message, Conditions: []Condition{
 			{Type: ConditionDegraded, Status: true, Reason: "ProviderError", Message: message},
 		}}
@@ -258,13 +260,14 @@ func (w *Worker) applyOne(ctx context.Context) (bool, *ProviderError, error) {
 		Status:             result.Status,
 		Conditions:         result.Conditions,
 		Message:            result.Message,
+		Detail:             detail,
 	}
 	if err := w.Bridge.Report(ctx, w.ID, pending.Operation.ID, report); err != nil {
 		return true, nil, err
 	}
 	var output any = AppliedOperationOutput{OK: true, Operation: pending.Operation.ID, Resource: resource.Key, Changed: result.Changed}
 	if refusal != nil {
-		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(err.Error())}
+		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: message, Detail: detail}
 	}
 	return true, refusal, w.emit(output)
 }

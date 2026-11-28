@@ -40,6 +40,7 @@ from .plugin_admission import admitted_sources
 from .projection import iso, serialized_reads
 from .record_errors import PolicyError
 from .resource_operations import HANDOFF, REPLACES, SETTLES, THEN, Prepared, enqueue, serialize_operation, succeeded
+from .run_outcome import LEFT_OUT, OUTCOME, Ending, ended_as
 lazy from .automation_runs import claimant, held_runs, operation_registry, other_profiles, queue_settling
 lazy from .automation_sources import propose
 lazy from .cadence import ask, swept
@@ -52,7 +53,7 @@ lazy from .github_profile import plan as github_profiles
 lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
-lazy from .work_runs import RUN_EVENTS, STOPPED_REPORTING
+lazy from .work_runs import RUN_EVENTS, run_said
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,11 +63,15 @@ class ControllerReport:
     status: dict[str, Any] = field(default_factory=dict)
     conditions: list[dict[str, Any]] = field(default_factory=list)
     message: str = ""
+    # A refused operation's cause in its own text, kept apart from ``message``.
+    detail: str = ""
     # What a scan found (``SourceCatalog``); no other operation reports one.
     catalog: dict[str, Any] | None = None
     # What a run's playbook stated beside its result (``RunStated``); no other
     # operation reports any.
     stated: dict[str, Any] | None = None
+    # How a run ended (``RunOutcome``); every run reports one, nothing else does.
+    outcome: dict[str, Any] | None = None
 
 
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
@@ -101,18 +106,11 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     )
 
 
-# The reason a run ended without a known outcome carries: its lease lapsed,
-# or its worker stopped before it reported (``hq_runner``). Either ends it
-# said as ``work_runs.STOPPED_REPORTING``, whatever the worker said.
-OUTCOME_UNKNOWN = "OutcomeUnknown"
-
-
 def _stopped(operation: OperationRequest, result: dict[str, Any]) -> None:
-    _end(
-        operation,
-        OperationRequest.State.CANCELLED,
-        {**result, "ok": False, "message": STOPPED_REPORTING, "reason": OUTCOME_UNKNOWN},
-    )
+    """End a run whose lease lapsed, or whose worker stopped before it
+    reported, as one whose outcome is unknown, whatever the worker said."""
+
+    _end(operation, OperationRequest.State.CANCELLED, {**result, OUTCOME: ended_as(Ending.UNKNOWN)})
 
 
 def _fail_lapsed_runs(now) -> None:
@@ -508,18 +506,23 @@ def _next_resolvable(operations):
             continue
         if standing:
             with own_operation(operation):
-                _end(operation, OperationRequest.State.FAILED, {"ok": False, "message": standing, "reason": DRIFTED})
+                _end(operation, OperationRequest.State.FAILED, _unstarted(operation, standing, DRIFTED))
             continue
         try:
             return operation, controller_contract(operation.resource)
         except (KeyError, TypeError, ValueError) as exc:
             with own_operation(operation):
-                _end(
-                    operation,
-                    OperationRequest.State.FAILED,
-                    {"ok": False, "message": str(exc), "reason": "Unresolvable"},
-                )
+                _end(operation, OperationRequest.State.FAILED, _unstarted(operation, str(exc), "Unresolvable"))
     return None, {}
+
+
+def _unstarted(operation: OperationRequest, message: str, reason: str) -> dict[str, Any]:
+    """How work HQ would not hand a worker ends: a run as one refused
+    (``RunOutcome``), anything else with the reason."""
+
+    if operation.action == OperationRequest.Action.RUN:
+        return {OUTCOME: ended_as(Ending.REFUSED, message=message)}
+    return {"ok": False, "message": message, "reason": reason}
 
 
 # ``over_live``'s answer for a reconcile whose kind has not been read since it was queued.
@@ -646,6 +649,12 @@ def report_operation(
     run = operation.action == OperationRequest.Action.RUN
     if run and report.status:
         raise ValueError("A run reports what its tasks did as events, never a status for its record.")
+    if run != (report.outcome is not None):
+        raise ValueError("A run reports how it ended, and nothing else does.")
+    if run and (violation := departs("RunOutcome", report.outcome)) is not None:
+        raise ValueError(violation)
+    if run and report.success != ((report.outcome or {}).get("ending") == Ending.SUCCEEDED):
+        raise ValueError("A run succeeded exactly when it ran to the end.")
     if report.stated is not None:
         if not run:
             raise ValueError("Only a run reports what its playbook stated.")
@@ -679,10 +688,12 @@ def _end(operation: OperationRequest, state: str, result: dict[str, Any]) -> Non
     OperationRequest.objects.filter(pk=operation.pk).update(**fields, updated_at=now)
     for name, value in {**fields, "updated_at": now}.items():
         setattr(operation, name, value)
-    # What the controller said, else the state it ended in.
-    message = str(result.get("message") or "") or operation.get_state_display()
+    # What a run did, else what the controller said, else the state it ended in.
+    outcome = result.get(OUTCOME)
+    said = run_said(result) if outcome else str(result.get("message") or "")
+    message = said or operation.get_state_display()
     ok = state == OperationRequest.State.SUCCEEDED
-    failure = Failure(message=message[:400], kind=str(result.get("reason") or state))
+    failure = Failure(message=message[:400], kind=str((outcome or {}).get("ending") or result.get("reason") or state))
     seconds = (now - operation.claimed_at).total_seconds() if operation.claimed_at else 0
     work_ended(operation, Outcome(message=message, seconds=seconds, ok=ok, facets=() if ok else (failure,)))
 
@@ -724,22 +735,23 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
     """
 
     held = operation.result or {}
-    result: dict[str, Any] = {
-        "message": report.message,
-        "conditions": report.conditions,
-        RUN_EVENTS: list(held.get(RUN_EVENTS) or ()),
-    }
+    result: dict[str, Any] = {OUTCOME: report.outcome, RUN_EVENTS: list(held.get(RUN_EVENTS) or ())}
+    if report.message:
+        result[LEFT_OUT] = report.message
     if HANDOFF in held:
         result[HANDOFF] = held[HANDOFF]
     stated = dict(report.stated or {})
     handoff = stated.pop(HANDOFF, None)
     if stated:
         result["stated"] = struck(stated, declared_names())[0]
+    ending = (report.outcome or {}).get("ending")
     # Ended as a run whose lease lapsed is (``_fail_lapsed_runs``).
-    if any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions):
+    if ending == Ending.UNKNOWN:
         _stopped(operation, result)
     elif handoff and report.success:
         _hold(operation, {**result, HANDOFF: handoff})
+    elif ending == Ending.CANCELLED:
+        _end(operation, OperationRequest.State.CANCELLED, result)
     else:
         _finish(operation, report, result)
         if report.success:
@@ -813,7 +825,7 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
     _finish(
         operation,
         report,
-        {"message": report.message, "status": report.status, "conditions": report.conditions},
+        {"message": report.message, "detail": report.detail, "status": report.status, "conditions": report.conditions},
     )
 
     resource.conditions = stamped(resource.conditions, report.conditions)

@@ -17,6 +17,7 @@ lazy from hq.domains.docs_index.models import DocumentationRecord
 from .entity_links import EntityLink, container_link, entity_link
 from .projection import read_once
 lazy from . import services
+lazy from .containers import container_watchers
 lazy from .infrastructure import enabled_resources
 lazy from .services import alias_target
 
@@ -41,12 +42,12 @@ def where_it_runs(public_url: str) -> RunsOn | None:
     service = next((found for found in services.service_catalog() if found.hostname == wanted), None)
     if service is None:
         return None
-    container = service.container
-    machine = (container.host if container else "") or service.path.machine
+    answers = service.answers
+    watcher = container_watchers().get((answers.machine, answers.container), ("", False))[0]
     return RunsOn(
         service=entity_link("service", service.hostname),
-        machine=entity_link("machine", machine) if machine else None,
-        container=(container_link(container.host, container.name, container.watcher) if container else None),
+        machine=entity_link("machine", answers.machine) if answers.machine else None,
+        container=container_link(answers.machine, answers.container, watcher) if answers.container else None,
     )
 
 

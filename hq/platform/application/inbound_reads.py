@@ -106,7 +106,8 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 InboundEvent,
                 "pk",
-                ("event", "subject", "provider", "delivery_id"),
+                (),
+                identifiers=("delivery_id",),
                 badge_field="source",
                 timestamp_field="applied_at",
             ),

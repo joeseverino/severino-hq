@@ -10,7 +10,7 @@ the heading, then what the rules below allow and what they held or refused.
   {% facts layout="band" %}
     {% fact "Rules" value=rule_count %}
     {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=held_url %}{% endif %}
-    {% with days=recent_days|counted:"day" %}{% fact "Refused in the last "|add:days value=refused_count url=refused_url %}{% endwith %}
+    {% with days=recent_days|span %}{% fact "Refused in the last "|add:days value=refused_count url=refused_url %}{% endwith %}
   {% endfacts %}
 {% aside %}
   {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}
@@ -23,7 +23,7 @@ or a machine agent's, which anyone who governs agents approves. Pressed here
 or on the device's row below, the same form.
 {% endcomment %}
 {% if prompts %}
-  {% section "Needs approval" count=prompts.rows|length id="device-prompts" %}
+  {% section "Needs approval" counts=prompts.rows id="device-prompts" %}
     {% data_table prompts %}
   {% endsection %}
 {% endif %}
@@ -35,8 +35,8 @@ holds open now (none says nothing, and a full set is warned of in its row),
 and its own block beside the pause above. Removing it is offered only while
 it is not blocked, since removal never lifts a block.
 {% endcomment %}
-{% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
-{% section "Agents" count=standings|length id="agents" lede=lede %}
+{% with days=recent_days|span %}{% with lede="Activity over the last "|add:days %}
+{% section "Agents" counts=standings id="agents" lede=lede %}
 {% if standings %}
   {% data_table agents %}
 {% else %}
@@ -85,7 +85,7 @@ device sent the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
-  {% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
+  {% with days=recent_days|span %}{% with lede="Activity over the last "|add:days %}
   {% section "Devices" id="agent-devices" lede=lede %}
   {% data_table device_groups %}
   {% endsection %}
@@ -97,7 +97,7 @@ The signed-in person's own devices: a client registered here whose token also
 carries the device permission stands as them. Only theirs, never anybody else's.
 {% endcomment %}
 {% url 'own_device' as device_url %}
-{% section "Your apps" count=devices.rows|length id="own-devices" lede="Apps that sign in as you." %}
+{% section "Your apps" counts=devices.rows id="own-devices" lede="Apps that sign in as you." %}
   {% data_table devices %}
   {% if device_form %}
     {% include "partials/_form.html" with form=device_form action=device_url fields="core/_command_fields.html" choices=device_choices choice_field="registered" %}

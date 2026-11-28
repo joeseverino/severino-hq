@@ -262,6 +262,7 @@ export default {
         "css.properties.baseline-source": "the last line's baseline, and a row-columns pair set by its top (tables.css)",
         "css.at-rules.view-transition": "a navigation with no cross-fade",
         "css.properties.break-after.avoid": "a printed heading that may end a page",
+        "css.types.calc-size": "an identifier in a cell its column may narrow until it breaks at its seams",
       },
     },
     // Any other sheet draws none.

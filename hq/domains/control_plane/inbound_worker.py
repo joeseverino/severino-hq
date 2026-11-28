@@ -81,9 +81,9 @@ SETTINGS = {
 }
 
 # What the Worker never reads: HQ's readings for each event, which of them
-# the events keep current, and what the provider's app must hold. Of each
-# fact it reads the pointers alone.
-OFF_ROUTE = {"events", "complete", "requires", "facts"}
+# the events keep current, what the provider's app must hold, and how a
+# subject is worded. Of each fact it reads the pointers alone.
+OFF_ROUTE = {"events", "complete", "requires", "facts", "worded"}
 
 
 def _plain(value: object) -> object:

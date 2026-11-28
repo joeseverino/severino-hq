@@ -57,7 +57,7 @@ drawn from it, and a page of one map takes the topology page's own.
   <div class="topology-workspace">
   <div class="topology-map" id="{{ map_region }}" tabindex="-1" role="region" aria-label="Map lanes">
     {% for group in topology_groups %}{% if group.items %}
-      {% section group.label count=group.items|length id=map_parts|add:"-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
+      {% section group.label counts=group.items id=map_parts|add:"-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
         <div class="topology-node-list">
           {% for item in group.items|slice:"1:" %}{% partial topology_card %}{% endfor %}
         </div>

@@ -21,6 +21,12 @@ waits on a schedule.
 | **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
 | **Check extensions** (`extensions.yml`) | Compose on a pull request; an extension pull request's dispatch | each extension's checks against the host, and the change's extension branches composed onto the host image as a verify-only candidate; for an extension pull request, its result as HQ's check on its head, which that merge's admission stands on ([Cordon admission](Plugins.md#cordon-admission)) |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
+| **Deploy Worker** (`deploy-worker.yml`) | Deploy, once a release or a rollback is live; a person | deploys the inbound-events Worker from the commit production runs, in the `inbound-worker` environment, or nothing when the Worker Cloudflare serves came from a commit with the same Worker files |
+
+The Worker follows the release rather than the merge, so it never serves a
+route production HQ lacks, and a rollback takes it back with HQ:
+`worker:deploy` refuses any commit but the one production runs, as GitHub's
+deployments record it (`tools/pipeline/production.py`), a manual run included.
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
@@ -163,8 +169,7 @@ the run shows the deploy step began:
 | *error*, interrupted | the step began, then a person or the job's timeout cancelled it, or its runner was lost; or the record was not read | unknown until `hq-host verify` reads the host |
 
 A live release's run summary links the changes since the release production
-ran before (`python3 -m tools.pipeline.production previous COMMIT`, the same
-reading `mise run release:report` takes). It gives the `cosign verify` command
+ran before (`python3 -m tools.pipeline.production previous COMMIT`). It gives the `cosign verify` command
 for the image it deployed.
 
 Resolve records the deployment itself: the environment's job sets
@@ -513,6 +518,16 @@ nothing. `hq-host deploy`:
      over the socket and memory kills.
    - The image's controller plans on copies of the connections, identities and
      certificate state.
+   - The web process then renders every page the navigation and the header
+     list, as the first operator on the copy (`manage.py page_costs`), within
+     three minutes. A page answering anything but 200 or a redirect fails the
+     release, as `pages=<n>-failed`. A walk that cannot run reads
+     `pages=unread` and fails nothing. Each page's status, queries, records
+     and HTML bytes are kept for root in
+     `/var/lib/severino-hq/rehearsal-pages.json`, with the release's revision.
+     The next controller pass is given a copy, as the `host.rehearsal`
+     reading, and the release's page shows each page beside the release
+     before it.
    - The live web unit and container must not have restarted meanwhile.
    - The image's setup playbook runs in check mode against this host, so a
      playbook this host's configuration or Ansible refuses fails here.
@@ -541,17 +556,14 @@ own, so its deployment says production's state is unknown.
 
 ### After a release
 
-Once the Deploy job is green, `mise run release:report` on a checkout of the
-released commit writes `var/release/<commit>.md` and prints its path. The
-report holds `perf all` beside the release production ran before it (the
-previous deployment GitHub records as live, or `--base <ref>`), and the
-production container's memory and CPU. It also holds the host's drift verdict,
-its failed units and the last run of the controller and glance units. It reads the host over SSH on
-`SEVERINO_HQ_DEPLOY_HOST` as the operator account, with no sudo and no docker
-group: the container is found through the cgroup of the process serving HQ,
-whose files any account can read. A reading that fails is a row saying so; the
-task exits 1 then, or when the release was never marked live. The perf reading
-is the run perf's closing line names, wherever perf ran.
+HQ keeps each release itself. Its page under `/hq/releases/` shows the
+release beside the one production ran before it: how its deploy ended, the
+cost of each page in its rehearsal, and what HQ read of itself once it went
+live (its container's memory and CPU, the units systemd held as failed, and
+the controller, glance and drift units' last runs). A release that went live
+with a check failed, and the pages that failed with a server error since it
+went live, are findings. The rehearsal's verdict line in the Deploy job's log
+says whether each check passed.
 
 ### The bridge
 

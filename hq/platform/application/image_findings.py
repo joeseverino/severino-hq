@@ -62,12 +62,28 @@ class ImageFindings:
         return tuple(found.values())
 
     @property
+    def packaged_fix(self) -> tuple[Mapping[str, Any], ...]:
+        """Of ``unfixed``, those whose package names a version that fixes it:
+        fixed where the package is made, in no release of the image yet."""
+
+        return tuple(item for item in self.unfixed if item.get("fixed"))
+
+    @property
+    def actionable(self) -> bool:
+        """Whether something known against it is the image's to act on: its
+        own project's advisory, or a serious finding a newer release clears."""
+
+        return bool(self.advisories or self.urgent)
+
+    @property
     def known_vulnerabilities(self) -> tuple[Mapping[str, Any], ...]:
-        """What makes it vulnerable, each once by its id: its advisories, then
-        its urgent package findings. A title counts these, and an upgrade
-        says which of these it fixes, so both count one thing. Worst first."""
+        """Everything serious known against it, each once by its id: its
+        advisories, then every critical or high package finding, whether or
+        not a release fixes it. Every count of its vulnerabilities (a row, a
+        title, a band's tally, what an upgrade fixes of them) is this one's,
+        so no two can disagree. Worst first."""
 
         found: dict[str, Mapping[str, Any]] = {}
-        for item in (*self.advisories, *self.urgent):
+        for item in (*self.advisories, *self.serious_findings):
             found.setdefault(str(item.get("id", "")), item)
         return ranked(found.values())

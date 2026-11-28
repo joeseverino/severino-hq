@@ -1,0 +1,13 @@
+id: day-and-clock-said-by-moments
+valid:
+  - 'label = when_exact(day)'
+  - 'key = f"{month:%Y-%m}"'
+  - 'path = f"receipts/{date:%Y/%m}/{name}"'
+  - 'stamp = at.strftime("%Y-%m-%dT%H:%M:%SZ")'
+  - 'said = f"{share:.1%}"'
+  - 'line = f"[{at:%Y-%m-%d %H:%M}] {who}"'
+invalid:
+  - 'label = f"{day:%b %-d, %Y}"'
+  - 'tip = f"{timezone.localtime(at):%b %-d %H:%M}"'
+  - 'said = at.strftime("%I:%M %p")'
+  - 'said = at.strftime("%A")'

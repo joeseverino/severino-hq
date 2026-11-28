@@ -12,7 +12,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
-from functools import cache, partial
+from functools import cache
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict, cast
 
@@ -48,11 +48,13 @@ from . import (
     record_findings,
     reference_findings,
     registration_findings,
+    release_findings,
     render_status_findings,
     repository_findings,
     tailnet_device_findings,
     tailnet_findings,
     unit_findings,
+    zone_findings,
 )
 from .action_links import (
     ActionLink,
@@ -83,7 +85,7 @@ from .first_seen import recorded
 from .integration_validation import required_capability_names
 from .integrations import held_graph
 from .non_empty import RequiredText
-from .projection import MAX_PAGE_SIZE, QUERY, projection_scope, read_once
+from .projection import MAX_PAGE_SIZE, QUERY, projection_scope
 from .security import Principal
 from .tone import Tone
 from .topology import derive_topology
@@ -194,6 +196,7 @@ RULE_MODULES = (
     reboot_findings,
     certificate_expiry,
     registration_findings,
+    zone_findings,
     reference_findings,
     controller_findings,
     tailnet_findings,
@@ -206,6 +209,7 @@ RULE_MODULES = (
     backup_findings,
     inbound_findings,
     delivery_findings,
+    release_findings,
     machine_findings,
     record_findings,
     repository_findings,
@@ -327,9 +331,7 @@ def _playbooks(
         allowed, _ = _permitted(name, principal)
         if not allowed:
             continue
-        reachable = read_once(f"automation.reachable:{manifest.id}", partial(automation_runs.reachable, manifest))
-        host = next((item for item in reachable if normalized_hostname(item) == machine), "")
-        if host and (url := automation_runs.run_here_url(manifest.id, (host,), finding=finding_key(finding))):
+        if url := automation_runs.run_here_url(manifest.id, (machine,), finding=finding_key(finding)):
             investigations.append(
                 command_action(PLAYBOOK_INVESTIGATION, name, url, intent=capabilities.command_spec(name).label)
             )

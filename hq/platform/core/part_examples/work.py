@@ -6,19 +6,21 @@ from hq.platform.core.template_parts import Example
 lazy from hq.domains.jobs.models import JobState
 lazy from hq.platform.application import tables
 lazy from hq.platform.application.tables import Cell, DataTable, TableColumn
-lazy from hq.platform.application.work_runs import RunEvidence, outcome_tone
+lazy from hq.platform.application.work_runs import RunEvidence
 
 
-def _event(task: str, outcome: str, *, host: str = "example-01", message: str = "", warnings: str = "") -> dict:
-    """A task's outcome as a run reports it (the bridge's ``RunEvent``), with its tone."""
+def _event(
+    task: str, outcome: str, *, host: str = "example-01", message: str = "", warnings: tuple = (), data: str = ""
+) -> dict:
+    """A task's outcome as a run reports it (the bridge's ``RunEvent``)."""
 
     return {
         "host": host,
         "task": task,
         "outcome": outcome,
         "message": message,
-        "warnings": warnings,
-        "tone": outcome_tone(outcome),
+        "warnings": list(warnings),
+        "data": data,
     }
 
 
@@ -39,14 +41,27 @@ def _example_runs():
                 lease_until=datetime(2026, 3, 2, 9, 35, tzinfo=UTC),
                 events=(
                     _event("Flush the example cache", "changed"),
+                    _event(
+                        "Say the example cache's settings",
+                        "ok",
+                        data='{"listen": 8080, "names": ["cache.example.com", "www.example.com"]}',
+                    ),
                     _event("Check the example cache", "ok", host="example-02"),
                     _event(
                         "Find the example cache's files",
                         "ok",
                         host="example-02",
                         message="Not all paths examined, check warnings for details",
-                        warnings="Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' "
-                        "is not a directory",
+                        warnings=(
+                            (
+                                "Skipped '/srv/example/cache' path due to this access issue: '/srv/example/cache' "
+                                "is not a directory"
+                            ),
+                            (
+                                "Skipped '/srv/example/spool' path due to this access issue: '/srv/example/spool' "
+                                "is not a directory"
+                            ),
+                        ),
                     ),
                     _event("Restart every example service the cache feeds", "started"),
                 ),

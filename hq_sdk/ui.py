@@ -20,6 +20,7 @@ from hq.platform.application.card_items import (
 from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import (
+    Span,
     span,
     when,
     when_day,
@@ -78,6 +79,7 @@ __all__ = [
     "RowTitle",
     "SectionPart",
     "Share",
+    "Span",
     "StackedBarChart",
     "Timeline",
     "TimelineItem",

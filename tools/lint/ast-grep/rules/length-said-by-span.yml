@@ -1,0 +1,37 @@
+# hq/platform/application/moments.Span says a length of time one way, in the
+# one unit it holds whole, so two lengths side by side read on one scale. An
+# f-string that writes a unit after a number it interpolates ("{days} days",
+# "{seconds:.0f}s") words a length a second way, in a unit of its own
+# choosing. counted and measured refuse a unit of time as their words.
+id: length-said-by-span
+language: python
+severity: error
+message: An f-string writes a unit of time after a number itself.
+note: Say the length with Span(timedelta(...)) from hq.platform.application.moments, or {{ n|span }} in a template.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/migrations/**"
+  # A developer's own measures, to the millisecond, in a terminal or a lock's
+  # report: the test runner's timings, a stall's, a benchmark's.
+  - "hq/platform/core/stalls.py"
+  - "hq/platform/core/run_report.py"
+  - "hq/platform/core/sqlite/base.py"
+  - "hq/platform/core/management/commands/bench_*.py"
+rule:
+  kind: interpolation
+  # A value's repr names a thing ("a 'rest' day"), never a count.
+  not:
+    regex: '!r\}$'
+  any:
+    # f"{days} days", f"after {seconds} seconds"
+    - precedes:
+        kind: string_content
+        regex: ^\s?(seconds?|minutes?|hours?|days?|weeks?|months?|years?)\b
+    # f"{seconds:.0f}s", f"{hours}h", f"{days}d"
+    - regex: (second|minute|hour|day|week|month|year|:[^{}]*)[^{}]*\}$
+      precedes:
+        kind: string_content
+        regex: ^(s|ms|min|h|d)\b

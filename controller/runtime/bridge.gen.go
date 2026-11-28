@@ -527,6 +527,8 @@ func (e HostRenderStatusRecordState) Valid() bool {
 // Defines values for HostService.
 const (
 	ControllerUnit HostService = "severino-hq-controller.service"
+	DriftUnit      HostService = "severino-hq-script-drift.service"
+	GlanceUnit     HostService = "severino-hq-glance.service"
 	SecretsUnit    HostService = "severino-hq-secrets.service"
 )
 
@@ -534,6 +536,10 @@ const (
 func (e HostService) Valid() bool {
 	switch e {
 	case ControllerUnit:
+		return true
+	case DriftUnit:
+		return true
+	case GlanceUnit:
 		return true
 	case SecretsUnit:
 		return true
@@ -904,6 +910,7 @@ const (
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
 	ResourceKindHostReboot                   ResourceKind = "host.reboot"
+	ResourceKindHostRehearsal                ResourceKind = "host.rehearsal"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
 	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
@@ -1017,6 +1024,8 @@ func (e ResourceKind) Valid() bool {
 		return true
 	case ResourceKindHostReboot:
 		return true
+	case ResourceKindHostRehearsal:
+		return true
 	case ResourceKindHostRenderStatus:
 		return true
 	case ResourceKindHostTailnetLock:
@@ -1096,28 +1105,70 @@ func (e ResourceKind) Valid() bool {
 
 // Defines values for RunEventOutcome.
 const (
-	Changed     RunEventOutcome = "changed"
-	Failed      RunEventOutcome = "failed"
-	OK          RunEventOutcome = "ok"
-	Skipped     RunEventOutcome = "skipped"
-	Started     RunEventOutcome = "started"
-	Unreachable RunEventOutcome = "unreachable"
+	RunEventOutcomeChanged     RunEventOutcome = "changed"
+	RunEventOutcomeFailed      RunEventOutcome = "failed"
+	RunEventOutcomeOK          RunEventOutcome = "ok"
+	RunEventOutcomeSkipped     RunEventOutcome = "skipped"
+	RunEventOutcomeStarted     RunEventOutcome = "started"
+	RunEventOutcomeUnreachable RunEventOutcome = "unreachable"
 )
 
 // Valid indicates whether the value is a known member of the RunEventOutcome enum.
 func (e RunEventOutcome) Valid() bool {
 	switch e {
-	case Changed:
+	case RunEventOutcomeChanged:
 		return true
-	case Failed:
+	case RunEventOutcomeFailed:
 		return true
-	case OK:
+	case RunEventOutcomeOK:
 		return true
-	case Skipped:
+	case RunEventOutcomeSkipped:
 		return true
-	case Started:
+	case RunEventOutcomeStarted:
 		return true
-	case Unreachable:
+	case RunEventOutcomeUnreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunOutcomeEnding.
+const (
+	RunOutcomeEndingCancelled   RunOutcomeEnding = "cancelled"
+	RunOutcomeEndingErrored     RunOutcomeEnding = "errored"
+	RunOutcomeEndingLeaseLost   RunOutcomeEnding = "lease_lost"
+	RunOutcomeEndingPaused      RunOutcomeEnding = "paused"
+	RunOutcomeEndingRefused     RunOutcomeEnding = "refused"
+	RunOutcomeEndingSucceeded   RunOutcomeEnding = "succeeded"
+	RunOutcomeEndingTaskFailed  RunOutcomeEnding = "task_failed"
+	RunOutcomeEndingTimedOut    RunOutcomeEnding = "timed_out"
+	RunOutcomeEndingUnknown     RunOutcomeEnding = "unknown"
+	RunOutcomeEndingUnreachable RunOutcomeEnding = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the RunOutcomeEnding enum.
+func (e RunOutcomeEnding) Valid() bool {
+	switch e {
+	case RunOutcomeEndingCancelled:
+		return true
+	case RunOutcomeEndingErrored:
+		return true
+	case RunOutcomeEndingLeaseLost:
+		return true
+	case RunOutcomeEndingPaused:
+		return true
+	case RunOutcomeEndingRefused:
+		return true
+	case RunOutcomeEndingSucceeded:
+		return true
+	case RunOutcomeEndingTaskFailed:
+		return true
+	case RunOutcomeEndingTimedOut:
+		return true
+	case RunOutcomeEndingUnknown:
+		return true
+	case RunOutcomeEndingUnreachable:
 		return true
 	default:
 		return false
@@ -1186,6 +1237,7 @@ const (
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
 	SweptHostReboot                   SweptKind = "host.reboot"
+	SweptHostRehearsal                SweptKind = "host.rehearsal"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
 	SweptHostTailnetLock              SweptKind = "host.tailnet_lock"
 	SweptHostUnit                     SweptKind = "host.unit"
@@ -1272,6 +1324,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostPerimeter:
 		return true
 	case SweptHostReboot:
+		return true
+	case SweptHostRehearsal:
 		return true
 	case SweptHostRenderStatus:
 		return true
@@ -1835,10 +1889,15 @@ type ConnectionProvider string
 
 // ConnectionRecord One connection the controller carries and what its probe found.
 type ConnectionRecord struct {
-	Carried       bool   `json:"carried,omitempty"`
+	Carried bool `json:"carried,omitempty"`
+
+	// Cause A failed probe's cause in its own text, kept apart from the detail; empty for none.
+	Cause         string `json:"cause,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
-	Detail        string `json:"detail"`
-	Endpoint      string `json:"endpoint"`
+
+	// Detail What the probe found, or HQ's words for why it failed.
+	Detail   string `json:"detail"`
+	Endpoint string `json:"endpoint"`
 
 	// ExpiresAt Credential expiry the probe read, when it read one.
 	ExpiresAt string `json:"expires_at,omitempty"`
@@ -1908,10 +1967,18 @@ type ControllerRegistry struct {
 // ControllerReport defines model for ControllerReport.
 type ControllerReport struct {
 	// Catalog What a scan of an automation source found; an operation other than a scan reports none.
-	Catalog            *SourceCatalog `json:"catalog,omitempty"`
-	Conditions         []Condition    `json:"conditions,omitempty"`
-	Message            string         `json:"message,omitempty"`
-	ObservedGeneration int64          `json:"observed_generation"`
+	Catalog    *SourceCatalog `json:"catalog,omitempty"`
+	Conditions []Condition    `json:"conditions,omitempty"`
+
+	// Detail A refused operation's cause in its own text, kept apart from the message; empty for none.
+	Detail string `json:"detail,omitempty"`
+
+	// Message How the work ended, in a line; a run says only what its report leaves out, beside its outcome.
+	Message            string `json:"message,omitempty"`
+	ObservedGeneration int64  `json:"observed_generation"`
+
+	// Outcome How a run ended; HQ refuses a run's report without one, and any other operation's with one.
+	Outcome *RunOutcome `json:"outcome,omitempty"`
 
 	// Stated What a run's playbook stated beside its result; an operation other than a run reports none.
 	Stated *RunStated `json:"stated,omitempty"`
@@ -2535,6 +2602,43 @@ type HostRebootRecord struct {
 	Since string `json:"since,omitempty"`
 }
 
+// HostRehearsalRecord What every page cost in the last release's rehearsal on a copy of production's data: the host.rehearsal reading's one record. Root keeps the walk's document for itself (“controller/host/rehearse.go“) and the launcher gives the controller a copy.
+type HostRehearsalRecord struct {
+	// Pages Each page it walked, by path.
+	Pages []HostRehearsalRehearsedPage `json:"pages,omitempty"`
+
+	// Reason Why the walk measured no page; empty when it measured them.
+	Reason string `json:"reason,omitempty"`
+
+	// Revision The release's commit.
+	Revision string `json:"revision"`
+}
+
+// HostRehearsalRehearsedPage What one page cost to draw in a release's rehearsal, as
+// “manage.py page_costs“ measured it (“hq.platform.core.page_costs“).
+type HostRehearsalRehearsedPage struct {
+	// HTMLBytes The bytes of HTML it answered.
+	HTMLBytes int `json:"html_bytes"`
+
+	// Page The page's path.
+	Page string `json:"page"`
+
+	// Queries Every SQL statement it sent.
+	Queries int `json:"queries"`
+
+	// RepeatedQueries Each repeat of a statement it had already sent.
+	RepeatedQueries int `json:"repeated_queries"`
+
+	// RowHTMLBytes The bytes of HTML its records' rows took.
+	RowHTMLBytes int `json:"row_html_bytes"`
+
+	// Rows The records its tables drew.
+	Rows int `json:"rows"`
+
+	// Status The HTTP status it answered.
+	Status int `json:"status"`
+}
+
 // HostRenderStatusRecord One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.
 type HostRenderStatusRecord struct {
 	Reason   HostRenderStatusRecordReason       `json:"reason,omitempty"`
@@ -2594,7 +2698,7 @@ type HostRenderStatusSecretRenderSuccess struct {
 	RenderedAt       string                             `json:"rendered_at,omitempty"`
 }
 
-// HostService A unit of HQ's host that HQ tells an operator to start or read.
+// HostService A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.
 type HostService string
 
 // HostTailnetLockRecord Tailnet lock as the controller's own machine sees it: `tailscale lock status`, with each key it trusts to sign.
@@ -2754,10 +2858,15 @@ type KindReport struct {
 	Carried bool `json:"carried,omitempty"`
 
 	// Connected False when nothing this controller holds can read the kind; absent means it was read.
-	Connected *bool  `json:"connected,omitempty"`
-	Error     string `json:"error,omitempty"`
-	OK        bool   `json:"ok"`
-	Records   []any  `json:"records"`
+	Connected *bool `json:"connected,omitempty"`
+
+	// Detail The cause's own text, kept apart from the error; empty for none.
+	Detail string `json:"detail,omitempty"`
+
+	// Error HQ's words for what failed.
+	Error   string `json:"error,omitempty"`
+	OK      bool   `json:"ok"`
+	Records []any  `json:"records"`
 
 	// Refusal Why a provider refused a read: the credential itself, or one permission it lacks. Empty when the reason is unclassified.
 	Refusal      Refusal       `json:"refusal,omitempty"`
@@ -3102,6 +3211,8 @@ type Refusal string
 
 // RefusedOperationOutput The line an apply pass prints for one operation a provider refused.
 type RefusedOperationOutput struct {
+	// Detail The refusal's cause in its own text, kept apart from the message; empty for none.
+	Detail    string `json:"detail,omitempty"`
 	Message   string `json:"message"`
 	OK        bool   `json:"ok"`
 	Operation string `json:"operation"`
@@ -3113,9 +3224,14 @@ type RefusedPart struct {
 	Address       string `json:"address,omitempty"`
 	ConnectionRef string `json:"connection_ref"`
 
+	// Detail The cause's own text, kept apart from the reason; empty for none.
+	Detail string `json:"detail,omitempty"`
+
 	// Part A part a reading is read in, as HQ's registry declares them; empty for the whole reading. HQ stores a refusal only for a part the kind declares.
-	Part   ReadingPartName `json:"part"`
-	Reason string          `json:"reason"`
+	Part ReadingPartName `json:"part"`
+
+	// Reason HQ's words for what failed.
+	Reason string `json:"reason"`
 
 	// Refusal Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.
 	Refusal FailureClass `json:"refusal"`
@@ -3165,13 +3281,15 @@ type ResourceKind string
 
 // RunEvent One task on one machine: started while it is under way, else how it ended.
 type RunEvent struct {
+	// Data The task's message as JSON when it said data rather than words, with message empty; empty when it said words or nothing.
+	Data    string          `json:"data"`
 	Host    string          `json:"host"`
 	Message string          `json:"message"`
 	Outcome RunEventOutcome `json:"outcome"`
 	Task    string          `json:"task"`
 
-	// Warnings Each warning Ansible gave of the task, in one line; empty when it gave none.
-	Warnings string `json:"warnings"`
+	// Warnings Each warning Ansible gave of the task, each in one line; empty when it gave none.
+	Warnings []string `json:"warnings"`
 }
 
 // RunEventOutcome defines model for RunEvent.Outcome.
@@ -3203,6 +3321,24 @@ type RunInput struct {
 	// Revision The reviewed commit the run was asked of.
 	Revision string `json:"revision"`
 }
+
+// RunOutcome How a run ended, as its worker saw it, which HQ words its result from.
+type RunOutcome struct {
+	// Ending How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported.
+	Ending RunOutcomeEnding `json:"ending"`
+
+	// Host The machine it failed on or could not reach; empty unless a task failed or a machine could not be reached.
+	Host string `json:"host"`
+
+	// Message The ending's own words, as written: the result its playbook stated, Ansible's error, why it could not start or why its lease was lost; empty for any other ending.
+	Message string `json:"message"`
+
+	// Task The task that failed first; empty unless a task failed.
+	Task string `json:"task"`
+}
+
+// RunOutcomeEnding How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported.
+type RunOutcomeEnding string
 
 // RunProgress What a claimant says of its work as it renews the lease: a run's tasks so far.
 type RunProgress struct {

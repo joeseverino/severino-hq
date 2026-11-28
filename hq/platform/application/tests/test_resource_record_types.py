@@ -13,7 +13,7 @@ from typing import Any, TypedDict
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.serializers.json import DjangoJSONEncoder
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from jsonschema import Draft202012Validator
 
@@ -29,6 +29,7 @@ from hq.platform.application.projection import page_of
 from hq.platform.application.resources import BoundedQuery, get_resource, list_resource, resource_registry
 from hq.platform.application.security import Capability, Principal
 from hq.platform.core import seeds
+from hq.platform.core.example_estate.names import HQ_SOURCE
 from hq.platform.core.example_estate.testing import throwaway_media
 
 READER = Principal("example-reader", "api", frozenset(Capability))
@@ -67,6 +68,8 @@ def _spec(item: type = dict, fields: tuple[str, ...] = (), **types: Any) -> Reso
     return ResourceSpec("example.notes", "Notes", "Example notes.", "example.read", listing, **types)
 
 
+# HQ's releases are those of the repository its build names.
+@override_settings(SEVERINO_HQ_SOURCE=HQ_SOURCE)
 class RecordTypeTests(TestCase):
     @classmethod
     def setUpTestData(cls):

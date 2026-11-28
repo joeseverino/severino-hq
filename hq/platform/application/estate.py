@@ -151,7 +151,7 @@ def _estate() -> Estate:
         domains=domains,
         connections=connection_states(),
         registrations=_registrations(domains),
-        certificates=_certificates(domains, hostnames),
+        certificates=certificates(domains, hostnames),
     )
 
 
@@ -193,11 +193,15 @@ def _registrations(domains: tuple[str, ...]) -> tuple[Expiry, ...]:
     return tuple(sorted(found, key=lambda item: item.expires))
 
 
-def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry, ...]:
-    """Edge certificates read under the domains, and certificates HQ manages."""
+def certificates(
+    domains: tuple[str, ...], hostnames: set[str] | frozenset[str] = frozenset(), *, keys: set[str] | None = None
+) -> tuple[Expiry, ...]:
+    """Edge certificates read under the domains, one per name it serves, and
+    the certificates HQ manages (those declared as ``keys``, when named),
+    soonest to expire first: every page that counts certificates counts these."""
 
-    found = [*_edge_certificates(domains, hostnames), *managed_certificates()]
-    return tuple(sorted(found, key=lambda item: item.expires))
+    managed = [item for item in managed_certificates() if keys is None or item.resource_key in keys]
+    return tuple(sorted([*_edge_certificates(domains, hostnames), *managed], key=lambda item: item.expires))
 
 
 def _edge_certificates(domains: tuple[str, ...], hostnames: set[str]) -> list[Expiry]:

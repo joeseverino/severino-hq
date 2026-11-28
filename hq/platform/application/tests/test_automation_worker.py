@@ -39,4 +39,4 @@ class AbsentWorkerTests(TestCase):
 
         answer = self.run_it()
         self.assertFalse(answer["ok"])
-        self.assertIn("3\N{NO-BREAK SPACE}hours", answer["error"]["message"])
+        self.assertIn("3\xa0hours", answer["error"]["message"])

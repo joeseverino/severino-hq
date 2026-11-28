@@ -2,7 +2,7 @@
 The selected node in the details pane: its name, what kind of thing it is,
 how many links it has, how it stands and the way to its own page.
 {% endcomment %}
-{% section item.node.label count=item.degree lede=item.node.subtitle data_topology_body_of=item.node.id %}
+{% section item.node.label counts=item.relations lede=item.node.subtitle data_topology_body_of=item.node.id %}
   {% if item.node.detail %}{% muted element="p" %}{{ item.node.detail }}{% endmuted %}{% endif %}
 
   {% comment %}
@@ -12,7 +12,7 @@ how many links it has, how it stands and the way to its own page.
   {% endcomment %}
   {% facts %}
     {% if item.node.pageviews is not None %}
-      {% fact "Traffic" %}{{ item.node.pageviews|counted:"pageview" }} from {{ item.node.visits|counted:"visit" }}{% detail %}in the last {{ traffic_window_days|counted:"day" }}{% endfact %}
+      {% fact "Traffic" %}{{ item.node.pageviews|counted:"pageview" }} from {{ item.node.visits|counted:"visit" }}{% detail %}in the last {{ traffic_window_days|span }}{% endfact %}
     {% endif %}
     {% if not item.node.managed %}{% fact "Changes" value="Read only" detail="HQ does not change it" %}{% endif %}
     {% if item.node.declared_revision or item.node.observed_revision %}

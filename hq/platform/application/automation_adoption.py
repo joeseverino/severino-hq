@@ -29,8 +29,9 @@ from pydantic import (
     ValidationError,
 )
 
-from hq.domains.control_plane.models import AdoptedCatalog, SourceProposal
+from hq.domains.control_plane.models import AdoptedCatalog, ManagedResource, SourceProposal
 from hq.platform.core.digests import digest
+lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 
 from . import automation_sources
 from .answer_fields import CallMessage
@@ -48,10 +49,20 @@ from .security import Capability, Principal
 lazy from . import agent_registry
 lazy from .approval_review import SUMMARY
 lazy from .automation_manifest import REVISION_INPUT
-lazy from .automation_runs import RETRY_WORDS, access_words, anywhere, reading_words, timeout_words
+lazy from .automation_runs import (
+    RETRY_WORDS,
+    access_words,
+    operation_registry,
+    pinned,
+    reading_words,
+    resource_key,
+    timeout_words,
+)
 lazy from .findings import rule_for
+lazy from .infrastructure import ManagedResourceCommand, save_sourced
 lazy from .labels import dotted, lower_first
 lazy from .payload_words import field_words
+lazy from .playbook_reach import reachable
 lazy from .ui import ended
 lazy from .work_runs import wording
 
@@ -193,6 +204,16 @@ def adopted() -> AdoptedCatalog | None:
     for every part of a page that names it."""
 
     return read_once("automation.adopted", AdoptedCatalog.objects.first)
+
+
+def scan_result(pk: int | None = None) -> SourceProposal | None:
+    """The scan result ``pk``, or the newest when none is named; None when HQ
+    holds no such one. Read once for every part of a page that names it."""
+
+    newest = read_once("automation.scan_result", SourceProposal.objects.order_by("-pk").first)
+    if pk is None or (newest is not None and newest.pk == pk):
+        return newest
+    return read_once(f"automation.scan_result:{pk}", SourceProposal.objects.filter(pk=pk).first)
 
 
 def manifests(digest: str) -> tuple[OperationManifest, ...]:
@@ -476,8 +497,7 @@ def _widens(
 def _summary(procedure: AdoptedProcedure) -> str:
     """Its Effect, Runs on and Access, in the Playbooks table's words."""
 
-    where = ", ".join(procedure.hosts) or anywhere(procedure.target_kinds)
-    return dotted(procedure.effect.label, where, access_words(procedure.privilege))
+    return dotted(procedure.effect.label, ", ".join(reachable(procedure)), access_words(procedure.privilege))
 
 
 def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
@@ -489,7 +509,7 @@ def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
     return {
         SUMMARY: {"label": named, "value": _summary(procedure)},
         "effect": procedure.effect.label,
-        "runs_on": list(procedure.hosts) or anywhere(procedure.target_kinds),
+        "runs_on": list(reachable(procedure)),
         "access": access_words(procedure.privilege),
         "timeout": timeout_words(procedure.timeout_seconds),
         "retry": RETRY_WORDS[procedure.retry],
@@ -621,7 +641,7 @@ def judged(proposal_id: int) -> AdoptionPlan:
     its problems, and a playbook a person rejected left as adopted;
     RecordNotFound for a proposal HQ no longer holds."""
 
-    proposal = SourceProposal.objects.filter(pk=proposal_id).first()
+    proposal = scan_result(proposal_id)
     if proposal is None:
         raise RecordNotFound("No scan result has that ID.")
     unplaced = _commit_refusals(proposal)
@@ -810,6 +830,7 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
         procedures=[procedure.model_dump(mode="json") for procedure in ordered],
         digest=_digest(ordered),
     )
+    derive_records(principal=principal)
     # Every caller's commands moved: this process builds its own anew once
     # the row commits, every other at its next request (``generation``), and
     # a stream is told.
@@ -817,6 +838,37 @@ def adopt(command: AdoptProposal, *, principal: Principal) -> Adopted:
     agent_registry.tools_changed(_everyone)
     widened = _widens(planned.before, planned.procedures, (change.key for change in chosen))
     return {"ok": True, "adopted": True, "digest": row.digest, "widened": widened, "message": "Adopted."}
+
+
+@transaction.atomic
+def derive_records(*, principal: Principal) -> None:
+    """Every adopted procedure's record as its manifest now pins it, and none
+    for a procedure no longer adopted, written as HQ.
+
+    The one writer of these records, run by each adoption and each sweep, so
+    the records are the adopted catalog whatever wrote or removed one between.
+    A dropped procedure's record goes, unless runs name it: those are history,
+    so it stays as their anchor, retired (``ProviderSpec.sourced``) and listed
+    nowhere.
+    """
+
+    # Read from the newest catalog, an adoption in this transaction included.
+    catch_up()
+    named = {resource_key(manifest.id): manifest for manifest in operation_registry().values()}
+    held = {record.key: record for record in ManagedResource.objects.select_for_update().filter(key__in=named)}
+    for key, manifest in named.items():
+        current, spec = held.get(key), pinned(manifest)
+        if current is None or current.kind != OPERATION_KIND or current.spec != spec:
+            save_sourced(
+                ManagedResourceCommand(
+                    key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
+                ),
+                principal=principal,
+                current_key=key if current else None,
+            )
+    for record in ManagedResource.objects.filter(kind=OPERATION_KIND, operations=None).exclude(key__in=named):
+        record.audit_gone = f"Forgot {record.key}: no longer adopted"
+        record.delete()
 
 
 class Rejected(TypedDict):

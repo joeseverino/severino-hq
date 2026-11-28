@@ -12,7 +12,6 @@ from django.utils import timezone
 from pydantic import BaseModel
 
 from hq.domains.jobs.models import JobState
-from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 from hq.platform.application.tone import Tone, TonedChoices
 from hq.platform.application.url_query import with_query
@@ -31,7 +30,7 @@ lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.glance_refresh import _panel_names
 lazy from hq.platform.application.security import subject_parts
 
-lazy from .providers import readout_rows, registry_label, resource_home, validate_spec
+lazy from .providers import registry_label, resource_home, validate_spec
 
 
 # Choices as callables, which Django reads on first use: the contracts live in
@@ -143,19 +142,6 @@ class ManagedResource(TimestampedModel):
     def kind_label(self) -> str:
         return registry_label(self.kind)
 
-    @property
-    def search_summary(self) -> str:
-        """The provider's readout as one line, else the kind's label."""
-
-        rows = dotted(
-            *(
-                f"{label}: {desired or observed}"
-                for label, desired, observed in readout_rows(self)
-                if desired or observed
-            )
-        )
-        return rows or self.kind_label
-
 
 def attempted_at(observed_at: datetime | None, updated_at: datetime) -> datetime:
     """When a stored reading was last tried, from its two columns.
@@ -184,6 +170,9 @@ class ProviderInventory(TimestampedModel):
     # False when the controller holds no connection that could read the kind.
     connected = models.BooleanField(default=True)
     error = models.CharField(max_length=500, blank=True)
+    # The cause's own text behind ``error``, kept apart so a page draws HQ's
+    # words and folds the machine's.
+    detail = models.CharField(max_length=500, blank=True)
     # What the provider refused when unreachable: the credential, or one
     # permission. Blank when the read failed for another reason.
     refusal = models.CharField(max_length=16, blank=True, choices=refusal_choices)
@@ -228,6 +217,8 @@ class ProviderConnection(TimestampedModel):
     # look like an outage every time the page loaded.
     probed = models.BooleanField(default=True)
     detail = models.CharField(max_length=500, blank=True)
+    # A failed probe's cause in its own text, kept apart from ``detail``.
+    cause = models.CharField(max_length=500, blank=True)
     # Why the last probe failed: a refusal, the address answering as something
     # other than the API, or no answer. Blank when it answered or the cause is
     # unknown.
@@ -697,7 +688,7 @@ class OperationHost(models.Model):
     """One machine a run acts on, as a row, so "the runs on this machine" is an
     indexed query rather than a read of every run's ``input``.
 
-    ``host`` is the machine's canonical name, as ``automation_runs.resolved_hosts``
+    ``host`` is the machine's canonical name, as ``playbook_reach.resolved_hosts``
     gives it: machines are a projection of many readings rather than rows, so
     there is no row to point at. Written with the run, in its transaction, by
     ``automation_runs.request_run``, its one writer.
@@ -742,7 +733,7 @@ class SourceProposal(TimestampedModel):
     files = models.JSONField(default=list)
     unpinned = models.JSONField(default=list)
     # Each machine and privilege profile the worker said it has a login for,
-    # which a run is held to when it is asked (``automation_runs.reached``).
+    # which a run is held to when it is asked (``playbook_reach.reached``).
     reaches = models.JSONField(default=list)
     # Set when a person rejects it (``automation_adoption.reject``), so it no
     # longer waits to be decided; who did is the audit row that set it.

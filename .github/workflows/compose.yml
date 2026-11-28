@@ -247,7 +247,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
           BRANCH: ${{ github.head_ref }}
-        run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" coordinated.txt
+          # Every extension carries main, so only an integration branch is named.
+          BASE: ${{ github.base_ref != 'main' && github.base_ref || '' }}
+        run: tools/pipeline/coordinated-branches.sh composition-set.json "$BRANCH" ${BASE:+"$BASE"} coordinated.txt
 
       - name: Decide whether anything changed
         # Not for a coordinated change, so every step that builds below,

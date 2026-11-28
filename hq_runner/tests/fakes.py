@@ -131,6 +131,10 @@ RETRY: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_retry_even
 # examine one of its paths, which it ended well and warned of; its paths are
 # rewritten under /srv/example.
 WARNED: dict[str, Any] = json.loads(Path(__file__).with_name("recorded_warned_event.json").read_text("utf-8"))
+# Two debug tasks ansible-runner 2.4.3 and ansible-core 2.22 recorded whose
+# msg was data, a mapping then a list, not words; its paths are rewritten
+# under /srv/example.
+SAID_DATA: list[dict[str, Any]] = json.loads(Path(__file__).with_name("recorded_data_event.json").read_text("utf-8"))
 # Its task outcomes alone, one per task, so a test counts the tasks that ran.
 OUTCOMES = [event for event in RECORDED if event["event"] in ("runner_on_ok", "runner_on_failed", "runner_on_skipped")]
 

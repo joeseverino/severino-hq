@@ -8,18 +8,17 @@ from typing import Any
 from django.utils import timezone
 lazy from django.db.models import Max, Q
 
-from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, unescaped
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, SystemdName
 lazy from hq.domains.jobs.models import Job as JobRow
 lazy from hq.platform.core.included_parts import DOTS
 
 from ..automation_workers import ProfileWorker, profile_workers, reached_by_profile, workers_table
 from ..backup_findings import OffSiteCopy, off_site_copies
 from ..drawings import Dot, Dots
-from ..moments import moment
+from ..moments import Span, moment, when_at
 from ..projection import iso, read_once
 from ..tables import Cell, DataTable, Piece, TableColumn
 from ..tone import Tone
-from ..ui import counted
 lazy from .. import outbound_work
 lazy from ..facts import stored_snapshots
 lazy from ..render_status_findings import FAILURE_CLASSES, UNKNOWN_FAILURE, UNREAD_REASONS, rendering
@@ -230,14 +229,14 @@ def _scheduled_label(unit: str) -> str:
     return next((work.label for work in outbound_work.host_work() if instance and work.name == instance), "")
 
 
-def _runs(unit: str, title: str = "", shown: str = "") -> tuple[str, bool]:
+def _runs(unit: SystemdName, title: str = "", shown: str = "") -> tuple[str, bool]:
     """What a unit a trigger starts is, in the words HQ has for it: the
     scheduled work an instance of the job template names, else its unit file's
     title unless that repeats the ``shown`` words already beside it, else the
     unit's own name; and whether it is that name."""
 
     label = _scheduled_label(unit) or (title if title != shown else "")
-    return (label, False) if label else (unescaped(unit), True)
+    return (label, False) if label else (unit.said, True)
 
 
 def _scheduled(starter: Any, target: Any) -> WorkUnit:
@@ -251,7 +250,7 @@ def _scheduled(starter: Any, target: Any) -> WorkUnit:
     )
     return WorkUnit(
         unit=starter.unit,
-        name=unescaped(starter.unit),
+        name=starter.unit.said,
         title=starter.title,
         runs=runs,
         runs_unit=runs_unit,
@@ -269,7 +268,7 @@ def _standing(unit: Any) -> WorkUnit:
     result, tone = _result(unit)
     return WorkUnit(
         unit=unit.unit,
-        name=unescaped(unit.unit),
+        name=unit.unit.said,
         title=unit.title,
         runs=_scheduled_label(unit.unit),
         last_run=moment(unit.started_at),
@@ -334,9 +333,7 @@ def _every(span: timedelta) -> str:
         return "Hourly"
     if hours == 24:
         return "Daily"
-    if hours and hours % 24 == 0:
-        return f"Every {counted(hours // 24, 'day')}"
-    return f"Every {counted(hours, 'hour')}" if hours else f"Every {counted(int(span.total_seconds() // 60), 'minute')}"
+    return f"Every {Span(span)}"
 
 
 # Recent runs shown per piece of work: as many dots as Dots draws.
@@ -346,7 +343,7 @@ RECENT = Dots.LIMIT
 def _run_dot(job: Any) -> Dot:
     return Dot(
         filled=job.state == JobRow.State.SUCCEEDED,
-        tip=f"{job_run(job).word}, {timezone.localtime(job.created_at):%b %-d %H:%M}",
+        tip=f"{job_run(job).word}, {when_at(job.created_at)}",
         url=reverse("jobs:list"),
     )
 

@@ -15,6 +15,7 @@ from hq.domains.control_plane.models import (
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.glance import MACHINE_KIND as MACHINE_TELEMETRY, WEATHER_KIND
 from hq.domains.control_plane.observations.r2 import BACKUP_KIND
+from hq.domains.control_plane.observations.tailscale import EXIT_ROUTES
 from hq.platform.application import cadence
 from hq.platform.application.conditions import READY
 from hq.platform.application.inventory import keep
@@ -29,6 +30,7 @@ from .names import (
     CONTAINERS,
     CONTROLLER,
     DNS,
+    EDGE,
     GITHUB,
     HQ,
     LAN,
@@ -45,9 +47,14 @@ from .names import (
     TAILNET6,
     TAILSCALE,
     ZONE,
+    container_id,
     iso,
+    magic_dns,
+    node_id,
     now,
     stamp,
+    tailnet_v4,
+    tailnet_v6,
 )
 from .sweep import store
 
@@ -127,21 +134,25 @@ def _observe_everything():
         )
 
 
-def connections():
+def _answering(ref, provider, endpoint, detail, reaches=()):
     # Each manages, as a set-up HQ's do, so every action is offered. Only a
     # controller applies one, and the estate has none.
-    def answering(ref, provider, endpoint, detail, reaches=()):
-        return {
-            "connection_ref": ref,
-            "provider": provider,
-            "endpoint": endpoint,
-            "manages": True,
-            "reaches": list(reaches),
-            "ok": True,
-            "probed": True,
-            "detail": detail,
-        }
+    return {
+        "connection_ref": ref,
+        "provider": provider,
+        "endpoint": endpoint,
+        "manages": True,
+        "reaches": list(reaches),
+        "ok": True,
+        "probed": True,
+        "detail": detail,
+    }
 
+
+def connections(*more):
+    """Each connection the controller reports, and ``more`` beside them."""
+
+    answering = _answering
     # Bound as the bridge binds a controller's report, so its rows name the controller.
     with doors.controller("connections"):
         report_connections(
@@ -165,9 +176,111 @@ def connections():
                 ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
                 answering(BACKUPS, "r2", "https://backups.example.com", "Bucket example-backups."),
+                *more,
             ],
             controller_id=CONTROLLER,
         )
+
+
+# A machine HQ knows that the playbook worker has no login to, and a shell
+# into a web host's account, whose sweep reads no Caddy route there.
+PRINTER = "office-printer"
+WEB_HOST = "web-host"
+
+
+def unreached():
+    """A printer on the LAN the playbook worker has no login to, so no
+    playbook is offered or said to run there; and two shell connections, the
+    machine's serving a Caddy route and the web host's serving none, so each
+    is said to change only what it does."""
+
+    ManagedResource.objects.create(
+        key=PRINTER, kind="machine", spec={"name": PRINTER, "role": "Printer", "addresses": ["10.100.200.50"]}
+    )
+    connections(_answering(WEB_HOST, "ssh", "203.0.113.20:22", "Host key matches.", [WEB_HOST]))
+    store(
+        "caddy.route",
+        {"connection_ref": SSH, "domain": f"status.{ZONE}", "upstream": "localhost:3001", "to_requested_host": False},
+    )
+
+
+# What the edge machine runs, and the names its Caddy hands to it or answers itself.
+EDGE_CONTAINER = "uptime-kuma"
+EDGE_NAMES = (f"uptime.{ZONE}", f"health.{ZONE}")
+
+
+def edge():
+    """An edge machine on the tailnet, approved as an exit node, whose Caddy
+    hands ``uptime`` to a container by its name and answers ``health``
+    itself, both declared: its page, its container's and the topology place
+    both names on it, from the path each name's request takes."""
+
+    address = tailnet_v4(EDGE)
+    connections(_answering(EDGE, "ssh", f"{address}:22", "Host key matches.", [EDGE]))
+    uptime, health = EDGE_NAMES
+    routes = {uptime: f"{EDGE_CONTAINER}:3001", health: ""}
+    for name, upstream in routes.items():
+        ManagedResource.objects.create(
+            key=f"{name.split('.')[0]}-caddy",
+            kind="caddy.route",
+            spec={"connection_ref": EDGE, "domain": name, "upstream": upstream},
+        )
+    ManagedResource.objects.create(
+        key=f"{EDGE_CONTAINER}-container",
+        kind="portainer.container",
+        spec={"connection_ref": PORTAINER, "host": EDGE, "name": EDGE_CONTAINER},
+    )
+    store(
+        "caddy.route",
+        *(
+            {"connection_ref": EDGE, "domain": name, "upstream": upstream, "to_requested_host": False}
+            for name, upstream in routes.items()
+        ),
+    )
+    _appended(
+        "tailscale.device",
+        {
+            "name": EDGE,
+            "node_id": node_id(EDGE),
+            "addresses": [address, tailnet_v6(EDGE)],
+            "dns_name": magic_dns(EDGE),
+            "os": "linux",
+            "online": True,
+            "tags": ["tag:server"],
+            "advertised_routes": sorted(EXIT_ROUTES),
+            "enabled_routes": sorted(EXIT_ROUTES),
+            "offers_exit_node": True,
+            "exit_node_approved": True,
+            "client_version": "1.76.6-t3b1a6e2c4-g5e7f9a1b3",
+            "last_handshake": iso(timedelta(minutes=1)),
+        },
+    )
+    _appended(
+        "portainer.container",
+        {
+            "id": container_id(EDGE_CONTAINER),
+            "name": EDGE_CONTAINER,
+            "stack": EDGE_CONTAINER,
+            "host": EDGE,
+            "host_address": address,
+            "connection_ref": PORTAINER,
+            "image": "louislam/uptime-kuma:1.23.16",
+            "state": "running",
+            "status": "Up 3 days",
+            "ports": [3001],
+            "network_mode": "bridge",
+            "portainer_managed": False,
+        },
+    )
+    _appended("adguard.rewrite", *({"connection_ref": ADGUARD, "domain": name, "answer": address} for name in routes))
+
+
+def _appended(kind, *records):
+    """``records`` added to the reading of ``kind`` the estate already holds."""
+
+    held = ProviderInventory.objects.get(kind=kind)
+    held.records = [*held.records, *records]
+    held.save(update_fields=["records"])
 
 
 def proxy():

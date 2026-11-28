@@ -36,7 +36,7 @@ from .figured import Figure
 from .github_public import github_repository
 from .image_findings import SERIOUS, ImageFindings, ranked
 from .images import ImageRef, affected, compare, newer, version
-from .moments import duration, moment
+from .moments import Span, moment
 from .projection import projection_scope, read_once
 from .tone import Tone
 from .ui import counted
@@ -94,7 +94,7 @@ def up_for(status: str, started_at: object, *, running: bool) -> str:
         return uptime_of(status)
     up = timezone.now() - started
     # Under a minute, a length of time reads "0 minutes".
-    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {duration(up, depth=1)}", up.total_seconds())
+    return Figure("Just started" if up < timedelta(minutes=1) else f"Up {Span(up)}", up.total_seconds())
 
 
 def started_at(machine: str, container: str) -> str:
@@ -377,7 +377,7 @@ class ImageStanding(ImageStandingWords, ImageFindings):
 
     @property
     def state(self) -> str:
-        if self.known_vulnerabilities:
+        if self.actionable:
             return VULNERABLE
         if self.newer:
             return BEHIND
@@ -417,10 +417,8 @@ class ImageStanding(ImageStandingWords, ImageFindings):
         checked, since its project's advisories alone miss what its image adds,
         and neutral while what is serious has no fix to move to."""
 
-        if self.serious:
-            return Tone.SERIOUS
         if self.state == VULNERABLE:
-            return Tone.ATTENTION
+            return Tone.SERIOUS if self.serious else Tone.ATTENTION
         if self.unfixed:
             return Tone.NEUTRAL
         return Tone.GOOD if self.checked else ""
@@ -603,9 +601,11 @@ class Tally:
     """What a set of containers comes to, as a band counts it."""
 
     count: ContainerCount
-    # Containers with a known vulnerability, and the images they run.
+    # Containers whose row counts a known vulnerability, the images they run,
+    # and the worst tone those rows draw.
     vulnerable: int
     vulnerable_images: int
+    vulnerable_tone: str
     # Counted per container and apart from vulnerabilities, so with the
     # unknown they add up to the containers a registry holds (``pulled``):
     # a build on its host has no registry's version and no pin.
@@ -625,10 +625,6 @@ class Tally:
         return self.count.total - self.checkable
 
     @property
-    def vulnerable_tone(self) -> str:
-        return Tone.SERIOUS if self.vulnerable else Tone.GOOD
-
-    @property
     def updates_tone(self) -> str:
         """Updates as a tone: none until every one is known up to date."""
 
@@ -644,20 +640,25 @@ class Tally:
     def tone(self) -> str:
         """All of it in one tone, as a machine's band says it."""
 
-        if self.vulnerable or self.count.stopped:
-            return Tone.SERIOUS
-        return Tone.ATTENTION if self.update_available else Tone.GOOD
+        return Tone.worst(
+            (
+                self.vulnerable_tone,
+                *((Tone.SERIOUS,) if self.count.stopped else ()),
+                *((Tone.ATTENTION,) if self.update_available else ()),
+            )
+        )
 
 
 def tally(found: list[Container]) -> Tally:
-    """What ``found`` comes to."""
+    """What ``found`` comes to, counted by what each one's row says."""
 
-    vulnerable = [item.standing for item in found if item.standing.state == VULNERABLE]
+    vulnerable = [item.standing for item in found if item.standing.known_vulnerabilities]
     updates = [item.standing.update_state for item in found]
     return Tally(
         count=ContainerCount.of(item.running.state for item in found),
         vulnerable=len(vulnerable),
         vulnerable_images=len({standing.label for standing in vulnerable}),
+        vulnerable_tone=Tone.worst(standing.vulnerability_tone for standing in vulnerable),
         update_available=updates.count(UPDATE_AVAILABLE),
         up_to_date=updates.count(UP_TO_DATE),
         pinned=sum(1 for item in found if item.standing.pinned),

@@ -23,6 +23,7 @@ output-options:
     - actions/get-github-actions-permissions-repository
     - actions/get-job-for-workflow-run
     - actions/get-pending-deployments-for-run
+    - actions/get-reviews-for-run
     - actions/list-artifacts-for-repo
     - actions/list-repo-variables
     - actions/list-repo-workflows

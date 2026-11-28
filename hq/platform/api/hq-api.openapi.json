@@ -190,6 +190,7 @@
               "steps.standing.tone",
               "steps.standing.live",
               "steps.standing.note",
+              "steps.standing.stated",
               "steps.standing.seconds",
               "steps.standing.percent",
               "steps.standing.url",
@@ -203,6 +204,7 @@
               "steps.parts.standing.tone",
               "steps.parts.standing.live",
               "steps.parts.standing.note",
+              "steps.parts.standing.stated",
               "steps.parts.standing.seconds",
               "steps.parts.standing.percent",
               "steps.parts.standing.url",
@@ -369,6 +371,15 @@
         },
         "style": "form"
       },
+      "CommitIdentifier": {
+        "description": "The record's `commit`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "ConnectionRefIdentifier": {
         "description": "The record's `connection_ref`, as each item of the list carries it.",
         "in": "path",
@@ -449,6 +460,7 @@
               "reads.sight.parts.part.provider",
               "reads.sight.parts.refusal",
               "reads.sight.parts.reason",
+              "reads.sight.parts.detail",
               "reads.sight.parts.scope",
               "reads.sight.parts.connection_ref",
               "reads.sight.parts.address",
@@ -534,7 +546,6 @@
               "sight.tally",
               "sight.tally.count",
               "sight.tally.state",
-              "sight.manages",
               "would_also_see",
               "credential_fix",
               "credential_fix.missing",
@@ -795,6 +806,7 @@
               "sights.parts.part.provider",
               "sights.parts.refusal",
               "sights.parts.reason",
+              "sights.parts.detail",
               "sights.parts.scope",
               "sights.parts.connection_ref",
               "sights.parts.address",
@@ -935,8 +947,6 @@
               "insights.value",
               "insights.detail",
               "insights.url",
-              "insights.concern",
-              "insights.notice",
               "insights.rows",
               "insights.rows.title",
               "insights.rows.detail",
@@ -1441,6 +1451,9 @@
               "presence.openings",
               "presence.openings.port",
               "presence.openings.open_to",
+              "presence.openings.serves",
+              "presence.openings.bound_at",
+              "presence.openings.open",
               "presence.observed_at",
               "*"
             ],
@@ -1928,7 +1941,6 @@
               "repository_url",
               "public_url",
               "last_push_at",
-              "last_active_at",
               "dependency_updates",
               "deployment_notes",
               "security_notes",
@@ -1975,7 +1987,6 @@
               "repository_url",
               "public_url",
               "last_push_at",
-              "last_active_at",
               "dependency_updates",
               "deployment_notes",
               "security_notes",
@@ -2217,6 +2228,115 @@
         },
         "style": "form"
       },
+      "ReleaseItemPageFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "commit",
+              "url",
+              "commit_url",
+              "outcome",
+              "outcome_said",
+              "check_failed",
+              "state",
+              "created_at",
+              "ended_at",
+              "run_url",
+              "approved_by",
+              "image",
+              "readings_kept",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
+      "ReleaseRecordFields": {
+        "description": "The fields of each record to keep: a name keeps that whole value (`observed_at`), and a dot keeps only the part named inside it, in every element of a list (`items.waiting`); `*` keeps every field. Absent, a list keeps the fields its description in `describe_resources` names as `operations.list.fields`, and a read of one record keeps the whole record. Sent as one comma-separated value (`observed_at,items.waiting`).",
+        "explode": false,
+        "in": "query",
+        "name": "fields",
+        "required": false,
+        "schema": {
+          "items": {
+            "enum": [
+              "commit",
+              "url",
+              "commit_url",
+              "outcome",
+              "outcome_said",
+              "check_failed",
+              "state",
+              "created_at",
+              "ended_at",
+              "run_url",
+              "approved_by",
+              "image",
+              "readings_kept",
+              "readings",
+              "readings.memory",
+              "readings.memory_basis",
+              "readings.cpu_percent",
+              "readings.started_at",
+              "readings.runtime_read_at",
+              "readings.failed",
+              "readings.units",
+              "readings.units.unit",
+              "readings.units.result",
+              "readings.units.started_at",
+              "readings.units.ended_at",
+              "readings.units.seconds",
+              "readings.units_read_at",
+              "pages",
+              "pages.page_queries",
+              "pages.row_queries",
+              "pages.bytes_per_row",
+              "pages.page_bytes",
+              "pages.page",
+              "pages.status",
+              "pages.rows",
+              "pages.html_bytes",
+              "pages.previous",
+              "pages.previous.page_queries",
+              "pages.previous.row_queries",
+              "pages.previous.bytes_per_row",
+              "pages.previous.page_bytes",
+              "pages_unread",
+              "verified",
+              "previous",
+              "previous.commit",
+              "previous.url",
+              "previous.readings",
+              "previous.readings.memory",
+              "previous.readings.memory_basis",
+              "previous.readings.cpu_percent",
+              "previous.readings.started_at",
+              "previous.readings.runtime_read_at",
+              "previous.readings.failed",
+              "previous.readings.units",
+              "previous.readings.units.unit",
+              "previous.readings.units.result",
+              "previous.readings.units.started_at",
+              "previous.readings.units.ended_at",
+              "previous.readings.units.seconds",
+              "previous.readings.units_read_at",
+              "*"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "style": "form"
+      },
       "RequestIdIdentifier": {
         "description": "The record's `request_id`, as each item of the list carries it.",
         "in": "path",
@@ -2263,6 +2383,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.data",
               "events.warnings",
               "events.tone",
               "expected",
@@ -2948,6 +3069,7 @@
               "events.task",
               "events.outcome",
               "events.message",
+              "events.data",
               "events.warnings",
               "events.tone",
               "expected",
@@ -3944,6 +4066,21 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/RelationshipsRecordSuccess"
+            }
+          }
+        },
+        "description": "Success.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          }
+        }
+      },
+      "ReleaseRecordSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ReleaseRecordSuccess"
             }
           }
         },
@@ -9634,8 +9771,8 @@
           "sight": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CredentialSightPart",
-                "title": "Credential sight part"
+                "$ref": "#/components/schemas/CredentialRow",
+                "title": "Credential row"
               },
               {
                 "type": "null"
@@ -9885,8 +10022,8 @@
           "sight": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CredentialSightPartPartial",
-                "title": "Credential sight part"
+                "$ref": "#/components/schemas/CredentialRowPartial",
+                "title": "Credential row"
               },
               {
                 "type": "null"
@@ -11754,7 +11891,11 @@
             "$ref": "#/components/schemas/CredentialRow/properties/label"
           },
           "manages": {
-            "$ref": "#/components/schemas/CredentialSightPart/properties/manages"
+            "description": "The types of record its credential changes, in words.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "provider": {
             "$ref": "#/components/schemas/CredentialRow/properties/provider"
@@ -11821,7 +11962,7 @@
             "$ref": "#/components/schemas/CredentialRowPartial/properties/label"
           },
           "manages": {
-            "$ref": "#/components/schemas/CredentialSightPartPartial/properties/manages"
+            "$ref": "#/components/schemas/CredentialRecord/properties/manages"
           },
           "provider": {
             "$ref": "#/components/schemas/CredentialRowPartial/properties/provider"
@@ -11905,61 +12046,6 @@
               "$ref": "#/components/schemas/TallyPartPartial"
             },
             "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "CredentialSightPart": {
-        "additionalProperties": false,
-        "description": "What a connection's credential can read, counted in each state.",
-        "properties": {
-          "credential_refusal": {
-            "$ref": "#/components/schemas/CredentialRow/properties/credential_refusal"
-          },
-          "label": {
-            "$ref": "#/components/schemas/CredentialRow/properties/label"
-          },
-          "manages": {
-            "description": "The types of record its credential changes, in words.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/CredentialRow/properties/provider"
-          },
-          "tally": {
-            "$ref": "#/components/schemas/CredentialRow/properties/tally"
-          }
-        },
-        "required": [
-          "provider",
-          "label",
-          "credential_refusal",
-          "tally",
-          "manages"
-        ],
-        "type": "object"
-      },
-      "CredentialSightPartPartial": {
-        "additionalProperties": false,
-        "description": "What a connection's credential can read, counted in each state.",
-        "properties": {
-          "credential_refusal": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/credential_refusal"
-          },
-          "label": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/label"
-          },
-          "manages": {
-            "$ref": "#/components/schemas/CredentialSightPart/properties/manages"
-          },
-          "provider": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/provider"
-          },
-          "tally": {
-            "$ref": "#/components/schemas/CredentialRowPartial/properties/tally"
           }
         },
         "type": "object"
@@ -18110,10 +18196,6 @@
       "InsightPart": {
         "additionalProperties": false,
         "properties": {
-          "concern": {
-            "description": "Whether it is a concern to act on.",
-            "type": "boolean"
-          },
           "detail": {
             "description": "More on it, in a sentence; empty for none.",
             "type": "string"
@@ -18137,10 +18219,6 @@
             "description": "The note's full reason, where `note` says it in fewer words; empty for none.",
             "type": "string"
           },
-          "notice": {
-            "description": "Whether it is a notice worth knowing, short of a concern.",
-            "type": "boolean"
-          },
           "rows": {
             "description": "The whole list a counted `value` stands for; empty for none.",
             "items": {
@@ -18162,8 +18240,6 @@
           "value",
           "detail",
           "url",
-          "concern",
-          "notice",
           "rows",
           "links",
           "note",
@@ -18174,9 +18250,6 @@
       "InsightPartPartial": {
         "additionalProperties": false,
         "properties": {
-          "concern": {
-            "$ref": "#/components/schemas/InsightPart/properties/concern"
-          },
           "detail": {
             "$ref": "#/components/schemas/InsightPart/properties/detail"
           },
@@ -18195,9 +18268,6 @@
           },
           "note_title": {
             "$ref": "#/components/schemas/InsightPart/properties/note_title"
-          },
-          "notice": {
-            "$ref": "#/components/schemas/InsightPart/properties/notice"
           },
           "rows": {
             "description": "The whole list a counted `value` stands for; empty for none.",
@@ -21544,32 +21614,59 @@
       "OpeningPart": {
         "additionalProperties": false,
         "properties": {
+          "bound_at": {
+            "description": "The addresses it is bound at there, as HQ read them; empty when unknown.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "open": {
+            "description": "Whether it is bound beyond loopback, or may be, so the policy's word reaches it.",
+            "type": "boolean"
+          },
           "open_to": {
-            "description": "Who the policy lets in at that port, as the policy writes them.",
+            "description": "Who the policy lets in at that port: a machine by its name, a user or tag as written.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "port": {
-            "description": "A port the tailnet policy opens on it.",
+            "description": "A port the tailnet policy admits a device to on it.",
             "type": "integer"
+          },
+          "serves": {
+            "description": "What serves it there, by its own name; empty when HQ knows of nothing.",
+            "type": "string"
           }
         },
         "required": [
           "port",
-          "open_to"
+          "open_to",
+          "serves",
+          "bound_at",
+          "open"
         ],
         "type": "object"
       },
       "OpeningPartPartial": {
         "additionalProperties": false,
         "properties": {
+          "bound_at": {
+            "$ref": "#/components/schemas/OpeningPart/properties/bound_at"
+          },
+          "open": {
+            "$ref": "#/components/schemas/OpeningPart/properties/open"
+          },
           "open_to": {
             "$ref": "#/components/schemas/OpeningPart/properties/open_to"
           },
           "port": {
             "$ref": "#/components/schemas/OpeningPart/properties/port"
+          },
+          "serves": {
+            "$ref": "#/components/schemas/OpeningPart/properties/serves"
           }
         },
         "type": "object"
@@ -22216,6 +22313,61 @@
         },
         "type": "object"
       },
+      "PageCostRecord": {
+        "additionalProperties": false,
+        "description": "What a page costs once, apart from what it costs per record it draws.",
+        "properties": {
+          "bytes_per_row": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The HTML each record's rows take; null where it drew none."
+          },
+          "page_bytes": {
+            "description": "Its HTML outside its records' rows, in bytes.",
+            "type": "integer"
+          },
+          "page_queries": {
+            "description": "The first of each SQL statement it sent.",
+            "type": "integer"
+          },
+          "row_queries": {
+            "description": "Each repeat of a statement it had sent, which grows with its rows.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_queries",
+          "row_queries",
+          "bytes_per_row",
+          "page_bytes"
+        ],
+        "type": "object"
+      },
+      "PageCostRecordPartial": {
+        "additionalProperties": false,
+        "description": "What a page costs once, apart from what it costs per record it draws.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/bytes_per_row"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_queries"
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/row_queries"
+          }
+        },
+        "type": "object"
+      },
       "PageLimit": {
         "description": "How many records a page holds, 1 to 100; `page` reads the ones after.",
         "maximum": 100,
@@ -22276,6 +22428,107 @@
           "next",
           "previous"
         ],
+        "type": "object"
+      },
+      "PageRecord": {
+        "additionalProperties": false,
+        "description": "One page as the release's rehearsal drew it on a copy of production's data.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/bytes_per_row"
+          },
+          "html_bytes": {
+            "description": "The bytes of HTML it answered.",
+            "type": "integer"
+          },
+          "page": {
+            "description": "The page's path.",
+            "type": "string"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/page_queries"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCostRecord",
+                "title": "Page cost record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The previous release's, where its rehearsal drew the page; null else."
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecord/properties/row_queries"
+          },
+          "rows": {
+            "description": "The records its tables drew.",
+            "type": "integer"
+          },
+          "status": {
+            "description": "The HTTP status it answered.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_queries",
+          "row_queries",
+          "bytes_per_row",
+          "page_bytes",
+          "page",
+          "status",
+          "rows",
+          "html_bytes",
+          "previous"
+        ],
+        "type": "object"
+      },
+      "PageRecordPartial": {
+        "additionalProperties": false,
+        "description": "One page as the release's rehearsal drew it on a copy of production's data.",
+        "properties": {
+          "bytes_per_row": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/bytes_per_row"
+          },
+          "html_bytes": {
+            "$ref": "#/components/schemas/PageRecord/properties/html_bytes"
+          },
+          "page": {
+            "$ref": "#/components/schemas/PageRecord/properties/page"
+          },
+          "page_bytes": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/page_bytes"
+          },
+          "page_queries": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/page_queries"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageCostRecordPartial",
+                "title": "Page cost record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The previous release's, where its rehearsal drew the page; null else."
+          },
+          "row_queries": {
+            "$ref": "#/components/schemas/PageCostRecordPartial/properties/row_queries"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/PageRecord/properties/rows"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PageRecord/properties/status"
+          }
+        },
         "type": "object"
       },
       "PageUrl": {
@@ -23759,6 +24012,60 @@
         },
         "type": "object"
       },
+      "PreviousRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "description": "The release production ran before it.",
+            "type": "string"
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingsRecord",
+                "title": "Readings record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What HQ read of it; null where nothing was kept."
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "required": [
+          "commit",
+          "url",
+          "readings"
+        ],
+        "type": "object"
+      },
+      "PreviousRecordPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "commit": {
+            "$ref": "#/components/schemas/PreviousRecord/properties/commit"
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingsRecordPartial",
+                "title": "Readings record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What HQ read of it; null where nothing was kept."
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "type": "object"
+      },
       "Problem": {
         "additionalProperties": false,
         "description": "One open problem about HQ itself.",
@@ -24241,9 +24548,6 @@
           "description": {
             "$ref": "#/components/schemas/ProjectRow/properties/description"
           },
-          "last_active_at": {
-            "$ref": "#/components/schemas/ProjectRow/properties/last_active_at"
-          },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRow/properties/last_push_at"
           },
@@ -24295,7 +24599,6 @@
           "repository_url",
           "public_url",
           "last_push_at",
-          "last_active_at",
           "dependency_updates",
           "deployment_notes",
           "security_notes",
@@ -24320,9 +24623,6 @@
           },
           "description": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/description"
-          },
-          "last_active_at": {
-            "$ref": "#/components/schemas/ProjectRowPartial/properties/last_active_at"
           },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRowPartial/properties/last_push_at"
@@ -24426,10 +24726,6 @@
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
           },
-          "last_active_at": {
-            "description": "When it last moved, its repository's last push or its last edit, the later, an ISO 8601 date-time.",
-            "type": "string"
-          },
           "last_push_at": {
             "anyOf": [
               {
@@ -24490,7 +24786,6 @@
           "repository_url",
           "public_url",
           "last_push_at",
-          "last_active_at",
           "dependency_updates",
           "deployment_notes",
           "security_notes",
@@ -24544,9 +24839,6 @@
           },
           "description": {
             "$ref": "#/components/schemas/ProjectDescription"
-          },
-          "last_active_at": {
-            "$ref": "#/components/schemas/ProjectRow/properties/last_active_at"
           },
           "last_push_at": {
             "$ref": "#/components/schemas/ProjectRow/properties/last_push_at"
@@ -25738,6 +26030,131 @@
         },
         "type": "object"
       },
+      "ReadingsRecord": {
+        "additionalProperties": false,
+        "description": "What HQ read of its own container and units once the release went live.",
+        "properties": {
+          "cpu_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Its CPU since it started, as a share of one core."
+          },
+          "failed": {
+            "description": "Every unit of HQ's that systemd held as failed.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bytes its container used, as memory_basis counts them; null unread."
+          },
+          "memory_basis": {
+            "description": "How memory was counted.",
+            "type": "string"
+          },
+          "runtime_read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its container was read."
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its container started."
+          },
+          "units": {
+            "description": "The controller, glance and drift units' last runs.",
+            "items": {
+              "$ref": "#/components/schemas/UnitRunRecord"
+            },
+            "type": "array"
+          },
+          "units_read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the units were read."
+          }
+        },
+        "required": [
+          "memory",
+          "memory_basis",
+          "cpu_percent",
+          "started_at",
+          "runtime_read_at",
+          "failed",
+          "units",
+          "units_read_at"
+        ],
+        "type": "object"
+      },
+      "ReadingsRecordPartial": {
+        "additionalProperties": false,
+        "description": "What HQ read of its own container and units once the release went live.",
+        "properties": {
+          "cpu_percent": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/cpu_percent"
+          },
+          "failed": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/failed"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/memory"
+          },
+          "memory_basis": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/memory_basis"
+          },
+          "runtime_read_at": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/runtime_read_at"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/started_at"
+          },
+          "units": {
+            "description": "The controller, glance and drift units' last runs.",
+            "items": {
+              "$ref": "#/components/schemas/UnitRunRecordPartial"
+            },
+            "type": "array"
+          },
+          "units_read_at": {
+            "$ref": "#/components/schemas/ReadingsRecord/properties/units_read_at"
+          }
+        },
+        "type": "object"
+      },
       "ReadoutPart": {
         "additionalProperties": false,
         "properties": {
@@ -26608,6 +27025,11 @@
             "description": "The connection it was refused to; empty for none.",
             "type": "string"
           },
+          "detail": {
+            "default": "",
+            "description": "The cause's own text behind the reason; empty for none.",
+            "type": "string"
+          },
           "kind": {
             "description": "The type the refused part belongs to.",
             "type": "string"
@@ -26617,7 +27039,7 @@
           },
           "reason": {
             "default": "",
-            "description": "The service's words for the refusal; empty for none.",
+            "description": "HQ's words for the refusal; empty for none.",
             "type": "string"
           },
           "refusal": {
@@ -26635,6 +27057,7 @@
           "part",
           "refusal",
           "reason",
+          "detail",
           "scope",
           "connection_ref",
           "address"
@@ -26650,6 +27073,9 @@
           },
           "connection_ref": {
             "$ref": "#/components/schemas/RefusedPart/properties/connection_ref"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/RefusedPart/properties/detail"
           },
           "kind": {
             "$ref": "#/components/schemas/RefusedPart/properties/kind"
@@ -26926,6 +27352,163 @@
         ],
         "type": "object"
       },
+      "ReleaseItem": {
+        "additionalProperties": false,
+        "description": "One release of HQ: a deployment to production, as GitHub records it.",
+        "properties": {
+          "approved_by": {
+            "description": "The GitHub login that approved its run; empty where none did.",
+            "type": "string"
+          },
+          "check_failed": {
+            "description": "Whether a check its deploy ran failed.",
+            "type": "boolean"
+          },
+          "commit": {
+            "description": "The commit it released, in full.",
+            "type": "string"
+          },
+          "commit_url": {
+            "description": "The commit on GitHub; empty where HQ's source is not known.",
+            "type": "string"
+          },
+          "created_at": {
+            "description": "When its deploy began, an ISO 8601 date-time.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its deploy reported how it ended, an ISO 8601 date-time; null before."
+          },
+          "image": {
+            "description": "The digest-pinned image it deployed.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "The outcome its deploy reported, as deploy/outcomes.json names it; empty for none.",
+            "type": "string"
+          },
+          "outcome_said": {
+            "description": "How it ended, in a few words: Live, Not deployed.",
+            "type": "string"
+          },
+          "readings_kept": {
+            "description": "Whether HQ kept what it read of itself once it went live.",
+            "type": "boolean"
+          },
+          "run_url": {
+            "description": "The Deploy run that released it, on GitHub.",
+            "type": "string"
+          },
+          "state": {
+            "description": "Its deployment's latest state on GitHub: success, inactive once replaced.",
+            "type": "string"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "required": [
+          "commit",
+          "url",
+          "commit_url",
+          "outcome",
+          "outcome_said",
+          "check_failed",
+          "state",
+          "created_at",
+          "ended_at",
+          "run_url",
+          "approved_by",
+          "image",
+          "readings_kept"
+        ],
+        "type": "object"
+      },
+      "ReleaseItemPageSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResourceCollection"
+              }
+            ],
+            "description": "What the operation answers, in the shape its response names.",
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/components/schemas/ReleaseItemPartial"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ReleaseItemPartial": {
+        "additionalProperties": false,
+        "description": "One release of HQ: a deployment to production, as GitHub records it.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/approved_by"
+          },
+          "check_failed": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/check_failed"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/commit"
+          },
+          "commit_url": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/commit_url"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/created_at"
+          },
+          "ended_at": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/ended_at"
+          },
+          "image": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/image"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/outcome"
+          },
+          "outcome_said": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/outcome_said"
+          },
+          "readings_kept": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/readings_kept"
+          },
+          "run_url": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/run_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/state"
+          },
+          "url": {
+            "$ref": "#/components/schemas/PageUrl"
+          }
+        },
+        "type": "object"
+      },
       "ReleasePart": {
         "additionalProperties": false,
         "properties": {
@@ -26969,6 +27552,217 @@
             "$ref": "#/components/schemas/ReleasePart/properties/url"
           }
         },
+        "type": "object"
+      },
+      "ReleaseRecord": {
+        "additionalProperties": false,
+        "description": "One release whole: its readings beside the previous release's.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/approved_by"
+          },
+          "check_failed": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/check_failed"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/commit"
+          },
+          "commit_url": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/commit_url"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/created_at"
+          },
+          "ended_at": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/ended_at"
+          },
+          "image": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/image"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/outcome"
+          },
+          "outcome_said": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/outcome_said"
+          },
+          "pages": {
+            "description": "Each page its rehearsal drew, by path; empty where none was kept.",
+            "items": {
+              "$ref": "#/components/schemas/PageRecord"
+            },
+            "type": "array"
+          },
+          "pages_unread": {
+            "description": "Why its rehearsal drew no page; empty where it drew them or none was kept.",
+            "type": "string"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviousRecord",
+                "title": "Previous record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The release production ran before it; null for none."
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingsRecord",
+                "title": "Readings record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What HQ read of itself; null where nothing was kept."
+          },
+          "readings_kept": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/readings_kept"
+          },
+          "run_url": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/run_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/state"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ReleaseItem/properties/url"
+          },
+          "verified": {
+            "description": "Each check its deploy ran before deploying, and its end.",
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "commit",
+          "url",
+          "commit_url",
+          "outcome",
+          "outcome_said",
+          "check_failed",
+          "state",
+          "created_at",
+          "ended_at",
+          "run_url",
+          "approved_by",
+          "image",
+          "readings_kept",
+          "readings",
+          "pages",
+          "pages_unread",
+          "verified",
+          "previous"
+        ],
+        "type": "object"
+      },
+      "ReleaseRecordPartial": {
+        "additionalProperties": false,
+        "description": "One release whole: its readings beside the previous release's.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/approved_by"
+          },
+          "check_failed": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/check_failed"
+          },
+          "commit": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/commit"
+          },
+          "commit_url": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/commit_url"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/created_at"
+          },
+          "ended_at": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/ended_at"
+          },
+          "image": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/image"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/outcome"
+          },
+          "outcome_said": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/outcome_said"
+          },
+          "pages": {
+            "description": "Each page its rehearsal drew, by path; empty where none was kept.",
+            "items": {
+              "$ref": "#/components/schemas/PageRecordPartial"
+            },
+            "type": "array"
+          },
+          "pages_unread": {
+            "$ref": "#/components/schemas/ReleaseRecord/properties/pages_unread"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviousRecordPartial",
+                "title": "Previous record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The release production ran before it; null for none."
+          },
+          "readings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReadingsRecordPartial",
+                "title": "Readings record"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What HQ read of itself; null where nothing was kept."
+          },
+          "readings_kept": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/readings_kept"
+          },
+          "run_url": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/run_url"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/state"
+          },
+          "url": {
+            "$ref": "#/components/schemas/ReleaseItemPartial/properties/url"
+          },
+          "verified": {
+            "$ref": "#/components/schemas/ReleaseRecord/properties/verified"
+          }
+        },
+        "type": "object"
+      },
+      "ReleaseRecordSuccess": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ReleaseRecordPartial"
+          },
+          "ok": {
+            "$ref": "#/components/schemas/Outcome",
+            "const": true
+          }
+        },
+        "required": [
+          "ok",
+          "data"
+        ],
         "type": "object"
       },
       "RemovalPart": {
@@ -27980,12 +28774,16 @@
         "additionalProperties": false,
         "description": "One task's outcome on one machine, as the worker reported it.",
         "properties": {
+          "data": {
+            "description": "What the task said as data, as JSON; empty when it said words or nothing.",
+            "type": "string"
+          },
           "host": {
             "description": "The machine the task ran on, as the playbook's inventory names it.",
             "type": "string"
           },
           "message": {
-            "description": "What the task said; empty when it said nothing.",
+            "description": "What the task said in words; empty when it said nothing or data.",
             "type": "string"
           },
           "outcome": {
@@ -28001,8 +28799,11 @@
             "type": "string"
           },
           "warnings": {
-            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none.",
-            "type": "string"
+            "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -28010,6 +28811,7 @@
           "task",
           "outcome",
           "message",
+          "data",
           "warnings",
           "tone"
         ],
@@ -28019,6 +28821,9 @@
         "additionalProperties": false,
         "description": "One task's outcome on one machine, as the worker reported it.",
         "properties": {
+          "data": {
+            "$ref": "#/components/schemas/RunTask/properties/data"
+          },
           "host": {
             "$ref": "#/components/schemas/RunTask/properties/host"
           },
@@ -29610,6 +30415,10 @@
             "description": "Where the work stands: `idle`, `queued`, `running`, `done` or `failed`.",
             "type": "string"
           },
+          "stated": {
+            "description": "What the work's own author said of how it ended, as written; empty when it said nothing.",
+            "type": "string"
+          },
           "tone": {
             "description": "The tone a page colors that label in; empty while nothing was asked.",
             "type": "string"
@@ -29625,6 +30434,7 @@
           "tone",
           "live",
           "note",
+          "stated",
           "seconds",
           "percent",
           "url"
@@ -29652,6 +30462,9 @@
           },
           "state": {
             "$ref": "#/components/schemas/StandingAnswer/properties/state"
+          },
+          "stated": {
+            "$ref": "#/components/schemas/StandingAnswer/properties/stated"
           },
           "tone": {
             "$ref": "#/components/schemas/StandingAnswer/properties/tone"
@@ -30030,6 +30843,7 @@
           "host.firewall",
           "host.perimeter",
           "host.reboot",
+          "host.rehearsal",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -30105,6 +30919,7 @@
           "host.firewall": "Host firewall",
           "host.perimeter": "Open-port test",
           "host.reboot": "Pending restart",
+          "host.rehearsal": "Release rehearsal",
           "host.render_status": "Credentials refresh",
           "host.tailnet_lock": "Tailnet lock",
           "host.unit": "HQ unit",
@@ -31472,6 +32287,81 @@
         ],
         "type": "object"
       },
+      "UnitRunRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its last run ended; null while it runs."
+          },
+          "result": {
+            "description": "How its last run ended, in systemd's word; empty while it had not run.",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long its last run took; null without both ends."
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its last run started; null unread."
+          },
+          "unit": {
+            "description": "The unit's name, as systemd has it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "unit",
+          "result",
+          "started_at",
+          "ended_at",
+          "seconds"
+        ],
+        "type": "object"
+      },
+      "UnitRunRecordPartial": {
+        "additionalProperties": false,
+        "properties": {
+          "ended_at": {
+            "$ref": "#/components/schemas/UnitRunRecord/properties/ended_at"
+          },
+          "result": {
+            "$ref": "#/components/schemas/UnitRunRecord/properties/result"
+          },
+          "seconds": {
+            "$ref": "#/components/schemas/UnitRunRecord/properties/seconds"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/UnitRunRecord/properties/started_at"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/UnitRunRecord/properties/unit"
+          }
+        },
+        "type": "object"
+      },
       "UnknownResourceRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -32489,7 +33379,7 @@
           "It runs on a machine HQ has no way to reach.",
           "HQ is not set up there yet, so nothing of HQ's can run it.",
           "It restores the way HQ reaches the machine, so HQ cannot do it through that way.",
-          "HQ is not granted this on the machine."
+          "HQ is not granted this."
         ],
         "type": "string"
       },
@@ -33269,6 +34159,7 @@
                 "readings",
                 "receipts",
                 "relationships",
+                "releases",
                 "request.path",
                 "runs",
                 "search",
@@ -38558,6 +39449,11 @@
                 "reboot-pending",
                 "certificate-expiring",
                 "registration-lapsing",
+                "acme-challenge-left-over",
+                "caa-refuses-renewal",
+                "encryption-weaker-than-elsewhere",
+                "spf-over-lookup-limit",
+                "dmarc-not-enforcing",
                 "names-nothing",
                 "report-refused",
                 "connections-lost",
@@ -38603,6 +39499,9 @@
                 "events-worker-behind",
                 "events-worker-refusing",
                 "deploy-running",
+                "release-check-failed",
+                "release-server-errors",
+                "release-pages-heavier",
                 "machine-offline",
                 "content-drafts",
                 "content-undocumented",
@@ -38766,6 +39665,7 @@
                 "readings",
                 "receipts",
                 "relationships",
+                "releases",
                 "request.path",
                 "runs",
                 "search",
@@ -38866,11 +39766,13 @@
                 "hq.calendar",
                 "hq.contacts",
                 "hq.content",
+                "hq.errors",
                 "hq.estate",
                 "hq.expenses",
                 "hq.infrastructure",
                 "hq.projects",
-                "hq.receipts"
+                "hq.receipts",
+                "hq.self"
               ],
               "type": "string"
             },
@@ -40622,23 +41524,21 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "description": "The order the records come in; absent, the best match first for a search, else recently published.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
+                "-published_at",
+                "published_at",
                 "title",
                 "-title",
                 "content_type",
                 "-content_type",
                 "status",
-                "-status",
-                "-published_at",
-                "published_at"
+                "-status"
               ],
               "type": "string"
             },
@@ -41035,15 +41935,15 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently updated.",
+            "description": "The order the records come in; absent, the best match first for a search, else newest change.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
+                "-last_reviewed",
+                "last_reviewed",
                 "doc_id",
                 "-doc_id",
                 "title",
@@ -41052,8 +41952,6 @@
                 "-doc_type",
                 "environment",
                 "-environment",
-                "last_reviewed",
-                "-last_reviewed",
                 "status",
                 "-status",
                 "sensitivity",
@@ -42924,15 +43822,13 @@
             "style": "form"
           },
           {
-            "description": "The order the records come in; absent, the best match first for a search, else recently edited.",
+            "description": "The order the records come in; absent, the best match first for a search, else name A\u2013Z.",
             "explode": true,
             "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
               "enum": [
-                "-updated_at",
-                "updated_at",
                 "name",
                 "-name",
                 "status",
@@ -43214,6 +44110,7 @@
                 "host.filesystem",
                 "host.reboot",
                 "host.edge_reboot",
+                "host.rehearsal",
                 "machine.telemetry",
                 "nws.forecast",
                 "hq.request_path",
@@ -44045,6 +44942,148 @@
         ],
         "x-hq-identifier": "node",
         "x-hq-resource": "relationships"
+      }
+    },
+    "/api/v2/resources/releases/": {
+      "get": {
+        "description": "HQ's releases to production, newest first: each commit, how it ended, its Deploy run, who approved it, and what HQ read of itself once it went live beside the release before it.",
+        "operationId": "listReleasesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/WholeLimit"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "$ref": "#/components/parameters/ReleaseItemPageFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReleaseItemPageSuccess"
+                }
+              }
+            },
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "$ref": "#/components/headers/CacheControl"
+              }
+            },
+            "links": {
+              "getReleasesV2": {
+                "operationId": "getReleasesV2",
+                "parameters": {
+                  "path.identifier": "$response.body#/data/items/0/commit"
+                }
+              },
+              "listReleasesV2": {
+                "operationId": "listReleasesV2",
+                "parameters": {
+                  "query.fields": "$request.query.fields",
+                  "query.limit": "$request.query.limit",
+                  "query.page": "$response.body#/data/next"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Releases: the list",
+        "tags": [
+          "hq.self"
+        ],
+        "x-hq-resource": "releases"
+      }
+    },
+    "/api/v2/resources/releases/{identifier}/": {
+      "get": {
+        "description": "One of the records Releases lists, found by its `commit`.",
+        "operationId": "getReleasesV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CommitIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/ReleaseRecordFields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ReleaseRecordSuccess"
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "security": [
+          {
+            "bearer": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "Releases: one by commit",
+        "tags": [
+          "hq.self"
+        ],
+        "x-hq-identifier": "commit",
+        "x-hq-resource": "releases"
       }
     },
     "/api/v2/resources/request.path/": {
@@ -44906,10 +45945,11 @@
             "schema": {
               "enum": [
                 "failed",
+                "-failed",
                 "-created_at",
                 "created_at",
                 "title",
-                "state"
+                "-title"
               ],
               "type": "string"
             },
@@ -45096,6 +46136,7 @@
                 "reading.records",
                 "readings",
                 "receipts",
+                "releases",
                 "request.path",
                 "search",
                 "server_errors",
@@ -45179,6 +46220,7 @@
                 "projects",
                 "readings",
                 "relationships",
+                "releases",
                 "runs",
                 "server_errors",
                 "service.paths",

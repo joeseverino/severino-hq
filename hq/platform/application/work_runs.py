@@ -29,9 +29,11 @@ lazy from hq.domains.jobs.runner import AUDIT_TYPE as JOB_AUDIT_TYPE
 from .asks import DONE, FAILED, QUEUED, RUNNING, Standing
 from .automation_runs import CHECK, capability_name, run_title
 from .conditions import PROBLEMS, holding
+from .display_words import Code
 from .doors import NOBODY, Attribution
 from .projection import Combined, read_once
 from .quoted import Quoted
+from .run_outcome import LEFT_OUT, OUTCOME, Ending
 from .tone import Tone, Toned
 from .ui import counted
 lazy from . import automation_adoption
@@ -82,7 +84,7 @@ PROBLEM_FOUND = "Problem found"
 PROBLEM_TONE = Tone.ATTENTION
 # What a run says whose worker stopped reporting before it ended, so what it
 # changed is unknown: while its lease has run out, and once HQ ends it
-# (``controller.OUTCOME_UNKNOWN``).
+# (``Ending.UNKNOWN``).
 STOPPED_REPORTING = "Stopped reporting"
 # What a run or scan that waits says while no worker will take it, in the
 # tone of something to look at: it is neither under way nor waiting its turn.
@@ -181,6 +183,10 @@ class RunEvidence:
     consumers: tuple[dict[str, Any], ...] = ()
     raw: str = ""
 
+    def __post_init__(self) -> None:
+        # Every way a run's evidence is built reads its tasks through one parser.
+        object.__setattr__(self, "events", tuple(run_event(event) for event in self.events))
+
     @property
     def under_way(self) -> tuple[dict[str, Any], ...]:
         """The tasks started and not yet ended while a worker holds the run."""
@@ -208,10 +214,11 @@ class RunEvidence:
     @property
     def amiss(self) -> tuple[tuple[str, Tone], ...]:
         """Each record of its readings whose kind says it in a tone to act on,
-        then each task's warnings, said in a line, with that tone."""
+        then each task's warnings, listed in a line, with that tone."""
 
+        # The task and what Ansible warned of it are the playbook's own words.
         warned = tuple(
-            (dotted(str(event.get("task") or ""), str(event["warnings"])), Tone.ATTENTION)
+            (Quoted(dotted(str(event.get("task") or ""), get_text_list(event["warnings"], "and"))), Tone.ATTENTION)
             for event in self.events
             if event.get("warnings")
         )
@@ -794,19 +801,56 @@ def _kind_of(action: str, procedure: str) -> str:
 
 
 def _said(operation: OperationRequest, problem: dict[str, Any] | None, evidence: RunEvidence) -> str:
-    """How an ended operation went, in a sentence: the condition that says
-    what went wrong before its own message; one that ended well says what
-    its readings say it did, else the result its playbook stated, else how
-    its tasks ended."""
+    """How an ended operation went, in a sentence: a run's from how it ended
+    (``run_said``); any other's the condition that says what went wrong,
+    else what its controller said."""
 
     result = operation.result or {}
+    if operation.action == OperationRequest.Action.RUN:
+        return run_said(result, evidence)
     said = result.get("message") or ""
     if operation.state == OperationState.FAILED:
         active = holding(result.get("conditions"))
-        return Quoted((active[0].get("message") if active else "") or said or operation.reason)
-    if problem:
-        return Quoted(problem.get("message") or said or operation.reason)
-    return evidence.told or Quoted(said) or evidence.tallied or Quoted(operation.reason)
+        return Quoted((active[0].get("message") if active else "") or said)
+    return Quoted((problem or {}).get("message") or said)
+
+
+def run_said(result: Mapping[str, Any], evidence: RunEvidence | None = None) -> str:
+    """What an ended run did, in a sentence, from how it ended (``ended_as``),
+    then what its report left out: one that ran to the end says what its
+    readings say, else the result its playbook stated, else how its tasks
+    ended; one that failed names the task and machine; one cancelled says
+    why HQ called it off and how far its tasks got. "" for one HQ holds no
+    ending of."""
+
+    found = result.get(OUTCOME)
+    if not found:
+        return ""
+    evidence = evidence or RunEvidence(events=run_events(dict(result)), stated=stated_readings(dict(result)))
+    message = Quoted(found["message"])
+    task, host = found["task"], found["host"]
+    match Ending(found["ending"]):
+        case Ending.SUCCEEDED:
+            said = evidence.told or message or evidence.tallied
+        case Ending.TASK_FAILED:
+            said = f"{task} failed on {host}"
+        case Ending.UNREACHABLE:
+            said = f"{host} could not be reached"
+        case Ending.ERRORED | Ending.REFUSED:
+            said = message
+        case Ending.TIMED_OUT:
+            said = "Ran past its timeout"
+        case Ending.CANCELLED:
+            # Why HQ called it off, where it did (``infrastructure.CALLED_OFF``).
+            tallied = evidence.tallied
+            said = dotted(found["message"], f"Cancelled after {tallied}" if tallied else "")
+        case Ending.PAUSED:
+            said = "Stopped while its asker is paused or blocked"
+        case Ending.LEASE_LOST:
+            said = dotted("Stopped when its lease could not be renewed", message)
+        case Ending.UNKNOWN:
+            said = STOPPED_REPORTING
+    return dotted(said, result.get(LEFT_OUT) or "")
 
 
 def shown_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -818,13 +862,22 @@ def shown_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_events(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:
-    """A run's tasks so far from its result, in the order they started, each in its outcome's tone,
-    with no warnings where its worker reported none."""
+    """A run's tasks so far from its result, in the order they started."""
 
-    return tuple(
-        {"warnings": "", **event, "tone": outcome_tone(event.get("outcome", ""))}
-        for event in result.get(RUN_EVENTS) or ()
-    )
+    return tuple(result.get(RUN_EVENTS) or ())
+
+
+def run_event(reported: Mapping[str, Any]) -> dict[str, Any]:
+    """One task as a page draws it, in its outcome's tone: what it said as the
+    playbook's own words, and what it said as data as code."""
+
+    return {
+        **reported,
+        "message": Quoted(reported.get("message") or ""),
+        "data": Code(reported.get("data") or ""),
+        "warnings": list(reported.get("warnings") or ()),
+        "tone": outcome_tone(reported.get("outcome", "")),
+    }
 
 
 def stated_readings(result: dict[str, Any]) -> tuple[dict[str, Any], ...]:

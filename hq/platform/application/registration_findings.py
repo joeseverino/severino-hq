@@ -6,6 +6,7 @@ from .expiry import days_until
 from .finding_model import Finding, FindingEstate, FindingRule, parse_stamp
 from .finding_steps import Do
 from .moments import expiry_words, when_day
+from .references import Kind
 from .thresholds import Threshold
 from .tone import Tone
 from .ui import ended
@@ -49,12 +50,13 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
         found.append(
             Finding(
                 rule="registration-lapsing",
-                subject=node.id,
+                # About the domain, so the domain's own page draws it.
+                subject=Kind.ZONE.of(domain),
                 title=f"{domain} {expiry_words(days)} and will not renew",
                 severity=Tone.SERIOUS if days <= SERIOUS_DAYS.value else Tone.ATTENTION,
                 explanation="Every name under it stops when it lapses.",
                 evidence=(
-                    ("Expires", when_day(expires.date())),
+                    ("Expires", when_day(expires)),
                     ("Auto-renew", "Off"),
                     ("Registrar", registrar or "Unknown"),
                 ),

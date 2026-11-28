@@ -47,7 +47,6 @@ lazy from .automation_runs import (
     operation_registry,
     queue_follow_up,
     queue_run,
-    reached,
     run_in_way,
 )
 lazy from .cadence import controller_standing
@@ -62,6 +61,7 @@ lazy from .infrastructure import ManagedResourceCommand, save_managed_resource, 
 lazy from .labels import dotted
 lazy from .machines import served_by
 lazy from .payload_words import ChangeRow
+lazy from .playbook_reach import reached
 lazy from .resource_operations import ACTION_CAPABILITY, THEN, OperationAsked, queue_carried_merge
 
 _COMMIT = re.compile(COMMIT)

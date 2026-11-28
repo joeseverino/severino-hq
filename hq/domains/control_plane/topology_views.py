@@ -66,11 +66,10 @@ def _lane_nouns(kind: str) -> tuple[str, str, str]:
 
 
 def _lane(kind: str, items: list[dict[str, Any]]) -> dict[str, Any]:
-    """One lane of the map: the heading names it, and a count says one or the
-    other of its nouns."""
+    """One lane of the map, named by its heading."""
 
-    heading, noun, plural = _lane_nouns(kind)
-    return {"kind": kind, "label": heading, "count": counted(len(items), noun, plural), "items": items}
+    heading, _noun, _plural = _lane_nouns(kind)
+    return {"kind": kind, "label": heading, "items": items}
 
 
 @dataclass(frozen=True, slots=True)
@@ -333,7 +332,7 @@ class TopologyView(PageMixin, TemplateView):
                     # A subtitle that repeats the name says nothing under it.
                     "subtitle": "" if node.subtitle.casefold() == str(link.label).casefold() else node.subtitle,
                     "neighbors": " ".join(sorted(neighbors[node.id])),
-                    "degree": len(neighbors[node.id]),
+                    "degree": len(rows),
                     "relations": rows,
                     "observed_age": cls._observed_age(node.observed_at),
                     "observable": observable(node),

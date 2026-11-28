@@ -50,7 +50,7 @@ def connections_table(found: Any, request: Any) -> DataTable:
         "Connections",
         CONNECTION_COLUMNS,
         groups=tuple(
-            Group(purpose if len(purposes) > 1 else "", tuple(_connection_rows(rows, request)), count=len(rows))
+            Group(purpose if len(purposes) > 1 else "", tuple(_connection_rows(rows, request)), counted=True)
             for purpose, rows in purposes
         ),
     )

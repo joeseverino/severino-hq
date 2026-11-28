@@ -307,7 +307,7 @@ class PageTests(TestCase):
             page = self.client.get(reverse("action_items"))
 
         self.assertEqual(self.shown(page), [OTHER["label"]])
-        self.assertEqual(page.context["aside_total"], 3)
+        self.assertEqual(len(page.context["action_aside"]), 3)
 
     def test_restoring_names_what_it_restores(self):
         self.client.post(reverse("action_items_set_aside"), form_keyed({"key": [row_value(ITEM), row_value(OTHER)]}))
@@ -344,7 +344,7 @@ class PageTests(TestCase):
             self.client.post(page.context["dismiss_notices"].url, form_keyed())
             page = self.client.get(reverse("action_items"))
             self.assertEqual(self.shown(page), [ITEM["label"]])
-            self.assertEqual(page.context["notice_total"], 0)
+            self.assertEqual(page.context["action_told"], [])
             self.assertEqual(self.shown(page, "aside_groups"), [told["label"]])
             self.client.post(reverse("action_items_bring_back"), form_keyed({"key": row_value(told)}))
 

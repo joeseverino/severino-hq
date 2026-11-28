@@ -1246,7 +1246,12 @@
             }
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "How the work ended, in a line; a run says only what its report leaves out, beside its outcome."
+          },
+          "detail": {
+            "type": "string",
+            "description": "A refused operation's cause in its own text, kept apart from the message; empty for none."
           },
           "catalog": {
             "$ref": "#/components/schemas/SourceCatalog",
@@ -1256,6 +1261,11 @@
           "stated": {
             "$ref": "#/components/schemas/RunStated",
             "description": "What a run's playbook stated beside its result; an operation other than a run reports none.",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RunOutcome",
+            "description": "How a run ended; HQ refuses a run's report without one, and any other operation's with one.",
             "x-go-type-skip-optional-pointer": false
           }
         },
@@ -1307,9 +1317,18 @@
             "maxLength": 500
           },
           "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 10,
+            "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none."
+          },
+          "data": {
             "type": "string",
             "maxLength": 500,
-            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none."
+            "description": "The task's message as JSON when it said data rather than words, with message empty; empty when it said words or nothing."
           }
         },
         "additionalProperties": false,
@@ -1318,7 +1337,8 @@
           "task",
           "outcome",
           "message",
-          "warnings"
+          "warnings",
+          "data"
         ],
         "description": "One task on one machine: started while it is under way, else how it ended."
       },
@@ -1376,6 +1396,50 @@
         },
         "additionalProperties": false,
         "description": "What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes."
+      },
+      "RunOutcome": {
+        "type": "object",
+        "properties": {
+          "ending": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "task_failed",
+              "unreachable",
+              "errored",
+              "timed_out",
+              "cancelled",
+              "paused",
+              "lease_lost",
+              "refused",
+              "unknown"
+            ],
+            "description": "How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported."
+          },
+          "task": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The task that failed first; empty unless a task failed."
+          },
+          "host": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "The machine it failed on or could not reach; empty unless a task failed or a machine could not be reached."
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "The ending's own words, as written: the result its playbook stated, Ansible's error, why it could not start or why its lease was lost; empty for any other ending."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ending",
+          "task",
+          "host",
+          "message"
+        ],
+        "description": "How a run ended, as its worker saw it, which HQ words its result from."
       },
       "StatedMachine": {
         "type": "string",
@@ -1497,7 +1561,12 @@
             "type": "boolean"
           },
           "detail": {
-            "type": "string"
+            "type": "string",
+            "description": "What the probe found, or HQ's words for why it failed."
+          },
+          "cause": {
+            "type": "string",
+            "description": "A failed probe's cause in its own text, kept apart from the detail; empty for none."
           },
           "reaches": {
             "type": "array",
@@ -1570,7 +1639,12 @@
             "$ref": "#/components/schemas/FailureClass"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the reason; empty for none."
           },
           "address": {
             "type": "string"
@@ -1607,7 +1681,12 @@
             }
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the error; empty for none."
           },
           "refusal": {
             "$ref": "#/components/schemas/Refusal"
@@ -2442,6 +2521,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "detail": {
+            "type": "string",
+            "description": "The refusal's cause in its own text, kept apart from the message; empty for none."
           }
         },
         "required": [
@@ -5810,6 +5893,90 @@
         ],
         "type": "object"
       },
+      "HostRehearsalRecord": {
+        "additionalProperties": false,
+        "description": "What every page cost in the last release's rehearsal on a copy of production's data: the host.rehearsal reading's one record. Root keeps the walk's document for itself (``controller/host/rehearse.go``) and the launcher gives the controller a copy.",
+        "properties": {
+          "revision": {
+            "description": "The release's commit.",
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "description": "Why the walk measured no page; empty when it measured them.",
+            "maxLength": 200,
+            "pattern": "^[ -~]*$",
+            "type": "string"
+          },
+          "pages": {
+            "default": [],
+            "description": "Each page it walked, by path.",
+            "items": {
+              "$ref": "#/components/schemas/HostRehearsalRehearsedPage"
+            },
+            "maxItems": 400,
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "HostRehearsalRehearsedPage": {
+        "additionalProperties": false,
+        "description": "What one page cost to draw in a release's rehearsal, as\n``manage.py page_costs`` measured it (``hq.platform.core.page_costs``).",
+        "properties": {
+          "page": {
+            "description": "The page's path.",
+            "maxLength": 255,
+            "pattern": "^/[!-~]*$",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status it answered.",
+            "maximum": 599,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "queries": {
+            "description": "Every SQL statement it sent.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "repeated_queries": {
+            "description": "Each repeat of a statement it had already sent.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "The records its tables drew.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "html_bytes": {
+            "description": "The bytes of HTML it answered.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "row_html_bytes": {
+            "description": "The bytes of HTML its records' rows took.",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "status",
+          "queries",
+          "repeated_queries",
+          "rows",
+          "html_bytes",
+          "row_html_bytes"
+        ],
+        "type": "object"
+      },
       "HostRenderStatusRecord": {
         "description": "One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.",
         "properties": {
@@ -6016,14 +6183,18 @@
       },
       "HostService": {
         "type": "string",
-        "description": "A unit of HQ's host that HQ tells an operator to start or read.",
+        "description": "A unit of HQ's host that HQ tells an operator to start or read, or keeps the last run of for a release.",
         "enum": [
           "severino-hq-controller.service",
-          "severino-hq-secrets.service"
+          "severino-hq-secrets.service",
+          "severino-hq-glance.service",
+          "severino-hq-script-drift.service"
         ],
         "x-enum-varnames": [
           "ControllerUnit",
-          "SecretsUnit"
+          "SecretsUnit",
+          "GlanceUnit",
+          "DriftUnit"
         ]
       },
       "HostTailnetLockRecord": {
@@ -7312,6 +7483,7 @@
           "host.firewall",
           "host.perimeter",
           "host.reboot",
+          "host.rehearsal",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -7386,6 +7558,7 @@
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
           "ResourceKindHostReboot",
+          "ResourceKindHostRehearsal",
           "ResourceKindHostRenderStatus",
           "ResourceKindHostTailnetLock",
           "ResourceKindHostUnit",
@@ -7489,6 +7662,7 @@
           "host.firewall",
           "host.perimeter",
           "host.reboot",
+          "host.rehearsal",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -7543,6 +7717,7 @@
           "SweptHostFirewall",
           "SweptHostPerimeter",
           "SweptHostReboot",
+          "SweptHostRehearsal",
           "SweptHostRenderStatus",
           "SweptHostTailnetLock",
           "SweptHostUnit",

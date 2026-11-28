@@ -265,7 +265,7 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
         )
         for claim in service.declared_claims:
             _declared_by(edges, node_id, Kind.RESOURCE.of(claim.resource_key), nodes)
-        machine = estate.machine(_runs_on(service, own))
+        machine = estate.machine(service.answers.machine)
         if machine:
             relation = edge_between(node_id, machine, "runs_on")
             edges[relation.id] = relation
@@ -274,14 +274,6 @@ def _services(nodes, edges, estate: _Estate, zones: tuple[str, ...]) -> None:
             relation = edge_between(Kind.ZONE.of(zone), node_id, "contains")
             edges[relation.id] = relation
     _redirect_edges(nodes, edges)
-
-
-def _runs_on(service, own) -> str:
-    """The machine a service runs on: its origin's, or HQ's own for HQ."""
-
-    if service.origin is not None and service.origin.host:
-        return service.origin.host
-    return own.machine if service.is_hq and own is not None else ""
 
 
 def _redirect_edges(nodes, edges) -> None:

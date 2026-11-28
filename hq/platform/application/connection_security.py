@@ -34,6 +34,7 @@ from .standards import Check, CheckResult, Examples, Measurement, Reading, Stand
 from .tone import Tone
 from .ui import counted, ended
 lazy from . import tailnet
+lazy from .connection_catalog import ConnectionView, connection_authority
 lazy from .facts import stored_snapshots
 lazy from .moments import when
 
@@ -274,14 +275,16 @@ def _example(record: Mapping[str, Any]) -> Inputs:
     says, or none when it is empty: its kind, what the checks of its
     abilities found, whether it needs a key, and when it was last read."""
 
-    held = Row(
-        instance=Row(
+    evidence = tuple(record.get("evidence", ()))
+    held = ConnectionView(
+        Row(
             label="Example",
             kind=record.get("kind", ""),
             keyless=record.get("keyless", False),
             observed_at=record.get("observed_at"),
         ),
-        abilities=tuple(Row(evidence=found) for found in record.get("evidence", ())),
+        tuple(Row(evidence=found) for found in evidence),
+        authority=connection_authority(evidence),
     )
     spec = Row(secret_store="a vault", required_capabilities=("read",))  # noqa: S106 - where a secret is kept, never one
     group = Row(connections=(held,) if record else (), spec=spec)

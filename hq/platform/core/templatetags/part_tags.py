@@ -43,7 +43,7 @@ def _section() -> Part:
     return Part(
         name="section",
         rules="""
-        `{% section "Agents" count=n lede="..." %}body{% aside %}a line, a link, a control{% empty %}No
+        `{% section "Agents" counts=agents lede="..." %}body{% aside %}a line, a link, a control{% empty %}No
         agent has connected yet.{% foot %}How to read the body.{% endsection %}` is a titled part of a
         page: a `<section>` labeled by its heading. Its head stands on the page: the heading with its count
         standing in it, the lede under it and the aside beside it. Its body follows in the frame. After
@@ -59,6 +59,10 @@ def _section() -> Part:
         draws its empty part as the empty state's line, followed by the link that fills it when
         `remedy_label` and `remedy_url` name one (`{% section "Receipts" remedy_label="Upload one"
         remedy_url=url %}{% empty %}No receipts.{% endsection %}`), and with neither it draws nothing.
+
+        Its count is of what it holds: `counts` takes the rows themselves (a list, a table's `things`), never
+        their number, so the heading cannot say more or fewer than the body shows. `noun` words the count
+        where the number alone would not say what it counts (`counts=groups noun="image"`, "3 images").
 
         `more_label` and `more_url` end the aside with the quiet link to the whole of what the section
         shows part of ("View Estate", "All runs"), after a dot when the aside says something too, never a
@@ -122,7 +126,7 @@ def _section() -> Part:
         options={name: _option(field) for name, field in named.items() if name not in _FILLED | set(parts)},
         data=True,
         public=True,
-        example='{% section "Agents" count=n %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}',
+        example='{% section "Agents" counts=agents %}<p>Body</p>{% aside %}A line.{% empty %}None yet.{% endsection %}',
         states=section.SECTION_STATES,
     )
 
@@ -148,6 +152,9 @@ class SectionNode(TagHelperNode):
         data = {name.removeprefix("data_"): options.pop(name) for name in list(options) if name.startswith("data_")}
         heading = args[0] if args else ""
         options["moment"] = options.get("moment") or None
+        # A name the context lacks resolves to "", which counts nothing.
+        if options.get("counts") == "":
+            options["counts"] = None
         root = context.render_context.dicts[0]
         level = root.get(_LEVEL, TOP_LEVEL)
         part = SectionPart(heading=heading, level=level, data=data, **options)

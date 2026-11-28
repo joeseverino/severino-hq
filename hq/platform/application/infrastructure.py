@@ -36,6 +36,7 @@ from .integration_specs import Kept, command_adapter, keeps
 from .projection import read_once
 from .record_errors import PolicyError
 from .record_saves import Held, as_sent, found, held, row, written
+from .run_outcome import OUTCOME, Ending, ended_as
 from .security import Principal
 from .tone import Tone, Toned
 lazy from .asks import APPLIES_SHORTLY
@@ -46,7 +47,7 @@ lazy from .facts import kinds_read
 lazy from .freshness import OUT_OF_DATE, behind, cadence, freshness
 lazy from .locate import names_by_connection
 lazy from .managed_records import HealthPart, ManagedResourceItem
-lazy from .moments import duration
+lazy from .moments import Span
 lazy from .resource_capabilities import kind_converges
 lazy from .resource_operations import OperationItem, ResourceSaved, queue_reconcile
 
@@ -361,7 +362,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
         return _health(ResourceState.UNSEEN, "Not found lately", message="The others of its type have been read since.")
     if (ready := active.get(READY)) is not None:
         if read_at is None or freshness(resource.kind, read_at).stale:
-            said = f"HQ reads it every {duration(cadence(resource.kind).every)}."
+            said = f"HQ reads it every {Span(cadence(resource.kind).every)}."
             return _health(ResourceState.STALE, OUT_OF_DATE, ready.get("reason", ""), said)
         return _health(ResourceState.HEALTHY, "Working", ready.get("reason", ""), ready.get("message", ""))
     # Nothing converges this kind, or nothing reads it back past the apply
@@ -513,8 +514,10 @@ def save_adopted(
     return _save(command, principal=principal, consented=None, current_key=current_key)
 
 
-def save_sourced(command: ManagedResourceCommand, *, principal: Principal) -> ResourceSaved:
-    """Write down a new record HQ derives from its source, as HQ.
+def save_sourced(
+    command: ManagedResourceCommand, *, principal: Principal, current_key: str | None = None
+) -> ResourceSaved:
+    """Write down a record HQ derives from its source, as HQ, new or over ``current_key``.
 
     Asks no consent: only a record its kind's ``sourced`` claims is written,
     one no person edits, and nothing is applied for a kind that is a
@@ -525,7 +528,7 @@ def save_sourced(command: ManagedResourceCommand, *, principal: Principal) -> Re
     drawn = ManagedResource(key=command.key, kind=command.kind, spec=command.spec)
     if not provider.declaration_only or provider.sourced is None or not provider.sourced(drawn):
         raise PolicyError("HQ writes only a record its source names.")
-    return _save(command, principal=principal, consented=None)
+    return _save(command, principal=principal, consented=None, current_key=current_key)
 
 
 def _save(
@@ -602,8 +605,15 @@ def _save(
 
 
 # How work its record's switch-off called off ends, waiting or claimed
-# (``controller.release_lapsed``); its row names the record.
-CALLED_OFF = {"ok": False, "message": "Switched off", "reason": "SwitchedOff"}
+# (``controller.release_lapsed``); its row names the record, and a run reads
+# as cancelled for it.
+SWITCHED_OFF = "Switched off"
+CALLED_OFF = {
+    "ok": False,
+    "message": SWITCHED_OFF,
+    "reason": "SwitchedOff",
+    OUTCOME: ended_as(Ending.CANCELLED, message=SWITCHED_OFF),
+}
 
 
 def _call_off_waiting(resource: ManagedResource) -> None:

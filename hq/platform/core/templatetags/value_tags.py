@@ -29,7 +29,7 @@ from hq.platform.application.entity_links import (
 from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
-    duration,
+    Span,
     moment,
     span as said,
     stamp_day,
@@ -153,7 +153,7 @@ def dot():
 def arrow():
     """The arrow that ends a link onward, after its last word, held to it by
     a no-break space and never read: the link's words say where it goes."""
-    return mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
+    return mark_safe('<span aria-hidden="true">&nbsp;&rarr;</span>')
 
 
 @register.filter(name="bytes")
@@ -333,32 +333,23 @@ def signed_in(request):
     when = when or getattr(request_identity.signed_in(request), "last_login", None)
     if when is None:
         return ""
-    hours = int((timezone.now() - when).total_seconds() // 3600)
-    if hours < 1:
+    age = timezone.now() - when
+    if age < timedelta(hours=1):
         return "Signed in within the hour"
-    if hours < 48:
-        return held(f"Signed in {_counted(hours, 'hour', 'hours')} ago")
-    return held(f"Signed in {_counted(hours // 24, 'day', 'days')} ago")
+    return held(f"Signed in {Span(age)} ago")
 
 
 @register.filter
-def span(days):
-    """``{{ days_left|span }}``: a count of days as a length of time, from its one owner."""
+@reading
+def span(count, unit: Literal["seconds", "minutes", "hours", "days", "weeks"] = "days"):
+    """``{{ days_left|span }}``, ``{{ run.seconds|span:"seconds" }}``: a count
+    of a unit as a length of time, the one way a page says one (``moments.Span``);
+    days below nothing are that long overdue."""
 
     try:
-        return said(int(days))
+        return said(int(count)) if unit == "days" else Span(timedelta(**{unit: float(count)}))
     except TypeError, ValueError:
         return MISSING
-
-
-@register.filter
-def seconds(value):
-    """``{{ job.duration_seconds|seconds }}``: a count of seconds as a run time, from its one owner."""
-
-    try:
-        return held(duration(timedelta(seconds=float(value)), short=True))
-    except TypeError, ValueError:
-        return or_empty(None)
 
 
 @register.filter

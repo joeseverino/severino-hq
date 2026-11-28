@@ -176,6 +176,14 @@ def _unattended(owner) -> None:
     example_estate.automation.unattended()
 
 
+def _unreached(owner) -> None:
+    """The example estate with a machine the playbook worker has no login
+    to, and a second shell connection whose sweep reads no Caddy route."""
+
+    _estate(owner)
+    example_estate.infra.unreached()
+
+
 def _worker_image_missing(owner) -> None:
     """The example estate once a release stopped short on HQ's machine: the
     playbook worker's image is not there, so its unit failed and it stopped
@@ -190,6 +198,14 @@ def _short_release() -> None:
     example_estate.work.worker_image_missing()
 
 
+def _neglected_domain(owner) -> None:
+    """The example estate with its domain left to drift, so each finding
+    about a domain is drawn on its page and its Email page."""
+
+    _estate(owner)
+    example_estate.network.neglected()
+
+
 def _readings_aged(owner) -> None:
     """The example estate with a reading out of date, one failing and one
     read with a part refused, so each standing the Controller page lists a
@@ -197,6 +213,33 @@ def _readings_aged(owner) -> None:
 
     _estate(owner)
     example_estate.work.readings_aged()
+
+
+def _edge(owner) -> None:
+    """The example estate with an edge machine, an exit node whose Caddy
+    serves two names, so its page, its container's and the topology are drawn
+    with what it serves."""
+
+    _estate(owner)
+    example_estate.infra.edge()
+
+
+def _short_named(owner) -> None:
+    """The example estate with the machine's tailnet device named as the LAN
+    names a service, so the machine's page is drawn beside a DNS name
+    spelled as one of its own names."""
+
+    _estate(owner)
+    example_estate.network.short_named()
+
+
+def _loopback_granted(owner) -> None:
+    """The example estate with the tailnet grant opening the proxy's admin
+    port, which the proxy binds only to loopback, so the machine's page, the
+    policy page and the finding draw a port that reaches nothing."""
+
+    _estate(owner)
+    example_estate.network.loopback_granted()
 
 
 def _glance_aged(owner) -> None:
@@ -344,6 +387,7 @@ SEEDS: dict[str, Seed] = {
     "unadoptable": Seed(_unadoptable, _SET_UP),
     "partly-adoptable": Seed(_partly_adoptable, _SET_UP),
     "unattended": Seed(_unattended, _SET_UP),
+    "unreached": Seed(_unreached, _SET_UP),
     # A fresh install whose playbook worker stopped reporting: the one serious
     # item, so the dashboard's Needs you card holds it alone, with its actions.
     "playbooks-stopped": Seed(lambda _owner: example_estate.automation.unattended()),
@@ -353,6 +397,10 @@ SEEDS: dict[str, Seed] = {
     "worker-image-missing-alone": Seed(lambda _owner: _short_release()),
     "policy-change": Seed(_policy_change, _SET_UP),
     "readings-aged": Seed(_readings_aged, _SET_UP),
+    "short-named": Seed(_short_named, _SET_UP),
+    "loopback-granted": Seed(_loopback_granted, _SET_UP),
+    "edge": Seed(_edge, _SET_UP),
+    "neglected-domain": Seed(_neglected_domain, _SET_UP),
     "glance-aged": Seed(_glance_aged, _SET_UP),
     "glance-asked": Seed(_glance_asked, _SET_UP),
     "glance-unanswered": Seed(_glance_unanswered, _SET_UP),

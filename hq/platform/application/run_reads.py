@@ -65,8 +65,11 @@ class RunTask(TypedDict):
     outcome: Annotated[
         str, Describe(ended(f"How it ended, or `{TaskOutcome.STARTED}` while it is under way: {listed(TaskOutcome)}"))
     ]
-    message: Annotated[str, Describe("What the task said; empty when it said nothing.")]
-    warnings: Annotated[str, Describe("Each warning Ansible gave of the task, in one line; empty when it gave none.")]
+    message: Annotated[str, Describe("What the task said in words; empty when it said nothing or data.")]
+    data: Annotated[str, Describe("What the task said as data, as JSON; empty when it said words or nothing.")]
+    warnings: Annotated[
+        list[str], Describe("Each warning Ansible gave of the task, each in one line; empty when it gave none.")
+    ]
     tone: Annotated[str, Describe(ended(f"How its outcome is colored: {listed(Tone)}"))]
 
 
@@ -196,7 +199,7 @@ def _evidence(run: WorkRun) -> dict[str, Any]:
         "worker": evidence.worker,
         "lease_until": iso(evidence.lease_until),
         # The fields a task's line on Jobs draws, whatever else the report held.
-        "events": [{name: str(event.get(name) or "") for name in RunTask.__annotations__} for event in evidence.events],
+        "events": [{name: event.get(name, "") for name in RunTask.__annotations__} for event in evidence.events],
         "expected": evidence.expected,
         "affected": [
             {name: str(item.get(name) or "") for name in ServedPart.__annotations__} for item in evidence.affected
@@ -325,9 +328,10 @@ def resources() -> tuple[ResourceSpec, ...]:
                 WorkItem,
                 sorts=(
                     ListSort("failed", "Failing first", ("lead", "-created_at"), _failed_first),
+                    ListSort("-failed", "Failing last", ("-lead", "-created_at")),
                     *ListSort.both("-created_at", "Newest first", "Oldest first"),
                     ListSort("title", "Job A–Z", ("title", "-created_at"), _a_to_z),
-                    ListSort("state", "State", ("seen", "-created_at")),
+                    ListSort("-title", "Job Z–A", ("-title", "-created_at")),
                 ),
                 filters=(
                     ListFilter("state", "State", JobState.choices, lookup="seen"),

@@ -8,6 +8,7 @@ docs/Architecture.md, "Running a playbook".
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, make_dataclass, replace
+from datetime import timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
@@ -26,14 +27,12 @@ lazy from hq.domains.control_plane.models import (
     ManagedResource,
     OperationHost,
     OperationRequest,
-    SourceProposal,
 )
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.domains.jobs.runner import SCHEDULER
 lazy from hq.platform.core.attribution import own_operation
-lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import REVISION_INPUT, OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Among, AmongNow, Checked, Describe, ForAgents, Names, NonEmpty
@@ -42,6 +41,7 @@ from .integration_specs import CapabilitySpec, command_adapter
 from .process_caches import kept
 from .quoted import Quoted
 from .record_errors import PolicyError, RecordNotFound
+from .run_outcome import OUTCOME, Ending, ended_as
 from .security import Capability, Principal, internal_principal
 lazy from . import approvals, automation_adoption, pages
 lazy from .action_links import command_url
@@ -50,13 +50,11 @@ lazy from .automation_sources import PLAYBOOKS
 lazy from .cadence import ask, automation_standing
 lazy from .capabilities import Consented, consent
 lazy from .controller import release_lapsed
-lazy from .entity_links import kind_label
-lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import json_schema
 lazy from .labels import lower_first
-lazy from .machines import machine_catalog
-lazy from .moments import moment, since_when
+lazy from .moments import Span, moment, since_when
 lazy from .playbook_about import about, reading_words, run_preview
+lazy from .playbook_reach import reachable, reached, resolved_hosts
 lazy from .resource_operations import (
     HANDOFF,
     SETTLES,
@@ -69,7 +67,7 @@ lazy from .resource_operations import (
     serialize_operation,
 )
 lazy from .run_reads import RUNS
-lazy from .ui import agreed, ended
+lazy from .ui import MISSING, agreed, ended
 lazy from .work_runs import RUN, WorkRun, operation_of, run_url
 
 if TYPE_CHECKING:
@@ -254,45 +252,6 @@ def pinned(manifest: OperationManifest) -> dict[str, Any]:
     )
 
 
-def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple[str, ...]:
-    """Each host named, as the machine HQ knows it by, held to what the manifest admits.
-
-    A machine is found by its name or any name it is also known by, so a run
-    asked by an alias binds to the one machine it is, and two runs naming one
-    machine two ways are seen to share it.
-    """
-
-    known: dict[str, str] = {}
-    for machine in machine_catalog():
-        canonical = normalized_hostname(machine.name)
-        for name in (machine.name, *machine.aliases):
-            known.setdefault(normalized_hostname(name), canonical)
-    unknown = [host for host in hosts if host not in known]
-    if unknown:
-        raise RecordNotFound(
-            "A host this names is no machine HQ knows; details.unknown lists them.", details={"unknown": unknown}
-        )
-    resolved = tuple(sorted({known[host] for host in hosts}))
-    refused = [host for host in resolved if not manifest.admits(MACHINE_KIND, host)]
-    if refused:
-        raise PolicyError(
-            "This playbook is not written for a machine this names; details.refused lists them, and "
-            "details.admits what it is written for.",
-            details={
-                "refused": refused,
-                "admits": {"target_kinds": list(manifest.target_kinds), "hosts": list(manifest.hosts)},
-            },
-        )
-    return resolved
-
-
-def login_profile(manifest: OperationManifest) -> str:
-    """The profile of the login a run of ``manifest`` goes through: its
-    privilege, or the read login's for one that names none."""
-
-    return manifest.privilege or READ_PROFILE
-
-
 def other_profiles(profile: str) -> Q:
     """Every playbook run of another profile than ``profile``: what a worker
     lent ``profile``'s logins alone is never offered, since it holds no
@@ -318,46 +277,6 @@ def _playbook_profile(resource: ManagedResource) -> str:
     """The profile of the logins a playbook's runs go through."""
 
     return claimant(OperationRequest.Action.RUN, (resource.spec or {}).get("privilege"))
-
-
-def runner_reaches() -> frozenset[tuple[str, str]]:
-    """Each machine and profile the worker has a login for, as its newest scan said."""
-
-    newest = SourceProposal.objects.values_list("reaches", flat=True).first()
-    return frozenset((normalized_hostname(found["machine"]), found["profile"]) for found in newest or ())
-
-
-def reachable(manifest: OperationManifest) -> frozenset[str]:
-    """The machines a run of ``manifest`` can be asked on now, each by its
-    name in HQ: those it is written for that the worker has a login to as its
-    profile, by any name the machine is known by, as ``reached`` holds a run to."""
-
-    profile = login_profile(manifest)
-    reaches = runner_reaches()
-    return frozenset(
-        machine.name
-        for machine in machine_catalog()
-        if manifest.admits(MACHINE_KIND, normalized_hostname(machine.name))
-        and any((normalized_hostname(name), profile) in reaches for name in (machine.name, *machine.aliases))
-    )
-
-
-def reached(manifest: OperationManifest, hosts: tuple[str, ...]) -> None:
-    """Refuse a run on a machine the worker has no login to as the run's profile.
-
-    The worker's own word, so it can make this check wrong and nothing more:
-    the worker refuses at the claim a machine it cannot reach as the profile.
-    """
-
-    profile = login_profile(manifest)
-    reaches = runner_reaches()
-    missing = [{"machine": host, "profile": profile} for host in hosts if (host, profile) not in reaches]
-    if missing:
-        raise PolicyError(
-            "HQ has no runner connection to a machine this names, as this playbook's profile; "
-            "details.missing lists each. A connection added since the last scan shows once a scan reads it.",
-            details={"missing": missing},
-        )
 
 
 def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
@@ -391,29 +310,18 @@ def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSub
     )
 
 
-def record_of(manifest: OperationManifest, *, consented: Consented) -> ManagedResource:
-    """The procedure's record, written as its manifest now says.
+def adopted_record(manifest: OperationManifest, *, settles: bool = False) -> ManagedResource:
+    """The procedure's record, locked, as the adopted catalog pins ``manifest``;
+    refused where it does not, as after an adoption that moved it, worded for
+    the read that ``settles`` a held run where it is one. Read, never written:
+    adoption writes it (``automation_adoption.derive_records``)."""
 
-    Written when a run is asked for, where a transaction, an actor and an audit
-    binding exist, never as the registry is composed in every process before
-    migrations. The read that settles it (``settled_by``) is written beside
-    it, under the same consent, since HQ asks that read itself.
-    """
-
-    if manifest.settled_by is not None and (settling := operation_registry().get(manifest.settled_by)) is not None:
-        record_of(settling, consented=consented)
-    key = resource_key(manifest.id)
-    current = ManagedResource.objects.select_for_update().filter(key=key).first()
-    spec = pinned(manifest)
-    if current is None or current.kind != OPERATION_KIND or current.spec != spec:
-        save_managed_resource(
-            ManagedResourceCommand(
-                key=key, kind=OPERATION_KIND, spec=spec, enabled=current.enabled if current else True
-            ),
-            consented=consented,
-            current_key=key if current else None,
-        )
-    return ManagedResource.objects.select_for_update().get(key=key)
+    resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
+    if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
+        if settles:
+            raise PolicyError("The read that settles this run is not the one adopted now.")
+        raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
+    return resource
 
 
 def _holding(resource: ManagedResource | None, hosts: list[str]) -> OperationRequest | None:
@@ -536,7 +444,7 @@ def queue_run(
 
     asked = {**bound, CHECK: True} if check else bound
     operation, queued = _enqueue_run(
-        partial(record_of, manifest, consented=consented), asked, consent(consented).principal, reason=reason
+        partial(adopted_record, manifest), asked, consent(consented).principal, reason=reason
     )
     return operation_asked(operation, queued=queued)
 
@@ -548,21 +456,14 @@ def queue_follow_up(
     """Queue the run another operation carries as its own next step, as that
     operation's requester and its approver, once for ``once``.
 
-    It writes no record: the run's record is the one written when the step
-    was approved (``record_of``), and one that no longer pins ``manifest``
-    refuses it, as an adoption since then does.
+    A record that no longer pins ``manifest`` refuses it, as an adoption
+    since the step was approved does.
     """
-
-    def record() -> ManagedResource:
-        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(manifest.id)).first()
-        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(manifest):
-            raise PolicyError("The playbook adopted now is not the one approved, so nothing ran.")
-        return resource
 
     acting = acting_for(asked)
     # Its rows are its requester's, under the operation that carried it.
     with own_operation(asked, operation=capability_name(manifest.id), principal=acting):
-        operation, _ = _enqueue_run(record, bound, acting, reason=asked.reason, once=once)
+        operation, _ = _enqueue_run(partial(adopted_record, manifest), bound, acting, reason=asked.reason, once=once)
     return operation
 
 
@@ -604,12 +505,7 @@ def queue_settling(held: OperationRequest) -> OperationRequest | None:
         SETTLES: str(held.pk),
     }
 
-    def record() -> ManagedResource:
-        resource = ManagedResource.objects.select_for_update().filter(key=resource_key(settling.id)).first()
-        if resource is None or resource.kind != OPERATION_KIND or resource.spec != pinned(settling):
-            raise PolicyError("The read that settles this run is not the one adopted now.")
-        return resource
-
+    record = partial(adopted_record, settling, settles=True)
     principal = internal_principal(SCHEDULER)
     # Its rows are part of the held run's life, as HQ's own.
     with own_operation(held, operation=capability_name(settling.id), principal=principal):
@@ -661,8 +557,6 @@ def _enqueue_run(
 
 
 CANCEL = "automation.run.cancel"
-# The reason a run cancelled before it started carries in its result.
-CANCELLED_REASON = "Cancelled"
 
 
 def run_authority(effect: str) -> Capability:
@@ -739,11 +633,7 @@ def cancel_run(command: CancelRunCommand, *, principal: Principal) -> RunAsked:
         )
     operation.state = OperationRequest.State.CANCELLED
     operation.completed_at = timezone.now()
-    operation.result = {
-        "ok": False,
-        "message": f"{principal.actor} cancelled it before it started.",
-        "reason": CANCELLED_REASON,
-    }
+    operation.result = {OUTCOME: ended_as(Ending.CANCELLED)}
     operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
     return operation_asked(operation, queued=False)
 
@@ -791,8 +681,8 @@ class PlaybookHere(NamedTuple):
 
 
 def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]:
-    """Each adopted playbook that may run on the machine ``machine`` and that
-    ``principal`` may run, A to Z."""
+    """Each adopted playbook that can run on the machine ``machine`` now and
+    that ``principal`` may run, A to Z."""
 
     titles = automation_adoption.playbook_titles()
     found = (
@@ -800,7 +690,7 @@ def playbooks_on(machine: str, principal: Principal) -> tuple[PlaybookHere, ...]
             run_title(manifest.id, titles), capability_name(manifest.id), run_here_url(manifest.id, (machine,))
         )
         for manifest in operation_registry().values()
-        if manifest.admits(MACHINE_KIND, machine) and principal.permits(run_authority(manifest.effect))
+        if machine in reachable(manifest) and principal.permits(run_authority(manifest.effect))
     )
     return tuple(sorted(found, key=lambda each: each.title.casefold()))
 
@@ -812,12 +702,12 @@ def asks_nothing(manifest: OperationManifest) -> bool:
 
 
 def playbooks_for(rule: str, machine: str) -> Iterable[OperationManifest]:
-    """Adopted playbooks written for the machine and the finding's rule."""
+    """Adopted playbooks for the finding's rule that can run on the machine now."""
 
     return (
         manifest
         for manifest in operation_registry().values()
-        if (rule in manifest.fixes or rule in manifest.investigates) and manifest.admits(MACHINE_KIND, machine)
+        if (rule in manifest.fixes or rule in manifest.investigates) and machine in reachable(manifest)
     )
 
 
@@ -848,16 +738,13 @@ def stated_words(statements: tuple[str, ...]) -> Quoted:
     return Quoted(" ".join(ended(statement) for statement in statements))
 
 
-def anywhere(target_kinds: Iterable[str]) -> str:
-    """Where a playbook that names no machine may run, in every page's words: "Any machine"."""
-
-    return f"Any {' or '.join(lower_first(kind_label(kind)) for kind in target_kinds)}"
-
-
 def timeout_words(timeout_seconds: object) -> str:
-    """How long a run of a playbook has, in every page's words: "10 min"."""
+    """How long a run of a playbook has, in every page's words: "10 minutes"."""
 
-    return str(seconds(timeout_seconds))
+    try:
+        return Span(timedelta(seconds=float(str(timeout_seconds))))
+    except ValueError:
+        return MISSING
 
 
 def access_words(privilege: str | None) -> str:

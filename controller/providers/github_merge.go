@@ -48,7 +48,7 @@ func (r *Registry) githubMerge(ctx context.Context, spec GitHubPullRequestSpec, 
 	if err != nil {
 		return Result{}, err
 	}
-	checks, err := g.checks(ctx, spec.HeadSha, githubOwnSuites(runs.WorkflowRuns), nil)
+	checks, err := g.checks(ctx, spec.HeadSha, githubAsideSuites(runs.WorkflowRuns), nil)
 	if err != nil {
 		return Result{}, err
 	}

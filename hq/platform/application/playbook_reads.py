@@ -2,18 +2,17 @@
 for an agent to find what to run, where, and what waits.
 
 Each is read from what its page reads, so a read says what the pages say, plus
-the machines a playbook can run on now (``automation_runs.reached``).
+the machines a playbook can run on now (``playbook_reach.reachable``).
 """
 
 from typing import Annotated, Any, TypedDict
-
-lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import automation_adoption, automation_runs, playbook_about
 from .automation_manifest import OperationManifest, PlaybookEffect
 from .automation_sources import PLAYBOOKS as PAGE, Reviewed, standing
 from .describe import Describe
 from .integration_specs import CommandFact, DetailRead, ListRead, ResourceSpec
+from .playbook_reach import reachable
 from .projection import iso, page_of
 from .record_errors import RecordNotFound
 from .record_fields import RecordId
@@ -106,21 +105,14 @@ def _manifests() -> tuple[OperationManifest, ...]:
     return tuple(automation_runs.operation_registry().values())
 
 
-def _reachable(manifest: OperationManifest, reaches: frozenset[tuple[str, str]]) -> list[str]:
-    """The machines ``manifest`` is written for that the worker reaches as its profile."""
-
-    profile = automation_runs.login_profile(manifest)
-    return sorted(host for host, reached in reaches if reached == profile and manifest.admits(MACHINE_KIND, host))
-
-
-def _row(manifest: OperationManifest, titles: dict[str, str], reaches: frozenset[tuple[str, str]]) -> dict[str, Any]:
+def _row(manifest: OperationManifest, titles: dict[str, str]) -> dict[str, Any]:
     return {
         "playbook": manifest.id,
         "title": automation_runs.run_title(manifest.id, titles),
         "capability": automation_runs.capability_name(manifest.id),
         "effect": manifest.effect,
         "readings": list(manifest.readings),
-        "reachable": _reachable(manifest, reaches),
+        "reachable": list(reachable(manifest)),
     }
 
 
@@ -132,8 +124,8 @@ def _fact(fact: CommandFact) -> dict[str, str]:
 def list_playbooks(**_caller: Principal) -> dict[str, Any]:
     """Every adopted playbook, in the catalog's order."""
 
-    titles, reaches = automation_adoption.playbook_titles(), automation_runs.runner_reaches()
-    return page_of([_row(manifest, titles, reaches) for manifest in _manifests()])
+    titles = automation_adoption.playbook_titles()
+    return page_of([_row(manifest, titles) for manifest in _manifests()])
 
 
 def get_playbook(playbook_id: str, *, principal: Principal) -> dict[str, Any]:
@@ -143,7 +135,7 @@ def get_playbook(playbook_id: str, *, principal: Principal) -> dict[str, Any]:
         manifest = automation_runs.operation_registry()[playbook_id]
     except KeyError:
         raise RecordNotFound("No adopted playbook has that id.") from None
-    row = _row(manifest, automation_adoption.playbook_titles(), automation_runs.runner_reaches())
+    row = _row(manifest, automation_adoption.playbook_titles())
     return {**row, "facts": [_fact(fact) for fact in playbook_about.about(manifest, principal).facts]}
 
 

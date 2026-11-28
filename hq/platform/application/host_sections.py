@@ -654,6 +654,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # HQ itself, after what configures it: the page that says how it is doing.
         navigation=(NavigationItem("HQ", "hq_self", "", HOST_ORDER_MACHINERY + 3, "System"),),
         integration=PluginIntegration(resources=_provider("hq.platform.application.hq_context:resources")),
+        mounts=(Mount("hq/releases/", "hq.platform.core.release_urls"),),
     ),
     DomainDescriptor(
         id="hq.errors",

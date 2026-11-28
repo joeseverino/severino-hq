@@ -14,6 +14,7 @@ from .band import Tile
 lazy from ..entity_links import web_url
 lazy from ..github_estate import repository_for
 lazy from ..plugins import installed_plugins
+lazy from ..routes import reverse
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,10 +52,6 @@ class Release:
     @property
     def short(self) -> str:
         return self.commit[:7]
-
-    @property
-    def commit_url(self) -> str:
-        return f"{self.source}/commit/{self.commit}" if self.source and self.commit else ""
 
     @property
     def head(self) -> str:
@@ -159,7 +156,7 @@ def release_tile(release: Release) -> Tile:
         "Release",
         release.short or "Not stamped",
         release.standing if release.commit else "This build does not say which commit it is.",
-        release.commit_url,
+        reverse("releases:list"),
         release.tone if release.commit else Tone.NEUTRAL,
         "deploy",
     )

@@ -95,11 +95,11 @@ def resources() -> tuple[ResourceSpec, ...]:
             search=SearchDefinition.of(
                 ServerError,
                 "request_id",
-                ("request_id", "exception", "message", "path"),
+                ("message",),
+                identifiers=("request_id", "path"),
                 title_field="exception",
                 badge_field="method",
                 timestamp_field="occurred_at",
-                snippet_field="message",
             ),
             web_route="errors:list",
         ),

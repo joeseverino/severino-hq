@@ -16,21 +16,29 @@ from hq.domains.control_plane.observations.github import (
     REPOSITORY_KIND,
     WORKFLOW_RUN_KIND,
 )
-from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
+from hq.domains.control_plane.observations.host import (
+    CONTROLLER_UNIT,
+    DRIFT_UNIT,
+    GLANCE_UNIT,
+    RENDER_STATUS_KIND,
+    UNIT_KIND,
+)
+from hq.domains.control_plane.observations.portainer import MEMORY_BASES
 from hq.domains.control_plane.provider_adapters import github as delivery
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
-from hq.platform.application import outbound_work
+from hq.platform.application import outbound_work, release_snapshots
 from hq.platform.application.adoption import adopt_discovered
 from hq.platform.application.conditions import READY
 from hq.platform.application.freshness import cadence
 from hq.platform.application.images import ImageRef
+from hq.platform.application.release_snapshots import ReleaseReadings, UnitRun
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sweep import ADOPT
 from hq.platform.core import bindings
 from hq.platform.core.audit import stamped
 
-from . import doors
+from . import doors, rehearsals
 from .names import (
     BUILT,
     CONTAINERS,
@@ -51,6 +59,10 @@ from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
+# The releases of HQ before the one production runs: one that went live,
+# and a later one that never deployed.
+PREVIOUS = hexed("release", "previous", length=40)
+UNDEPLOYED = hexed("release", "undeployed", length=40)
 # The repository whose dependency update and alerts are open.
 UPDATED = "photo-library"
 # The repository whose default branch fails a check, so the queue holds GitHub's item.
@@ -89,6 +101,7 @@ STARTERS = (
     ("severino-hq-controller.timer", "severino-hq-controller.service", timedelta(minutes=4), timedelta(minutes=1)),
     ("severino-hq-controller.path", "severino-hq-controller.service", timedelta(minutes=4), None),
     ("severino-hq-due.timer", "severino-hq-job@due.service", timedelta(minutes=31), timedelta(minutes=29)),
+    ("severino-hq-glance.path", "severino-hq-glance.service", timedelta(minutes=2), None),
     ("severino-hq-script-drift.timer", "severino-hq-script-drift.service", timedelta(hours=7), timedelta(hours=17)),
     ("severino-hq-secrets.timer", "severino-hq-secrets.service", timedelta(minutes=22), timedelta(minutes=38)),
 )
@@ -104,6 +117,8 @@ TITLES = {
     "severino-hq-controller.service": "Severino HQ infrastructure controller",
     "severino-hq-controller.timer": "Run Severino HQ infrastructure controller",
     "severino-hq-due.timer": "Run due Severino HQ work",
+    "severino-hq-glance.path": "Read the Severino HQ dashboard when HQ asks for a refresh",
+    "severino-hq-glance.service": "Severino HQ dashboard glance",
     "severino-hq-job@due.service": "Severino HQ scheduled work: due",
     "severino-hq-script-drift.service": "Check the host matches its Severino HQ release",
     "severino-hq-script-drift.timer": "Daily check for stale root-owned Severino HQ scripts",
@@ -155,16 +170,48 @@ def repositories():
             "pins": [],
         }
         if name == "hq":
+            # The release production runs, live with a check failed, one before
+            # it that went live with every check passing, and one between them
+            # that never deployed.
             record["deployments"] = [
                 {
                     "environment": "production",
                     "sha": head,
                     "image": f"ghcr.io/example/hq@{HQ_DIGEST}",
                     "state": "success",
+                    "outcome": "live-check-failed",
+                    "check_failed": True,
                     "created_at": iso(timedelta(days=1)),
-                    "url": "https://github.com/example/hq/deployments/production",
+                    "ended_at": iso(timedelta(days=1) - timedelta(minutes=6)),
+                    "url": "https://github.com/example/hq/actions/runs/4090",
+                    "approved_by": "example",
                     "verified": [{"name": "Verify the image signature", "conclusion": "success"}],
-                }
+                },
+                {
+                    "environment": "production",
+                    "sha": UNDEPLOYED,
+                    "image": f"ghcr.io/example/hq@{digest('hq', 'undeployed')}",
+                    "state": "failure",
+                    "outcome": "not-deployed",
+                    "check_failed": True,
+                    "created_at": iso(timedelta(days=3)),
+                    "ended_at": iso(timedelta(days=3) - timedelta(minutes=4)),
+                    "url": "https://github.com/example/hq/actions/runs/4080",
+                    "approved_by": "example",
+                    "verified": [],
+                },
+                {
+                    "environment": "production",
+                    "sha": PREVIOUS,
+                    "image": f"ghcr.io/example/hq@{digest('hq', 'previous')}",
+                    "state": "inactive",
+                    "outcome": "live",
+                    "created_at": iso(timedelta(days=6)),
+                    "ended_at": iso(timedelta(days=6) - timedelta(minutes=7)),
+                    "url": "https://github.com/example/hq/actions/runs/4070",
+                    "approved_by": "example",
+                    "verified": [],
+                },
             ]
             record["environments"] = [
                 {"name": "production", "reviewers": ["example"], "wait_minutes": 0, "branches": ["main"]}
@@ -364,7 +411,13 @@ def readings_aged():
 
     late = cadence(DEPENDENCY_RUN_KIND).stale_after + timedelta(hours=3)
     ProviderInventory.objects.filter(kind=DEPENDENCY_RUN_KIND).update(observed_at=timezone.now() - late)
-    store(ALLOWANCE_KIND, reachable=False, observed_at=None, error="GitHub did not answer in time.")
+    store(
+        ALLOWANCE_KIND,
+        reachable=False,
+        observed_at=None,
+        error="GitHub did not answer in time.",
+        detail="context deadline exceeded",
+    )
     closed = [
         {
             "part": CODE_SCANNING.name,
@@ -645,6 +698,39 @@ def _take_on_units() -> None:
     hq = internal_principal(doors.CONTROLLER)
     with doors.controller("sweep"), bindings.audit_operation(operation=ADOPT, principal=hq):
         adopt_discovered(UNIT_KIND, principal=hq)
+
+
+def releases() -> None:
+    """What HQ read of itself once each release went live: the one it runs
+    kept by the sweep that read it, the one before as it was read then."""
+
+    hq = internal_principal(doors.CONTROLLER)
+    ago = timedelta(days=6)
+    with doors.controller("sweep"), bindings.audit_operation(operation=release_snapshots.TAKE, principal=hq):
+        release_snapshots.keep(
+            PREVIOUS,
+            ReleaseReadings(
+                memory=212 * 1_048_576,
+                memory_basis=MEMORY_BASES["anon"],
+                cpu_time=int(timedelta(minutes=40).total_seconds() * 1e9 * 0.02),
+                started_at=timezone.now() - ago,
+                runtime_read_at=timezone.now() - ago + timedelta(minutes=40),
+                failed=("severino-hq-script-drift.service",),
+                units=(
+                    _unit_run(CONTROLLER_UNIT, "success", ago - timedelta(minutes=38), timedelta(seconds=9)),
+                    _unit_run(GLANCE_UNIT, "success", ago - timedelta(minutes=37), timedelta(seconds=2)),
+                    _unit_run(DRIFT_UNIT, "exit-code", ago - timedelta(minutes=5), timedelta(seconds=3)),
+                ),
+                units_read_at=timezone.now() - ago + timedelta(minutes=40),
+                pages=rehearsals.before(),
+            ),
+        )
+        release_snapshots.settle(repository_read=False)
+
+
+def _unit_run(unit: str, result: str, ago: timedelta, took: timedelta) -> UnitRun:
+    started = timezone.now() - ago
+    return UnitRun(unit=unit, result=result, started_at=started, ended_at=started + took)
 
 
 def units(*more: dict):

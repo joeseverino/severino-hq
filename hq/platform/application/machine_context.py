@@ -9,6 +9,7 @@ page's sections and cells, so a band renders identically on both.
 
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import timedelta
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
@@ -19,13 +20,12 @@ lazy from hq.domains.control_plane.providers import service_facets
 from . import docker_sections
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label, provider_label
+from .moments import Span
 from .projection import projection_scope
 from .security import Principal
 from .service_context import Cell, ServiceSection, recent_changes, recent_work
 from .ui import MISSING
-lazy from . import connections, services
 lazy from .finding_model import CONTAINERS_CARD, TAILNET_CARD
-lazy from .hq_self import hq_service
 lazy from .locate import host_of
 lazy from .machine_records import MachineRecord
 lazy from .machines import Machine
@@ -36,6 +36,7 @@ lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
 lazy from .read_requests import connection_providers
 lazy from .routes import reverse
+lazy from .service_list import listed_services, served_on
 lazy from .tailnet import TAILNET_KIND
 lazy from .topology_model import RELATIONS
 lazy from .work_runs import runs_on
@@ -48,7 +49,7 @@ def sections_for(machine, *, principal: Principal) -> tuple[ServiceSection, ...]
     with projection_scope():
         for resolve in SECTIONS:
             section = resolve(machine, principal=principal) if resolve in _READ_BY else resolve(machine)
-            if section is not None and section.count:
+            if section is not None and section.things:
                 found.append(section)
     return tuple(found)
 
@@ -113,13 +114,11 @@ def _names(machine, *, principal: Principal) -> ServiceSection | None:
     this page holds enough names at once for the comparison to mean anything.
     """
 
-    hostnames = machine.hostnames
+    hostnames = served_on(machine.name)
     if not hostnames:
         return None
 
-    # One derivation for the whole catalog rather than one per name: asking
-    # per hostname would re-resolve the same estate nine times over.
-    catalog = {service.hostname: service for service in services.service_catalog()}
+    catalog = {service.hostname: service for service in listed_services()}
     measured = traffic_for_hosts(set(hostnames), days=HOST_TRAFFIC_DAYS)
     facets = service_facets()
 
@@ -160,7 +159,7 @@ def _names(machine, *, principal: Principal) -> ServiceSection | None:
     any_measured = any(measured.get(normalized_hostname(host)) for host in hostnames)
     label = "Serves"
     if any_measured:
-        label = dotted(label, f"traffic over {HOST_TRAFFIC_DAYS} days")
+        label = dotted(label, f"traffic over {Span(timedelta(days=HOST_TRAFFIC_DAYS))}")
     return ServiceSection(
         id="names",
         label=label,
@@ -208,16 +207,11 @@ def _runs(machine, *, principal: Principal | None) -> ServiceSection | None:
 def serves_links(machine, relationships) -> tuple:
     """What the machine serves, read off the same relation query as its
     Relationships panel, so the header and the panel cannot disagree. HQ's
-    own service leads where HQ runs here."""
+    own names lead where HQ runs here."""
 
     group = relationships.group(RELATIONS["runs_on"].inverse)
-    serves = [item.entity for item in (group.items if group else ())]
-    if machine.runs_hq:
-        own = hq_service(catalog=connections.machines_once())
-        if own is not None:
-            first = entity_link("service", own.hostname)
-            serves = [first, *(link for link in serves if link.label != first.label)]
-    return tuple(dict.fromkeys(serves))
+    serves = tuple(item.entity for item in group.items) if group else ()
+    return tuple(sorted(serves, key=lambda link: link.identity not in machine.hq_hostnames))
 
 
 def machine_links(record: MachineRecord) -> dict[str, object]:
@@ -252,7 +246,7 @@ def machine_links(record: MachineRecord) -> dict[str, object]:
     if presence["dns_name"]:
         links["magic_dns_link"] = entity_link(TAILNET_KIND, presence["dns_name"], record=addresses)
     names = PolicyNames()
-    links["opening_links"] = tuple((item["port"], names.of(item["open_to"])) for item in presence["openings"])
+    links["opening_links"] = tuple((item, names.of(item["open_to"])) for item in presence["openings"])
     return links
 
 

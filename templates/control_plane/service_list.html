@@ -9,7 +9,7 @@
   read through a connection that only observes, in a domain HQ does not
   manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
-  {% section "Unmanaged names" count=unmanaged|length fold=True lede="From a read-only connection, an unmanaged domain, or settings HQ could not read." %}
+  {% section "Unmanaged names" counts=unmanaged fold=True lede="From a read-only connection, an unmanaged domain, or settings HQ could not read." %}
     {% data_table unmanaged_table %}
   {% endsection %}
 {% endif %}

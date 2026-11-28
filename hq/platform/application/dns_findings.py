@@ -5,6 +5,8 @@ Read off the facts ``topology`` puts on each AdGuard connection node from
 that decides it.
 """
 
+from datetime import timedelta
+
 from hq.domains.control_plane.observations.adguard import (
     FILTERING_OFF,
     NAME_UNUSED,
@@ -15,6 +17,7 @@ from hq.domains.control_plane.observations.adguard import (
 
 from .entity_links import entity_link, node_link
 from .finding_model import Finding, FindingEstate, FindingRule
+from .moments import Span
 from .tone import Tone
 from .topology_model import TopologyNode
 from .ui import counted
@@ -100,7 +103,7 @@ def unused_names(estate: FindingEstate) -> tuple[Finding, ...]:
             evidence=(
                 ("Name", entity_link("service", name)),
                 ("Read from", node_link(node)),
-                ("Query log covers", f"{UNUSED_AFTER_HOURS} hours or more"),
+                ("Query log covers", f"{Span(timedelta(hours=UNUSED_AFTER_HOURS))} or more"),
             ),
         )
         for node in _connections(estate)

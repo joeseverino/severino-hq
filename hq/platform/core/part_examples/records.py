@@ -54,6 +54,8 @@ def _month_gone_by(month=date(2026, 1, 1)):
         1: CalendarEvent("example-timed", "Example timed line", datetime(month.year, month.month, 14, 15, tzinfo=UTC)),
         6: CalendarEvent("example-all-day", "Example all-day line", month.replace(day=15)),
         8: CalendarEvent("example-mark", "Example mark", month.replace(day=13), mark=True),
+        # A source's record with no title of its own.
+        3: CalendarEvent("example-untitled", "", month.replace(day=16)),
     }
     sources = tuple(
         ("Example", CalendarSource(f"example.series-{slot}", f"Example {slot}", _holding(entry), slot=slot))
@@ -301,7 +303,7 @@ RECORD_LIST_STATES = {
     # place with its chips, one with a line long enough to wrap and more
     # chips than fit beside it, and one with no page of its own.
     "places": Example(
-        '{% section "Example places" count=3 %}'
+        '{% section "Example places" counts=rows %}'
         '{% include "partials/_record_list.html" with whole_rows=True %}{% endsection %}',
         lambda: {
             "rows": [
@@ -319,7 +321,7 @@ RECORD_LIST_STATES = {
     # match inside a word, a snippet long enough to be cut at its second
     # line, and record text that is not HQ's words.
     "snippets": Example(
-        '{% section "Example results" count=3 %}{% include "partials/_record_list.html" %}{% endsection %}',
+        '{% section "Example results" counts=rows %}{% include "partials/_record_list.html" %}{% endsection %}',
         lambda: {
             "rows": [
                 ListRow(
@@ -930,7 +932,7 @@ WORK_QUEUE_STATES = {
     # Under a section's heading, the queue's one Refresh at its end, beside
     # what the heading says, where no row draws its own.
     "refresh": Example(
-        '{% section "Example" count=2 %}{% include "partials/_work_queue.html" %}'
+        '{% section "Example" counts=items %}{% include "partials/_work_queue.html" %}'
         '{% aside %}{% include "partials/_work_queue.html#refresh" %}{% endsection %}',
         lambda: {
             "items": _problems("Example certificate expires soon", "Example backup is late"),

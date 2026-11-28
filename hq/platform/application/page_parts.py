@@ -6,7 +6,7 @@ an extension builds the same part. ``section``'s rules say what each part
 carries.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sized
 from dataclasses import field
 from datetime import date
 from typing import Any, Literal, get_args
@@ -22,6 +22,7 @@ lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
 from .tone import Tone
+lazy from .ui import counted
 
 # The arrow that ends a link onward, written inside its last word's box as
 # breakable writes a mark, so a wrapped label never leaves it alone on a line.
@@ -66,7 +67,8 @@ class SectionPart:
     """
 
     heading: str = field(default="", doc="Plain words; with none, the moment it names is the heading.")
-    count: int | str | None = field(default=None, doc="How many things it holds, beside the heading.")
+    counts: Sized | None = field(default=None, doc="What it holds, whose number stands beside the heading.")
+    noun: str = field(default="", doc="What it counts, where the number alone would not say (3 images).")
     lede: str = field(default="", doc="A line under the heading.")
     aside: str = field(default="", doc="A line, a link or a control beside the heading.")
     empty: str = field(default="", doc="With no body, what is missing.")
@@ -95,6 +97,12 @@ class SectionPart:
     )
 
     def __post_init__(self) -> None:
+        if self.counts is not None and (isinstance(self.counts, str) or not isinstance(self.counts, Sized)):
+            raise ValueError(
+                f"A section counts what it holds: give {self.heading!r} the rows, never {type(self.counts).__name__}."
+            )
+        if self.noun and self.counts is None:
+            raise ValueError("A section's noun says what it counts, and it counts nothing.")
         if self.head not in HEADS:
             raise ValueError("A section's head stands above or inside its frame, or where the stylesheet puts it.")
         if not strip_tags(self.heading).strip() and self.moment is None:
@@ -113,6 +121,14 @@ class SectionPart:
             raise ValueError("A section's when is the form of the moment it names, and it names none.")
         if not TOP_LEVEL <= self.level <= LAST_LEVEL:
             raise ValueError(f"A section's heading is h{TOP_LEVEL} to h{LAST_LEVEL}.")
+
+    @property
+    def count(self) -> int | str | None:
+        """The number beside its heading, in its noun's words when it has one."""
+
+        if self.counts is None:
+            return None
+        return counted(len(self.counts), self.noun) if self.noun else len(self.counts)
 
     @property
     def heading_id(self) -> str:

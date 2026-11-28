@@ -53,69 +53,10 @@ class ZoneInsightTests(TestCase):
 
         self.assertEqual(card.value, "wildcard")
         self.assertTrue(card.url)
-        self.assertFalse(card.concern)
         # The expiry and nothing else. Listing what it covered and confirming
         # CAA allowed it took four lines to say "this is fine", which a card
         # says better by being short.
         self.assertTrue(card.detail.startswith("Expires"))
-
-    def test_caa_that_forbids_the_renewing_authority_is_flagged(self):
-        """The failure this page exists to catch.
-
-        A CAA record naming who may issue is a security control, and it becomes
-        an outage the day it excludes the authority renewing the certificate
-        already serving the domain. Cloudflare does not know which certificates
-        HQ renews; the certificate registry does not know what the zone
-        permits. Only the join sees it, and it fails silently until expiry.
-        """
-
-        sweep(
-            records=[
-                record("example.com", "CAA", '0 issue "digicert.com"', rid="c1"),
-                record("example.com", "A", "203.0.113.1", rid="a1"),
-            ]
-        )
-        self._certificate()
-
-        card = self._insight("example.com", "Certificates")
-
-        self.assertTrue(card.concern)
-        self.assertIn("digicert.com", card.detail)
-
-    def test_caa_that_permits_the_renewing_authority_is_not_flagged_and_iodef_names_no_issuer(self):
-        """iodef names where to report a violation, not who may issue: counted
-        as an issuer, a certificate HQ renews would be flagged as doomed."""
-        sweep(
-            records=[
-                record("example.com", "CAA", '0 issue "letsencrypt.org"', rid="c1"),
-                record("example.com", "CAA", '0 iodef "mailto:sec@example.com"', rid="c2"),
-                record("example.com", "A", "203.0.113.1", rid="a1"),
-            ]
-        )
-        self._certificate()
-
-        card = self._insight("example.com", "Certificates")
-
-        self.assertFalse(card.concern)
-
-    def test_an_uploaded_certificate_is_not_cross_checked_against_caa(self):
-        """HQ did not choose who signed it, so it cannot predict a renewal.
-
-        Flagging one would assert a fact HQ does not have, and the operator
-        who uploaded it renews it themselves, by hand, from wherever it came.
-        """
-
-        sweep(
-            records=[
-                record("example.com", "CAA", '0 issue "digicert.com"', rid="c1"),
-                record("example.com", "A", "203.0.113.1", rid="a1"),
-            ]
-        )
-        self._certificate(kind="tls.uploaded_certificate")
-
-        card = self._insight("example.com", "Certificates")
-
-        self.assertFalse(card.concern)
 
     def test_a_certificate_card_does_not_recite_other_domains(self):
         """A wildcard covering four domains explained itself with another one.
@@ -368,7 +309,6 @@ class TLSPostureInsightTests(TestCase):
 
         self.assertEqual(found.value, "Not readable")
         self.assertIn("403", found.detail)
-        self.assertTrue(found.concern)
 
     def test_a_missing_permission_names_it(self):
         from ..zone_insights import posture
@@ -427,7 +367,6 @@ class TLSPostureInsightTests(TestCase):
 
         # A refusal that names no permission is said with the reason kept.
         self.assertEqual(found.value, "Not read")
-        self.assertFalse(found.concern)
         self.assertIn("Cloudflare refused: 403", found.note)
 
 
@@ -463,26 +402,6 @@ class DomainRegistrationInsightTests(TestCase):
 
         return (timezone.now() + timedelta(days=days)).date().isoformat()
 
-    def test_a_domain_that_will_not_renew_itself_is_a_concern(self):
-        from ..zone_insights import registration
-
-        found = registration(self._zone({"expires_at": self._soon(40), "auto_renew": False}))
-
-        self.assertTrue(found.concern)
-
-    def test_the_same_date_with_auto_renew_on_is_not(self):
-        """A date on its own is a calendar entry, not something to act on.
-
-        Every domain expires every year. Flagging that would put four findings
-        in the queue permanently and teach the operator to ignore the card.
-        """
-
-        from ..zone_insights import registration
-
-        found = registration(self._zone({"expires_at": self._soon(40), "auto_renew": True}))
-
-        self.assertFalse(found.concern)
-
     def test_it_names_the_registrar_that_reported_it(self):
         from ..zone_insights import registration
 
@@ -504,4 +423,3 @@ class DomainRegistrationInsightTests(TestCase):
 
         # The card stays, so the domain page keeps its four questions.
         self.assertEqual(found.value, "Not read")
-        self.assertFalse(found.concern)

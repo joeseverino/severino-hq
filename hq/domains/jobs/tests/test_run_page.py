@@ -98,10 +98,6 @@ class ApprovedRunPageTests(TestCase):
         self.assertEqual(approving.url, entry)
         # The approval's line names the person who decided it, alone.
         self.assertEqual((approving.who.actor, approving.who.approved_by), (APPROVER, ""))
-        # Its heading counts every row of history the table draws.
-        drawn = [line for event in events.lines for line in event.lines if line.rest is None]
-        self.assertEqual(events.count, len(drawn))
-        self.assertGreater(events.count, len(events.lines))
 
 
 class RunHereTests(TestCase):

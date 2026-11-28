@@ -9,6 +9,7 @@ every side already carries it, and storing the tie again would make two answers.
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -19,11 +20,10 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
-lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import EntityLink, entity_link, kind_label
-from .moments import when
+from .moments import Span, when
 from .published_sites import projects_by_hostname
 from .tables import Cell, DataTable, Row, TableColumn
 from .tone import Tone
@@ -39,10 +39,10 @@ lazy from .npm_sections import access
 lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
-lazy from .paths import hq_path
 lazy from .projects import last_push
 lazy from .reach import network_of
 lazy from .record_timeline import record_timeline
+lazy from .request_path import request_path
 lazy from .security import Capability, Principal
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
@@ -102,10 +102,10 @@ class ServiceSection:
             raise ValueError("ServiceSection actions holds one entry for each record.")
 
     @property
-    def count(self) -> int:
-        """How many rows it holds."""
+    def things(self) -> tuple[Any, ...]:
+        """What its rows show, which its heading counts."""
 
-        return self.groups[0].count if self.history else len(self.records)
+        return self.groups[0].things if self.history else self.records
 
     @property
     def groups(self) -> tuple[HistoryGroup, ...]:
@@ -148,7 +148,7 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
     found = []
     for resolve in SECTIONS:
         section = resolve(service, project)
-        if section is not None and section.count:
+        if section is not None and section.things:
             found.append(section)
     return tuple(found)
 
@@ -257,7 +257,7 @@ def _run_cells(run: WorkRun, *, shows: bool) -> tuple[Cell, ...]:
     return (
         Cell(run.word, tone=run.tone),
         Cell(when(run.created_at), muted=True),
-        Cell(str(seconds(run.duration)) if run.duration is not None else ""),
+        Cell(Span(timedelta(seconds=run.duration)) if run.duration is not None else ""),
         Cell(run.note),
         Cell(run.by.words if shows else ""),
     )
@@ -301,7 +301,7 @@ def _traffic(service) -> SummaryItem | None:
     # is the best number available and still not a count.
     basis = "counted" if interval <= 1 else f"sampled 1 in {interval}"
     return SummaryItem(
-        dotted("Traffic", f"{HOST_TRAFFIC_DAYS} days"),
+        dotted("Traffic", Span(timedelta(days=HOST_TRAFFIC_DAYS))),
         counted(measured["pageviews"], "pageview"),
         detail=lines(counted(measured["visits"], "visit"), basis),
         icon="eye",
@@ -408,15 +408,11 @@ def _where(path) -> SummaryItem:
     if end is not None and end.step in ("served", "external", "origin", "hq"):
         return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, lines(end.detail))
     if path.machine:
-        container = next(
-            (hop.name for route in path.routes for hop in route.hops if hop.step == "container"),
-            "",
-        )
         return SummaryItem(
             "Where it runs",
             path.machine,
             entity_link("machine", path.machine),
-            _container_detail(path.machine, container),
+            _container_detail(path.machine, path.answers.container),
         )
     return SummaryItem("Where it runs", MISSING, detail=lines(path.gaps[0] if path.gaps else ""))
 
@@ -664,7 +660,7 @@ _HEALTH_READERS: dict[str, Callable[[Any, int], tuple[str, Tone] | None]] = {
 def routes_for(service, request) -> tuple:
     """The routes the page draws: the walked ones, except that on HQ's own name,
     viewed through that very name, the first is the route this request took,
-    each hop joined to what the request showed (``paths.hq_path``).
+    each hop joined to what the request showed (``request_path.request_path``).
 
     Only then: a request for another name traveled a different path and proves
     nothing about this one. The evidence itself is the connection page's.
@@ -674,8 +670,8 @@ def routes_for(service, request) -> tuple:
     asked = normalized_hostname(split_host_port(request.get_host())[0])
     if asked != service.hostname or not routes:
         return routes
-    walked = hq_path(request)
-    if walked is None or walked.primary is None:
+    walked = request_path(request).path
+    if walked.primary is None:
         return routes
     return (walked.primary, *routes[1:])
 

@@ -99,9 +99,12 @@ Rules:
   subject it could hide something about, and a path hop that depends on it says
   "<part> not read: missing <permissions>". The sweep's result (`kinds`) uses
   the same words, and `Not connected` for a kind no connection reads.
-- **Join keys are declared.** `hostnames`, `addresses` and `containers` are how
-  a reading attaches to a machine, a service, a zone or a container. Nothing
-  else parses records to join them.
+- **Join keys are declared.** `hostnames`, `machines`, `addresses` and
+  `containers` are how a reading attaches to a machine, a service, a zone or a
+  container. Nothing else parses records to join them. `hostnames` are DNS
+  names and `machines` machine names, typed apart as a Kubernetes kind and
+  name are: a reading about the DNS name `homebox` never joins the machine
+  `homebox`, nor the other way round.
 - **A reading says what it is to its subject.** `relation` is a short
   present-tense phrase shown beside the record's title: "Served by Pages
   project", "Behind Access". `address_relation` replaces it when the record
@@ -338,6 +341,13 @@ It says since when, for which packages, and when the restart is scheduled.
 Its step schedules the restart with `shutdown -r 03:00`, or, when one is
 scheduled, cancels it with `shutdown -c`.
 
+`host.rehearsal` is what every page cost in the last release's rehearsal on a
+copy of production's data (`SEVERINO_REHEARSAL_PAGES`): one record naming the
+release's commit, with each page's status, queries, records and HTML bytes.
+Root keeps the walk's document for itself, and the launcher gives each pass a
+copy once a rehearsal has written one. A release's snapshot
+(`release_snapshots`) keeps the pages when the record names that release.
+
 ## Facts about a subject
 
 `hq.platform.application.facts` is the join engine. Every page that attaches a
@@ -347,7 +357,7 @@ reading to a subject calls it; nothing else parses a record to join it.
 from hq.platform.application.facts import Subject, readings, inventory_about
 
 subject = Subject.of(hostnames=("app.example.com",))  # a service
-subject = Subject.of(hostnames=names, addresses=addrs)  # a machine
+subject = Subject.of(machines=names, addresses=addrs)  # a machine (Machine.subject)
 subject = Subject.of(zones=("example.com",))  # a domain: every name under it
 
 index = readings()  # every connected reading, indexed once per projection
@@ -527,9 +537,9 @@ answer as the machine page and the services list.
 Nothing in the topology names a provider to draw its edges. They follow from
 the declarations:
 
-- A reading joins its subject through the `hostnames`, `addresses`,
-  `containers` and `keys` its spec declares. A machine's keys are its tailnet
-  device's lock key (`Machine.subject`). The edge comes from the connection that read
+- A reading joins its subject through the `hostnames`, `machines`,
+  `addresses`, `containers` and `keys` its spec declares. A machine's keys are
+  its names, its addresses and its tailnet device's lock key (`Machine.subject`). The edge comes from the connection that read
   it, labeled with the reading's `relation` and carrying its kind, its age and
   each record as a linked entity; it exists only while the reading does. A
   tailnet device is a subject by its addresses too. A reading HQ takes itself
@@ -558,7 +568,12 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS`
+a machine, the machine "Serves" it, from one edge. Where a name runs is where
+its path lands (`ServicePath.answers`): the last address a proxy forwards to,
+placed by `whereabouts.locate`, else the machine the walk ends on.
+`service_list.served_from` groups the listed services by that machine and
+container, and the runs-on edges, a machine's and a container's Serves and the
+machine list read that one grouping. `topology_model.RELATIONS`
 states each structural edge kind's phrase, inverse and rank once. A reading
 edge takes its phrase from the reading's `relation` and its rank from its facet
 (`READING_RANKS`). So what serves a name comes first, and an overlay with no

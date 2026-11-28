@@ -22,9 +22,6 @@ const (
 	CheckUnverified = 3
 )
 
-// DriftUnit runs `hq-host verify` daily.
-const DriftUnit = "severino-hq-script-drift.service"
-
 // Checker is the deploy host's half of a preflight: run there by the
 // operator's own account from a build of the release being checked, so what
 // is checked is what that release needs. Read-only: it changes nothing, and

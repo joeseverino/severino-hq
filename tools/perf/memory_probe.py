@@ -16,19 +16,17 @@ import types
 lazy import asyncio
 lazy import json
 lazy from pathlib import Path
-lazy from urllib.parse import urlsplit
 
 lazy from django.conf import settings
 
+# Loaded before the count; its own imports are lazy, so what HQ loads stays counted.
+from hq.platform.core import redirects
 lazy import hq.config.asgi as served
 
 BOOT = "boot"
 PASS = "pass"  # noqa: S105 - a phase's name, no credential
 # What a server answers once it is ready to serve, which the count of boot ends on.
 READY = "/health/ready/"
-REDIRECTS = {301, 302, 303, 307, 308}
-# More than the longest chain of redirects within HQ a navigation entry takes.
-HOPS = 5
 # Each path boot never takes, by the modules that serve it: a sign-in through the OIDC provider,
 # an agent's MCP call, and a call HQ makes out of the process.
 AFTER = {
@@ -127,23 +125,15 @@ async def ask(application, page: str, cookie: str) -> tuple[int, str]:
     return start["status"], headers.get(b"location", b"").decode()
 
 
-async def landing(application, page: str, cookie: str) -> dict[str, int | str]:
-    """The status of the page ``page`` lands on, each redirect within HQ followed, and the
-    address of a redirect left unfollowed, or nothing."""
+def walk(application, pages: list[str], cookie: str) -> dict[str, dict[str, int | str]]:
+    """The status of the page each of ``pages`` lands on, and the address of a redirect left
+    unfollowed, or nothing."""
 
-    for _ in range(HOPS):
-        answer, location = await ask(application, page, cookie)
-        if answer not in REDIRECTS:
-            return {"status": answer, "to": ""}
-        to = urlsplit(location)
-        if to.scheme or to.netloc or not to.path.startswith("/"):
-            break
-        page = to.path + (f"?{to.query}" if to.query else "")
-    return {"status": answer, "to": location}
+    def asked(at: str) -> tuple[int, str]:
+        return asyncio.run(ask(application, at, cookie))
 
-
-async def walk(application, pages: list[str], cookie: str) -> dict[str, dict[str, int | str]]:
-    return {page: await landing(application, page, cookie) for page in pages}
+    landed = {page: redirects.follow(asked, page, lambda answer: answer) for page in pages}
+    return {page: {"status": answer[0], "to": to} for page, (_, answer, to) in landed.items()}
 
 
 def _eager(*_: object) -> bool:
@@ -167,8 +157,8 @@ def take(path: str) -> None:
 def timed(paths: list[str]) -> None:
     pages = os.environ["MEMORY_PAGES"].split()
     session = os.environ["MEMORY_SESSION"]
-    asyncio.run(walk(served.application, [READY], ""))
-    asyncio.run(walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}"))
+    walk(served.application, [READY], "")
+    walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}")
     for path in paths:
         print(f"{MARK}{path}", file=sys.stderr, flush=True)
         take(path)
@@ -182,10 +172,10 @@ def main(out: str) -> None:
     ledger = Ledger()
     ledger.install()
     tracemalloc.start()
-    ready = asyncio.run(walk(served.application, [READY], ""))
+    ready = walk(served.application, [READY], "")
     boot = tracemalloc.get_traced_memory()[0]
     ledger.current = PASS
-    landed = asyncio.run(walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}"))
+    landed = walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}")
     after = tracemalloc.get_traced_memory()[0]
     taken = {}
     for path in paths:

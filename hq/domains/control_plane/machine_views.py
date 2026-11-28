@@ -76,7 +76,6 @@ class MachineListView(RecordListMixin, TemplateView):
         "running",
         "containers_visible",
         "hostnames",
-        "runs_hq",
         "presence.online",
         "presence.last_seen",
     )
@@ -119,10 +118,7 @@ def _machine_cells(item: dict) -> tuple[Cell, ...]:
             if item["containers_visible"]
             else Cell("Not visible", muted=True, title="No connection reads containers.")
         )
-    serves = (
-        *((Cell(HQ_LABEL),) if item["runs_hq"] else ()),
-        *(Cell.of(entity_link("service", hostname)) for hostname in item["hostnames"]),
-    )
+    serves = tuple(Cell.of(entity_link("service", hostname)) for hostname in item["hostnames"])
     presence = item.get("presence") or {}
     since = moment(presence.get("last_seen")) if presence and not presence.get("online") else None
     return (

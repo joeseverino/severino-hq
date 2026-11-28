@@ -94,11 +94,13 @@ class ChangePreview:
         return (*self.rows, *(row for group in self.groups for row in group.named))
 
     @property
-    def moves(self) -> int:
-        """How many things a reader sees move: each value apart from any
-        record, and each record that changes as one."""
+    def moves(self) -> tuple[Any, ...] | None:
+        """The things a reader sees move: each value apart from any record,
+        and each record that changes as one; None for a diff, which counts none."""
 
-        return len(self.rows) + sum(1 for group in self.groups if group.changed)
+        if not self.rows and not self.groups:
+            return None
+        return (*self.rows, *(group for group in self.groups if group.changed))
 
     @property
     def unchanged(self) -> tuple[str, ...]:

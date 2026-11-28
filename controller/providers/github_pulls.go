@@ -26,8 +26,8 @@ var githubPullStatesRead = githubapi.AppPermissions{
 }
 
 // githubPullStatesQuery asks for the same page of open pull requests the REST
-// listing reads, newest first. A check of GitHub's own dynamic runs is not
-// the repository's, so each check run names its run's event.
+// listing reads, newest first. A check of a run githubAside sets apart is
+// not the pull request's, so each check run names its run's event and title.
 const githubPullStatesQuery = `query($owner: String!, $name: String!, $pulls: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequests(states: OPEN, first: $pulls, orderBy: {field: CREATED_AT, direction: DESC}) {
@@ -35,7 +35,7 @@ const githubPullStatesQuery = `query($owner: String!, $name: String!, $pulls: In
         number mergeStateStatus reviewDecision
         statusCheckRollup { contexts(first: 100) { nodes {
           __typename
-          ... on CheckRun { name status conclusion startedAt completedAt url checkSuite { workflowRun { event } } }
+          ... on CheckRun { name status conclusion startedAt completedAt url checkSuite { workflowRun { event displayTitle } } }
           ... on StatusContext { context state createdAt targetUrl }
         } } }
       }
@@ -64,7 +64,8 @@ type githubRollupContext struct {
 	URL         string `json:"url"`
 	CheckSuite  struct {
 		WorkflowRun *struct {
-			Event string `json:"event"`
+			Event        string `json:"event"`
+			DisplayTitle string `json:"displayTitle"`
 		} `json:"workflowRun"`
 	} `json:"checkSuite"`
 	Context   string `json:"context"`
@@ -90,7 +91,7 @@ func (g *githubRepository) pullStates(ctx context.Context, pulls []GitHubOpenPul
 		}
 		pulls[i].MergeableState, pulls[i].ReviewState = strings.ToLower(state.MergeStateStatus), strings.ToLower(state.ReviewDecision)
 		if state.StatusCheckRollup != nil {
-			pulls[i].CheckRuns = rollupChecks(state.StatusCheckRollup.Contexts.Nodes)
+			pulls[i].CheckRuns = rollupChecks(state.StatusCheckRollup.Contexts.Nodes, pulls[i].Head)
 		}
 	}
 }
@@ -132,13 +133,13 @@ func (g *githubRepository) readPullStates(ctx context.Context) (map[int]githubPu
 // rollupChecks is each check as its last run stands, by name in the order
 // each first appears: a check run in GitHub's words, lower-cased, and a
 // commit status completed once it succeeded or failed, an error a failure.
-func rollupChecks(contexts []githubRollupContext) []GitHubCheckRun {
+func rollupChecks(contexts []githubRollupContext, head string) []GitHubCheckRun {
 	latest, started, order := map[string]GitHubCheckRun{}, map[string]string{}, []string{}
 	for _, context := range contexts {
 		check := GitHubCheckRun{}
 		switch context.Typename {
 		case "CheckRun":
-			if run := context.CheckSuite.WorkflowRun; run != nil && run.Event == "dynamic" {
+			if run := context.CheckSuite.WorkflowRun; run != nil && githubAside(githubapi.WorkflowRun{Event: run.Event, DisplayTitle: run.DisplayTitle, HeadSha: head}) {
 				continue
 			}
 			check = GitHubCheckRun{

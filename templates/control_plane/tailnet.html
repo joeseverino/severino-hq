@@ -17,15 +17,15 @@
     {% endfacts %}
   {% endif %}{% endsection %}
 
-  {% section "Grants" count=tailnet.grants|length %}
+  {% section "Grants" counts=tailnet.grants %}
   {% if tailnet.grants %}
   {% data_table tables.grants %}
   {% endif %}
   {% empty %}No grants.
   {% endsection %}
 
-  {% section "Groups and tags" count=tailnet.group_rows %}
-  {% if tailnet.group_rows %}
+  {% section "Groups and tags" counts=tables.groups.things %}
+  {% if tables.groups.rows %}
   {% data_table tables.groups %}
   {% endif %}
   {% empty %}No groups or tags.
@@ -42,7 +42,7 @@
   broken when it is simply unused.
   {% endcomment %}
   {% if tailnet.policy.services %}
-    {% section "Services" count=tailnet.policy.services|length %}
+    {% section "Services" counts=tailnet.policy.services %}
     {% data_table tables.services %}
     {% endsection %}
   {% endif %}
@@ -54,13 +54,13 @@
     person is asked to re-authenticate before the shell opens; "accept" means
     they are not.
     {% endcomment %}
-    {% section "Shell access" count=tailnet.ssh_rules|length %}
+    {% section "Shell access" counts=tailnet.ssh_rules %}
     {% data_table tables.ssh %}
     {% endsection %}
   {% endif %}
 
   {% if tailnet.policy.app_connectors %}
-    {% section "App connectors" count=tailnet.policy.app_connectors|length %}
+    {% section "App connectors" counts=tailnet.policy.app_connectors %}
     {% data_table tables.connectors %}
     {% endsection %}
   {% endif %}

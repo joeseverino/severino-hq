@@ -22,7 +22,14 @@ from .test_held_tasks import CreatedTask, Tasks, _task
 
 WORKER = "example-worker"
 LOGS = "example.service_logs"
-TASK = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted.", "warnings": ""}
+TASK = {
+    "host": APP,
+    "task": "Restart the service",
+    "outcome": "changed",
+    "message": "Restarted.",
+    "warnings": [],
+    "data": "",
+}
 
 
 @override_settings(SEVERINO_SITE_HOST="hq.example.com")
@@ -65,7 +72,7 @@ class AutomationLoopTests(TestCase):
         waiting = self._get(created.task_id)
         self._claimed()
         running = self._get(created.task_id)
-        run_ended(str(operation.pk), WORKER, events=[TASK], success=True, message="Read.")
+        run_ended(str(operation.pk), WORKER, events=[TASK], message="Read.")
         done = self._get(created.task_id)
 
         self.assertIsInstance(created, CreatedTask)
@@ -84,7 +91,7 @@ class AutomationLoopTests(TestCase):
     def test_a_run_that_fails_completes_as_a_tool_error(self):
         created = self._read_logs()
         operation = self._claimed()
-        run_ended(str(operation.pk), WORKER, success=False, message="The service is not installed.")
+        run_ended(str(operation.pk), WORKER, ending="errored", message="The service is not installed.")
         done = self._get(created.task_id)
 
         # The run failed, not the protocol: completed, with the tool's error.
@@ -156,7 +163,7 @@ class AutomationLoopTests(TestCase):
         approve(ApproveCommand(created.task_id), principal=web_principal(operator()))
         claimed = claim_next_operation(WORKER, capabilities=(("automation.operation", "run"),))
         operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
-        run_ended(str(operation.pk), WORKER, events=[TASK], success=True, message="Restarted.")
+        run_ended(str(operation.pk), WORKER, events=[TASK], message="Restarted.")
 
         async def read(client):
             done = await _task(client, "tasks/get", created.task_id)

@@ -128,7 +128,17 @@ class SuccessTests(PassTestCase):
         (event,) = bridge.events
         self.assertEqual(event["outcome"], "ok")
         self.assertIn("Not all paths examined", event["message"])
-        self.assertIn("Skipped '/srv/example/closed/inner' path", event["warnings"])
+        (warning,) = event["warnings"]
+        self.assertIn("Skipped '/srv/example/closed/inner' path", warning)
+
+    def test_a_task_that_said_data_reports_it_as_json_apart_from_its_words(self):
+        bridge = fakes.Bridge(fakes.pending())
+
+        self.work(bridge, fakes.Runner(fakes.SAID_DATA))
+
+        said = [json.loads(event["data"]) for event in bridge.events]
+        self.assertEqual(said, [event["event_data"]["res"]["msg"] for event in fakes.SAID_DATA])
+        self.assertEqual([event["message"] for event in bridge.events], ["", ""])
 
     def test_ansibles_own_check_of_a_roles_arguments_is_reported_only_when_it_fails(self):
         bridge = fakes.Bridge(fakes.pending())
@@ -181,7 +191,7 @@ class SuccessTests(PassTestCase):
                 self.work(bridge, runner)
 
                 self.assertEqual(runner.runs, [])
-                self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "Unrunnable")
+                self.assertEqual(self.only_report(bridge)["outcome"]["ending"], "refused")
 
     def test_nothing_waiting_runs_nothing_and_reports_nothing(self):
         bridge = fakes.Bridge()
@@ -203,7 +213,7 @@ class ResultTests(PassTestCase):
 
         report = self.only_report(bridge)
         self.assertTrue(report["success"])
-        self.assertEqual(report["message"], fakes.STATED["event_data"]["artifact_data"]["result"])
+        self.assertEqual(report["outcome"]["message"], fakes.STATED["event_data"]["artifact_data"]["result"])
 
     def test_a_result_set_machine_by_machine_names_each_machine(self):
         stated = json.loads(json.dumps(fakes.STATED))
@@ -212,7 +222,7 @@ class ResultTests(PassTestCase):
 
         self.work(bridge, fakes.Runner([stated]))
 
-        self.assertEqual(self.only_report(bridge)["message"], "example-a: One; example-b: Two")
+        self.assertEqual(self.only_report(bridge)["outcome"]["message"], "example-a: One; example-b: Two")
 
     def test_a_secret_in_a_stated_result_never_reaches_the_report(self):
         stated = json.loads(json.dumps(fakes.STATED))
@@ -221,7 +231,7 @@ class ResultTests(PassTestCase):
 
         self.work(bridge, fakes.Runner([stated]))
 
-        self.assertNotIn("PRIVATE KEY", self.only_report(bridge)["message"])
+        self.assertNotIn("PRIVATE KEY", self.only_report(bridge)["outcome"]["message"])
 
 
 class StatedTests(PassTestCase):
@@ -360,7 +370,7 @@ class StatedTests(PassTestCase):
 
 
 class FailedRunTests(PassTestCase):
-    def test_a_failed_task_reports_failure_and_names_the_task(self):
+    def test_a_failed_task_reports_failure_and_names_the_task_and_its_machine(self):
         bridge = fakes.Bridge(fakes.pending())
 
         self.work(bridge, fakes.Runner(fakes.RECORDED, status="failed"))
@@ -368,7 +378,10 @@ class FailedRunTests(PassTestCase):
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
         self.assertIn(("localhost", "Fail", "failed"), [(e["host"], e["task"], e["outcome"]) for e in bridge.events])
-        self.assertEqual(report["conditions"][0]["type"], "Degraded")
+        self.assertEqual(
+            {key: report["outcome"][key] for key in ("ending", "task", "host")},
+            {"ending": "task_failed", "task": "Fail", "host": "localhost"},
+        )
 
 
 class StoppedRunTests(PassTestCase):
@@ -389,19 +402,20 @@ class StoppedRunTests(PassTestCase):
                 report = bridge.reports[-1]
                 self.assertFalse(report["success"])
                 self.assertEqual(bridge.events, [])
-                self.assertIn(said, report["message"])
-                self.assertIn(where, report["message"])
-                self.assertNotIn("/srv/example/project", report["message"])
-                self.assertNotIn("\x1b", report["message"])
-                self.assertNotIn("[ERROR]", report["message"])
-                self.assertEqual(report["conditions"][0]["message"], report["message"])
+                self.assertEqual(report["outcome"]["ending"], "errored")
+                message = report["outcome"]["message"]
+                self.assertIn(said, message)
+                self.assertIn(where, message)
+                self.assertNotIn("/srv/example/project", message)
+                self.assertNotIn("\x1b", message)
+                self.assertNotIn("[ERROR]", message)
 
     def test_a_secret_parameter_in_ansible_s_error_is_struck(self):
         bridge = fakes.Bridge(fakes.pending(parameters={"api_token": "example.absent.compose_restart"}))
 
         self.work(bridge, fakes.Runner(fakes.STOPPED["missing_collection"], status="failed"))
 
-        message = bridge.reports[-1]["message"]
+        message = bridge.reports[-1]["outcome"]["message"]
         self.assertNotIn("example.absent.compose_restart", message)
         self.assertIn("[redacted]", message)
 
@@ -411,7 +425,8 @@ class StoppedRunTests(PassTestCase):
         self.work(bridge, fakes.Runner([*fakes.STOPPED["broken_role"], *fakes.RECORDED], status="failed"))
 
         report = bridge.reports[-1]
-        self.assertNotIn("YAML parsing failed", report["message"])
+        self.assertEqual(report["outcome"]["ending"], "task_failed")
+        self.assertNotIn("YAML parsing failed", report["outcome"]["message"])
         self.assertIn("failed", [event["outcome"] for event in bridge.events])
 
     def test_a_place_outside_the_project_is_never_said(self):
@@ -422,7 +437,7 @@ class StoppedRunTests(PassTestCase):
 
         self.work(bridge, fakes.Runner(moved, status="failed"))
 
-        message = bridge.reports[-1]["message"]
+        message = bridge.reports[-1]["outcome"]["message"]
         self.assertIn("example.absent.compose_restart", message)
         self.assertNotIn("elsewhere", message)
 
@@ -438,8 +453,7 @@ class TimeoutTests(PassTestCase):
         self.assertEqual(run.timeout_seconds, 30)
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
-        self.assertEqual(report["conditions"][0]["reason"], "TimedOut")
-        self.assertIn("30 second", report["message"])
+        self.assertEqual(report["outcome"]["ending"], "timed_out")
         self.assertEqual(len(bridge.events), 2)
 
 
@@ -474,7 +488,7 @@ class LeaseTests(PassTestCase):
 
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
-        self.assertEqual(report["conditions"][0]["reason"], "Held")
+        self.assertEqual(report["outcome"]["ending"], "paused")
         self.assertEqual(len(bridge.events), 1)
 
     def test_a_cancelled_run_stops_at_its_next_renewal(self):
@@ -486,7 +500,7 @@ class LeaseTests(PassTestCase):
 
         self.work(bridge, fakes.Runner(fakes.OUTCOMES, between=later))
 
-        self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "Cancelled")
+        self.assertEqual(self.only_report(bridge)["outcome"]["ending"], "cancelled")
 
 
 class InvalidClaimTests(PassTestCase):
@@ -499,7 +513,7 @@ class InvalidClaimTests(PassTestCase):
         self.assertEqual(runner.runs, [])
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
-        self.assertEqual(report["conditions"][0]["reason"], "RevisionMismatch")
+        self.assertEqual(report["outcome"]["ending"], "refused")
         self.assertEqual(bridge.progress, [])
 
     def test_a_claim_without_its_run_input_is_refused_before_it_runs(self):
@@ -511,7 +525,7 @@ class InvalidClaimTests(PassTestCase):
         self.work(bridge, runner)
 
         self.assertEqual(runner.runs, [])
-        self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "Unrunnable")
+        self.assertEqual(self.only_report(bridge)["outcome"]["ending"], "refused")
 
     def test_a_procedure_not_installed_is_refused_before_it_runs(self):
         answer = fakes.pending()
@@ -522,7 +536,7 @@ class InvalidClaimTests(PassTestCase):
         self.work(bridge, runner)
 
         self.assertEqual(runner.runs, [])
-        self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "NotInstalled")
+        self.assertEqual(self.only_report(bridge)["outcome"]["ending"], "refused")
 
 
 class LoginTests(PassTestCase):
@@ -574,14 +588,14 @@ class LoginTests(PassTestCase):
 
         self.assertEqual(runner.runs, [])
         report = self.only_report(bridge)
-        self.assertEqual(report["conditions"][0]["reason"], "NoConnection")
-        self.assertIn("read", report["message"])
+        self.assertEqual(report["outcome"]["ending"], "refused")
+        self.assertIn("read", report["outcome"]["message"])
 
     def test_a_record_that_is_a_read_naming_a_privilege_is_refused(self):
         runs, looked, report = self.logins(effect="read")
 
         self.assertEqual((runs, looked), ([], []))
-        self.assertEqual(report["conditions"][0]["reason"], "Unrunnable")
+        self.assertEqual(report["outcome"]["ending"], "refused")
 
 
 class RedactionTests(PassTestCase):
@@ -646,7 +660,7 @@ class RestartTests(PassTestCase):
         self.assertEqual(runner.runs, [])
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
-        self.assertEqual(report["conditions"][0]["reason"], "OutcomeUnknown")
+        self.assertEqual(report["outcome"]["ending"], "unknown")
         self.assertIsNone(self.journal.read())
 
     def test_a_claim_whose_answer_was_lost_runs_once_under_the_same_attempt(self):

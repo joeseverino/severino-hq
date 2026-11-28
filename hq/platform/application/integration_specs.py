@@ -499,7 +499,13 @@ class ListSort:
 
         if not reverse:
             label, reverse = f"{label} A–Z", f"{label} Z–A"
-        return cls(name, label), cls(name[1:] if name.startswith("-") else f"-{name}", reverse)
+        return cls(name, label), cls(reversed_sort(name), reverse)
+
+
+def reversed_sort(name: str) -> str:
+    """The sort that reads ``name``'s order the other way: ``date`` and ``-date``."""
+
+    return name[1:] if name.startswith("-") else f"-{name}"
 
 
 # The values a list is narrowed by, as one choice: each value it takes and its words.

@@ -26,6 +26,7 @@ lazy from hq.platform.core.audit import prune_routine, record_operation
 lazy from hq.platform.core.database import optimize
 lazy from hq.platform.core.models import AuditLog
 
+from .moments import Span
 from .outbound_work import OutboundWork
 from .record_errors import PolicyError, RecordConflict
 from .ui import counted
@@ -48,7 +49,7 @@ def prune_audit(_progress: Any = None, *, subject: str = "", principal: Any = No
     if deleted:
         record_operation(
             "audit.prune",
-            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than {counted(days, 'day')}.",
+            f"Deleted {counted(deleted, 'routine event', 'routine events')} older than {Span(timedelta(days=days))}.",
             action=AuditLog.Action.DELETED,
             metadata={"deleted": deleted, "days": days},
         )

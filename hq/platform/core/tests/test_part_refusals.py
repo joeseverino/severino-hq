@@ -144,7 +144,7 @@ class StatusRefusalTests(SimpleTestCase):
 class SectionRefusalTests(SimpleTestCase):
     def test_a_section_written_needs_its_heading_and_a_link_to_the_rest_its_label(self):
         with self.assertRaises(TemplateSyntaxError):
-            Template("{% section count=1 %}{% endsection %}")
+            Template("{% section counts=rows %}{% endsection %}")
         with self.assertRaises(ValueError):
             render('{% section "Renewals" more_url="/example/" %}<p>Body</p>{% endsection %}')
 

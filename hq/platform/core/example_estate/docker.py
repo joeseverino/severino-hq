@@ -240,6 +240,34 @@ def _advisory(name, vulnerable, patched=""):
     }
 
 
+def _package_finding(name, severity, fixed=()):
+    return {
+        "id": f"GHSA-example-{name}",
+        "package": "openssl",
+        "installed": "3.3.2-r1",
+        "fixed": list(fixed),
+        "severity": severity,
+        "summary": f"Example package finding {name}",
+        "url": f"https://github.com/advisories/GHSA-example-{name}",
+    }
+
+
+# What OSV knows against the packages of each image that runs, and whether the
+# newest release published still holds it. forgejo's packages name a fix that
+# no release carries (a newer one, in ``advised``, clears it); jellyfin's two
+# stay in the release after it, beside its own project's advisory; and OSV
+# was asked about one package fewer than immich's publisher lists.
+PACKAGE_FINDINGS = {
+    "forgejo": ((_package_finding("forgejo-openssl", "high", ("3.3.3-r0",)), False),),
+    "jellyfin": (
+        (_package_finding("jellyfin-openssl", "critical", ("3.3.3-r0",)), True),
+        (_package_finding("jellyfin-zlib", "high"), True),
+        (_package_finding("jellyfin-musl", "medium", ("1.2.6-r0",)), True),
+    ),
+}
+UNASKED = {"immich": 1}
+
+
 # Each upgrade a card can offer: a release that fixes what runs, one still
 # affected, one that brings an advisory of its own, and a major move.
 ADVISED_NEWER = {
@@ -345,13 +373,13 @@ def _registries(newer=NEWER, advisories=None, between=None):
                 "read_at": stamp(timedelta(hours=3)),
             }
         )
-        for pin, age in releases.values():
+        for tag, (pin, age) in releases.items():
             attested.append(_attested(f"{ref.name}@{pin}", ref.name, source, age))
             checked.append(
                 {
                     "digest": f"{ref.name}@{pin}",
-                    "checked": len(PACKAGES),
-                    "findings": [],
+                    "checked": len(PACKAGES) - UNASKED.get(name, 0),
+                    "findings": [found for found, kept in PACKAGE_FINDINGS.get(name, ()) if tag == ref.tag or kept],
                     "read_at": stamp(timedelta(hours=3)),
                 }
             )

@@ -121,12 +121,12 @@
   .cell-clamp:not(.row-detail *) .line-list { display: inline; }
   .cell-clamp .tag { padding-block: 0; }
 }
-/* An identifier in a cell (a name, a host, an address, a key) wraps at the
+/* An identifier in a cell (a name, a host, an address, a key) is held whole
+   up to its column's share (base.css); one longer than that wraps at the
    breaks it is drawn with (line_breaks), and a piece between them longer
-   than its column breaks inside it: a piece of any length would otherwise
-   hold its column, and the table, past the box. So its column asks for no
-   more than a letter of it, and gives way as a column of words does. */
-.data-table > tbody > tr > * :is(code:not(.cell-whole), .token) { overflow-wrap: anywhere; }
+   than its column breaks inside it, so no piece holds its column, and the
+   table, past the box. */
+.data-table > tbody > tr > * :is(code:not(.cell-whole), .token, .whole) { overflow-wrap: anywhere; }
 /* An identifier's chip longer than a short value in a row that links its
    record (`data-chip`, table_layout), standing as a value of its own (not
    code in a sentence, base.css), is one line on its row's line, cut at its

@@ -3,7 +3,6 @@
 With ``SEVERINO_POSTURE=advanced`` each unmet check is also a finding.
 """
 
-from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
@@ -147,8 +146,9 @@ def _scope(inputs) -> Reading:
     clean pass."""
 
     scoped = {setup.provider for setup in setups() if setup.permissions}
-    pairs = tuple((group, connection) for group in inputs.groups for connection in group.connections)
-    evidence = Counter(state.evidence for _group, connection in pairs for state in connection.abilities)
+    pairs = tuple(
+        (group, connection) for group in inputs.groups for connection in group.connections if connection.abilities
+    )
 
     def having(*found: str) -> tuple:
         return tuple(pair for pair in pairs if any(state.evidence in found for state in pair[1].abilities))
@@ -158,7 +158,6 @@ def _scope(inputs) -> Reading:
 
     missing = having("missing")
     broad = tuple(pair for pair in having("coarse") if pair[1].instance.kind in scoped)
-    whole = tuple(pair for pair in having("coarse") if pair[1].instance.kind not in scoped)
     if missing or broad:
         return Reading.unmet(
             dotted(
@@ -170,22 +169,21 @@ def _scope(inputs) -> Reading:
             if missing
             else "A credential has full account access where its service offers a scoped token.",
         )
-    if not evidence:
+    if not pairs:
         return Reading.unavailable(
             "No connection reads or changes anything yet", fix="add a connection", fix_url=_setup_url()
         )
-    unchecked = evidence["undeclared"] + evidence["unverified"]
-    unknown = evidence["unknown"]
-    # Counted by connection, as every other line on the page counts.
-    keyless = sum(
-        all(state.evidence == "not_applicable" for state in connection.abilities)
-        for _group, connection in pairs
-        if connection.abilities
-    )
+    # Each connection counted once, by what its own row says of its
+    # credential (``ConnectionView.authority``), so the parts add up to them.
+    by: dict[str, list] = {}
+    for pair in pairs:
+        by.setdefault("keyless" if pair[1].keyless_use else pair[1].authority, []).append(pair)
+    whole = tuple(by.get("whole_account", ()))
+    unchecked, unknown = len(by.get("undeclared", ())), len(by.get("unknown", ()))
     said = capfirst(
         dotted(
-            f"{evidence['verified']} checked" if evidence["verified"] else "",
-            f"{keyless} need no key" if keyless else "",
+            f"{len(by['proven'])} checked" if by.get("proven") else "",
+            f"{len(by['keyless'])} need no key" if by.get("keyless") else "",
             f"nothing narrower offered for {named(whole)}" if whole else "",
             f"{unchecked} not checked" if unchecked else "",
             f"{unknown} not reported" if unknown else "",

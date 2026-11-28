@@ -376,6 +376,7 @@ class ToneTests(TestCase):
             count=ContainerCount(running=2, total=2),
             vulnerable=0,
             vulnerable_images=0,
+            vulnerable_tone="good",
             update_available=0,
             up_to_date=2,
             pinned=2,

@@ -205,15 +205,8 @@ class ZoneInsight:
     note: str = ""
     # The note's full reason, where the note says it in fewer words.
     note_title: str = ""
-    # Reserved for things that are wrong by their own definition rather than by
-    # a policy nobody declared: a leftover challenge record is garbage by any
-    # reading, and a CAA record that forbids the authority HQ renews with will
-    # fail a renewal. A permissive DMARC policy is a choice.
-    concern: bool = False
     # ``(label, links)``: entities the card names, through the link builder.
     links: tuple[tuple[str, tuple[Any, ...]], ...] = ()
-    # Shown as a notice above the records rather than as a card.
-    notice: bool = False
 
 
 # Each entry is a ``module:attribute`` taking a Zone and returning a
@@ -228,20 +221,15 @@ class ZoneInsight:
 # each import whatever they need (certificates, services) without this file
 # depending on all of it.
 #
-# What they say stays description rather than drift: HQ's credential can change
-# DNS records and nothing else, so it has no opinion on a zone's TLS posture.
-# "DMARC is monitoring only" is true and useful; flagging it would invent a
-# policy nobody declared and nothing here could enforce. The exceptions are
-# what is wrong by its own definition (``ZoneInsight.concern``).
+# What they say is description: what is wrong about a domain is a finding
+# about it (``zone_findings``), which its page draws with what to change.
 # Four cards, each answering one question: what runs here, how it is secured,
-# its mail, and whether it is still owned. A notice (left-over challenges)
-# renders above the records instead of as a card.
+# its mail, and whether it is still owned.
 ZONE_INSIGHTS: tuple[str, ...] = (
     "hq.platform.application.zone_insights:services",
     "hq.platform.application.zone_insights:security",
     "hq.platform.application.zone_insights:email",
     "hq.platform.application.zone_insights:registration",
-    "hq.platform.application.zone_insights:leftover_challenges",
 )
 
 

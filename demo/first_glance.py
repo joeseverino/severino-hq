@@ -20,6 +20,7 @@ from hq.platform.application.projection import projection_scope
 from hq.platform.application.receipts import UPDATE as RECEIPT_UPDATE, serialize_receipt
 from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.report_testing import bridged
+from hq.platform.application.run_outcome import Ending, ended_as
 from hq.platform.application.security import web_principal
 from hq.platform.core.example_estate import automation, doors, network
 from hq.platform.core.example_estate.names import iso, stamp
@@ -82,14 +83,12 @@ def _report(operation_id: str) -> None:
             operation_id,
             controller_id=automation.WORKER,
             events=[
-                {"host": host, "task": "Run the playbook", "outcome": "ok", "message": "", "warnings": ""}
+                {"host": host, "task": "Run the playbook", "outcome": "ok", "message": "", "warnings": [], "data": ""}
                 for host in run.input["hosts"]
             ],
         )
     report = ControllerReport(
-        success=True,
-        observed_generation=run.input["generation"],
-        message="Done on every machine.",
+        success=True, observed_generation=run.input["generation"], outcome=ended_as(Ending.SUCCEEDED)
     )
     with doors.controller("report"):
         report_operation(operation_id, report, controller_id=automation.WORKER)

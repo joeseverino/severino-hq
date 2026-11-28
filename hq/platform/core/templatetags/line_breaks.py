@@ -182,6 +182,9 @@ def _token(word: str, *, sole: bool) -> str:
 
 # The tags that close a word's boxes, after its last letter.
 _CLOSING = re.compile(r"(?:</span>)*$")
+# The tags a drawn value closes on, its link and bold among them: the box a
+# dot after it is held in.
+_VALUE_CLOSING = re.compile(r"(?:</(?:span|a|strong)>)*$")
 
 
 def button_words(value):
@@ -210,9 +213,23 @@ def breakable(value, mark=""):
     # Django renders it. It passes as it is: what built it held the names in
     # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
-        after = mark_safe(DOT_MARKUP) if mark == DOT_MARK else conditional_escape(mark)  # noqa: S308 - HQ's own literal markup
-        return conditional_escape(value) + after
+        if mark == DOT_MARK:
+            return dot_held(conditional_escape(value))
+        return conditional_escape(value) + conditional_escape(mark)
     return mark_safe(_drawn(str(value), mark))  # noqa: S308 - each word is escaped as it is drawn
+
+
+def dot_held(drawn, css=""):
+    """Drawn markup ending with ``{% dot %}``'s dot inside its last box, then
+    the space a line breaks at (``DOT_MARK``). ``css`` is the class the part
+    after the dot shows by, so the dot hides with it."""
+
+    mark = DOT_MARKUP.rstrip()
+    if css:
+        mark = f'<span class="{css}">{mark}</span>'
+    drawn = str(drawn)
+    at = _VALUE_CLOSING.search(drawn).start()
+    return mark_safe(f"{drawn[:at]}{mark}{drawn[at:]} ")  # noqa: S308 - markup already drawn, and HQ's own literal
 
 
 @functools.lru_cache(maxsize=4096)
@@ -221,7 +238,7 @@ def _drawn(text: str, mark: str) -> str:
     draw the same markup on every page, and a table repeats them row by row."""
 
     if mark == DOT_MARK:
-        return "".join([*_inside_last(_line(text), DOT_MARKUP.rstrip()), " "])
+        return dot_held("".join(_line(text)))
     return "".join(_marked(_line(text), mark))
 
 
@@ -239,11 +256,16 @@ def _marked(drawn: list[str], mark: str) -> list[str]:
 
     if not mark:
         return drawn
-    # Hidden from the accessibility tree: in a link it would be heard as part
-    # of the link's name. ``data-mark`` is what a link draws in its place,
-    # clear of its underline (base.css).
+    # In a link, ``data-mark`` keeps the mark's place on the line unseen and
+    # its glyph is drawn over that place, clear of the link's underline
+    # (base.css). A closing bracket ends words the name opened, so a reader
+    # hears it in the link's name; any other mark is the sentence's, or an
+    # arrow no one reads, and stays out of it.
     shown = conditional_escape(mark)
-    return _inside_last(drawn, f'<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>')
+    unheard = "" if mark[:1] in ")]" else ' aria-hidden="true"'
+    return _inside_last(
+        drawn, f'<span class="mark" data-mark="{shown}"{unheard}><span class="mark-glyph">{shown}</span></span>'
+    )
 
 
 def _inside_last(drawn: list[str], markup: str) -> list[str]:
@@ -258,6 +280,11 @@ def _inside_last(drawn: list[str], markup: str) -> list[str]:
 # A word a value ends on that a name before it holds: one word of letters,
 # perhaps with its sentence's mark ("TXT", "pulled").
 _TAIL = re.compile(r"\w*[^\W\d_]\w*[.,;:!?]?")
+# A word a value opens on that the name after it holds: one word of letters
+# ("Deployed"), and the boxes that name opens with, a token and its first
+# hyphenated part.
+_LEAD = re.compile(r"[^\W\d_]+")
+_BOXES = re.compile(r'<span class="token">(?:<span class="whole">)?')
 # A dot between two parts, ``labels.DOT`` or one typed between two spaces, so
 # a value that holds one draws it held to the part before it either way.
 _SEPARATOR = re.compile(r"\s·\s")
@@ -266,16 +293,24 @@ _SEPARATOR = re.compile(r"\s·\s")
 def _line(value, *, sole: bool | None = None) -> list[str]:
     """``value``'s words as ``breakable`` draws them, held so that no line they
     wrap onto starts with a stray: a dot between two parts (``_SEPARATOR``)
-    stays on the line of the part before it, and a word a value ends on
-    after a name stays on the name's last line. Each is held inside the box before it, since a box as wide as
-    its line leaves what follows no room there; a word a name holds stays
-    outside the parts of it a cell cuts."""
+    stays on the line of the part before it, a word a value opens on before
+    a name stays on the name's first line, and a word a value ends on after a
+    name stays on the name's last line. Each is held inside the box beside it,
+    since a box as wide as its line leaves what follows no room there; a word
+    a name holds stays outside the parts of it a cell cuts."""
 
     parts = _SEPARATOR.split(str(value))
     alone = (len(parts) == 1 and not _WORDS.search(parts[0])) if sole is None else sole
     drawn: list[str] = []
     for at, part in enumerate(parts):
         words = _words(part, sole=alone)
+        opens = len(words) >= 3 and not at and words[1] == " " and _LEAD.fullmatch(words[0]) and _BOXES.match(words[2])
+        if opens:
+            # Inside the name's first box, before the text a cell cuts there:
+            # held whole, the name could only drop to the next line and leave
+            # the word alone. The name then opens the value (`data-led`).
+            boxes = opens.group().replace('"token"', '"token" data-led', 1)
+            words = [f"{boxes}{words[0]}\xa0{words[2][opens.end() :]}", *words[3:]]
         if len(words) >= 3 and 'class="token"' in words[-3] and _TAIL.fullmatch(words[-1]) and words[-2] == " ":
             # In the token's own box, after the parts a cell cuts; in a
             # phrase whose last part is a box of its own (`.whole`), inside

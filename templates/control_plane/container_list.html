@@ -29,13 +29,13 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
   {% endfacts %}{% endcard %}
 
   {% for need in need_sections %}
-    {% section need.heading count=need.groups|length|counted:"image" lede=need.lede %}
+    {% section need.heading counts=need.groups noun="image" lede=need.lede %}
     {% data_table need.table %}
     {% aside %}{% if need.running != need.groups|length %}{% muted %}{{ need.running|counted:"container" }}{% endmuted %}{% endif %}
     {% endsection %}
   {% endfor %}
 
-  {% section "All containers" count=containers|length %}
+  {% section "All containers" counts=containers %}
   {% data_table every %}
   {% endsection %}
 {% else %}

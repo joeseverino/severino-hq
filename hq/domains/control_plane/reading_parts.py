@@ -69,7 +69,8 @@ class RefusedPart:
     kind: Annotated[str, Describe("The type the refused part belongs to.")]
     part: ReadingPart
     refusal: Annotated[str, Describe(f"How it was refused, {listed(FAILURES)}; empty when the cause is unknown.")]
-    reason: Annotated[str, Describe("The service's words for the refusal; empty for none.")] = ""
+    reason: Annotated[str, Describe("HQ's words for the refusal; empty for none.")] = ""
+    detail: Annotated[str, Describe("The cause's own text behind the reason; empty for none.")] = ""
     scope: Annotated[
         str, Describe("What it was refused on, such as a zone, a hostname or a machine; empty for all of it.")
     ] = ""
@@ -129,6 +130,7 @@ def clean_refused_parts(kind: str, reported: Iterable[Mapping[str, Any]] | None)
             "part": entry["part"],
             "refusal": entry["refusal"],
             "reason": entry["reason"][:_REASON_LENGTH],
+            "detail": entry.get("detail", "")[:_REASON_LENGTH],
             "scope": entry["scope"].strip().lower()[:_SCOPE_LENGTH],
             "connection_ref": entry["connection_ref"][:_REF_LENGTH],
         }
@@ -171,6 +173,7 @@ def refused_parts(snapshot: ProviderInventory) -> tuple[RefusedPart, ...]:
                 part=part,
                 refusal=refusal,
                 reason=str(entry.get("reason", "") or ""),
+                detail=str(entry.get("detail", "") or ""),
                 scope=str(entry.get("scope", "") or ""),
                 connection_ref=str(entry.get("connection_ref", "") or ""),
                 address=str(entry.get("address", "") or ""),

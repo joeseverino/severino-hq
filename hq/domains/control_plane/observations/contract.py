@@ -111,10 +111,13 @@ class ObservationSpec:
     # The parts it is read in, each with the subset of ``requires`` it needs,
     # where one part can be refused while the others read.
     parts: tuple[ReadingPart, ...] = ()
-    # Join keys: the hostnames and addresses a record is about, the
-    # containers it names (``container_key``), and the public keys it names,
-    # each the key of whatever holds its private half.
+    # Join keys: the DNS names and addresses a record is about, the machines
+    # it names by their own names, the containers it names (``container_key``),
+    # and the public keys it names, each the key of whatever holds its private
+    # half. A machine's name and a DNS name are different keys, so a record
+    # about one never joins the other, however alike they are spelled.
     hostnames: Callable[[Mapping[str, Any]], Iterable[str]] = _none
+    machines: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     addresses: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     containers: Callable[[Mapping[str, Any]], Iterable[str]] = _none
     keys: Callable[[Mapping[str, Any]], Iterable[str]] = _none
@@ -224,6 +227,10 @@ class ObservationSpec:
         return self.hostnames is not _none
 
     @property
+    def joins_machines(self) -> bool:
+        return self.machines is not _none
+
+    @property
     def redirects(self) -> bool:
         return self.redirects_to is not _blank
 
@@ -248,7 +255,13 @@ class ObservationSpec:
         """Whether a record can join a subject by any key: one that cannot is
         shown only on the connection that read it."""
 
-        return self.joins_hostnames or self.joins_addresses or self.containers is not _none or self.joins_keys
+        return (
+            self.joins_hostnames
+            or self.joins_machines
+            or self.joins_addresses
+            or self.containers is not _none
+            or self.joins_keys
+        )
 
     def relation_to(self, *, by_address: bool, by_container: bool = False, by_key: bool = False) -> str:
         """The phrase for a record joined by key, container, address or hostname."""

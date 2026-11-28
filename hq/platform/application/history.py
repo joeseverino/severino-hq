@@ -46,7 +46,7 @@ from .entity_links import container_link, entity_link, web_url
 from .facts import inventory_records
 from .figured import Figure
 from .labels import lower_first, plural
-from .moments import duration, epoch, moment
+from .moments import Span, epoch, moment
 from .projection import read_once
 from .quoted import Quoted
 from .routes import reverse
@@ -418,11 +418,11 @@ class HistoryGroup:
     folds: str = ""
 
     @property
-    def count(self) -> int:
-        """How many rows of history its table draws: each line and those folded
+    def things(self) -> tuple[HistoryLine, ...]:
+        """The lines its table draws as things: each line and those folded
         beneath it, never the row counting what a fold leaves out."""
 
-        return sum(line.rest is None for event in self.lines for line in event.lines)
+        return tuple(line for event in self.lines for line in event.lines if line.rest is None)
 
 
 def columns(*, hide_who: bool = False) -> tuple[TableColumn, ...]:
@@ -464,7 +464,7 @@ def table(
                     for event in group.lines
                     for line in event.lines
                 ),
-                count=group.count or None,
+                counted=True,
                 folds=group.folds,
             )
             for group in groups
@@ -510,7 +510,7 @@ def _row(line: HistoryLine, *, who: bool, folded: str, key: Any, here: str) -> R
         # The row's own text as stored, which an older release may have worded.
         said = Cell(Quoted(line.message), muted=True, role="data")
     when = (
-        Cell(Figure(f"+{duration(line.at - line.began, short=True)}", epoch(line.at)), muted=True)
+        Cell(Figure(f"+{Span(line.at - line.began)}", epoch(line.at)), muted=True)
         if line.began is not None
         else Cell(moment=line.at, muted=True)
     )

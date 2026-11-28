@@ -22,7 +22,7 @@ would be a page about anybody.
     {% endfacts %}
   {% endcard %}
 
-  {% section "Newest starred" count=profile.watched|length %}
+  {% section "Newest starred" counts=profile.watched %}
   {% data_table starred %}
   {% aside %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}
   {% endsection %}

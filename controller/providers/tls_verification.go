@@ -67,49 +67,26 @@ func expiryWords(days int) string {
 }
 
 // daysSaidAsDays is HQ's moments.DAYS_SAID_AS_DAYS: up to it a length is
-// counted in days, past it in years, months and weeks.
+// counted in days, past it in calendar months, then years.
 const daysSaidAsDays = 90
 
-// daySpan is a whole number of days as HQ's moments.span says it. Past
-// daysSaidAsDays it is Django's timesince over that many days from the start
-// of 2000, as moments.duration measures it: the first unit that is not zero
-// and the next one with it when that is not zero either, each number held to
-// its unit by a no-break space.
+// daySpan is a whole number of days as HQ's moments.Span says it: the largest
+// unit it holds whole and that unit alone, calendar months counted from the
+// start of 2000 as Span counts them.
 func daySpan(days int) string {
-	if days <= daysSaidAsDays {
-		return countedDays(days)
-	}
-	start := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	end := start.AddDate(0, 0, days)
-	months := (end.Year()-start.Year())*12 + int(end.Month()-start.Month())
-	rest := int(end.Sub(start.AddDate(0, months, 0)).Hours()) / 24
-	counts := []int{months / 12, months % 12, rest / 7, rest % 7}
-	units := []string{"year", "month", "week", "day"}
-	said := []string{}
-	for i, count := range counts {
-		if count == 0 {
-			if len(said) > 0 {
-				break
-			}
-			continue
-		}
-		unit := units[i]
-		if count != 1 {
-			unit += "s"
-		}
-		said = append(said, strconv.Itoa(count)+"\u00a0"+unit)
-		if len(said) == 2 {
-			break
+	count, unit := days, "day"
+	if days > daysSaidAsDays {
+		start := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+		end := start.AddDate(0, 0, days)
+		count, unit = (end.Year()-start.Year())*12+int(end.Month()-start.Month()), "month"
+		if count >= 12 {
+			count, unit = count/12, "year"
 		}
 	}
-	return strings.Join(said, ", ")
-}
-
-func countedDays(days int) string {
-	if days == 1 {
-		return "1 day"
+	if count != 1 {
+		unit += "s"
 	}
-	return strconv.Itoa(days) + " days"
+	return strconv.Itoa(count) + "\u00a0" + unit
 }
 
 // npmCoveredHosts is the serving proxy hosts with a name the certificate covers.

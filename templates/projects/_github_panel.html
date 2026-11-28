@@ -18,12 +18,7 @@ reading; nothing here calls GitHub.
       <small>{% if repo.checks.failing %}{{ repo.checks.failing|join:", " }}{% elif repo.checks.total %}{{ repo.checks.total }} on this commit{% if repo.checks.running %}, {{ repo.checks.running }} still running{% endif %}{% else %}Nothing runs on this commit.{% endif %}</small>
     {% endfact %}
     {% fact "Production" icon="deploy" tone=repo.production_tone %}
-      {% if repo.production %}
-        {% with state=repo.production.state %}
-        {% comment %}GitHub's deployment states, as what happened.{% endcomment %}
-        {% if state == "failure" or state == "error" %}{% entity repo.production.url|outside label="Deploy failed" %}{% elif state == "in_progress" or state == "queued" or state == "pending" %}{% entity repo.production.url|outside label="Deploying" %}{% elif state == "inactive" %}{% entity repo.production.url|outside label="Replaced" %}{% else %}{% entity repo.production.url|outside label="Deployed" %}{% endif %}
-        {% endwith %}
-      {% else %}None{% endif %}
+      {% if repo.production %}{% entity repo.production.url|outside label=repo.production_said %}{% else %}None{% endif %}
     {% detail %}
       {% if repo.production %}
         <small><code>{{ repo.production.sha|slice:":7" }}</code>{% dot %}{{ repo.production.created_at|when_text }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch }} has newer commits{% endif %}</small>
@@ -78,7 +73,7 @@ reading; nothing here calls GitHub.
       {% fact "Deploy rules" %}
         {% if environment.reviewers %}Approval from {{ environment.reviewers|join:", " }}{% else %}No approval{% endif %}
       {% detail %}
-        {% if environment.wait_minutes or environment.branches != "any" %}<small>{% if environment.wait_minutes %}{{ environment.wait_minutes|counted:"minute" }} wait{% if environment.branches != "any" %}{% dot %}{% endif %}{% endif %}{% if environment.branches == "protected" %}Protected branches only{% elif environment.branches != "any" %}Chosen branches only{% endif %}</small>{% endif %}
+        {% if environment.wait_minutes or environment.branches != "any" %}<small>{% if environment.wait_minutes %}{{ environment.wait_minutes|span:"minutes" }} wait{% if environment.branches != "any" %}{% dot %}{% endif %}{% endif %}{% if environment.branches == "protected" %}Protected branches only{% elif environment.branches != "any" %}Chosen branches only{% endif %}</small>{% endif %}
       {% endfact %}
     {% endif %}
     {% for runner in repo.runners %}
@@ -100,7 +95,7 @@ reading; nothing here calls GitHub.
   {% include "projects/_updates.html" %}
 
   {% if repo.pull_rows %}
-    {% section "Open pull requests" count=repo.pull_rows|length %}
+    {% section "Open pull requests" counts=repo.pull_rows %}
       {% include "partials/_record_list.html" with rows=repo.pull_rows label="Open pull requests" only %}
     {% endsection %}
   {% endif %}

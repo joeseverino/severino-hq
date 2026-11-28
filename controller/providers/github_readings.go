@@ -46,11 +46,18 @@ var githubRead = githubapi.AppPermissions{
 // couple of dozen requests under a token of its own.
 const githubReadConcurrency = 4
 
+// githubProduction is the environment whose deployments are releases, as
+// Deploy records them (.github/workflows/deploy.yml): a record keeps the
+// last githubReleasesKept of it, and the newest deployment of any other.
+const githubProduction = "production"
+
 // Page sizes, each the number of items a record keeps or reads.
 const (
 	githubRunsPage        = 50
 	githubPullsPage       = 30
 	githubDeploymentsPage = 20
+	githubStatusesPage    = 10
+	githubReleasesKept    = 10
 	githubListPage        = 100
 	githubArtifactsKept   = 20
 	githubTagsPage        = 1000
@@ -244,6 +251,14 @@ type GitHubDeployment struct {
 	// it: what production was asked to run, which HQ compares with the
 	// digest it runs.
 	Image string `json:"image,omitempty"`
+	// Outcome is the outcome deploy/outcomes.json names that its deploy
+	// reported ("live", "not-deployed"), and EndedAt when it reported it;
+	// both "" while it reported none.
+	Outcome string `json:"outcome,omitempty"`
+	EndedAt string `json:"ended_at,omitempty"`
+	// ApprovedBy is the login that approved a release's run, as GitHub's
+	// reviews of the run record it; "" where no one did.
+	ApprovedBy string `json:"approved_by,omitempty"`
 }
 
 type GitHubVerification struct {
@@ -548,8 +563,8 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 	if err != nil {
 		return record, runs, pulls, err
 	}
-	githubs := githubOwnSuites(slices.Concat(page.WorkflowRuns, read))
-	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, githubs); err != nil {
+	aside := githubAsideSuites(slices.Concat(page.WorkflowRuns, read))
+	if record.Checks, err = g.branchChecks(ctx, commit.Sha, onBranch, aside); err != nil {
 		return record, runs, pulls, err
 	}
 	if runs, err = g.workflowRuns(ctx, branch, onBranch, page.WorkflowRuns, workflows.Workflows); err != nil {
@@ -560,7 +575,7 @@ func (g *githubRepository) readAll(ctx context.Context) (GitHubRepositoryRecord,
 		return record, runs, pulls, err
 	}
 	pulls = githubPulls(g.c.ref, g.name, listed)
-	if record.PullRequestChecks, err = g.pullChecks(ctx, pulls, githubs, githubWorkflowSuites(slices.Concat(page.WorkflowRuns, read)), layout); err != nil {
+	if record.PullRequestChecks, err = g.pullChecks(ctx, pulls, aside, githubWorkflowSuites(slices.Concat(page.WorkflowRuns, read)), layout); err != nil {
 		return record, runs, pulls, err
 	}
 	g.pullStates(ctx, pulls)
@@ -648,7 +663,7 @@ var githubPullRequestEvents = map[string]bool{"pull_request": true, "pull_reques
 
 // branchRuns is the newest run on branch of each active workflow, named as the
 // workflow is now, and the page of the branch's runs it read them from. A run
-// of a pull request or of GitHub's own is not the branch's. Where the page is
+// of a pull request, or one githubAside sets apart, is not the branch's. Where the page is
 // full, a workflow it misses (a weekly schedule behind a busy week) is read
 // alone.
 func (g *githubRepository) branchRuns(ctx context.Context, branch string, workflows []githubapi.Workflow) ([]githubapi.WorkflowRun, []githubapi.WorkflowRun, error) {
@@ -659,7 +674,7 @@ func (g *githubRepository) branchRuns(ctx context.Context, branch string, workfl
 	newest := map[int]githubapi.WorkflowRun{}
 	take := func(runs []githubapi.WorkflowRun) {
 		for _, run := range runs {
-			if _, seen := newest[run.WorkflowID]; !seen && run.Event != "dynamic" && !githubPullRequestEvents[run.Event] {
+			if _, seen := newest[run.WorkflowID]; !seen && !githubAside(run) && !githubPullRequestEvents[run.Event] {
 				newest[run.WorkflowID] = run
 			}
 		}
@@ -729,7 +744,7 @@ func (g *githubRepository) workflowRuns(ctx context.Context, branch string, onBr
 	chosen := slices.Clone(onBranch)
 	seen, branches := map[string]bool{}, map[string]bool{}
 	for _, run := range page {
-		if run.Event == "dynamic" || run.HeadBranch == "" || run.HeadBranch == branch {
+		if githubAside(run) || run.HeadBranch == "" || run.HeadBranch == branch {
 			continue
 		}
 		key := "name:" + run.Name
@@ -778,35 +793,80 @@ func (g *githubRepository) waiting(ctx context.Context, runs []githubapi.Workflo
 	return found, nil
 }
 
-// deployments is the newest deployment to each environment, with its latest status.
+// deployments is the newest deployment to each environment, and production's
+// last githubReleasesKept, newest first: GitHub lists them so. Each carries
+// its latest status, and the outcome its deploy reported.
 func (g *githubRepository) deployments(ctx context.Context) ([]GitHubDeployment, error) {
 	listed, err := json200(g.api.ReposListDeploymentsWithResponse(ctx, g.owner, g.repo, &githubapi.ReposListDeploymentsParams{PerPage: new(githubDeploymentsPage)}))
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
+	kept := map[string]int{}
 	found := []GitHubDeployment{}
 	for _, deployment := range listed {
-		if seen[deployment.Environment] {
+		releases := deployment.Environment == githubProduction
+		if kept[deployment.Environment] > 0 && (!releases || kept[deployment.Environment] >= githubReleasesKept) {
 			continue
 		}
-		seen[deployment.Environment] = true
-		statuses, err := json200(g.api.ReposListDeploymentStatusesWithResponse(ctx, g.owner, g.repo, strconv.Itoa(deployment.ID), &githubapi.ReposListDeploymentStatusesParams{PerPage: new(1)}))
+		kept[deployment.Environment]++
+		record, err := g.deployment(ctx, deployment, releases)
 		if err != nil {
-			return nil, err
-		}
-		record := GitHubDeployment{Environment: deployment.Environment, SHA: deployment.Sha, CreatedAt: deployment.CreatedAt, Image: payloadImage(deployment.Payload), Verified: []GitHubVerification{}}
-		if len(statuses) > 0 {
-			record.State, record.URL = string(statuses[0].State), orDefault(statuses[0].LogURL, statuses[0].TargetURL)
-			outcome, declared := host.ReportedOutcome(record.State, statuses[0].Description)
-			record.CheckFailed = declared && outcome.CheckFailed
-		}
-		if record.Verified, err = g.verifications(ctx, record.URL); err != nil {
 			return nil, err
 		}
 		found = append(found, record)
 	}
 	return found, nil
+}
+
+// deployment is one deployment with its latest status, the outcome deploy/
+// outcomes.json declares that its newest status naming one reports, what its
+// job verified and, for a release, who approved its run. A release keeps its
+// outcome once a newer one goes live and GitHub marks it inactive.
+func (g *githubRepository) deployment(ctx context.Context, deployment githubapi.Deployment, release bool) (GitHubDeployment, error) {
+	record := GitHubDeployment{Environment: deployment.Environment, SHA: deployment.Sha, CreatedAt: deployment.CreatedAt, Image: payloadImage(deployment.Payload), Verified: []GitHubVerification{}}
+	statuses, err := json200(g.api.ReposListDeploymentStatusesWithResponse(ctx, g.owner, g.repo, strconv.Itoa(deployment.ID), &githubapi.ReposListDeploymentStatusesParams{PerPage: new(githubStatusesPage)}))
+	if err != nil {
+		return record, err
+	}
+	if len(statuses) > 0 {
+		record.State, record.URL = string(statuses[0].State), orDefault(statuses[0].LogURL, statuses[0].TargetURL)
+	}
+	for _, status := range statuses {
+		if outcome, declared := host.ReportedOutcome(string(status.State), status.Description); declared {
+			record.Outcome, record.EndedAt, record.CheckFailed = outcome.Name, status.CreatedAt, outcome.CheckFailed
+			break
+		}
+	}
+	if record.Verified, err = g.verifications(ctx, record.URL); err != nil {
+		return record, err
+	}
+	if release {
+		record.ApprovedBy, err = g.approver(ctx, record.URL)
+	}
+	return record, err
+}
+
+// approver is who approved the workflow run a deployment's log names, as
+// GitHub's reviews of the run record it: "" for a run no one approved, or a
+// log that names no run.
+func (g *githubRepository) approver(ctx context.Context, link string) (string, error) {
+	_, run, found := strings.Cut(link, "/actions/runs/")
+	run, _, _ = strings.Cut(run, "/")
+	run, _, _ = strings.Cut(run, "?")
+	if !found || run == "" || strings.Trim(run, "0123456789") != "" {
+		return "", nil
+	}
+	reviews, err := json200(g.api.ActionsGetReviewsForRunWithResponse(ctx, g.owner, g.repo, run))
+	if err != nil {
+		return "", err
+	}
+	approver := ""
+	for _, review := range reviews {
+		if review.State == githubapi.EnvironmentApprovalsStateApproved {
+			approver = review.User.Login
+		}
+	}
+	return approver, nil
 }
 
 // payloadImage is the image a deployment's payload names, or "" for a payload

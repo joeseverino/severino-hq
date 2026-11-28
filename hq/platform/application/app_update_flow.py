@@ -22,6 +22,7 @@ from .github_estate import check_state, check_step, repositories
 from .labels import dotted, lower_first
 from .moments import when
 from .projection import read_once
+from .quoted import Quoted
 from .routes import reverse
 from .sequences import PERSON, Example, Read, SequenceSpec, Step, StepSpec
 from .tone import Tone
@@ -105,8 +106,13 @@ def _ran(operation: OperationRequest, *, ended: str = "") -> Standing:
     task, said = run.stopped
     # A note worded from its readings says their records to act on already.
     amiss = () if said == run.evidence.told else run.evidence.amiss
-    lines = (f"At “{task}”" if task else "", said, *(line for line, _tone in amiss))
-    return Standing(FAILED, dotted(*lines), since=standing.since, word=ended or standing.label, url=standing.url)
+    lines = (said, *(line for line, _tone in amiss))
+    # What the playbook said in its own words stays apart from HQ's.
+    stated = Quoted(dotted(*(line for line in lines if isinstance(line, Quoted))))
+    words = (f"At “{task}”" if task else "", *(line for line in lines if not isinstance(line, Quoted)))
+    return Standing(
+        FAILED, dotted(*words), since=standing.since, word=ended or standing.label, url=standing.url, stated=stated
+    )
 
 
 def _ended_badly(asked: _Asked) -> bool:

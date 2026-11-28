@@ -355,8 +355,7 @@ _DECLARED = {
     # cell marks with its role (the row's own name, what a row means, free
     # text, a context line), a preview, a chip that wraps, a control, a
     # value among the words of a phrase, which wraps at its seams as they
-    # do, a name outside a short value's box (`cell-short`), a value set after
-    # words on its line, and a panel the cell shows,
+    # do, a value set after words on its line, and a panel the cell shows,
     # which is laid out as a page.
     "cell_token": _S("main .data-table > tbody > tr > td .token", optional=True),
     # An identifier as `breakable` draws it, one run however its seams split it.
@@ -365,7 +364,7 @@ _DECLARED = {
     # identifier does (cuts.css): a row's own name.
     "breaks_anywhere": _S('[data-cell~="name"]', optional=True),
     "wraps_in_a_cell": _S(
-        "tr.row-detail, .row-gutter, [data-cell], code.cell-whole, .btn, .token:not(.cell-short *), [popover]",
+        "tr.row-detail, .row-gutter, [data-cell], code.cell-whole, .btn, [popover]",
         optional=True,
     ),
     # Words said to a reader and never drawn.

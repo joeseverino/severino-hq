@@ -18,6 +18,7 @@ from django.utils.text import capfirst
 lazy from django.contrib.auth.base_user import AbstractBaseUser
 lazy from django.contrib.auth.models import AnonymousUser
 
+from hq.platform.application.moments import Span
 from hq.platform.application.projection import iso
 from hq.platform.application.record_errors import RecordConflict
 from hq.platform.application.security import CLI_ACTOR, JOB_INTERFACE
@@ -326,7 +327,7 @@ def _end(job: Job, said: str, ended, *, ok: bool = True, **outcome: Any) -> None
     # Measured from the in-memory job's start: the row is not marked finished
     # until after this returns.
     seconds = (ended - job.started_at).total_seconds() if job.started_at else 0
-    took = f" in {seconds:.0f}s" if seconds >= 1 else ""
+    took = f" in {Span(ended - job.started_at)}" if seconds >= 1 else ""
     with own_operation(job, requester=_requester(job)):
         # The row names the job already, so the message is how it ended.
         work_ended(

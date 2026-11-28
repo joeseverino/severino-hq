@@ -3,24 +3,75 @@
 #MISE hide=true
 #MISE depends=["setup:worker-tools"]
 #USAGE flag "--dry-run" help="Build and check the Worker, uploading nothing"
+#USAGE flag "--if-changed" help="Deploy nothing when the version Cloudflare serves was deployed from a commit whose Worker files are this checkout's"
 #USAGE flag "--with-secrets" help="Upload each secret wrangler.jsonc requires from the variable of its name: the first deploy, and a rotation"
 
 # The environment names what this public repository must not:
 # CLOUDFLARE_ACCOUNT_ID, which wrangler reads itself, and HQ_INBOUND_HOSTNAME,
 # the name on the operator's own zone the Worker answers on. wrangler.jsonc
 # turns off the workers.dev address and preview URLs, which name the account.
-# CLOUDFLARE_API_TOKEN deploys; a dry run needs none.
+# CLOUDFLARE_API_TOKEN deploys; a dry run needs none. gh reads GitHub's
+# deployments, as its own sign-in or GH_TOKEN allows.
 set -eu
 
 : "${CLOUDFLARE_ACCOUNT_ID:?worker:deploy needs CLOUDFLARE_ACCOUNT_ID, the Cloudflare account to deploy to}"
 : "${HQ_INBOUND_HOSTNAME:?worker:deploy needs HQ_INBOUND_HOSTNAME, the name on your own zone the Worker answers on}"
 
+# What the Worker is deployed from: its own tree, this task, and the parts of
+# static/ the pages in public/ link by the names static/ gives them (HQ's own
+# stylesheet, font, icons and scripts), which the deploy serves beside them.
+set -- worker mise-tasks/worker static/css static/fonts static/img static/js
+
+# The Worker serves the routes of the commit it is deployed from, and HQ
+# refuses what a Worker of other routes sends, so a deploy uploads only the
+# commit production runs, as GitHub's deployments record it, with those files
+# as committed. A dry run uploads nothing.
+if [ "${usage_dry_run:-}" != true ]; then
+    production=$(python3 -m tools.pipeline.production running) || {
+        echo "worker:deploy: what production runs was not read, so nothing is deployed" >&2
+        exit 1
+    }
+    head=$(git rev-parse HEAD)
+    if [ "$production" != "$head" ]; then
+        echo "worker:deploy: production runs $production, and this checkout is $head; deploy from it: git switch --detach $production" >&2
+        exit 1
+    fi
+    if ! git diff-index --quiet HEAD -- "$@"; then
+        echo "worker:deploy: the Worker's files differ from $head as committed; commit or restore them first" >&2
+        exit 1
+    fi
+fi
+
+# The version Cloudflare serves names the commit it was deployed from in its
+# message, written below. A served version from a commit whose files above
+# match this one's is what this deploy would upload. Anything unread (never
+# deployed, a split between versions, a message of another shape, a commit
+# this clone lacks) deploys.
+if [ "${usage_if_changed:-}" = true ]; then
+    # shellcheck disable=SC2016  # the program is node's, whose template literals the shell must not expand
+    served=$(cd worker && node --input-type=module -e '
+import { execFileSync } from "node:child_process";
+const wrangler = (...args) =>
+    JSON.parse(execFileSync("./node_modules/.bin/wrangler", [...args, "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] }));
+const { versions } = wrangler("deployments", "status");
+if (versions.length === 1) {
+    const message = wrangler("versions", "view", versions[0].version_id).annotations?.["workers/message"] ?? "";
+    process.stdout.write(/^commit ([0-9a-f]{40})$/.exec(message)?.[1] ?? "");
+}
+') || served=""
+    if [ -n "$served" ] && git cat-file -e "$served^{commit}" 2>/dev/null \
+        && git diff-tree --quiet "$served" HEAD -- "$@"; then
+        echo "worker:deploy: Cloudflare serves the Worker deployed from $served, whose Worker files are this checkout's; nothing to deploy"
+        exit 0
+    fi
+fi
+
 cd worker
-# The pages in public/ link HQ's own stylesheet, font, icons and scripts by
-# the names static/ gives them, so the deploy serves the same files beside them.
 rm -rf public/static
 mkdir public/static
-cp -R ../static/css ../static/fonts ../static/img ../static/js public/static/
+for each in "$@"; do
+    case "$each" in static/*) cp -R "../$each" public/static/ ;; esac
+done
 # The version is tagged with the digest of what HQ derived it from, from the
 # file control_plane.inbound_worker.deploy_tag reads, so HQ can tell whether the
 # version Cloudflare runs is the one its declarations make, and its message

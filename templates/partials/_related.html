@@ -10,5 +10,5 @@ ones): a heading and its items, a link and a few words beside it. Nothing
 related: nothing drawn.
 {% endcomment %}
 {% for group in groups %}
-  {% section group.heading count=group.items|length %}{% include "partials/_record_list.html" with rows=group.rows %}{% endsection %}
+  {% section group.heading counts=group.items %}{% include "partials/_record_list.html" with rows=group.rows %}{% endsection %}
 {% endfor %}

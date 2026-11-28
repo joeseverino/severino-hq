@@ -227,7 +227,7 @@ class ProposalTests(ScanTestCase):
         self.assertFalse(ManagedResource.objects.filter(kind="automation.operation").exists())
 
     def test_the_logins_the_newest_scan_reports_are_the_ones_a_run_is_held_to(self):
-        from ..automation_runs import runner_reaches
+        from ..playbook_reach import runner_reaches
 
         first = {**CATALOG, "reaches": [{"machine": "app.example.com", "profile": "read"}]}
         self.scanned(first)

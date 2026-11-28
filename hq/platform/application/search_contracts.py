@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Self
-lazy from datetime import datetime
+lazy from datetime import date
 
 lazy from django.db.models import Model
 
@@ -56,6 +56,11 @@ def looked_up(instance: Model, lookup: str) -> Any:
 
 @dataclass(frozen=True, slots=True)
 class SearchDefinition:
+    """What a record is found by, in the index's three columns: its title, its
+    identifiers, and its words (``fields``), the one column a result's snippet
+    is cut from, so a slug, a path or an account's digits are found and never
+    shown as the passage it matched."""
+
     scope: str
     model: type
     identifier_field: str
@@ -63,12 +68,13 @@ class SearchDefinition:
     label: str = ""
     title_field: str = ""
     badge_field: str = ""
-    timestamp_field: str = "updated_at"
-    # A property holding readable text for the result; blank uses the indexed body.
-    snippet_field: str = ""
+    # The moment of the thing itself a result shows (an expense's date), never
+    # the row's own save time; blank for a thing with none.
+    timestamp_field: str = ""
+    identifiers: tuple[str, ...] = ()
 
     @classmethod
-    def of(cls, model: type, identifier_field: str, fields: tuple[str, ...], **options: str) -> Self:
+    def of(cls, model: type, identifier_field: str, fields: tuple[str, ...], **options: Any) -> Self:
         """A resource's search, whose scope and label its ``ResourceSpec``
         supplies from its own name and label."""
 
@@ -79,10 +85,18 @@ class SearchDefinition:
 
     # Each name is a lookup on the model, as the index without FTS5 filters by
     # it, so the body reads it through the model's fields too: a name that is
-    # no field (a property) fails here, under either backend. The default
-    # timestamp names a field a model may not have.
+    # no field (a property) fails here, under either backend.
     def body(self, instance: Model) -> str:
-        return "\n".join(line for field in self.fields for line in search_lines(looked_up(instance, field)))
+        return _lines(instance, self.fields)
+
+    def columns(self, instance: Model) -> dict[str, str]:
+        """The index's row for ``instance``, by its column names."""
+
+        return {
+            "title": self.title(instance),
+            "identifiers": _lines(instance, self.identifiers),
+            "body": self.body(instance),
+        }
 
     def title(self, instance: Model) -> str:
         return str(getattr(instance, self.title_field)) if self.title_field else str(instance)
@@ -90,16 +104,19 @@ class SearchDefinition:
     def badge(self, instance: Model) -> str:
         return str(getattr(instance, self.badge_field)) if self.badge_field else ""
 
-    def timestamp(self, instance: Model) -> datetime | None:
-        return getattr(instance, self.timestamp_field, None)
+    def timestamp(self, instance: Model) -> date | None:
+        return getattr(instance, self.timestamp_field) if self.timestamp_field else None
 
-    def snippet_text(self, instance: Model) -> str:
-        """What a result shows under its title, or "" to cut it from the body."""
+    def listed(self, instance: Model) -> bool:
+        """Whether a match on ``instance`` is a result: a row kept only as
+        history is none."""
 
-        if not self.snippet_field:
-            return ""
-        return " ".join(str(getattr(instance, self.snippet_field, "") or "").split())
+        return True
 
     def url(self, instance: Model) -> str:
         # Django leaves get_absolute_url for a model to define or not.
         return instance.get_absolute_url() if hasattr(instance, "get_absolute_url") else ""
+
+
+def _lines(instance: Model, lookups: tuple[str, ...]) -> str:
+    return "\n".join(line for lookup in lookups for line in search_lines(looked_up(instance, lookup)))

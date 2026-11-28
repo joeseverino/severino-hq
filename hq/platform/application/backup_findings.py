@@ -17,7 +17,7 @@ from . import unit_timers
 from .finding_model import Finding, FindingEstate, FindingRule, LookInto
 from .finding_steps import Do
 from .freshness import missed
-from .moments import duration, moment, when
+from .moments import Span, moment, when
 from .projection import read_once
 from .tone import Tone
 from .ui import counted
@@ -35,7 +35,7 @@ BACKUP_TIMER = "severino-hq-backup.timer"
 COPIED_WITHIN = missed(
     unit_timers.every(BACKUP_TIMER) + unit_timers.span(BACKUP_TIMER, "RandomizedDelaySec"), 2
 ).stale_after
-_ALLOWED = duration(COPIED_WITHIN)
+_ALLOWED = Span(COPIED_WITHIN)
 
 
 @dataclass(frozen=True, slots=True)

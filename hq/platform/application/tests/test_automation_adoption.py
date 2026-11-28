@@ -241,7 +241,7 @@ class AdoptTests(AdoptionTestCase):
             "unit": {"type": "str", "required": True, "description": "The unit to check."}
         }
         self.adopt(self.proposed(catalog(bounded)))
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
 
         with machines:
             refused = run_capability(
@@ -464,7 +464,7 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
     def asked_at(self, playbook: str) -> str:
         """The commit a run of ``playbook`` asked now hands the worker."""
 
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
         with machines:
             answer = run_capability(
                 f"automation.example.{playbook}.run",
@@ -523,7 +523,14 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
         self.assertIsNone(standing().pending, "nothing of it waits")
 
     def test_adopting_a_removed_playbook_removes_it_and_leaves_the_rest(self):
+        from hq.domains.control_plane.models import ManagedResource
+
+        def records() -> set[str]:
+            return set(ManagedResource.objects.filter(kind="automation.operation").values_list("key", flat=True))
+
         self.adopt(self.proposed(catalog(procedure("check"), procedure("other"))))
+        # Each adopted playbook has its record before anything runs it.
+        self.assertEqual(records(), {"automation-example-check", "automation-example-other"})
         newer = self.proposed(catalog(procedure("check"), revision=SECOND))
         self.assertEqual(self.waiting(newer), {"example.other": "removed"})
 
@@ -531,6 +538,7 @@ class PlaybookByPlaybookTests(AdoptionTestCase):
 
         self.assertEqual({key: found.revision for key, found in self.pinned().items()}, {"example.check": FIRST})
         self.assertIsNone(capability_spec("automation.example.other.run"))
+        self.assertEqual(records(), {"automation-example-check"})
 
     def test_a_playbook_hq_cannot_run_is_refused_alone_and_adopting_all_adopts_the_ones_beside_it(self):
         self.adopt(self.proposed(catalog(procedure("check"))))
@@ -564,7 +572,7 @@ class StaleRunTests(AdoptionTestCase):
     def test_a_held_run_goes_stale_when_its_procedure_is_adopted_anew(self):
         wipe = procedure("wipe", effect="destructive")
         self.adopt(self.proposed(catalog(wipe)))
-        machines = patch("hq.platform.application.automation_runs.machine_catalog", return_value=(Machine(APP),))
+        machines = patch("hq.platform.application.playbook_reach.machine_catalog", return_value=(Machine(APP),))
         with machines:
             answer = run_capability(
                 "automation.example.wipe.run",

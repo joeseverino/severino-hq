@@ -338,6 +338,11 @@ class ResourceSearchDefinition(SearchDefinition):
         return services.home_url(instance)
 
     @override
+    def listed(self, instance: Any) -> bool:
+        provider = PROVIDERS.get(instance.kind)
+        return provider is None or not provider.retired(instance)
+
+    @override
     def body(self, instance: Model) -> str:
         """The indexed text; a withheld kind's spec is left out (``ProviderSpec.withheld``)."""
 
@@ -359,10 +364,10 @@ InfrastructureResourceQuery = create_model(
 SEARCH = ResourceSearchDefinition.of(
     ManagedResource,
     "key",
-    ("key", "kind", "spec", "status", "conditions"),
+    ("spec", "status", "conditions"),
+    identifiers=("kind",),
     title_field="key",
     badge_field="kind_label",
-    snippet_field="search_summary",
 )
 FIELDS = typed_keys(ManagedResourceRow)
 

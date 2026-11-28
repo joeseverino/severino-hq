@@ -26,7 +26,7 @@ from .ui import counted
 lazy from .github_estate import repository_for
 lazy from .github_profile import accounts, profile, profiles
 lazy from .moments import moment
-lazy from .projects import last_active
+lazy from .projects import last_push
 
 # The display projection of a reading, in the shape an extension emits, so the
 # dashboard renders host and extension cards through one loop and a new section
@@ -202,7 +202,7 @@ def _project(project: Project) -> dict[str, Any]:
         "category_label": project.get_category_display(),
         "repository_url": project.repository_url,
         "public_url": project.public_url,
-        "last_active_at": iso(last_active(project)),
+        "last_push_at": iso(last_push(project)),
     }
 
 
@@ -213,24 +213,28 @@ def _content(item: ContentItem) -> dict[str, Any]:
         "content_type_label": item.get_content_type_display(),
         "published_url": item.published_url,
         "published_at": iso(item.published_at),
-        "updated_at": iso(item.updated_at),
     }
 
 
 def recent_active_projects() -> list[dict[str, Any]]:
-    """The active projects that moved last, by ``last_active``, which a
-    repository's push sets as well as an edit, so every one is read."""
+    """The active projects whose repositories were pushed to last, those
+    never pushed after, by name; a push is read per project, so every one is read."""
 
-    newest = sorted(active_projects(), key=last_active, reverse=True)[:CALENDAR_ROWS]
-    return [_project(project) for project in newest]
+    def pushed(project: Project) -> tuple[bool, float, str]:
+        at = last_push(project)
+        return (at is None, -at.timestamp() if at is not None else 0.0, project.name)
+
+    return [_project(project) for project in sorted(active_projects(), key=pushed)[:CALENDAR_ROWS]]
 
 
-def recent_draft_content() -> list[dict[str, Any]]:
-    return [_content(item) for item in draft_content().order_by("-updated_at")[:CALENDAR_ROWS]]
+def drafts() -> list[dict[str, Any]]:
+    """The drafts by title: a writeup keeps no time of its own until it is published."""
+
+    return [_content(item) for item in draft_content().order_by("title")[:CALENDAR_ROWS]]
 
 
 def recently_published() -> list[dict[str, Any]]:
-    return [_content(item) for item in published_content().order_by("-published_at", "-updated_at")[:CALENDAR_ROWS]]
+    return [_content(item) for item in published_content().order_by("-published_at", "title")[:CALENDAR_ROWS]]
 
 
 # ----- Watching --------------------------------------------------------------

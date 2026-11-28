@@ -28,7 +28,7 @@ from .finding_steps import ByHand, Does, Fix, Why
 from .freshness import LAST_READ, OUT_OF_DATE, behind, freshness
 from .infrastructure import DRIFT_LABEL, NOT_READ_LABEL
 from .labels import field_label, lower_first, plural
-from .moments import duration, when
+from .moments import Span, when
 from .reading_facts import refusals
 from .tone import Tone
 from .topology_model import TopologyNode
@@ -262,12 +262,12 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="kind-never-swept",
                 subject="",
                 scope=kind_key,
-                title=f"{_many(kind_key)} have not been read for {duration(silent)}",
+                title=f"{_many(kind_key)} have not been read for {Span(silent)}",
                 severity=Tone.SERIOUS,
                 explanation=REFRESH_OR_FIX,
                 evidence=(
                     _when(LAST_READ, newest),
-                    ("Read every", duration(sweep_interval())),
+                    ("Read every", Span(sweep_interval())),
                 ),
                 fixes=(_read_again(),),
             )
@@ -289,7 +289,7 @@ def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
                 evidence=(
                     _when(LAST_READ, None),
                     ("In HQ", str(estate.declared_counts.get(kind_key, 0))),
-                    ("Read every", duration(sweep_interval())),
+                    ("Read every", Span(sweep_interval())),
                 ),
                 fixes=(_read_again(),),
             )

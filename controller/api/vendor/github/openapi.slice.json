@@ -583,6 +583,52 @@
     }
    }
   },
+  "/repos/{owner}/{repo}/actions/runs/{run_id}/approvals": {
+   "get": {
+    "operationId": "actions/get-reviews-for-run",
+    "parameters": [
+     {
+      "name": "owner",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "repo",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/environment-approvals"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments": {
    "get": {
     "operationId": "actions/get-pending-deployments-for-run",
@@ -4049,6 +4095,10 @@
       "type": "string",
       "example": "https://example.com/deployment/42/output"
      },
+     "created_at": {
+      "type": "string",
+      "example": "2012-07-20T01:19:13Z"
+     },
      "log_url": {
       "description": "The URL to associate with this status.",
       "type": "string",
@@ -4058,7 +4108,8 @@
     "required": [
      "state",
      "description",
-     "target_url"
+     "target_url",
+     "created_at"
     ]
    },
    "diff-entry": {
@@ -4289,6 +4340,30 @@
     },
     "required": [
      "name"
+    ]
+   },
+   "environment-approvals": {
+    "title": "Environment Approval",
+    "description": "An entry in the reviews log for environment deployments",
+    "type": "object",
+    "properties": {
+     "state": {
+      "description": "Whether deployment to the environment(s) was approved or rejected or pending (with comments)",
+      "enum": [
+       "approved",
+       "rejected",
+       "pending"
+      ],
+      "example": "approved",
+      "type": "string"
+     },
+     "user": {
+      "$ref": "#/components/schemas/simple-user"
+     }
+    },
+    "required": [
+     "state",
+     "user"
     ]
    },
    "full-repository": {
@@ -6083,11 +6158,17 @@
      },
      "updated_at": {
       "type": "string"
+     },
+     "display_title": {
+      "type": "string",
+      "example": "Simple Workflow",
+      "description": "The event-specific title associated with the run or the run-name if set, or the value of `run-name` if it is set in the workflow."
      }
     },
     "required": [
      "id",
      "head_branch",
+     "display_title",
      "event",
      "status",
      "conclusion",

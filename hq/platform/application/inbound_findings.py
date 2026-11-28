@@ -74,8 +74,11 @@ def _behind(estate: FindingEstate) -> tuple[Finding, ...]:
                 ),
             ),
             fixes=(
-                ByHand("Deploy it from main", "mise run worker:deploy", Why.NOT_GRANTED),
-                Do("Or run the Deploy Worker job on main."),
+                ByHand(
+                    "Deploy it from the commit production runs",
+                    "gh workflow run deploy-worker.yml --ref main",
+                    Why.NOT_GRANTED,
+                ),
             ),
             primary=opens("Open events", reverse("control_plane:events")),
             observed_at=worker.standing.sight.observed_at,
@@ -131,7 +134,7 @@ RULES: tuple[FindingRule, ...] = (
         Tone.ATTENTION,
         _behind,
         gathered=True,
-        operator_action="Deploy the events Worker from main.",
+        operator_action="Run Deploy Worker, which deploys the events Worker from the commit production runs.",
         no_help_reason="HQ holds no credential that deploys the Worker.",
         bars={Tone.ATTENTION: "the deployed Worker carries other routes than HQ generates"},
         clears="the deployed Worker's version carries the routes HQ generates",

@@ -14,7 +14,7 @@ from hq.platform.application.action_links import read_now_link
 from hq.platform.application.asks import Ask, read_now_standing
 from hq.platform.application.cadence import CONTROLLER_REFRESH
 from hq.platform.application.decisions import decision
-from hq.platform.application.moments import duration
+from hq.platform.application.moments import Span
 from hq.platform.application.security import Principal
 from hq.platform.application.tables import Below, Cell, DataTable, Group, Piece, Row, StatusMark, TableColumn
 from hq.platform.application.tone import Tone
@@ -60,7 +60,7 @@ def by_domain(context: Any, groups: Iterable[Any], where: Where, *, titled: bool
         Group(
             group["label"] if titled else "",
             tuple(_entries(context, group["entries"], where)),
-            count=len(group["items"]),
+            counted=True,
             href=group.get("url") or "",
         )
         for group in groups
@@ -93,6 +93,7 @@ def _family(context: Any, entry: Mapping[str, Any], family: str, away: Any) -> R
         actions=tuple(remedies(context, entry["lead"])),
         put_away=away,
         folds=family,
+        heads=True,
         data={"queue-family": ""},
     )
 
@@ -165,7 +166,7 @@ def _under_way(standing: Mapping[str, Any]) -> Cell:
     it (``asks.Standing``): its state's word in its tone, linked to its page,
     then what it does and how long since it was asked."""
 
-    since = duration(timedelta(seconds=standing["seconds"]), short=True) if standing["seconds"] else ""
+    since = Span(timedelta(seconds=standing["seconds"])) if standing["seconds"] else ""
     rest = tuple(Cell(said, dot=True) for said in (standing["note"], since) if said)
     return Cell(standing["label"], standing["url"], tone=standing["tone"], parts=rest)
 

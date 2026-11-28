@@ -342,6 +342,9 @@ class InboundSpec:
     complete: tuple[str, ...] = ()
     # What an event's body says, by the event as ``events`` names it.
     facts: Mapping[str, EventFact] = field(default_factory=dict)
+    # An event's subject as a person reads it, from the provider's own name
+    # for it, which matching and asking keep.
+    worded: Callable[[str], str] = str
 
     def __post_init__(self) -> None:
         if not self.events or not all(self.events.values()):
@@ -658,8 +661,8 @@ class ProviderSpec:
     home: Callable[[Any], str] | None = None
     # Whether the source HQ derives this kind's records from names this one
     # now: HQ writes such a record from its source, so no person edits or
-    # removes it by hand, and one the source has dropped is a person's again.
-    # Asked of the source each time, never stored. Unset: no source derives them.
+    # removes it by hand, and one the source has dropped is retired. Asked of
+    # the source each time, never stored. Unset: no source derives them.
     sourced: Callable[[Any], bool] | None = None
     # The provider console page for a swept record, built only from ids the
     # record stores. Blank when the record lacks them.
@@ -863,6 +866,12 @@ class ProviderSpec:
         """Why a found record of this kind is never taken on, as a refusal says it."""
 
         return self.adoption_gap
+
+    def retired(self, resource: Any) -> bool:
+        """Whether its source has dropped ``resource``, which stays only as the
+        anchor of its history and is listed nowhere."""
+
+        return self.sourced is not None and not self.sourced(resource)
 
     @property
     def sweeps(self) -> bool:

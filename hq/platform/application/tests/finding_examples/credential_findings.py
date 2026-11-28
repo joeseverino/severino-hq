@@ -40,7 +40,7 @@ EXAMPLES = (
     Examples(
         "credential-expiring",
         fires=(
-            connected(expires_in=10, raises=("example-api's token expires in 10 days",)),
+            connected(expires_in=10, raises=("example-api's token expires in 10\xa0days",)),
             connected(
                 expires_in=-1, raises=(Raised(title="example-api's token expired today", severity=Tone.SERIOUS),)
             ),

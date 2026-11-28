@@ -8,7 +8,8 @@ from typing import override
 from django.conf import settings
 from django.db import models
 from django.db.models.fields.json import KeyTextTransform
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Length
+from django.db.models.lookups import Exact
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.urls import reverse
@@ -18,8 +19,10 @@ from hq.platform.application.roles import Role
 from hq.platform.application.tone import Tone, TonedChoices
 lazy from hq.platform.application.doors import Attribution
 lazy from hq.platform.application.labels import dotted, plural
+lazy from hq.platform.application.release_snapshots import loaded as loaded_snapshot
 
 from .rules import Rule, one_of, singleton
+from .stored_json import StoredJSONField
 lazy from .audit import audited_labels
 
 
@@ -46,13 +49,6 @@ def _model_plurals() -> dict[str, str]:
         **{model.__name__: many for model, many in declared.items()},
         **{labels[model]: many for model, many in declared.items() if model in labels},
     }
-
-
-# A UUID, or a run of hex long enough to be a key or digest.
-_IDENTIFIER = re.compile(
-    r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{16,}\b",
-    re.IGNORECASE,
-)
 
 
 def object_type_label(stored: str) -> str:
@@ -282,14 +278,6 @@ class AuditLog(models.Model):
 
         subject = self.object_repr or self.type_label
         return f"{self.get_action_display()} {subject}".strip() if subject else self.summary
-
-    @property
-    def search_snippet(self) -> str:
-        """The object's type and the message's first line, with identifiers left out."""
-
-        first = next(iter((self.message or "").strip().splitlines()), "")
-        message = " ".join(_IDENTIFIER.sub("", first).split())[:160]
-        return dotted(self.type_label, message)
 
 
 class Pin(models.Model):
@@ -702,3 +690,31 @@ class Avatar(models.Model):
     @override
     def __str__(self) -> str:
         return f"{self.user.get_username()}'s picture"
+
+
+class ReleaseSnapshot(models.Model):
+    """What HQ read of itself once a release of it went live, kept by the
+    release's commit: the readings it was taken from are replaced on every
+    read (``hq.platform.application.release_snapshots``)."""
+
+    commit = models.CharField(max_length=40, primary_key=True)
+    taken_at = models.DateTimeField(default=timezone.now)
+    readings = StoredJSONField(
+        default=dict,
+        load=lambda snapshot: loaded_snapshot(snapshot),  # noqa: PLW0108 - the shape's module imports this one, so it is looked up at the first load
+    )
+
+    class Meta:
+        ordering = ("-taken_at",)
+        constraints = [
+            Rule(
+                condition=models.Q(Exact(Length("commit"), 40)),
+                name="release_snapshot_names_a_commit",
+                violation_error_message="A release is named by its whole commit id, 40 characters.",
+                field="commit",
+            )
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return f"What HQ read of release {self.commit[:7]}"

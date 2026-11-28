@@ -10,14 +10,15 @@ waited. Each is about the delivery's own record, read as its health says
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
 from .entity_links import entity_link
 from .finding_model import Finding, FindingEstate, FindingRule, Notice, opens
+from .moments import Span
 from .references import Kind
 from .tone import Tone
-from .ui import counted, ended
+from .ui import ended
 lazy from .infrastructure import enabled_resources, resource_health
 
 DEPLOYING = "deploy-running"
 # How long a deploy may take before it is a problem, as a finding says it.
-STALLS_AFTER = counted(int(STALLED_AFTER.total_seconds() // 60), "minute")
+STALLS_AFTER = Span(STALLED_AFTER)
 
 
 def _deploys(_estate: FindingEstate) -> tuple[Finding, ...]:

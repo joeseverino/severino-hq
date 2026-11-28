@@ -58,8 +58,12 @@ const (
 	// operator to start or read, so HQ declares them.
 	SecretsUnit    = string(runtime.SecretsUnit)
 	ControllerUnit = string(runtime.ControllerUnit)
-	// GlanceUnit runs one glance pass, beside a controller pass.
-	GlanceUnit = "severino-hq-glance.service"
+	// GlanceUnit runs one glance pass, beside a controller pass; HQ keeps
+	// its last run for each release.
+	GlanceUnit = string(runtime.GlanceUnit)
+	// DriftUnit runs `hq-host verify` daily; HQ keeps its last run for each
+	// release too.
+	DriftUnit = string(runtime.DriftUnit)
 	// BackupUnit snapshots HQ's volumes.
 	BackupUnit = "severino-hq-backup.service"
 	// DeployFreeBytes is the free space on / a deploy needs before it pulls.
@@ -131,6 +135,9 @@ const (
 	// the next controller pass is given read-only.
 	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
 	dependencyRunTarget = hostcore.RunDir + "/dependency-run.json"
+	// rehearsalPagesTarget is where a pass finds its copy of the last
+	// rehearsal's walk (Machine.RehearsalPagesPath).
+	rehearsalPagesTarget = hostcore.RunDir + "/rehearsal-pages.json"
 
 	// AutomationUnit runs the automation worker until no run is queued. Its
 	// path unit starts it when HQ rings AutomationDoorbell, beside the

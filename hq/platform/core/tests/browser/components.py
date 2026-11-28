@@ -366,7 +366,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                                     folded="example-fold",
                                 ),
                             ),
-                            count=1,
+                            counted=True,
                             folds="example-fold",
                         ),
                     ),

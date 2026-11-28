@@ -12,17 +12,16 @@ from pydantic import Field, GetJsonSchemaHandler, WithJsonSchema, field_validato
 from pydantic_core import CoreSchema
 
 from hq.platform.application.command_fields import Reason, RequiredText, checked
-from hq.platform.application.labels import dotted
 from hq.platform.application.stored_columns import IPV4, IPV6
 from hq.platform.application.ui import ended
-lazy from hq.platform.application.expiry import days_until
-lazy from hq.platform.application.moments import moment, stamp_day
+lazy from hq.platform.application.moments import stamp_day
 
 from ..connection_shapes import SERVICE_ACCOUNT, SSH_TRANSPORT, ConnectionRef
 from ..provider_spec import (
     ConnectionKind,
     ProviderModel,
     ProviderSpec,
+    expiry_phrase,
     key_from,
     locked,
     named_page,
@@ -338,21 +337,9 @@ def _authority_readout(spec: dict[str, Any], status: dict[str, Any]) -> tuple[tu
 
     del status
     expires = str(spec.get("expires_on", ""))
-    remaining = ""
-    if expires:
-        when = moment(expires)
-        days = days_until(when) if when is not None else None
-        if days is not None:
-            remaining = (
-                dotted(expires, f"{days // 365} years away")
-                if days > 730
-                else dotted(expires, f"{days} days away")
-                if days > 0
-                else dotted(expires, "expired")
-            )
     return (
         ("Issues", "", str(spec.get("covers", ""))),
-        ("Expires", "", remaining or "does not expire"),
+        ("Expires", "", expiry_phrase(expires) if expires else "does not expire"),
         ("Key location", "", str(spec.get("key_location", ""))),
         ("Issued with", "", str(spec.get("issued_with", ""))),
     )

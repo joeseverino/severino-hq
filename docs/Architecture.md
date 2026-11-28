@@ -641,7 +641,14 @@ and a list falls back to primary-key order.
 
 `search_index.SearchDocument` is a derived projection. On SQLite an FTS5
 external-content table indexes it with Unicode tokenization and 2-, 3- and
-4-character prefix indexes. Triggers keep the FTS structure atomic with
+4-character prefix indexes. A row holds a record's title, its identifiers
+(`SearchDefinition.identifiers`: a slug, a path, an account's digits) and its
+words (`SearchDefinition.fields`) as three columns. A query matches any of
+them, and a hit's snippet is cut from its words alone, so an identifier is
+found and never shown as the passage that matched. A migration of
+`search_index` draws every row again from its record once every app has
+migrated (`search_index.apps.reproject`), since a migration's own models know
+only the schema of their moment. Triggers keep the FTS structure atomic with
 projection writes, and domain-model signals keep the projection atomic with the
 record, so a rollback removes all three changes. The backend is replaceable
 without changing table views, query parameters, CLI output or models.
@@ -1748,11 +1755,11 @@ app released with `changed` false reads as unchanged.
 
 Before it is pressed, Approve says what applying it interrupts while its
 containers restart, on the press and in a held request's preview
-(`app_update_approval.interrupted`): each name a container is the origin of,
-and each name whose record a connection inside it holds, by the record's facet
-(a DNS server resolves its rewrites, a proxy routes its hosts). Both come from
-`machines.served_by`, which places each connection's endpoint once
-(`machines.connections_inside`).
+(`app_update_approval.interrupted`): each name whose path lands on the
+container (`service_list.served_from`), and each name whose record a
+connection inside it holds, by the record's facet (a DNS server resolves its
+rewrites, a proxy routes its hosts). Both come from `machines.served_by`, which
+places each connection's endpoint once (`machines.connections_inside`).
 
 An image built on its host is classified once, where its standing is decided
 (`containers._built_here`): the machine's copy holds no registry digest, and
@@ -1874,7 +1881,9 @@ another one names (`controller/connections/document.go`). A host no such login
 reaches is refused before anything runs. HQ refuses it earlier, when the run is
 asked for. Each scan reports every machine and profile the worker has a login
 for, never an address, user or key, and a run is held to the newest scan's
-(`automation_runs.reached`). The refusal lists each missing pair in
+(`playbook_reach.reached`). Every page and read that offers a run or names
+where one runs asks the same answer (`playbook_reach.reachable`), so nothing
+is offered that the run would refuse. The refusal lists each missing pair in
 `details.missing`, and says that a login added since the last scan is seen
 after the next one. That list is the worker's word, so a worker that lies can
 only make the early refusal wrong. The worker's own check at the claim still

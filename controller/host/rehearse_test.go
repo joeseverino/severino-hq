@@ -17,6 +17,9 @@ const (
 	rehearsed       = "severino-hq-rehearsal"
 	rehearsedVolume = "severino-hq-rehearsal-data"
 	planCall        = "docker run --rm --pull never --network host"
+	walkCall        = "docker exec " + rehearsed + " timeout 180 python manage.py page_costs"
+	// walked is a walk in which every page answered.
+	walked = `{"revision": "", "pages": {"/": {"status": 200}, "/example-moved/": {"status": 302}}}`
 )
 
 // rehearsal is how the host answers a rehearsal's checks. Its zero value is a
@@ -25,6 +28,8 @@ type rehearsal struct {
 	notReady, noSocket, damaged, runsAnyJob, killed, liveRestarts bool
 	planExit                                                      int
 	marks                                                         int
+	// pages is what the walk prints, walked when empty.
+	pages string
 }
 
 // rehearses answers the rehearsal's checks as r says, over what the fake host
@@ -62,6 +67,12 @@ func (f *fakeHost) rehearses(r *rehearsal) {
 			return answer("", !r.runsAnyJob)
 		case call == "docker inspect --format {{.State.OOMKilled}} "+rehearsed:
 			return answer(strconv.FormatBool(r.killed)+"\n", false)
+		case call == walkCall:
+			pages := r.pages
+			if pages == "" {
+				pages = walked
+			}
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `echo "Booting" >&2; printf 'Booting\n%s\n' "$1"`, "sh", pages)
 		case strings.HasPrefix(call, planCall):
 			return exec.CommandContext(ctx, "/bin/sh", "-c", `echo '{"mode":"plan"}'; exit "$1"`, "sh", strconv.Itoa(r.planExit))
 		case call == "docker inspect --format {{.State.StartedAt}} "+hostcore.Container:
@@ -114,6 +125,8 @@ func TestAFailedRehearsalLeavesProductionAsItWas(t *testing.T) {
 		{name: "the plan fails", says: "plan=exit-3", host: rehearsal{planExit: 3}},
 		{name: "the live web restarted meanwhile", says: "live=restarted", host: rehearsal{liveRestarts: true}},
 		{name: "the host's setup does not check", says: "setup=failed", fail: "docker run --rm --pull never --name severino-hq-setup-"},
+		{name: "a page breaks on production's data", says: "pages=1-failed", host: rehearsal{
+			pages: `{"revision": "", "pages": {"/": {"status": 200}, "/example-broken/": {"status": 500}}}`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeHost(t)
@@ -182,8 +195,19 @@ func TestAPassingRehearsalGoesOnToTheRelease(t *testing.T) {
 		t.Fatalf("%v\n%s", err, f.out.String())
 	}
 
-	if !strings.Contains(f.out.String(), "result=pass") || !strings.Contains(f.out.String(), " setup=ok ") {
+	if !strings.Contains(f.out.String(), "result=pass") || !strings.Contains(f.out.String(), " setup=ok ") ||
+		!strings.Contains(f.out.String(), " pages=ok ") {
 		t.Errorf("no passing verdict in the deploy's log:\n%s", f.out.String())
+	}
+	if strings.Contains(f.out.String(), "/example-moved/") {
+		t.Errorf("a page's name reached the deploy's log:\n%s", f.out.String())
+	}
+	kept, err := os.Stat(f.machine.RehearsalPagesPath())
+	if err != nil || kept.Mode().Perm() != 0o600 {
+		t.Fatalf("the walk was not kept for root alone: %v %v", kept, err)
+	}
+	if data, _ := os.ReadFile(f.machine.RehearsalPagesPath()); strings.TrimSpace(string(data)) != walked {
+		t.Errorf("the kept walk is not the one printed: %q", data)
 	}
 	f.before(t, planCall, "systemctl stop severino-hq-secrets.timer")
 	f.before(t, "docker volume rm --force "+rehearsedVolume, "systemctl stop severino-hq-secrets.timer")
@@ -358,4 +382,43 @@ func TestARefusedDryRunFailsTheRehearsal(t *testing.T) {
 		t.Error("a release its sandbox refused held the live units")
 	}
 	f.rehearsalLeftNothing(t)
+}
+
+// A walk that cannot run, or reads no page, says nothing of the release: the
+// release goes on, and no walk of an earlier release is left in its place.
+func TestAnUnreadWalkDeploysTheRelease(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		pages string
+		fail  string
+	}{
+		{name: "the walk is cut off", fail: walkCall},
+		{name: "no operator to sign in as", pages: `{"revision": "", "pages": {}, "unread": "no active operator to sign in as"}`},
+		{name: "a document it cannot read", pages: "Traceback"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeHost(t)
+			if err := f.machine.Record(running); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(f.machine.RehearsalPagesPath(), []byte(walked), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			d, _ := newDeployer(f)
+			f.rehearses(&rehearsal{pages: tc.pages})
+			if tc.fail != "" {
+				f.fail = []string{tc.fail}
+			}
+
+			if err := d.Release(context.Background(), next); err != nil {
+				t.Fatalf("an unread walk refused the release: %v\n%s", err, f.out.String())
+			}
+			if !strings.Contains(f.out.String(), "result=pass") || !strings.Contains(f.out.String(), " pages=unread ") {
+				t.Errorf("the verdict does not say the walk was unread:\n%s", f.out.String())
+			}
+			if data, err := os.ReadFile(f.machine.RehearsalPagesPath()); err == nil && strings.TrimSpace(string(data)) == walked {
+				t.Error("the walk of an earlier release was left as this one's")
+			}
+		})
+	}
 }

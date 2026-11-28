@@ -9,23 +9,23 @@ from .models import SearchDocument
 
 
 def index_instance(definition: SearchDefinition, instance) -> None:
-    """Store the instance's search body, writing only when it differs.
+    """Store the instance's search columns, writing only when they differ.
 
-    A save that leaves the body as it stands writes nothing: no row, no
-    full-text entry and no revision. A body that is new or changed is one
-    statement, which inserts the document or replaces its body.
+    A save that leaves them as they stand writes nothing: no row, no
+    full-text entry and no revision. Columns that are new or changed are one
+    statement, which inserts the document or replaces them.
     """
 
     key = {"scope": definition.scope, "object_id": definition.object_id(instance)}
-    body = definition.body(instance)
-    stored = SearchDocument.objects.filter(**key).values_list("body", flat=True).first()
-    if stored == body:
+    columns = definition.columns(instance)
+    stored = SearchDocument.objects.filter(**key).values(*columns).first()
+    if stored == columns:
         return
     SearchDocument.objects.bulk_create(
-        [SearchDocument(**key, body=body)],
+        [SearchDocument(**key, **columns)],
         update_conflicts=True,
         unique_fields=("scope", "object_id"),
-        update_fields=("body", "updated_at"),
+        update_fields=(*columns, "updated_at"),
     )
 
 
@@ -45,7 +45,7 @@ def rebuild_search_index() -> dict[str, int]:
             SearchDocument(
                 scope=definition.scope,
                 object_id=definition.object_id(instance),
-                body=definition.body(instance),
+                **definition.columns(instance),
             )
             for instance in definition.model.objects.all().iterator(chunk_size=500)
         ]

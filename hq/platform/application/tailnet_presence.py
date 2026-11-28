@@ -84,10 +84,6 @@ class Presence:
     tags: tuple[str, ...] = ()
     # When this device last reached HQ, and how: ``arrivals.Arrival``.
     reached_hq: Any = None
-    # Who the policy admits, per port. Already swept for the reachability
-    # panel, and the same answer a machine's own page should be able to give
-    # without anybody having to go and ask it.
-    openings: tuple[tuple[int, tuple[str, ...]], ...] = ()
     observed_at: Any = None
     # Who took the reading: the controller, and the connection when the
     # record names one.
@@ -225,11 +221,6 @@ def tailnet_presence() -> dict[str, Presence]:
                 tx_bytes=int(record.get("tx_bytes") or 0),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 reached_hq=arrived.get(name),
-                openings=tuple(
-                    (int(entry["port"]), tuple(entry.get("who") or ()))
-                    for entry in record.get("reach") or ()
-                    if str(entry.get("port", "")).isdigit()
-                ),
                 observed_at=snapshot.observed_at,
                 controller_id=str(snapshot.controller_id or ""),
                 connection_ref=str(record.get("connection_ref", "") or ""),

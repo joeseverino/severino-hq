@@ -11,6 +11,8 @@ from hq.platform.application.moments import moment
 from hq.platform.application.quoted import Quoted
 from hq.platform.application.tables import Cell, DataTable, Group, Row, TableColumn
 
+from .provider_adapters import INBOUND
+
 
 def _event(item: dict[str, Any]) -> Cell:
     """The event by the provider's name for it, and who sent it. Plain text,
@@ -19,10 +21,17 @@ def _event(item: dict[str, Any]) -> Cell:
     return Cell(item["event"], lines=(Cell(item["provider_label"], muted=True),))
 
 
+def _subject(item: dict[str, Any]) -> str:
+    """The event's subject in the words its provider's declaration reads it in."""
+
+    spec = INBOUND.get(item["provider"])
+    return spec.worded(item["subject"]) if spec is not None else item["subject"]
+
+
 EVENT_COLUMNS = (
     TableColumn("Event", kind="identifier", cell=_event),
     # Text HQ did not write: shown as the provider wrote it, and never a link.
-    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(Quoted(item["subject"]), cut=True)),
+    TableColumn("Subject", kind="identifier", drop=2, cell=lambda item: Cell(Quoted(_subject(item)), cut=True)),
     TableColumn(
         "Made due", drop=3, cell=lambda item: Cell(", ".join(kind_label(kind) for kind in item["reads"]), muted=True)
     ),
@@ -33,7 +42,8 @@ EVENT_COLUMNS = (
 
 def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
     """``table``'s rows, one per item in order, under the channel each came
-    by, each channel's rows in the list's own order."""
+    by: the channels in the order the list's sort first reaches each, and
+    each channel's rows in that order too."""
 
     by_source: dict[str, list[Row]] = {}
     for item, row in zip(items, table.rows, strict=True):
@@ -41,7 +51,7 @@ def grouped(table: DataTable, items: list[dict[str, Any]]) -> DataTable:
     return replace(
         table,
         rows=(),
-        groups=tuple(Group(source.label, tuple(by_source[source])) for source in InboundSource if source in by_source),
+        groups=tuple(Group(InboundSource(source).label, tuple(rows)) for source, rows in by_source.items()),
     )
 
 
@@ -74,7 +84,6 @@ def taken_table(taken: tuple[Taken, ...]) -> DataTable:
         table,
         rows=(),
         groups=tuple(
-            Group(label, tuple(row for _each, row in rows), count=sum(len(each.events) for each, _row in rows))
-            for label, rows in sorted(by_provider.items())
+            Group(label, tuple(row for _each, row in rows), counted=True) for label, rows in sorted(by_provider.items())
         ),
     )

@@ -83,7 +83,7 @@ class CaddyPathTests(TestCase):
 
         self.assertEqual((ingress.certificate.name, ingress.certificate.issuer), ("example.com", "Example CA"))
         self.assertFalse(ingress.certificate.unread)
-        self.assertIn("60 days", ingress.certificate.expiry)
+        self.assertIn("60\xa0days", ingress.certificate.expiry)
 
     def test_the_path_says_why_a_route_names_no_certificate(self):
         self.route(certificate_unread="the edge target does not report its certificate")

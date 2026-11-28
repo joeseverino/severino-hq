@@ -360,8 +360,12 @@ class Route:
         return next((hop.name for hop in self.hops if hop.step == "redirect"), "")
 
     @property
-    def machine(self) -> str:
-        return last_machine(self.hops)
+    def answers(self) -> Forward:
+        """Where the route lands: the last address a proxy forwards to, else
+        the machine its walk ends on, each "" where HQ places none."""
+
+        found = self.forwards
+        return found[-1] if found else Forward("", last_machine(self.hops))
 
     @property
     def forwards(self) -> tuple[Forward, ...]:
@@ -417,8 +421,15 @@ class ServicePath:
         return next((route.redirects_to for route in self.routes if route.redirects_to), "")
 
     @property
+    def answers(self) -> Forward:
+        """The machine and container that answer the name: where the first
+        route that lands on a machine lands. What serves what is this, grouped."""
+
+        return next((route.answers for route in self.routes if route.answers.machine), Forward(""))
+
+    @property
     def machine(self) -> str:
-        return next((route.machine for route in self.routes if route.machine), "")
+        return self.answers.machine
 
     @property
     def ends_at(self) -> Hop | None:

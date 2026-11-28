@@ -29,7 +29,7 @@ press, approval and merge that set it going, linking the whole chain.
     {% if run.reason %}{% fact "Reason" value=run.reason %}{% endif %}
     {% if run.started_at %}{% fact "Started" %}{{ run.started_at|when }}{% endfact %}{% endif %}
     {% if run.finished_at %}{% fact "Finished" %}{{ run.finished_at|when }}{% endfact %}{% endif %}
-    {% if duration is not None %}{% fact "Duration" value=duration|seconds %}{% endif %}
+    {% if duration is not None %}{% fact "Duration" value=duration|span:"seconds" %}{% endif %}
     {% if run.headline %}{% fact "Result" value=run.headline %}{% endif %}
     {% if reading %}{% fact "Reading" value=reading.words detail=reading.ended|yesno:"Not stated," %}{% endif %}
     {% run_evidence evidence layout="facts" %}
@@ -39,5 +39,5 @@ press, approval and merge that set it going, linking the whole chain.
 {% if evidence.raw_readings %}{% section "Raw data" fold=True %}<pre tabindex="0">{{ evidence.raw_readings }}</pre>{% endsection %}{% endif %}
 </div>
 {% endpartialdef %}
-{% if events %}{% section events_heading count=events.0.count fold=True %}{% history_table events_heading events %}{% foot %}Every row in the <a href="{{ events_url }}">audit log</a>{% endsection %}{% endif %}
+{% if events %}{% section events_heading counts=events.0.things fold=True %}{% history_table events_heading events %}{% foot %}Every row in the <a href="{{ events_url }}">audit log</a>{% endsection %}{% endif %}
 {% endblock %}

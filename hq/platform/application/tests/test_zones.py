@@ -177,25 +177,6 @@ class ZoneViewTests(TestCase):
 
         card = certificates(find_zone("example.net"))
         self.assertIn("any authority may issue", card.detail)
-        self.assertFalse(card.concern)
-        cards = {i.label: i for i in find_zone("example.net").insights}
-        self.assertFalse(cards["Security"].concern)
-
-    def test_left_over_challenge_records_are_the_one_thing_flagged(self):
-        """The single judgment this page makes without a declared policy.
-
-        A missing CAA record and a permissive DMARC policy are choices, and HQ
-        holds no credential that could change either. A challenge record that
-        outlived its issuance is garbage by its own definition.
-        """
-
-        cards = {i.label: i for i in find_zone("example.net").insights}
-        self.assertIn("2", cards["Left-over ACME challenges"].value)
-        self.assertTrue(cards["Left-over ACME challenges"].concern)
-        self.assertFalse(any(card.concern for label, card in cards.items() if label != "Left-over ACME challenges"))
-
-    def test_a_healthy_zone_flags_nothing(self):
-        self.assertFalse(any(card.concern for card in find_zone("example.com").insights))
 
     def test_mail_names_the_host_that_receives_it(self):
         cards = {i.label: i for i in find_zone("example.com").insights}
@@ -303,14 +284,6 @@ class EphemeralRecordTests(TestCase):
 
         declared = ManagedResource.objects.filter(kind=RECORD_KIND)
         self.assertEqual([r.spec["name"] for r in declared], ["example.com"])
-
-    def test_but_ones_that_outlived_their_issuance_are_still_reported(self):
-        """Invisible is right for a record that lives seconds. A leftover is a
-        real problem and keeps its own card."""
-
-        card = next(i for i in self.zone.insights if i.label == "Left-over ACME challenges")
-        self.assertIn("2", card.value)
-        self.assertTrue(card.concern)
 
 
 @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)

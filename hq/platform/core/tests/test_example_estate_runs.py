@@ -29,9 +29,13 @@ class EstateRunTests(TestCase):
             "waiting": self.runs(state=State.QUEUED),
             "working": self.runs(state=State.CLAIMED, lease_expires_at__gt=now),
             "done": self.runs(state=State.SUCCEEDED),
-            "failed a task": self.runs(state=State.FAILED, result__events__isnull=False),
-            "outcome unknown": self.runs(state=State.CANCELLED, result__reason="OutcomeUnknown"),
-            "called off": self.runs(state=State.CANCELLED).exclude(result__reason="OutcomeUnknown"),
+            "failed a task": self.runs(state=State.FAILED, result__outcome__ending="task_failed"),
+            "machine unreached": self.runs(state=State.FAILED, result__outcome__ending="unreachable"),
+            "cancelled while it ran": self.runs(state=State.CANCELLED, result__events__isnull=False).exclude(
+                result__outcome__ending="unknown"
+            ),
+            "outcome unknown": self.runs(state=State.CANCELLED, result__outcome__ending="unknown"),
+            "called off": self.runs(state=State.CANCELLED, result__reason="SwitchedOff"),
             "approved by a person": self.runs(~Q(input__approved_by="")).filter(input__approved_by__isnull=False),
             "correlated": self.runs(~Q(input__correlation="")),
         }

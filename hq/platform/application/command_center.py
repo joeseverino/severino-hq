@@ -24,6 +24,7 @@ from .topology_lenses import topology_lenses
 from .ui import counted
 lazy from .estate import estate_reading
 lazy from .projection import projection_scope
+lazy from .service_list import served_on
 
 _MATCHING_ABILITY_BADGE_LIMIT = 3
 _SEARCH_WORD = re.compile(r"[a-z0-9]+")
@@ -221,7 +222,7 @@ def _estate_items() -> tuple[DiscoveryItem, ...]:
             summary=dotted(
                 ", ".join(role.label for role in machine.roles),
                 machine.role,
-                counted(len(machine.hostnames), "service") if machine.hostnames else "",
+                counted(len(serves), "service") if (serves := served_on(machine.name)) else "",
             ),
             url=machine.url,
             destination_label="Machine",

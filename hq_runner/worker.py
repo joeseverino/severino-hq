@@ -15,6 +15,7 @@ from .bridge import BridgeError
 from .claim import Claimed, Installed, Reach, Refused, Run, bind, capabilities, claimed
 from .events import (
     ELSEWHERE,
+    MESSAGE_LIMIT,
     MISSHAPEN,
     PAST_BOUNDS,
     STARTED,
@@ -35,13 +36,27 @@ from .journal import Journal
 # renewals fit in one lease, so one lost renewal never lets it lapse.
 LEASE_SECONDS = 120
 RENEW_EVERY_SECONDS = 40
-# Why a run stopped whose lease could not be renewed.
-LEASE_LOST = "LeaseLost"
 
-UNKNOWN = (
-    "The worker stopped during this run before it reported, so whether it changed the machines is unknown. "
-    "It is not run again."
-)
+# How a run ended (the contract's ``RunOutcome``), which HQ words its result from.
+SUCCEEDED = "succeeded"
+TASK_FAILED = "task_failed"
+UNREACHABLE = "unreachable"
+ERRORED = "errored"
+TIMED_OUT = "timed_out"
+CANCELLED = "cancelled"
+PAUSED = "paused"
+LEASE_LOST = "lease_lost"
+REFUSED = "refused"
+UNKNOWN = "unknown"
+
+
+def ending(kind: str, *, task: str = "", host: str = "", message: str = "") -> dict[str, str]:
+    """A ``RunOutcome``: how a run ended, with the task and machine it failed
+    on and the ending's own words where it has them."""
+
+    # Cut to the contract's bound as ``events`` cuts a task's message.
+    said = message if len(message) <= MESSAGE_LIMIT else message[: MESSAGE_LIMIT - 1] + "…"
+    return {"ending": kind, "task": task, "host": host, "message": said}
 
 
 class Bridge(Protocol):
@@ -102,7 +117,8 @@ class _Hold:
         self._secrets = secrets
         self._renewed = clock()
         self.tasks = Tasks()
-        self.stopped: tuple[str, str] | None = None
+        # How the run ended once it was told to stop (``ending``).
+        self.stopped: dict[str, str] | None = None
         # The run's span, which ansible-runner's thread asks this on.
         self.span: Any = None
 
@@ -118,7 +134,7 @@ class _Hold:
         """Tell HQ the tasks it has yet to hear once the playbook has ended,
         unless the lease is lost; whether it may go on no longer matters."""
 
-        if self.tasks.changed and (self.stopped is None or self.stopped[0] != LEASE_LOST):
+        if self.tasks.changed and (self.stopped is None or self.stopped["ending"] != LEASE_LOST):
             self._renew(self._clock(), ended=True)
 
     def _renew(self, now: float, *, ended: bool = False) -> None:
@@ -129,35 +145,36 @@ class _Hold:
         except BridgeError as exc:
             # A lease that cannot be held lapses, and HQ then treats the run
             # as unknown; stopping now keeps what it did as small as it can be.
-            self.stopped = (LEASE_LOST, strike(f"Its lease could not be renewed: {exc}", self._secrets))
+            self.stopped = ending(LEASE_LOST, message=strike(str(exc), self._secrets))
             return
         self._renewed = now
         tracing.event(self.span, "lease renewed")
         if not ended and answer.get("continue") is not True:
-            reason = answer.get("reason")
-            if reason == "Cancelled":
-                self.stopped = ("Cancelled", "It was cancelled in HQ.")
-            else:
-                self.stopped = ("Held", "HQ asked it to stop: whoever asked for it is paused or blocked.")
+            self.stopped = ending(CANCELLED if answer.get("reason") == "Cancelled" else PAUSED)
 
 
-def _condition(reason: str, message: str) -> list[dict[str, Any]]:
-    return [{"type": "Degraded", "status": True, "reason": reason, "message": message}]
+def _scanned(generation: int, *, message: str, reason: str = "") -> dict[str, Any]:
+    """A scan's report: whether it read the source (a refusal's ``reason`` where not), in a line."""
+
+    report: dict[str, Any] = {"success": not reason, "observed_generation": generation, "message": message}
+    if reason:
+        report["conditions"] = [{"type": "Degraded", "status": True, "reason": reason, "message": message}]
+    return report
 
 
-def _report(
-    generation: int,
-    *,
-    success: bool,
-    message: str,
-    reason: str = "",
-    stated: Mapping[str, Any] | None = None,
+def _ran(
+    generation: int, outcome: dict[str, str], *, left_out: str = "", stated: Mapping[str, Any] | None = None
 ) -> dict[str, Any]:
-    report: dict[str, Any] = {"success": success, "observed_generation": generation, "message": message}
+    """A run's report: how it ended, what the report leaves out, and what its playbook stated."""
+
+    report: dict[str, Any] = {
+        "success": outcome["ending"] == SUCCEEDED,
+        "observed_generation": generation,
+        "message": left_out,
+        "outcome": outcome,
+    }
     if stated:
         report["stated"] = dict(stated)
-    if not success:
-        report["conditions"] = _condition(reason, message)
     return report
 
 
@@ -173,53 +190,44 @@ def _left_out(stated: Stated) -> str:
     return f"{parts} not reported: {said}."
 
 
-# The outcomes that say why a failed run failed, so a run with none of them
-# failed before any task did.
-_FAILED = frozenset({"failed", "unreachable"})
+# The task outcomes that say why a failed run failed, so a run with none of
+# them failed before any task did.
+_FAILED = {"failed": TASK_FAILED, "unreachable": UNREACHABLE}
 
 
-def _ended(
-    run: Run, status: str, result: str | None, events: Sequence[Event], stopped: str | None
-) -> tuple[bool, str, str]:
-    """Whether a run ansible-runner ended as ``status`` succeeded, and why not.
+def _ended(status: str, result: str | None, events: Sequence[Event], stopped: str | None) -> dict[str, str]:
+    """How a run ansible-runner ended as ``status`` ended (``ending``).
 
-    A run that succeeded says the result its playbook stated, if any; HQ
-    words the rest from what it stated and its tasks. A run that failed with
-    no task failed or machine unreached says the error Ansible stopped it
-    with (``events.Stopped``).
+    One that succeeded carries the result its playbook stated, if any; one
+    that failed names its first task to fail or machine unreached, else the
+    error Ansible stopped it with (``events.Stopped``).
     """
 
     if status == "successful":
-        return True, "", result or ""
-    if status == "failed":
-        if stopped and not any(event.outcome in _FAILED for event in events):
-            return False, "Failed", stopped
-        return False, "Failed", "A task failed or a machine could not be reached."
+        return ending(SUCCEEDED, message=result or "")
     if status == "timeout":
-        return False, "TimedOut", f"It ran past its procedure's {run.timeout_seconds} second timeout."
-    return False, "Failed", f"ansible-runner ended it as {status}."
+        return ending(TIMED_OUT)
+    failed = next((event for event in events if event.outcome in _FAILED), None)
+    if failed is not None:
+        kind = _FAILED[failed.outcome]
+        return ending(kind, task=failed.task if kind == TASK_FAILED else "", host=failed.host)
+    return ending(ERRORED, message=stopped or f"ansible-runner ended it as {status}.")
 
 
 def _finish(run: Run, status: str, hold: _Hold, said: Stated | None, stopped: str | None) -> dict[str, Any]:
     hold.told()
     events = hold.tasks.every
-    left_out = bounded(events)[1]
-    if hold.stopped is not None:
-        reason, message = hold.stopped
-        success = False
-    else:
-        success, reason, message = _ended(run, status, said.result if said else None, events, stopped)
-    if left_out:
-        message = f"{message} {left_out} task outcomes that were fine or skipped are not listed.".lstrip()
-    if said is not None and (unreported := _left_out(said)):
-        message = f"{message} {unreported}".lstrip()
-    return _report(
-        run.generation,
-        success=success,
-        message=message,
-        reason=reason,
-        stated=said.as_report() if said else None,
+    unlisted = bounded(events)[1]
+    outcome = hold.stopped or _ended(status, said.result if said else None, events, stopped)
+    left_out = " ".join(
+        line
+        for line in (
+            f"{unlisted} task outcomes that were fine or skipped are not listed." if unlisted else "",
+            _left_out(said) if said is not None else "",
+        )
+        if line
     )
+    return _ran(run.generation, outcome, left_out=left_out, stated=said.as_report() if said else None)
 
 
 def run_claimed(
@@ -256,7 +264,7 @@ def run_claimed(
         tracing.note(**{"ansible.status": status})
     report = _finish(run, status, hold, said[-1] if said else None, stopped.message)
     if hold.stopped is not None:
-        tracing.note(**{"hq.stopped": hold.stopped[0]})
+        tracing.note(**{"hq.stopped": hold.stopped["ending"]})
     return report
 
 
@@ -273,10 +281,10 @@ def scan_claimed(claim: Claimed, scan: Scan, secrets: Collection[str] = ()) -> d
             catalog = scan()
         except Refused as refused:
             message = strike(refused.message, secrets)
-            return _report(claim.generation, success=False, message=message, reason=refused.reason)
+            return _scanned(claim.generation, message=message, reason=refused.reason)
         tracing.note(**{"hq.procedures": len(catalog["procedures"])})
     message = f"Read commit {catalog['revision'][:12]} on {catalog['branch']}: {len(catalog['procedures'])} playbooks."
-    report = _report(claim.generation, success=True, message=strike(message, secrets))
+    report = _scanned(claim.generation, message=strike(message, secrets))
     report["catalog"] = struck_all(dict(catalog), secrets)
     return report
 
@@ -353,13 +361,12 @@ def _pass(
     if claim.scans:
         report = scan_claimed(claim, scan, secrets)
     elif entry.operation == claim.operation:
-        report = entry.report or _report(claim.generation, success=False, message=UNKNOWN, reason="OutcomeUnknown")
+        report = entry.report or _ran(claim.generation, ending(UNKNOWN))
     else:
         try:
             run = bind(claim, installed, reach)
         except Refused as refused:
-            message = strike(refused.message, secrets)
-            report = _report(claim.generation, success=False, message=message, reason=refused.reason)
+            report = _ran(claim.generation, ending(REFUSED, message=strike(refused.message, secrets)))
         else:
             entry = journal.started(entry, claim.operation)
             report = run_claimed(bridge, controller_id, run, runner, clock, secrets)

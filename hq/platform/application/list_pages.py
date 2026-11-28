@@ -7,7 +7,7 @@ from typing import Any
 from django.core.exceptions import BadRequest, ImproperlyConfigured
 from django.db.models import QuerySet
 
-from .integration_specs import SEARCH_FIELD, ListRead, ResourceSpec
+from .integration_specs import SEARCH_FIELD, ListRead, ListSort, ResourceSpec, reversed_sort
 from .page_reads import Remedy
 from .pages import PageMixin
 from .tables import Cell, DataTable, Row, TableColumn, typed
@@ -68,7 +68,20 @@ class ListPageMixin(PageMixin):
         for name, allowed in self.scope().items():
             if chosen := [value for value in asked.pop(name, "").split(",") if value in allowed]:
                 asked[name] = ",".join(chosen)
+        # Unasked and unsearched, the list is read in the first order the page offers.
+        if (offered := self.sorts()) and not asked.get("sort") and not asked.get(SEARCH_FIELD):
+            asked["sort"] = offered[0].name
         return asked
+
+    def sorts(self) -> tuple[ListSort, ...]:
+        """The list's sorts its columns carry, each heading's and its reverse,
+        in the list's order: an order over a value no column shows is never
+        offered, nor is the page read in it."""
+
+        carried = {
+            each for column in self.table_columns if column.sort for each in (column.sort, reversed_sort(column.sort))
+        }
+        return tuple(sort for sort in self.listing.sorts if sort.name in carried)
 
     def scope(self) -> dict[str, tuple[str, ...]]:
         """The values of a filter this page always reads within, each filter
@@ -148,7 +161,7 @@ class ListPageMixin(PageMixin):
     def table(self) -> dict[str, Any]:
         """What the toolbar, the headings and the empty state draw."""
 
-        listing, asked = self.listing, self.list_query()
+        listing, asked, offered = self.listing, self.list_query(), self.sorts()
         names = {sort.name for sort in listing.sorts}
         for column in self.table_columns:
             if column.sort and not {column.sort, f"-{column.sort}"} <= names:
@@ -176,7 +189,7 @@ class ListPageMixin(PageMixin):
         query = self.request.GET.get(_SEARCH, "")
         # A list that searches its own way keeps its order when searched.
         relevance = [("", "Relevance")] if query.strip() and self.spec.search else []
-        default = listing.sorts[0].name if listing.sorts and not relevance else ""
+        default = offered[0].name if offered and not relevance else ""
         model = self.spec.search.model if self.spec.search else None
         return {
             "query": query,
@@ -184,8 +197,8 @@ class ListPageMixin(PageMixin):
             "search_placeholder": self.table_search_placeholder if SEARCH_FIELD in listing.query.model_fields else "",
             "filters": filters,
             "toggles": toggles,
-            "sorts": listing.sorts,
-            "sort_choices": [*relevance, *((sort.name, sort.label) for sort in listing.sorts)],
+            "sorts": offered,
+            "sort_choices": [*relevance, *((sort.name, sort.label) for sort in offered)],
             "selected_sort": asked.get("sort", default),
             "columns": typed(self.table_columns, model),
             "selectable": self.table_selectable,

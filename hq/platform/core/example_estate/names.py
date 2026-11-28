@@ -17,6 +17,8 @@ PROXY = "172.18.0.2"
 # The tailnet's devices besides the machine, as their owner named them.
 LAPTOP_NAME = "macbook-pro-16"
 PHONE_NAME = "iphone-16-pro"
+# A machine at the edge, which only the edge seed adds.
+EDGE = "edge-01"
 # The home's public address, from a documentation range.
 PUBLIC = "198.51.100.7"
 # The person who runs it: their username in HQ, first and last name, and the
@@ -81,7 +83,7 @@ TAILNET_V4, TAILNET_V6 = reach.TAILNET
 MAGIC_DNS = "tailc0ffee.ts.net"
 # Each device's place in the tailnet. Its addresses are patterned, so plainly
 # made up, and as long as real ones run.
-DEVICES = {MACHINE: 103, LAPTOP_NAME: 104, PHONE_NAME: 105}
+DEVICES = {MACHINE: 103, LAPTOP_NAME: 104, PHONE_NAME: 105, EDGE: 106}
 
 
 def node_id(device):

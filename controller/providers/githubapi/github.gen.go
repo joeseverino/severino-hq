@@ -543,6 +543,27 @@ func (e DiffEntryStatus) Valid() bool {
 	}
 }
 
+// Defines values for EnvironmentApprovalsState.
+const (
+	EnvironmentApprovalsStateApproved EnvironmentApprovalsState = "approved"
+	EnvironmentApprovalsStatePending  EnvironmentApprovalsState = "pending"
+	EnvironmentApprovalsStateRejected EnvironmentApprovalsState = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the EnvironmentApprovalsState enum.
+func (e EnvironmentApprovalsState) Valid() bool {
+	switch e {
+	case EnvironmentApprovalsStateApproved:
+		return true
+	case EnvironmentApprovalsStatePending:
+		return true
+	case EnvironmentApprovalsStateRejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for JobStepsStatus.
 const (
 	JobStepsStatusCompleted  JobStepsStatus = "completed"
@@ -1705,6 +1726,8 @@ type DeploymentReviewerType string
 
 // DeploymentStatus The status of a deployment.
 type DeploymentStatus struct {
+	CreatedAt string `json:"created_at"`
+
 	// Description A short description of the status.
 	Description string `json:"description"`
 
@@ -1815,6 +1838,18 @@ type EnvironmentProtectionRules2 struct {
 type Environment_ProtectionRules_Item struct {
 	union json.RawMessage
 }
+
+// EnvironmentApprovals An entry in the reviews log for environment deployments
+type EnvironmentApprovals struct {
+	// State Whether deployment to the environment(s) was approved or rejected or pending (with comments)
+	State EnvironmentApprovalsState `json:"state"`
+
+	// User A GitHub user.
+	User SimpleUser `json:"user"`
+}
+
+// EnvironmentApprovalsState Whether deployment to the environment(s) was approved or rejected or pending (with comments)
+type EnvironmentApprovalsState string
 
 // FullRepository Full Repository
 type FullRepository struct {
@@ -2388,6 +2423,9 @@ type WorkflowRun struct {
 	CheckSuiteID int    `json:"check_suite_id,omitempty"`
 	Conclusion   string `json:"conclusion"`
 	CreatedAt    string `json:"created_at"`
+
+	// DisplayTitle The event-specific title associated with the run or the run-name if set, or the value of `run-name` if it is set in the workflow.
+	DisplayTitle string `json:"display_title"`
 	Event        string `json:"event"`
 	HeadBranch   string `json:"head_branch"`
 
@@ -3567,6 +3605,9 @@ type ClientInterface interface {
 	// ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
 	ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ActionsGetReviewsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals (the `ActionsGetReviewsForRun` operationId) request.
+	ActionsGetReviewsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ActionsGetPendingDeploymentsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 	ActionsGetPendingDeploymentsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -3878,6 +3919,19 @@ func (c *Client) ActionsListSelfHostedRunnersForRepo(ctx context.Context, owner 
 // ActionsListWorkflowRunsForRepo performs a GET /repos/{owner}/{repo}/actions/runs (the `ActionsListWorkflowRunsForRepo` operationId) request.
 func (c *Client) ActionsListWorkflowRunsForRepo(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewActionsListWorkflowRunsForRepoRequest(c.Server, owner, repo, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ActionsGetReviewsForRun performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals (the `ActionsGetReviewsForRun` operationId) request.
+func (c *Client) ActionsGetReviewsForRun(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewActionsGetReviewsForRunRequest(c.Server, owner, repo, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -5093,6 +5147,54 @@ func NewActionsListWorkflowRunsForRepoRequest(server string, owner string, repo 
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
 		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewActionsGetReviewsForRunRequest constructs an http.Request for the ActionsGetReviewsForRun method
+func NewActionsGetReviewsForRunRequest(server string, owner string, repo string, runID string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "owner", owner, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "repo", repo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "run_id", runID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := "/repos/" + pathParam0 + "/" + pathParam1 + "/actions/runs/" + pathParam2 + "/approvals"
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -7690,6 +7792,11 @@ type ClientWithResponsesInterface interface {
 	// Returns a wrapper object for the known response body format(s).
 	ActionsListWorkflowRunsForRepoWithResponse(ctx context.Context, owner string, repo string, params *ActionsListWorkflowRunsForRepoParams, reqEditors ...RequestEditorFn) (*ActionsListWorkflowRunsForRepoReply, error)
 
+	// ActionsGetReviewsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals (the `ActionsGetReviewsForRun` operationId) request.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	ActionsGetReviewsForRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetReviewsForRunReply, error)
+
 	// ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -8470,6 +8577,47 @@ func (r ActionsListWorkflowRunsForRepoReply) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ActionsListWorkflowRunsForRepoReply) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ActionsGetReviewsForRunReply struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]EnvironmentApprovals
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ActionsGetReviewsForRunReply) GetJSON200() *[]EnvironmentApprovals {
+	return r.JSON200
+}
+
+// GetBody returns the raw response body bytes
+func (r ActionsGetReviewsForRunReply) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ActionsGetReviewsForRunReply) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ActionsGetReviewsForRunReply) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ActionsGetReviewsForRunReply) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -10324,6 +10472,17 @@ func (c *ClientWithResponses) ActionsListWorkflowRunsForRepoWithResponse(ctx con
 	return ParseActionsListWorkflowRunsForRepoReply(rsp)
 }
 
+// ActionsGetReviewsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/approvals (the `ActionsGetReviewsForRun` operationId) request.
+//
+// Returns a wrapper object for the known response body format(s).
+func (c *ClientWithResponses) ActionsGetReviewsForRunWithResponse(ctx context.Context, owner string, repo string, runID string, reqEditors ...RequestEditorFn) (*ActionsGetReviewsForRunReply, error) {
+	rsp, err := c.ActionsGetReviewsForRun(ctx, owner, repo, runID, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseActionsGetReviewsForRunReply(rsp)
+}
+
 // ActionsGetPendingDeploymentsForRunWithResponse performs a GET /repos/{owner}/{repo}/actions/runs/{run_id}/pending_deployments (the `ActionsGetPendingDeploymentsForRun` operationId) request.
 //
 // Returns a wrapper object for the known response body format(s).
@@ -11135,6 +11294,32 @@ func ParseActionsListWorkflowRunsForRepoReply(rsp *http.Response) (*ActionsListW
 			TotalCount   int           `json:"total_count"`
 			WorkflowRuns []WorkflowRun `json:"workflow_runs"`
 		}
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseActionsGetReviewsForRunReply parses an HTTP response from a ActionsGetReviewsForRunWithResponse call
+func ParseActionsGetReviewsForRunReply(rsp *http.Response) (*ActionsGetReviewsForRunReply, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ActionsGetReviewsForRunReply{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []EnvironmentApprovals
 		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

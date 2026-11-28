@@ -9,21 +9,19 @@ printer and the offline CA, which nothing will ever sweep.
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
-from functools import partial
 from typing import Any
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations.glance import MACHINE_KIND as TELEMETRY_KIND
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
-from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
 from .container_state import ContainerCount
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
 from .integration_specs import DetailRead, ListRead, ResourceSpec, typed_keys
-from .locate import Machines, host_of, index_of, observed_answers, points_at_host
+from .locate import host_of, machines_index, observed_answers, points_at_host
 from .machine_aliases import same_machine
 from .resources import BoundedQuery
 from .security import Capability
@@ -36,12 +34,13 @@ lazy from .connection_lifecycle import WORKING
 lazy from .connections import connection_rows, connection_standing
 lazy from .entity_links import entity_link
 lazy from .facts import Subject, kept_by, record_read_at, snapshots_of
-lazy from .infrastructure import declared_machines, enabled_resources
+lazy from .infrastructure import enabled_resources
 lazy from .machine_records import MachineRecord, MachineRow
 lazy from .machine_roles import role_context, roles_of
 lazy from .projection import read_once
 lazy from .reach import network_of
 lazy from .service_facets import connected_kinds
+lazy from .service_list import served_from
 lazy from .whereabouts import locate, whereabouts
 
 
@@ -114,7 +113,6 @@ class Machine:
 
         return tuple(item for item in self.containers if item.hidden)
 
-    hostnames: tuple[str, ...] = ()
     resources: tuple[str, ...] = field(default_factory=tuple)
     # Whether HQ itself runs here, and the names it answers at. Derived; see
     # ``application.hq_self``. Never a declaration.
@@ -134,11 +132,11 @@ class Machine:
 
     @property
     def subject(self) -> Subject:
-        """What a reading about this machine names it by: its names, its
-        addresses and the tailnet lock key its device holds."""
+        """What a reading about this machine names it by: its machine names,
+        its addresses and the tailnet lock key its device holds."""
 
         return Subject.of(
-            hostnames=(self.name, *self.aliases),
+            machines=(self.name, *self.aliases),
             addresses=self.addresses,
             keys=(self.presence.lock_key,) if self.presence is not None else (),
         )
@@ -221,26 +219,12 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
     declared = _declarations()
     present = tailnet_presence()
     reached = _with_tailnet(opened, present, connections)
-    # One index over everything this page has already read, and the same one
-    # every other surface resolves an address through. Built here rather than
-    # queried again because the readings above are exactly its evidence.
+    # The same index every other surface places an address through.
     addresses = _host_addresses(containers)
-    index = index_of(
-        declared=[{"name": name, "addresses": entry.addresses} for name, entry in declared.items()]
-        # The tailnet's own addresses, as evidence rather than as something
-        # somebody has to retype: without them a tailnet address resolves to a
-        # machine only when an operator has copied it into the declaration.
-        #
-        # After the declarations, so a declared name still wins the address it
-        # claims and nothing about precedence moves.
-        + [{"name": name, "addresses": presence.addresses} for name, presence in present.items()],
-        hosts=addresses,
-        connections=connections,
-    )
-    services = _services_by_host(index)
+    index = machines_index([{"name": name, "addresses": entry.addresses} for name, entry in declared.items()])
     resources, device_keys = _resources_by_host()
     # A declared machine counts on its own; declaring one is a deliberate act.
-    names = set(containers) | set(reached) | set(services) | set(resources) | set(declared) | set(present)
+    names = set(containers) | set(reached) | set(resources) | set(declared) | set(present)
     answered = {connection.connection_ref for connection in connections if connection_standing(connection) in WORKING}
     aliases = same_machine(index, addresses, connections, present)
     canonical = sorted(names - set(aliases))
@@ -318,12 +302,6 @@ def machine_catalog(*, served_at: tuple[str, ...] | None = None) -> tuple[Machin
             # by two names runs one set of containers.
             containers=tuple(containers.get(name, ()))
             + tuple(item for alias, target in aliases.items() if target == name for item in containers.get(alias, ())),
-            hostnames=tuple(
-                sorted(
-                    set(services.get(name, ()))
-                    | {hostname for alias in aliases if aliases[alias] == name for hostname in services.get(alias, ())}
-                )
-            ),
             resources=tuple(sorted(resources.get(name, ()))),
             runs_hq=name == hq_on,
             hq_hostnames=hq_names if name == hq_on else (),
@@ -497,50 +475,6 @@ def _declarations() -> dict[str, Declared]:
     return result
 
 
-def _origin_and_names(provider: Any, spec: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
-    return provider.origin(spec) if provider.origin else "", tuple(provider.hostnames(spec))
-
-
-def _services_by_host(index: Machines) -> dict[str, set[str]]:
-    """Which names are served from which machine.
-
-    Read straight off the declarations that answer "and then what serves it": a
-    board of machines needs one field from each service, and assembling every
-    service in full to get it is a query per row and then some.
-    """
-
-    # Ranked exactly as the service catalog ranks them, through the one rule
-    # both read. A name whose ingress declares an origin is served where the
-    # ingress forwards; the record pointing at that ingress is not a second
-    # answer to file it under a second machine.
-    routed: dict[str, str] = {}
-    resolved: dict[str, str] = {}
-    for resource in enabled_resources():
-        provider = PROVIDERS.get(resource.kind)
-        if provider is None or provider.origin is None or provider.hostnames is None:
-            continue
-        read = read_spec(resource.kind, resource.spec, partial(_origin_and_names, provider))
-        if read is None:
-            continue
-        origin, names = read
-        if not origin:
-            continue
-        rank = routed if origin_is_authoritative(provider) else resolved
-        for name in names:
-            hostname = normalized_hostname(name)
-            if hostname:
-                rank.setdefault(hostname, origin)
-
-    # Resolved through the index every other surface uses, so the machine this
-    # board files a name under and the one its own page names cannot disagree.
-    found: dict[str, set[str]] = {}
-    for hostname, origin in {**resolved, **routed}.items():
-        host = index.resolve(origin)
-        if host:
-            found.setdefault(host, set()).add(hostname)
-    return found
-
-
 def declares_host(kind: str) -> bool:
     """Whether a declaration of this kind names the machine it lives on.
 
@@ -593,11 +527,8 @@ class Serving:
 
 
 def served_by() -> dict[tuple[str, str], Serving]:
-    """``{(machine, container): Serving}``: which names each container answers for.
-
-    Resolved the same way a service resolves its own origin, but without
-    assembling every service to ask: the board builds facets, health and
-    certificates for each name, and none of that answers this question. Once
+    """``{(machine, container): Serving}``: which names each container answers
+    for (``service_list.served_from``) and which it resolves or routes. Once
     per projection, so a page listing every container asks it once.
     """
 
@@ -622,30 +553,22 @@ def connections_inside() -> dict[tuple[str, str], tuple[ProviderConnection, ...]
 
 
 def _served_by() -> dict[tuple[str, str], Serving]:
-    machines = declared_machines()
-    at = whereabouts(machines)
+    names = {key: found for key, found in served_from().items() if key[1]}
     holders = {row.connection_ref: key for key, rows in connections_inside().items() for row in rows}
-    names: dict[tuple[str, str], set[str]] = {}
     through: dict[tuple[str, str], dict[str, set[str]]] = {}
     # The shared read of every enabled declaration, not a query of its own.
     for resource in enabled_resources():
         provider = PROVIDERS.get(resource.kind)
-        if provider is None or provider.hostnames is None:
+        if provider is None or provider.hostnames is None or provider.facet not in PASSES_THROUGH:
             continue
-        read = read_spec(resource.kind, resource.spec, partial(_origin_and_names, provider))
-        if read is None:
-            continue
-        origin, found = read
-        hostnames = {name for name in map(normalized_hostname, found) if name}
-        located = locate(origin, machines, at) if origin else None
-        if located is not None and located.host and located.container:
-            names.setdefault((located.host, located.container), set()).update(hostnames)
         holder = holders.get(_held_through(resource.spec, provider))
-        if holder is not None and provider.facet in PASSES_THROUGH:
+        found = read_spec(resource.kind, resource.spec, provider.hostnames) if holder is not None else None
+        if found:
+            hostnames = {name for name in map(normalized_hostname, found) if name}
             through.setdefault(holder, {}).setdefault(PASSES_THROUGH[provider.facet], set()).update(hostnames)
     return {
         key: Serving(
-            tuple(sorted(names.get(key, ()))),
+            names.get(key, ()),
             tuple((does, tuple(sorted(held))) for does, held in sorted(through.get(key, {}).items())),
         )
         for key in names.keys() | through.keys()

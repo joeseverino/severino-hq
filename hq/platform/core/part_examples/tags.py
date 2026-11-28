@@ -676,20 +676,20 @@ ROW_ACTIONS_STATES = {
 }
 
 
-DATA_TABLE = Example(
-    "{% data_table table %}",
-    context=lambda: {
-        "table": DataTable.of(
-            "Example hosts",
-            (
-                TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
-                TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
-                TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
-            ),
-            ("example-host-01", "example-host-two"),
-        )
-    },
-)
+def _hosts(note: str = "") -> DataTable:
+    return DataTable.of(
+        "Example hosts",
+        (
+            TableColumn("Host", cell=lambda name: Cell(name, f"/example/{name}/")),
+            TableColumn("State", cell=lambda name: Cell("Online", tone="good")),
+            TableColumn("Cost", kind="numeric", cell=lambda name: Cell(amount=Decimal(len(name)))),
+        ),
+        ("example-host-01", "example-host-two"),
+        note=note,
+    )
+
+
+DATA_TABLE = Example("{% data_table table %}", context=lambda: {"table": _hosts()})
 
 
 TABLE_HEADING = Example(
@@ -708,7 +708,13 @@ ROW_GROUP = Example(
         "table": DataTable(
             "Example groups",
             (TableColumn("Host"),),
-            groups=(tables.Group("Example group", (tables.Row((Cell("example-host"),)),), count=3),),
+            groups=(
+                tables.Group(
+                    "Example group",
+                    (tables.Row((Cell("example-host-01"),)), tables.Row((Cell("example-host-02"),))),
+                    counted=True,
+                ),
+            ),
         )
     },
 )
@@ -820,7 +826,7 @@ def _every_kind() -> DataTable:
             tables.Group(
                 "Example group",
                 (head, row("example-host-02", folded="example-fold"), rest, blank, marked),
-                count=4,
+                counted=True,
                 id="example-group",
                 data={"example": "group"},
             ),
@@ -859,9 +865,51 @@ def _queue_kind() -> DataTable:
     return DataTable("Example queue", (TableColumn("Item"),), tuple(row(decision(each)) for each in opened_problems()))
 
 
+def _identifiers() -> DataTable:
+    """Names beside a column of words that takes the room: hosts, hyphenated,
+    several to a cell, a dotted grant in code, and a sentence that names a
+    directive. Each is whole while its column's share holds it."""
+
+    return DataTable(
+        "Example identifiers",
+        (TableColumn("Connection"), TableColumn("Reaches"), TableColumn("Grant"), TableColumn("Note", css="key-col")),
+        tuple(
+            tables.Row(
+                (
+                    Cell(name, f"/example/{at}/", name=True),
+                    Cell(
+                        "example-host-01",
+                        "/example/host/",
+                        parts=tuple(
+                            Cell(host, f"/example/{host}/", dot=True)
+                            for host in ("example-lab-server", "ex-cloud-edge-01", "example-edge-02", "example-nas-01")
+                        ),
+                    ),
+                    Cell("example.read", readout=True),
+                    Cell(
+                        "An example policy refused a script that broke its require-trusted-types-for. "
+                        "directive, as an example sentence long enough to take the room it is offered.",
+                        role="prose",
+                    ),
+                )
+            )
+            for at, name in enumerate(("Example API", "Example tailnet"))
+        ),
+    )
+
+
 DATA_TABLE_STATES = {
     "kinds": Example("{% data_table table %}", context=lambda: {"table": _every_kind()}),
     "queue": Example("{% data_table table %}", context=lambda: {"table": _queue_kind()}),
+    # Hosts in a column as narrow as the words beside it leave it, a dotted
+    # grant and a directive in a sentence: no name breaks at a hyphen or a
+    # dot while its share holds it whole.
+    "identifiers": Example("{% data_table table %}", context=lambda: {"table": _identifiers()}),
+    # A statement true of every row, beneath them once.
+    "note": Example(
+        "{% data_table table %}",
+        context=lambda: {"table": _hosts(note="Each cost is the example host's monthly bill, before tax.")},
+    ),
 }
 
 
@@ -889,6 +937,13 @@ ENTITY_STATES = {
         '<p style="inline-size: 14rem">Built from an example source '
         '{% entity "machine"|entity_of:name lead="on" %}</p>',
         context={"name": "example-host-01"},
+    ),
+    # A link whose words end on a mark the loader holds to the value before
+    # it, in a line too narrow for the link: the mark keeps the value's line,
+    # its glyph clear of the link's line and heard in the link's name.
+    "closing-mark": Example(
+        '<p style="inline-size: 9rem">Example runs: <a href="/example/">Run{% dot %}1.7 mi ({{ state }})</a></p>',
+        context={"state": "done"},
     ),
 }
 

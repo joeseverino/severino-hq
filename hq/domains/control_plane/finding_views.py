@@ -14,6 +14,7 @@ from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.core import queue_table
+from hq.platform.core.templatetags.status_tags import urgency_tone
 
 # The queue's source for findings: the domain whose pages they are about.
 SOURCE_ID, SOURCE = "hq.infrastructure", "Infrastructure"
@@ -54,7 +55,9 @@ class FindingsView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         principal, active_rule, every, raised, entries = self._shown
 
-        counts = Counter(finding.severity for finding in raised)
+        # Counted by the tone each row's urgency is drawn in, so a notice
+        # counts as the note it reads as.
+        counts = Counter(urgency_tone(entry) for entry in entries)
         context.update(
             {
                 "finding_entries": entries,

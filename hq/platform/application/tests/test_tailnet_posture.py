@@ -11,7 +11,8 @@ from hq.platform.core.testing import connection, declare, operator
 from ..findings import findings
 from ..inventory_testing import store
 from ..security import Capability, Principal
-from ..tailnet import TAILNET_KIND, WELL_KNOWN_PORTS, grant_ports
+from ..tailnet import TAILNET_KIND
+from ..tailnet_ports import WELL_KNOWN_PORTS, grant_ports
 
 EVERYTHING = Principal("test", "operator", frozenset(Capability))
 
@@ -66,7 +67,9 @@ class PortNameTests(TestCase):
         )
 
     def names(self, *entries, dst=("tag:server",)):
-        (grant,) = grant_ports(({"src": ["*"], "dst": list(dst), "ip": list(entries)},))
+        grants = ({"src": ["*"], "dst": list(dst), "ip": list(entries)},)
+        policy(grants=list(grants))
+        (grant,) = grant_ports(grants)
         return dict(grant["ports"])
 
     def test_the_ssh_connection_names_its_port(self):
@@ -96,33 +99,6 @@ class PortNameTests(TestCase):
 
     def test_a_port_on_another_destination_is_not_named_by_this_one(self):
         self.assertEqual(self.names("tcp:7722", dst=("tag:other",))["tcp:7722"], "")
-
-    def _hq_names(self, port, *, runs_hq=True, entry="tcp:8000"):
-        from types import SimpleNamespace
-
-        from ..projection import projection_scope
-
-        machine = SimpleNamespace(
-            name="example-host",
-            aliases=(),
-            reached_by=(),
-            opened_by=(),
-            containers=(),
-            runs_hq=runs_hq,
-            addresses=(),
-        )
-        with projection_scope(seed={"hq.served_port": port}):
-            (grant,) = grant_ports(({"src": ["*"], "dst": ["tag:server"], "ip": [entry]},), machines=[machine])
-        return dict(grant["ports"])[entry]
-
-    def test_hq_names_the_port_it_serves_on_its_own_machine(self):
-        self.assertEqual(self._hq_names(8000), "Severino HQ")
-
-    def test_the_same_port_elsewhere_is_not_hq(self):
-        self.assertEqual(self._hq_names(8000, runs_hq=False), "")
-
-    def test_without_a_request_port_hq_names_nothing(self):
-        self.assertEqual(self._hq_names(None), "")
 
     def test_the_policy_page_renders_the_port_as_a_chip_and_its_name_beside_it(self):
         policy(
@@ -266,7 +242,7 @@ class GrantReachesOnlyLoopbackTests(TestCase):
         with (
             _own("100.64.0.5"),
             mock.patch(
-                "hq.platform.application.tailnet_loopback.own_container",
+                "hq.platform.application.tailnet_ports.own_container",
                 return_value=SimpleNamespace(address="example-host:example-hq"),
             ),
         ):

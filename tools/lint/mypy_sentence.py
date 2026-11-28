@@ -69,7 +69,9 @@ NOT_WRITTEN = (
 )
 UNHELD = "A module that names Sentence is held to return-value and assignment; name it in tools/lint/mypy-reach.toml"
 # What an f-string may say beside words: a value HQ writes in its own form.
-FACTS = ("builtins.int", "builtins.float", "decimal.Decimal", "datetime.date", "datetime.timedelta")
+# A length of time HQ worded (moments.Span) is a sentence of its own.
+SPAN = "hq.platform.application.moments.Span"
+FACTS = ("builtins.int", "builtins.float", "decimal.Decimal", "datetime.date", "datetime.timedelta", SPAN)
 CASE = frozenset({"lower", "capitalize"})
 CHOICE_LABEL = re.compile(r"get_\w+_display")
 # ``counted`` says a number with the words it is given, which a page's may be
@@ -193,8 +195,10 @@ def _is_written(kind: ProperType) -> bool:
         case LiteralType():
             return isinstance(kind.value, str)
         case Instance():
-            return kind.type.fullname == WRITTEN or (
-                kind.type.fullname == "builtins.str" and kind.last_known_value is not None
+            return (
+                kind.type.fullname == WRITTEN
+                or kind.type.has_base(SPAN)
+                or (kind.type.fullname == "builtins.str" and kind.last_known_value is not None)
             )
     return False
 

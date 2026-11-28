@@ -37,7 +37,7 @@ from hq.platform.core.tests.browser.survey import geometry_probes
 from hq.platform.core.tests.browser.widths import PALETTE_AT, PHONE_SCREEN, SCRIPTED, WIDE, viewport
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
-lazy from hq.platform.core import seeds
+lazy from hq.platform.core import redirects, seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
@@ -60,7 +60,6 @@ _STYLED = '<!doctype html><html><head><meta charset="utf-8"><style>p { color: re
 _NOT_HQS_MARKUP = {"api_reference:reference"}
 # Reached from the header on every page rather than from the navigation.
 _HEADER = ("action_items",)
-_REDIRECTS = frozenset({301, 302, 303, 307, 308})
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
@@ -115,16 +114,10 @@ def landing(ask: Callable[[str], Any], address: str) -> str:
     A navigation entry may be a stop on the way (Domains goes straight to a domain), and a list
     of pages names the page a reader reaches, which is the one a gate draws and perf measures."""
 
-    seen = [address]
-    while (response := ask(address)).status_code in _REDIRECTS:
-        to = urlsplit(urljoin(address, response.headers["Location"]))
-        if to.scheme or to.netloc:
-            raise Redirected(f"{seen[0]} redirects out of HQ, to {to.geturl()}")
-        address = to.path + (f"?{to.query}" if to.query else "")
-        if address in seen:
-            raise Redirected(f"{seen[0]} redirects in a loop: {' -> '.join([*seen, address])}")
-        seen.append(address)
-    return address
+    landed, _, to = redirects.follow(ask, address)
+    if to:
+        raise Redirected(f"{address} lands on no page of HQ's: {landed} redirects to {to}")
+    return landed
 
 
 def landings(ask: Callable[[str], Any], addresses: Sequence[str]) -> list[str]:
@@ -613,11 +606,12 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.evaluate("() => { window.kept = true; }")
                 link = self.page.locator(self.css(SELECTORS["sort_link"])).first
                 sorted_by = "(link) => link.closest('th').getAttribute('aria-sort')"
-                self.assertEqual(link.evaluate(sorted_by), "none")
-                for direction in ("ascending", "descending"):
-                    asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
-                    link.click()
-                    self.page.wait_for_function(_ASKED, arg=["sort", asked])
+                # Unasked, the list is read in its first column's order, and that heading says so.
+                for pressed, direction in enumerate(("ascending", "descending", "ascending")):
+                    if pressed:
+                        asked = dict(parse_qsl(urlsplit(link.get_attribute("href")).query))["sort"]
+                        link.click()
+                        self.page.wait_for_function(_ASKED, arg=["sort", asked])
                     self.assertEqual(link.evaluate(sorted_by), direction)
                     names = self.page.evaluate(_FIRST_COLUMN, self.css(SELECTORS["table_rows"]))
                     self.assertEqual(names, sorted(names, key=str.lower, reverse=direction == "descending"))

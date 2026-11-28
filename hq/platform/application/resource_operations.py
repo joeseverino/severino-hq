@@ -8,7 +8,7 @@ before the controller runs it.
 import secrets
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import Annotated, Any, Final, Literal, TypedDict, cast
 
@@ -57,6 +57,7 @@ from .managed_records import (
     RequestedActor,
     RequestedInterface,
 )
+from .moments import Span
 from .projection import iso
 from .record_errors import PolicyError, RecordNotFound, Sentence, worded
 from .record_saves import Created, row
@@ -767,13 +768,13 @@ def certificate_renewal_allowed(resource: ManagedResource) -> tuple[bool, Senten
     window = renewal_window(resource.spec)
     left = max(0, days_until(expiry))
     if datetime.now(UTC) >= renewal_opens_at(expiry, window):
-        return True, worded(f"{counted(left, 'day')} remaining.")
+        return True, worded(f"{Span(timedelta(days=left))} remaining.")
 
     return (
         False,
         worded(
             f"Renews automatically from {when_day(renewal_opens_at(expiry, window))} "
-            f"({counted(window, 'day')} before it expires)."
+            f"({Span(timedelta(days=window))} before it expires)."
         ),
     )
 

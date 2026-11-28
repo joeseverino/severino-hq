@@ -36,10 +36,19 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(events.HOST_LIMIT, run_event["host"]["maxLength"])
         self.assertEqual(events.TASK_LIMIT, run_event["task"]["maxLength"])
         self.assertEqual(events.MESSAGE_LIMIT, run_event["message"]["maxLength"])
-        self.assertEqual(events.MESSAGE_LIMIT, run_event["warnings"]["maxLength"])
+        self.assertEqual(events.MESSAGE_LIMIT, run_event["warnings"]["items"]["maxLength"])
+        self.assertEqual(events.WARNINGS_LIMIT, run_event["warnings"]["maxItems"])
         self.assertEqual(events.EVENT_LIMIT, self.schemas["RunProgress"]["properties"]["events"]["maxItems"])
         outcomes = {"ok", "changed", *(outcome for outcome in events._OUTCOMES.values())}
         self.assertLessEqual(outcomes, set(run_event["outcome"]["enum"]))
+
+    def test_a_run_s_outcome_is_held_to_run_outcome_s_endings_and_bounds(self):
+        outcome = self.schemas["RunOutcome"]["properties"]
+        endings = {value for name, value in vars(worker).items() if name.isupper() and isinstance(value, str)}
+        self.assertLessEqual(set(outcome["ending"]["enum"]), endings)
+        self.assertEqual(events.TASK_LIMIT, outcome["task"]["maxLength"])
+        self.assertEqual(events.HOST_LIMIT, outcome["host"]["maxLength"])
+        self.assertEqual(events.MESSAGE_LIMIT, outcome["message"]["maxLength"])
 
     def test_what_a_run_states_is_held_to_run_stated_s_bounds(self):
         stated = self.schemas["RunStated"]["properties"]

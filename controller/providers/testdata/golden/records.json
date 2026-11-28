@@ -564,7 +564,10 @@
             }
           ],
           "check_failed": true,
-          "image": "example"
+          "image": "example",
+          "outcome": "example",
+          "ended_at": "example",
+          "approved_by": "example"
         }
       ],
       "alerts": {
@@ -815,6 +818,23 @@
       "scheduled_action": "reboot",
       "scheduled_at": "2030-01-01T00:00:00Z",
       "since": "2030-01-01T00:00:00Z"
+    }
+  ],
+  "host.rehearsal": [
+    {
+      "pages": [
+        {
+          "html_bytes": 1,
+          "page": "/",
+          "queries": 1,
+          "repeated_queries": 1,
+          "row_html_bytes": 1,
+          "rows": 1,
+          "status": 200
+        }
+      ],
+      "reason": "example",
+      "revision": "0123456789abcdef0123456789abcdef01234567"
     }
   ],
   "host.render_status": [

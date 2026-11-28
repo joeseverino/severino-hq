@@ -130,10 +130,10 @@ SMALL_TARGETS = (
     const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
     for (let text = walker.nextNode(); text; text = walker.nextNode()) {
       if (!text.textContent.trim()) continue;
-      // Text hidden from the accessibility tree inside a link is no part of
-      // its name: a sentence's mark held there (value_tags.breakable) is the
-      // sentence's.
-      if (!text.parentElement.closest('[aria-hidden="true"]')) {
+      // A decoration hidden from the accessibility tree inside a link, and
+      // a sentence's mark held there (line_breaks.breakable), are the
+      // sentence's, not the link's words.
+      if (!text.parentElement.closest('[aria-hidden="true"], .mark')) {
         if (el.contains(text)) continue;
         const owner = text.parentElement.closest(selector);
         if (owner && block.contains(owner)) continue;

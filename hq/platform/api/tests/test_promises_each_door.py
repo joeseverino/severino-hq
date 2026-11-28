@@ -36,7 +36,14 @@ PROJECT = {"name": "Once", "slug": "once", "status": "active"}
 WORKER = "example-worker"
 CLAIMS = (("automation.operation", "run"),)
 LOGS = "example.service_logs"
-TASK = {"host": APP, "task": "Restart the service", "outcome": "changed", "message": "Restarted.", "warnings": ""}
+TASK = {
+    "host": APP,
+    "task": "Restart the service",
+    "outcome": "changed",
+    "message": "Restarted.",
+    "warnings": [],
+    "data": "",
+}
 # The reads an agent follows a playbook's run by, and the doors that carry them;
 # a supplied playbook's call is not in the committed document.
 FOLLOWS = ("describe_resources", "list_resource", "get_resource", "describe_capabilities")
@@ -248,7 +255,7 @@ def _work(*events):
 
     claimed = claim_next_operation(WORKER, capabilities=CLAIMS)
     operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
-    run_ended(str(operation.pk), WORKER, events=events, success=True, message="Restarted.")
+    run_ended(str(operation.pk), WORKER, events=events, message="Restarted.")
     return str(operation.pk)
 
 

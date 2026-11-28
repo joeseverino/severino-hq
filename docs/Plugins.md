@@ -556,13 +556,17 @@ before either merges:
   unadmitted wheels, no lock, a local tag, never published, signed or
   deployed. The app's Contents and Pull requests read cover finding and
   reading the branches.
+- A host pull request into an integration branch (`pass/...`), which is how
+  one worker's change runs CI before it lands, meets an extension without
+  its branch on the integration branch's instead, so the two halves the
+  integration branch already holds are composed together.
 - A host pull request with such a branch composes nothing from the admitted
   set in Build HQ: the candidate stands for it.
 - On a checkout, every step that composes the set picks an extension's local
   branch of the same name the same way
   ([The extension set](Development.md#the-extension-set)).
 - Every host pull request runs its own `plugin:check` against every extension
-  in the set, from its same-named branch or else its default branch, in that
+  in the set, from its branch as the composition picks it, in that
   job beside Build HQ. So a host change that breaks an extension fails the pull
   request rather than the next admission. Which extension failed is only in the
   sealed failure logs.
@@ -832,7 +836,11 @@ answers only its item's keys, and the API document types each item by it. HQ val
 that refuses any field it does not declare, query and handler compatibility, identifier contracts, and duplicate resources and
 search scopes at startup. The API, MCP and global search derive from the spec.
 A search projection that belongs to no resource comes from
-`PluginIntegration.search`. A list's query subclasses
+`PluginIntegration.search`. A `SearchDefinition` names a record's title
+(`title_field`), what finds it and never shows under it (`identifiers`: a
+slug, a path, an account's digits) and the words a result's snippet is cut
+from (`fields`), each its own column of the index, from `PLUGIN_API_VERSION`
+33. A list's query subclasses
 `hq_sdk.resources.BoundedQuery` rather than declaring `limit` and `page`
 itself, so its schema carries the deployment's maximum and a larger ask is
 refused. A searched list types its `query` by `hq_sdk.resources.SearchText`,
@@ -1558,7 +1566,10 @@ A source keeps four rules:
   day and read by color.
 
 `ends` is exclusive, as in iCalendar: an all-day event over the 3rd to the 5th
-ends on the 6th. A timed event's `starts` is an aware datetime. `slot` keeps a
+ends on the 6th. A timed event's `starts` is an aware datetime. An event with
+no title is named by its `detail`, else "Untitled"; one whose range or state
+the calendar cannot draw raises where it is built under strict printing, and on
+a served page is logged and drawn at its start. `slot` keeps a
 color the domain's charts already use; otherwise the calendar deals one.
 
 The calendar page is the host's. An extension may place a host page in its own

@@ -1246,7 +1246,12 @@
             }
           },
           "message": {
-            "type": "string"
+            "type": "string",
+            "description": "How the work ended, in a line; a run says only what its report leaves out, beside its outcome."
+          },
+          "detail": {
+            "type": "string",
+            "description": "A refused operation's cause in its own text, kept apart from the message; empty for none."
           },
           "catalog": {
             "$ref": "#/components/schemas/SourceCatalog",
@@ -1256,6 +1261,11 @@
           "stated": {
             "$ref": "#/components/schemas/RunStated",
             "description": "What a run's playbook stated beside its result; an operation other than a run reports none.",
+            "x-go-type-skip-optional-pointer": false
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RunOutcome",
+            "description": "How a run ended; HQ refuses a run's report without one, and any other operation's with one.",
             "x-go-type-skip-optional-pointer": false
           }
         },
@@ -1307,9 +1317,18 @@
             "maxLength": 500
           },
           "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "maxItems": 10,
+            "description": "Each warning Ansible gave of the task, each in one line; empty when it gave none."
+          },
+          "data": {
             "type": "string",
             "maxLength": 500,
-            "description": "Each warning Ansible gave of the task, in one line; empty when it gave none."
+            "description": "The task's message as JSON when it said data rather than words, with message empty; empty when it said words or nothing."
           }
         },
         "additionalProperties": false,
@@ -1318,7 +1337,8 @@
           "task",
           "outcome",
           "message",
-          "warnings"
+          "warnings",
+          "data"
         ],
         "description": "One task on one machine: started while it is under way, else how it ended."
       },
@@ -1376,6 +1396,50 @@
         },
         "additionalProperties": false,
         "description": "What a playbook stated with set_stats beside its result, keyed by the machines of its run alone. Its compact JSON is at most StatedBytes' maxLength bytes."
+      },
+      "RunOutcome": {
+        "type": "object",
+        "properties": {
+          "ending": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "task_failed",
+              "unreachable",
+              "errored",
+              "timed_out",
+              "cancelled",
+              "paused",
+              "lease_lost",
+              "refused",
+              "unknown"
+            ],
+            "description": "How it ended: its playbook ran to the end; a task failed or a machine could not be reached, which task and host name; Ansible stopped it with an error before any task failed; it ran past its timeout; HQ cancelled it, or asked it to stop because its asker is paused or blocked; its lease could not be renewed; it could not be started; or its worker stopped before it reported."
+          },
+          "task": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The task that failed first; empty unless a task failed."
+          },
+          "host": {
+            "type": "string",
+            "maxLength": 253,
+            "description": "The machine it failed on or could not reach; empty unless a task failed or a machine could not be reached."
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "The ending's own words, as written: the result its playbook stated, Ansible's error, why it could not start or why its lease was lost; empty for any other ending."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ending",
+          "task",
+          "host",
+          "message"
+        ],
+        "description": "How a run ended, as its worker saw it, which HQ words its result from."
       },
       "StatedMachine": {
         "type": "string",
@@ -1497,7 +1561,12 @@
             "type": "boolean"
           },
           "detail": {
-            "type": "string"
+            "type": "string",
+            "description": "What the probe found, or HQ's words for why it failed."
+          },
+          "cause": {
+            "type": "string",
+            "description": "A failed probe's cause in its own text, kept apart from the detail; empty for none."
           },
           "reaches": {
             "type": "array",
@@ -1570,7 +1639,12 @@
             "$ref": "#/components/schemas/FailureClass"
           },
           "reason": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the reason; empty for none."
           },
           "address": {
             "type": "string"
@@ -1607,7 +1681,12 @@
             }
           },
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "HQ's words for what failed."
+          },
+          "detail": {
+            "type": "string",
+            "description": "The cause's own text, kept apart from the error; empty for none."
           },
           "refusal": {
             "$ref": "#/components/schemas/Refusal"
@@ -2442,6 +2521,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "detail": {
+            "type": "string",
+            "description": "The refusal's cause in its own text, kept apart from the message; empty for none."
           }
         },
         "required": [

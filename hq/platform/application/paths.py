@@ -9,6 +9,7 @@ when HQ cannot see it: docs/Derived-Facts.md#request-paths.
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
@@ -24,6 +25,7 @@ from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import dotted, lower_first
 from .locate import host_of, split_endpoint
+from .moments import Span
 from .path_model import Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
 from .reach import NETWORKS, admitted_network, is_documentation, network_of
@@ -34,7 +36,6 @@ lazy from .hq_self import hq_service, scoped_served_at, scoped_served_port
 lazy from .inventory import record_identity
 lazy from .known_hosts import operator
 lazy from .moments import moment
-lazy from .ui import counted
 lazy from .whereabouts import locate, machine_link, whereabouts
 
 # How deep an alias chain is followed before the path stops saying more.
@@ -688,7 +689,7 @@ def _days_left(stamp: str) -> str:
     if when is None:
         return ""
     days = days_until(when)
-    return "expired" if days < 0 else f"{counted(days, 'day')} left"
+    return "expired" if days < 0 else f"{Span(timedelta(days=days))} left"
 
 
 def _declared_served(name: str, role: str) -> Certificate | None:
@@ -782,9 +783,9 @@ def _upstream(address: str, connector: tuple[str, ...] = (), on: str = "") -> li
 
 def hq_path(request: Any = None, *, found: Any = None) -> ServicePath | None:
     """HQ's own path; for a request, from the caller's device, each hop joined
-    to what the request shows (``request_path.joined``).
-
-    ``found`` is the request's ``connection.Connection`` when the caller holds it.
+    to what the request shows (``request_path.joined``), with ``found`` its
+    ``request_connection.Connection``. Only ``request_path`` asks with one, so
+    every page that draws a request's path draws the one it reads.
     """
 
     own = hq_service(request, catalog=connections.machines_once())

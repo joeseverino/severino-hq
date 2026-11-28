@@ -67,35 +67,6 @@ def _no_matches(queryset: QuerySet) -> QuerySet:
     return queryset.none().annotate(_search_rank=Value(0, output_field=IntegerField()))
 
 
-def _snippet(definition: SearchDefinition, instance, query: str, indexed: SnippetParts) -> SnippetParts:
-    """The record's own readable text when it has some, else the index's snippet."""
-    text = definition.snippet_text(instance)
-    return _marked(text, query) if text else indexed
-
-
-def _marked(text: str, query: str) -> SnippetParts:
-    body = text.replace("\n", " ")
-    lowered = body.lower()
-    for term in query.split()[:8]:
-        position = lowered.find(term.lower())
-        if position < 0:
-            continue
-        start = max(0, position - 60)
-        end = min(len(body), position + len(term) + 90)
-        parts: SnippetParts = []
-        if start > 0:
-            parts.append(("… ", False))
-        if position > start:
-            parts.append((body[start:position], False))
-        parts.append((body[position : position + len(term)], True))
-        if end > position + len(term):
-            parts.append((body[position + len(term) : end], False))
-        if end < len(body):
-            parts.append((" …", False))
-        return parts
-    return [(body[:150], False)] if body else []
-
-
 def _fetch_records(definition: SearchDefinition, object_ids: list[str]) -> dict:
     """Map object_id -> instance, preserving typed-lookup semantics."""
     model_field = (
@@ -138,7 +109,7 @@ def _global_search(query: str, *, principal: Principal, limit_per_scope: int) ->
     groups = []
     for scope in permitted:
         definition = definitions[scope]
-        items = _global_items(definition, query, hits_by_scope.get(scope, []))
+        items = _global_items(definition, hits_by_scope.get(scope, []))
         groups.append(
             {
                 "scope": scope,
@@ -156,7 +127,6 @@ def _global_search(query: str, *, principal: Principal, limit_per_scope: int) ->
 
 def _global_items(
     definition: SearchDefinition,
-    query: str,
     hits: list[tuple[str, SnippetParts]],
 ) -> list[dict]:
     if not hits:
@@ -169,10 +139,10 @@ def _global_items(
             "badge": definition.badge(record),
             "url": definition.url(record),
             "timestamp": definition.timestamp(record),
-            "snippet": _snippet(definition, record, query, snippet),
+            "snippet": snippet,
         }
         for object_id, snippet in hits
-        if (record := records.get(object_id)) is not None
+        if (record := records.get(object_id)) is not None and definition.listed(record)
     ]
 
 

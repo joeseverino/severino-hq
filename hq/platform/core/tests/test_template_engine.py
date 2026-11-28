@@ -51,6 +51,7 @@ class LiteralTests(SimpleTestCase):
         # A filter's names the line too.
         for source, where in (
             ('{{ n|counted:"newer release" }}', ":2"),
+            ('{{ n|counted:"day" }}', ":2"),
             ('{% include "example/part.html" with phrase="newer release" %}', ":2"),
             ('{% status "Up" tone="goood" %}', ""),
             ('{% status "Up" chip=True tone="good" %}', ""),

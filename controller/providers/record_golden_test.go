@@ -57,6 +57,7 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindHostFilesystem:               {runtime.HostFilesystemRecord{}},
 	runtime.ResourceKindHostReboot:                   {runtime.HostRebootRecord{}},
 	runtime.ResourceKindHostEdgeReboot:               {runtime.HostEdgeRebootRecord{}},
+	runtime.ResourceKindHostRehearsal:                {runtime.HostRehearsalRecord{}},
 	runtime.ResourceKindNPMProxyHost:                 {NPMProxyHostRecord{}},
 	runtime.ResourceKindNPMCertificate:               {NPMCertificateRecord{}},
 	runtime.ResourceKindNPMRedirect:                  {NPMRedirectRecord{}},
@@ -115,6 +116,9 @@ var admittedMembers = map[string]any{
 	"HostEdgeRebootRecord.ScheduledAt":       instant,
 	"HostEdgeRebootRecord.ReadAt":            instant,
 	"HostTailnetLockTailnetLockSigner.Key":   "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7",
+	"HostRehearsalRecord.Revision":           "0123456789abcdef0123456789abcdef01234567",
+	"HostRehearsalRehearsedPage.Page":        "/",
+	"HostRehearsalRehearsedPage.Status":      200,
 }
 
 // filled is a value of the type with every member it can hold set: each

@@ -159,6 +159,19 @@ class EngineTests(TestCase):
             },
         )
 
+    def test_a_machine_name_and_a_dns_name_spelled_alike_never_join_each_other(self):
+        """A lookup of the bare name ``example-box`` is about a DNS name, and the
+        Docker host ``example-box`` a machine: each joins only its own kind of subject."""
+
+        store("adguard.query_summary", {"domain": "example-box", "queries": 3})
+        store("portainer.runtime", {"host": "example-box", "container": "web"})
+
+        machine = readings().about(Subject.of(machines=("example-box",)))
+        name = readings().about(Subject.of(hostnames=("example-box",)))
+
+        self.assertEqual([item.kind for item in machine], ["portainer.runtime"])
+        self.assertEqual([item.kind for item in name], ["adguard.query_summary"])
+
     def test_the_index_is_read_once_per_projection(self):
         with projection_scope():
             readings()
@@ -176,7 +189,7 @@ class DomainCardTests(TestCase):
         card = certificates(self.zone)
 
         self.assertTrue(card.value.startswith("2 "), card.value)
-        self.assertIn("40 days", card.detail)
+        self.assertIn("40\xa0days", card.detail)
         for code in ("example_ca", "other_ca"):
             self.assertIn(authority_name(code), card.detail)
 
@@ -273,9 +286,8 @@ class RegistrationFallbackTests(TestCase):
 
         card = registration(self.zone)
 
-        self.assertIn("80 days", card.value)
+        self.assertIn("80\xa0days", card.value)
         self.assertIn("Example Registrar", card.detail)
-        self.assertFalse(card.concern)
         self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn("Authentication error", card.note_title)
 
@@ -332,12 +344,6 @@ class RegistrationFallbackTests(TestCase):
 
         self.assertEqual(card.note, "Registrar not read: Cloudflare refused the request: Invalid API Token")
         self.assertEqual(card.note_title, "")
-
-    def test_without_a_public_reading_it_is_not_an_alarm(self):
-        card = registration(self.zone)
-
-        self.assertEqual(card.value, "Not read")
-        self.assertFalse(card.concern)
 
 
 class RegistrarRegistrationTests(TestCase):
@@ -408,7 +414,7 @@ class ServiceColumnTests(TestCase):
         self.assertEqual(
             line.detail, ", ".join(authority_name(code) for code in ("google", "lets_encrypt", "unknown_ca"))
         )
-        self.assertIn("40 days", line.expiry)
+        self.assertIn("40\xa0days", line.expiry)
 
         response = self.client.get(reverse("control_plane:services"))
 

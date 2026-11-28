@@ -6,15 +6,13 @@ raises its own.
 """
 
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, Self, cast
 
 lazy from django.utils import dateformat, timezone
-lazy from django.utils.timesince import timesince
 
-from .figured import Figure
+from .figured import UNITS, Figure
 lazy from .derivations import reached, since, this_year
 lazy from .expiry import days_until
-lazy from .ui import counted
 
 if TYPE_CHECKING:
     from .record_errors import Sentence
@@ -84,7 +82,6 @@ DAY_FORMAT = "M\xa0j"
 DAY_YEAR_FORMAT = "M\xa0j,\xa0Y"
 CLOCK_FORMAT = "g:i\xa0A"
 CLOCK_EXACT_FORMAT = "g:i:s\xa0A"
-HOUR_FORMAT = "g\xa0A"
 MOMENT_YEAR_FORMAT = f"{DAY_YEAR_FORMAT}, {CLOCK_FORMAT}"
 WEEKDAY_FORMAT = "l"
 WEEKDAY_SHORT_FORMAT = "D"
@@ -124,10 +121,9 @@ NEAR = timedelta(days=1)
 
 
 def clock(value: datetime) -> str:
-    """The time of day a moment falls at here: "7 PM", "7:30 PM"."""
+    """The time of day a moment falls at here: "7:00 PM", "7:30 PM"."""
 
-    value = _local(value)
-    return _written(value, HOUR_FORMAT if value.minute == 0 else CLOCK_FORMAT)
+    return _written(_local(value), CLOCK_FORMAT)
 
 
 def when_at(value: date) -> str:
@@ -159,11 +155,9 @@ def _when(found: date, now: datetime | None) -> str:
         return when_at(found)
     # ``since`` holds the wording until the next whole unit, ahead or behind.
     age = since(found, now=now)
-    start = datetime(2000, 1, 1, tzinfo=UTC)
-    said = timesince(start, start + abs(age), depth=1)
-    if said.startswith(("0\xa0minutes", "0 minutes")):
+    if abs(age) < _MINUTE:
         return "just now" if age >= timedelta(0) else "in under a minute"
-    return f"{said} ago" if age >= timedelta(0) else f"in {said}"
+    return f"{Span(abs(age))} ago" if age >= timedelta(0) else f"in {Span(abs(age))}"
 
 
 def epoch(found: date) -> float:
@@ -221,15 +215,15 @@ def _day_of(value: date) -> date:
 
 
 def length(moment: date, now: datetime | None = None) -> str:
-    """How far ``moment`` lies from now, either way, in ``ago``'s one unit:
-    "5 minutes", and "under a minute" inside the first. A bare date is the day."""
+    """How far ``moment`` lies from now, either way, as a ``Span``: "5 minutes",
+    and "under a minute" inside the first, which an age never counts in
+    seconds. A bare date is the day."""
 
     if not isinstance(moment, datetime):
         return when_day(moment)
     # ``since`` holds the wording until the next whole unit, ahead or behind.
-    start = datetime(2000, 1, 1, tzinfo=UTC)
-    said = timesince(start, start + abs(since(moment, now=now)), depth=1)
-    return "under a minute" if said.startswith(("0\xa0minutes", "0 minutes")) else said
+    age = abs(since(moment, now=now))
+    return "under a minute" if age < _MINUTE else Span(age)
 
 
 def when_range(start: date, end: date) -> str:
@@ -250,38 +244,57 @@ def when_range(start: date, end: date) -> str:
     return f"{first} – {when_day(end)}"
 
 
-def duration(delta: timedelta, *, short: bool = False, depth: int = 2) -> Sentence:
-    """A length of time in the phrasing ``when`` gives an age, without the "ago", in up to ``depth`` units, one as
-    Docker says an uptime; ``short``, a run time as ``ask.js``'s ``elapsed`` ticks one: "45 s", "4 min 33 s",
-    "1 h 2 min", never a zero part after a larger one."""
-
-    delta = max(delta, timedelta(0))
-    return cast("Sentence", Figure(_lasted(delta, short=short, depth=depth), delta.total_seconds()))
-
-
-def _lasted(delta: timedelta, *, short: bool, depth: int) -> str:
-    if not short:
-        start = datetime(2000, 1, 1, tzinfo=UTC)
-        return timesince(start, start + delta, depth=depth)
-    hours, rest = divmod(round(delta.total_seconds()), 3600)
-    minutes, left = divmod(rest, 60)
-    larger, unit, smaller, small_unit = (hours, "h", minutes, "min") if hours else (minutes, "min", left, "s")
-    if not larger:
-        return f"{left} s"
-    return f"{larger} {unit} {smaller} {small_unit}" if smaller else f"{larger} {unit}"
-
-
+_MINUTE = timedelta(minutes=1)
 # Up to this many days a length of time is said in days: "46 days" is what a
-# deadline is counted in. Past it the count stops meaning anything at a glance
-# and the length is said in months and years.
+# deadline is counted in. Past it a count of days means nothing at a glance.
 DAYS_SAID_AS_DAYS = 90
+# Each unit a length is said in under a day, with its length; past a day it is
+# days, then calendar months and years.
+_UNDER_A_DAY = (("hour", timedelta(hours=1)), ("minute", _MINUTE), ("second", timedelta(seconds=1)))
+# Where calendar months are counted from, as Django's ``timesince`` counts them.
+_COUNTED_FROM = datetime(2000, 1, 1, tzinfo=UTC)
+
+
+class Span(Figure):
+    """A length of time in words, the one way HQ says one: the largest unit
+    it holds whole and that unit alone ("45 seconds", "3 hours", "46 days",
+    "3 months", "2 years"), as GitHub's ``relative-time`` says a duration at
+    one unit of precision, so two lengths side by side read on one scale. A
+    no-break space keeps the count with its unit wherever it is printed. Its
+    figure is the length in seconds."""
+
+    def __new__(cls, length: timedelta) -> Self:
+        length = max(length, timedelta(0))
+        return super().__new__(cls, in_units(*_rung(length)), length.total_seconds())
+
+    # Pickled as the length it says, so a cached read is said again the same way.
+    def __getnewargs__(self) -> tuple[timedelta]:  # type: ignore[override]  # Figure declares two arguments
+        return (timedelta(seconds=float(self.figure)),)
+
+
+def in_units(count: int, unit: str) -> str:
+    """A count of one of ``UNITS``, the one way a unit of time is counted:
+    "1 day", "2 weeks", kept together by a no-break space. A length says
+    itself as a ``Span``; a count of calendar units (a recurrence's "every
+    2 weeks") has no length to measure."""
+
+    return f"{count:,}\xa0{unit if count == 1 else UNITS[unit]}"
+
+
+def _rung(length: timedelta) -> tuple[int, str]:
+    if length.days > DAYS_SAID_AS_DAYS:
+        end = _COUNTED_FROM + length
+        months = (end.year - _COUNTED_FROM.year) * 12 + end.month - _COUNTED_FROM.month
+        return (months // 12, "year") if months >= 12 else (months, "month")
+    if length.days:
+        return length.days, "day"
+    return next(((length // size, unit) for unit, size in _UNDER_A_DAY if length >= size), (0, "second"))
 
 
 def span(days: int) -> str:
-    """A whole number of days as a length of time a person reads: "46 days", "2 years, 11 months", "3 days overdue"."""
+    """A whole number of days as a length of time a person reads: "46 days", "2 years", "3 days overdue"."""
 
-    # Past a few weeks, a no-break space keeps the number with its unit ("2\xa0weeks").
-    said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))
+    said = Span(timedelta(days=abs(days)))
     # A count below nothing is that long past.
     return Figure(f"{said} overdue" if days < 0 else said, days)
 

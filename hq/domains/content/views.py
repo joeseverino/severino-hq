@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import override
 
 from django.urls import reverse_lazy
@@ -16,7 +17,7 @@ from hq.platform.application.documentation import related_documents
 from hq.platform.application.entity_links import entity_link, web_url
 from hq.platform.application.labels import adding, dotted_html
 from hq.platform.application.list_pages import ListPageMixin
-from hq.platform.application.moments import moment, stamp_day
+from hq.platform.application.moments import Span, stamp_day
 from hq.platform.application.pages import PageAction, PageMixin, RecordPageMixin
 from hq.platform.application.tables import Cell, TableColumn
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
@@ -103,7 +104,7 @@ class _ContentSectionView(ListPageMixin, TemplateView):
             TableColumn("Status", "status", css="key-col", cell=lambda row: Cell.state(row["state"])),
             TableColumn("Description", drop=1, cell=lambda row: Cell(row["topic"] or "", muted=True)),
             TableColumn(
-                f"Views ({CONTENT_TRAFFIC_DAYS} days)",
+                f"Views ({Span(timedelta(days=CONTENT_TRAFFIC_DAYS))})",
                 kind="numeric",
                 drop=5,
                 cell=lambda row: Cell("" if row["pageviews"] is None else str(row["pageviews"])),
@@ -113,12 +114,6 @@ class _ContentSectionView(ListPageMixin, TemplateView):
                 "published_at",
                 drop=3,
                 cell=lambda row: Cell(moment=stamp_day(row["published_at"]), muted=True),
-            ),
-            TableColumn(
-                "Updated",
-                "updated_at",
-                drop=2,
-                cell=lambda row: Cell(moment=moment(row["updated_at"]), muted=True),
             ),
             TableColumn("Live page", css="actions-col", drop=4, cell=_live),
         )

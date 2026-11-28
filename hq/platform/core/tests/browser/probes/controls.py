@@ -235,6 +235,30 @@ WORDS_SWAPPED_FOR_A_GLYPH = (
 )
 
 
+# A link's or a button's name says every word it shows: a letter, a digit
+# or a bracket drawn in it but hidden from assistive technology drops out
+# of what a reader hears ("(done" for "(done)"). The sentence's mark after
+# its last word is the sentence's, a decoration hidden so (a dot, an arrow,
+# a glyph) is no word, and a control whose name is given whole in words kept
+# from sight, or in an attribute, says its shown words another way.
+NAMES_SHORT_OF_THEIR_WORDS = (
+    "([selector, unseen]) => {"
+    + DESCRIBE
+    + r"""
+  const found = [];
+  const said = /[\p{L}\p{N}()\[\]{}]/u;
+  for (const el of document.querySelectorAll(selector)) {
+    if (!el.checkVisibility() || el.matches('[aria-label], [aria-labelledby]') || el.querySelector(unseen)) continue;
+    for (const hidden of el.querySelectorAll('[aria-hidden="true"]')) {
+      if (!said.test(hidden.textContent) || !hidden.checkVisibility({visibilityProperty: true})) continue;
+      found.push(`${describe(el)} hides "${hidden.textContent.trim()}" from its name`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 # A control's words are one box: a control is a flex box (page.css, Buttons),
 # where each run of text and each word box `breakable` draws (a hyphenated
 # name, a path) is an item of its own, set apart by the gap instead of the
@@ -309,6 +333,24 @@ CHECKS = {
     "words swapped for a glyph": Check(
         (WORDS_SWAPPED_FOR_A_GLYPH, SELECTORS["pressed"]),
         reader_sees="a control showing a glyph where its words belong",
+    ),
+    "names short of their words": Check(
+        (NAMES_SHORT_OF_THEIR_WORDS, ["a[href], button", SELECTORS["unseen"]]),
+        reader_sees="a link or a button whose name leaves out a word or mark it shows",
+        plants=(
+            Plant(
+                '<p><a href="/example/">Example run (done<span aria-hidden="true">)</span></a></p>',
+                finds=('hides ")"',),
+            ),
+        ),
+        clear=(
+            Example(
+                '<p><a href="/example/">Example run<span aria-hidden="true">&nbsp;·</span> 2 days ago'
+                '<span aria-hidden="true">&nbsp;&rarr;</span></a>'
+                ' <a href="/example/"><span aria-hidden="true">12</span>'
+                '<span class="visually-hidden">Friday, 12 June</span></a></p>'
+            ),
+        ),
     ),
     "control words in one box": Check(
         (CONTROL_WORDS_IN_ONE_BOX, SELECTORS["pressed"]),

@@ -19,11 +19,13 @@ from django.utils import timezone
 from hq.platform.application.url_query import with_query
 lazy from hq.platform.application.routes import reverse
 
+from .display_words import refused
 from .entity_links import link_url
 lazy from . import domains
 lazy from .calendar_entries import CHOOSE_SOURCE, own_sources
 lazy from .moments import clock, month as month_name, weekday
 lazy from .pages import PageAction
+lazy from .ui import ended
 
 logger = logging.getLogger("severino.calendar")
 
@@ -63,19 +65,28 @@ class CalendarEvent:
     mark: bool = False
 
     def __post_init__(self) -> None:
-        if not self.id or not self.title.strip():
-            raise ValueError("A calendar event needs an id and a title.")
+        if not self.id:
+            raise ValueError("A calendar event needs an id.")
+        # iCalendar lets an event go without a summary: it is named by what
+        # else it holds, as other calendars name one.
+        if not self.title.strip():
+            object.__setattr__(self, "title", self.detail.strip() or "Untitled")
+            object.__setattr__(self, "detail", "")
+        # The rest is read from a source's own records, so a shape the
+        # calendar cannot draw is refused and drawn the nearest way it can:
+        # a plain fact, at its start, on its one day.
         if self.state not in EVENT_STATES:
-            raise ValueError(f"Unknown calendar event state {self.state!r}.")
-        if isinstance(self.starts, datetime) and timezone.is_naive(self.starts):
-            raise ValueError("A timed calendar event needs an aware start.")
-        if self.ends is not None:
-            if isinstance(self.ends, datetime) != isinstance(self.starts, datetime):
-                raise ValueError("A calendar event starts and ends in the same terms.")
-            if self.ends < self.starts:
-                raise ValueError("A calendar event cannot end before it starts.")
+            refused(f"Unknown calendar event state {self.state!r}.", "A calendar event's state is not one it draws.")
+            object.__setattr__(self, "state", "")
+        if self.timed and timezone.is_naive(self.starts):
+            refused("A timed calendar event needs an aware start.", "A timed calendar event starts naive.")
+            object.__setattr__(self, "starts", timezone.make_aware(self.starts))
+        if self.ends is not None and (unfit := self._unfit_end()):
+            refused(f"A calendar event {unfit}: {self.starts!r} to {self.ends!r}.", ended(f"A calendar event {unfit}"))
+            object.__setattr__(self, "ends", None)
         if self.mark and self.first_day != self.last_day:
-            raise ValueError("A mark is one day; a longer event is a span.")
+            refused("A mark is one day; a longer event is a span.", "A calendar event's mark runs past one day.")
+            object.__setattr__(self, "ends", None)
         # A source says where its record lives; an address that is not HQ's own
         # path or an http(s) URL is no link at all.
         object.__setattr__(self, "url", link_url(self.url))
@@ -83,6 +94,15 @@ class CalendarEvent:
     @property
     def timed(self) -> bool:
         return isinstance(self.starts, datetime)
+
+    def _unfit_end(self) -> str:
+        """Why its end cannot close its span, or ""."""
+
+        if isinstance(self.ends, datetime) != self.timed:
+            return "starts and ends in different terms"
+        if isinstance(self.ends, datetime) and timezone.is_naive(self.ends):
+            return "ends naive"
+        return "ends before it starts" if self.ends is not None and self.ends < self.starts else ""
 
     @property
     def first_day(self) -> date:

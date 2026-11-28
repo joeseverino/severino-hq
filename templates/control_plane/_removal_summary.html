@@ -27,7 +27,7 @@ is about to be deleted.
   {% endfor %}
 {% endfacts %}
 {% if spec_rows.advanced %}
-  {% section "Other settings" count=spec_rows.advanced|length fold=True %}
+  {% section "Other settings" counts=spec_rows.advanced fold=True %}
     {% facts %}
       {% for label, value in spec_rows.advanced %}
         {% fact label %}<code>{{ value }}</code>{% endfact %}

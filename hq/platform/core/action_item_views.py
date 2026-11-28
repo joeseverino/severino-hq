@@ -59,17 +59,18 @@ class ActionItemsView(PageMixin, TemplateView):
         source = self.request.GET.get("source", "").strip()
         sources = tuple({item["source_id"]: item["source"] for item in all_items}.items())
         doing, told = queue_state.split_waiting(items)
+        aside = [item for item in items if item["aside"]]
         query = self.request.GET.get("q", "").strip()
         about = self.request.GET.get("about", "").strip()
         context.update(
             dismiss_all=self._dismiss_all("doing"),
             dismiss_notices=self._dismiss_all("told"),
+            action_doing=doing,
             action_groups=queue_state.by_source(doing),
-            action_item_total=len(doing),
+            action_told=told,
             notice_groups=queue_state.by_source(told),
-            notice_total=len(told),
-            aside_groups=queue_state.by_source([item for item in items if item["aside"]]),
-            aside_total=len(items) - len(doing) - len(told),
+            action_aside=aside,
+            aside_groups=queue_state.by_source(aside),
             profile_action_count=queue_state.count_waiting(all_items),
             show_action_count=True,
             action_sources=sources,

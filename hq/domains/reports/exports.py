@@ -164,11 +164,11 @@ def assets_csv(year: int | None = None) -> str:
 
 
 def content_csv() -> str:
-    return _csv_of(ContentItem.objects.all().order_by("-updated_at"), CONTENT_COLUMNS)
+    return _csv_of(ContentItem.objects.all().order_by("title"), CONTENT_COLUMNS)
 
 
 def projects_csv() -> str:
-    return _csv_of(Project.objects.all().order_by("-updated_at"), PROJECT_COLUMNS)
+    return _csv_of(Project.objects.all().order_by("name"), PROJECT_COLUMNS)
 
 
 def documentation_csv() -> str:
@@ -274,7 +274,7 @@ def year_summary(year: int, *, documentation: QuerySet[DocumentationRecord] | No
             .prefetch_related(
                 "related_projects", "related_assets", Prefetch("related_documentation", queryset=documentation)
             )
-            .order_by("-updated_at"),
+            .order_by("title"),
             CONTENT_FIELDS,
         ),
         "documentation": _records(

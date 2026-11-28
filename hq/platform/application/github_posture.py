@@ -17,7 +17,7 @@ lazy from django.conf import settings
 
 from .derivations import passed
 from .github_estate import Repository, repositories
-from .moments import moment
+from .moments import Span, moment
 from .standards import Check as _Check, Examples, Measurement, Reading, measure
 from .ui import ended
 lazy from .projects import repository_key
@@ -25,7 +25,7 @@ lazy from .projects import repository_key
 BOTH = "both"
 PUBLIC = "public"
 # A deploy key nobody has used in this long is either dead weight or moved.
-KEY_IDLE_DAYS = 90
+KEY_IDLE = timedelta(days=90)
 
 
 def _public(repo: Repository) -> bool:
@@ -75,7 +75,7 @@ def _keys_read_only(_repo: Repository, access: dict[str, Any]) -> bool:
 
 def _idle(key: dict[str, Any]) -> bool:
     seen = moment(key.get("last_used") or key.get("created_at") or "")
-    return seen is not None and passed(seen + timedelta(days=KEY_IDLE_DAYS))
+    return seen is not None and passed(seen + KEY_IDLE)
 
 
 def _keys_in_use(_repo: Repository, access: dict[str, Any]) -> bool:
@@ -164,9 +164,9 @@ STANDARD: tuple[Check, ...] = (
         "Every deploy key is in use",
         BOTH,
         _on_access(_keys_in_use),
-        f"A key unused for {KEY_IDLE_DAYS} days is access nothing needs.",
+        f"A key unused for {Span(KEY_IDLE)} is access nothing needs.",
         "Delete the key, or find what stopped using it.",
-        unmet=f"A deploy key has gone unused for {KEY_IDLE_DAYS} days",
+        unmet=f"A deploy key has gone unused for {Span(KEY_IDLE)}",
         breaks=({"access": {"deploy_keys": [{"title": "deploy", "read_only": True, "last_used": "2000-01-01"}]}},),
     ),
     Check(

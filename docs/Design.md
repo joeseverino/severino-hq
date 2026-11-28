@@ -281,7 +281,8 @@ state says it in ink, as `.figure` with its tone class
 An address, a path or a command breaks only where `|breakable` lets it (after
 a dot or a slash, before a port); in a table's cell it breaks elsewhere only
 where its column lacks room for it. A length of time
-keeps each count with its unit.
+is said in the one unit it holds whole (`moments.Span`, `{{ n|span }}`),
+its count kept with that unit, and a time of day always with its minutes.
 
 A template prints a value bare (`{{ host }}`, `Runs on {{ host }}.`): the
 template engine holds every value printed as text as it compiles the template,
@@ -397,7 +398,7 @@ in Python. A measured zero is 0; the missing mark is for no value. The value tag
 refused as any template of the host or an extension loads.
 
 A bare figure counting what a heading heads (`.count`) stands in that
-heading after its words (`{% section "Readings" count=n %}`), and the same
+heading after its words (`{% section "Readings" counts=readings %}`), and the same
 in a summary, a group row and a tab. Never in parentheses, and never alone
 at the far end of a `.section-head`, cut off from the words it counts; what
 stands there is the section's aside, a line about it in the same quiet voice,

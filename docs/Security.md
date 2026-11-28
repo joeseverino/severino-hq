@@ -834,8 +834,9 @@ write a workflow makes is a GitHub token minted for one permission and one
 job. `CLOUDFLARE_API_TOKEN` lives on the `inbound-worker` environment,
 which deploys from `main` alone (`deploy-worker.yml`), beside the account
 and the hostname, which are secrets so GitHub masks them in public logs. It
-has no reviewer: the merge to `main` is the approval, and a Worker deploy
-takes nothing down. A workflow on any other branch, a pull request's
+has no reviewer: the release's approval is the approval, since it deploys
+only the commit production runs once that release is live, and a Worker
+deploy takes nothing down. A workflow on any other branch, a pull request's
 included, never reaches the token. The job's own permissions stay at read. The token carries one
 permission, Workers Scripts Write on the account
 (`mise-tasks/worker/deploy.permissions`, minted by `mint:cloudflare`), which

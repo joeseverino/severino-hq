@@ -14,7 +14,8 @@ from django.db import transaction
 from hq.platform.core import bindings
 lazy from hq.domains.control_plane.bridge_actions import Admitted, admission
 lazy from hq.domains.control_plane.observations.github import REPOSITORY_KIND
-lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND
+lazy from hq.domains.control_plane.observations.host import UNIT_KIND
+lazy from hq.domains.control_plane.observations.portainer import CONTAINER_KIND, IMAGE_KIND, RUNTIME_KIND
 lazy from hq.domains.control_plane.observations.public_registry import IMAGE_KIND as REGISTRY_IMAGE_KIND
 
 from .adoption import adopt_discovered, unmanaged
@@ -25,7 +26,7 @@ from .inventory import (
 )
 from .read_requests import askers, settle_read_requests
 from .zones import RECORD_KIND, adopt_discovered_records
-lazy from . import problems
+lazy from . import automation_adoption, problems, release_snapshots
 lazy from .automation_sources import SCAN, scan_when_due
 lazy from .cadence import ask
 lazy from .first_seen import look_due
@@ -66,6 +67,9 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
         # Run after the loop above so a zone adopted moments ago already counts,
         # otherwise its records would wait a whole sweep for no reason.
         adopted += adopt_discovered_records(principal=principal)["adopted"]
+    # The adopted playbooks' records, as the catalog adopted now says.
+    with bindings.audit_operation(operation=automation_adoption.ADOPT, principal=principal):
+        automation_adoption.derive_records(principal=principal)
     # Every repository the GitHub App reads is a project, from the reading
     # just stored, and a playbook source whose branch moved is scanned again.
     if REPOSITORY_KIND in payload:
@@ -79,6 +83,11 @@ def record_sweep(payload: dict[str, Any], *, admitted: Admitted) -> dict[str, An
     # And the containers the sweep no longer lists at all, which were deleted.
     retired = retire_departed(payload)
     settle_read_requests()
+    # What HQ reads of itself, kept onto the release production just went
+    # live with, once the readings are newer than it.
+    if {REPOSITORY_KIND, UNIT_KIND, RUNTIME_KIND} & payload.keys():
+        with bindings.audit_operation(operation=release_snapshots.TAKE, principal=principal):
+            release_snapshots.settle(repository_read=REPOSITORY_KIND in payload)
     # An image or a digest the containers just stored name and HQ has not
     # read is read in minutes, not tomorrow.
     if (CONTAINER_KIND in payload or IMAGE_KIND in payload) and registry_due():

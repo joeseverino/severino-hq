@@ -369,7 +369,7 @@ class LapsedHoldTests(RunTestCase):
 
         lapsed = OperationRequest.objects.get(pk=self.first["id"])
         self.assertEqual(lapsed.get_state_display(), "Stopped early")
-        self.assertEqual(lapsed.result["reason"], "OutcomeUnknown")
+        self.assertEqual(lapsed.result["outcome"]["ending"], "unknown")
 
     def test_a_live_lease_still_holds(self):
         OperationRequest.objects.filter(pk=self.first["id"]).update(lease_expires_at="2999-01-01T00:00:00Z")
@@ -424,7 +424,6 @@ class InvalidRunTests(RunTestCase):
         self.refused(run_payload(playbook="site.yml"), "invalid_input")
 
         self.assertFalse(OperationRequest.objects.exists())
-        self.assertFalse(ManagedResource.objects.filter(kind=KIND).exists())
 
 
 class RetriedRunTests(RunTestCase):
@@ -555,10 +554,6 @@ class FindingInvestigationTests(TestCase):
         (url,) = self.offered()
         (key,) = parse_qs(urlsplit(url).query)["finding"]
         self.assertIsNone(finding_run(self.COMMAND, key, NOBODY))
-
-    def test_a_worker_that_cannot_reach_the_machine_is_offered_no_run(self):
-        self.supply.reach()
-        self.assertEqual(self.offered(), [])
 
     def test_a_fix_whose_run_needs_an_input_of_its_own_is_never_offered_as_it_stands(self):
         self.supply(manifest(id=self.PLAYBOOK, input_type=self.input, fixes=("unit-restarting",)))

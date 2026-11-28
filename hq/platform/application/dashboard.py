@@ -387,7 +387,7 @@ def _operating_snapshot(principal) -> _Snapshot:
         # Items, not the numbers they carry: each item shows its own.
         "priority_count": len(priority),
         "active_projects": sections.recent_active_projects(),
-        "draft_content": sections.recent_draft_content(),
+        "draft_content": sections.drafts(),
         "recent_published": sections.recently_published(),
         **_activity(principal),
     }
