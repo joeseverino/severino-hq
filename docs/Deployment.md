@@ -526,6 +526,9 @@ nothing. `hq-host deploy`:
      `pages=unread` and fails nothing. Each page's status, queries, records
      and HTML bytes are kept for root in
      `/var/lib/severino-hq/rehearsal-pages.json`, with the release's revision.
+     The next controller pass is given a copy, as the `host.rehearsal`
+     reading, and the release's page shows each page beside the release
+     before it.
    - The live web unit and container must not have restarted meanwhile.
    - The image's setup playbook runs in check mode against this host, so a
      playbook this host's configuration or Ansible refuses fails here.

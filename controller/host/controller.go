@@ -600,13 +600,21 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 	}
 	args = append(args, "--env", "SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json")
 
-	// The last dependency run's outcome, once there has been one.
-	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {
-		if data, err := os.ReadFile(c.DependencyRun); err == nil {
-			if err := give("dependency-run.json", data, dependencyRunTarget); err != nil {
+	// Root's own records of what it last ran, each once there is one: the
+	// dependency run's outcome, and what each page cost in the last
+	// release's rehearsal.
+	for _, kept := range []struct{ path, name, target, env string }{
+		{c.DependencyRun, "dependency-run.json", dependencyRunTarget, "SEVERINO_DEPENDENCY_RUN"},
+		{c.RehearsalPagesPath(), "rehearsal-pages.json", rehearsalPagesTarget, "SEVERINO_REHEARSAL_PAGES"},
+	} {
+		if info, err := os.Lstat(kept.path); err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		if data, err := os.ReadFile(kept.path); err == nil {
+			if err := give(kept.name, data, kept.target); err != nil {
 				return nil, err
 			}
-			args = append(args, "--env", "SEVERINO_DEPENDENCY_RUN="+dependencyRunTarget)
+			args = append(args, "--env", kept.env+"="+kept.target)
 		}
 	}
 	return args, nil

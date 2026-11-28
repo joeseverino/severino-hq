@@ -391,6 +391,53 @@ class HostEdgeRebootRecord(HostRebootRecord):
     connection_ref: str = Field(description="The edge's SSH transport, which names the machine it reads.")
 
 
+# A page as the rehearsal's walk names one: its path in printable ASCII. A
+# release is its whole commit. A walk that read nothing says why in a short
+# line of printable ASCII. The controller reads each from this record's schema
+# in the bridge contract and refuses a document that breaks one.
+REHEARSAL_PAGE = r"^/[!-~]*$"
+REHEARSAL_PAGE_LENGTH = 255
+REHEARSAL_PAGES = 400
+REHEARSAL_REVISION = r"^[0-9a-f]{40}$"
+REHEARSAL_UNREAD = r"^[ -~]*$"
+REHEARSAL_UNREAD_LENGTH = 200
+
+
+class RehearsedPage(ObservationRecord):
+    """What one page cost to draw in a release's rehearsal, as
+    ``manage.py page_costs`` measured it (``hq.platform.core.page_costs``)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    page: str = Field(pattern=REHEARSAL_PAGE, max_length=REHEARSAL_PAGE_LENGTH, description="The page's path.")
+    status: int = Field(ge=100, le=599, description="The HTTP status it answered.")
+    queries: int = Field(ge=0, description="Every SQL statement it sent.")
+    repeated_queries: int = Field(ge=0, description="Each repeat of a statement it had already sent.")
+    rows: int = Field(ge=0, description="The records its tables drew.")
+    html_bytes: int = Field(ge=0, description="The bytes of HTML it answered.")
+    row_html_bytes: int = Field(ge=0, description="The bytes of HTML its records' rows took.")
+
+
+class HostRehearsalRecord(ObservationRecord):
+    """What every page cost in the last release's rehearsal on a copy of
+    production's data: the host.rehearsal reading's one record. Root keeps
+    the walk's document for itself (``controller/host/rehearse.go``) and the
+    launcher gives the controller a copy."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    revision: str = Field(pattern=REHEARSAL_REVISION, description="The release's commit.")
+    reason: str = Field(
+        default="",
+        pattern=REHEARSAL_UNREAD,
+        max_length=REHEARSAL_UNREAD_LENGTH,
+        description="Why the walk measured no page; empty when it measured them.",
+    )
+    pages: tuple[RehearsedPage, ...] = Field(
+        default=(), max_length=REHEARSAL_PAGES, description="Each page it walked, by path."
+    )
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
@@ -399,6 +446,7 @@ TAILNET_LOCK_KIND = "host.tailnet_lock"
 FILESYSTEM_KIND = "host.filesystem"
 REBOOT_KIND = "host.reboot"
 EDGE_REBOOT_KIND = "host.edge_reboot"
+REHEARSAL_KIND = "host.rehearsal"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -470,6 +518,14 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostEdgeRebootRecord,
         title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
         relation="Restart state of",
+    ),
+    ObservationSpec(
+        REHEARSAL_KIND,
+        PROVIDER,
+        "Release rehearsal",
+        HostRehearsalRecord,
+        title=lambda record: str(record.get("revision", ""))[:7],
+        relation="Release rehearsed on",
     ),
 )
 

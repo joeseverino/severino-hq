@@ -5893,6 +5893,90 @@
         ],
         "type": "object"
       },
+      "HostRehearsalRecord": {
+        "additionalProperties": false,
+        "description": "What every page cost in the last release's rehearsal on a copy of production's data: the host.rehearsal reading's one record. Root keeps the walk's document for itself (``controller/host/rehearse.go``) and the launcher gives the controller a copy.",
+        "properties": {
+          "revision": {
+            "description": "The release's commit.",
+            "pattern": "^[0-9a-f]{40}$",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "description": "Why the walk measured no page; empty when it measured them.",
+            "maxLength": 200,
+            "pattern": "^[ -~]*$",
+            "type": "string"
+          },
+          "pages": {
+            "default": [],
+            "description": "Each page it walked, by path.",
+            "items": {
+              "$ref": "#/components/schemas/HostRehearsalRehearsedPage"
+            },
+            "maxItems": 400,
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "type": "object"
+      },
+      "HostRehearsalRehearsedPage": {
+        "additionalProperties": false,
+        "description": "What one page cost to draw in a release's rehearsal, as\n``manage.py page_costs`` measured it (``hq.platform.core.page_costs``).",
+        "properties": {
+          "page": {
+            "description": "The page's path.",
+            "maxLength": 255,
+            "pattern": "^/[!-~]*$",
+            "type": "string"
+          },
+          "status": {
+            "description": "The HTTP status it answered.",
+            "maximum": 599,
+            "minimum": 100,
+            "type": "integer"
+          },
+          "queries": {
+            "description": "Every SQL statement it sent.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "repeated_queries": {
+            "description": "Each repeat of a statement it had already sent.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rows": {
+            "description": "The records its tables drew.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "html_bytes": {
+            "description": "The bytes of HTML it answered.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "row_html_bytes": {
+            "description": "The bytes of HTML its records' rows took.",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page",
+          "status",
+          "queries",
+          "repeated_queries",
+          "rows",
+          "html_bytes",
+          "row_html_bytes"
+        ],
+        "type": "object"
+      },
       "HostRenderStatusRecord": {
         "description": "One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.",
         "properties": {
@@ -7399,6 +7483,7 @@
           "host.firewall",
           "host.perimeter",
           "host.reboot",
+          "host.rehearsal",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -7473,6 +7558,7 @@
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
           "ResourceKindHostReboot",
+          "ResourceKindHostRehearsal",
           "ResourceKindHostRenderStatus",
           "ResourceKindHostTailnetLock",
           "ResourceKindHostUnit",
@@ -7576,6 +7662,7 @@
           "host.firewall",
           "host.perimeter",
           "host.reboot",
+          "host.rehearsal",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -7630,6 +7717,7 @@
           "SweptHostFirewall",
           "SweptHostPerimeter",
           "SweptHostReboot",
+          "SweptHostRehearsal",
           "SweptHostRenderStatus",
           "SweptHostTailnetLock",
           "SweptHostUnit",

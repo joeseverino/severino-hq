@@ -245,24 +245,33 @@ func TestAPassThatLeavesNoHandoffSpoolsNothing(t *testing.T) {
 	}
 }
 
-func TestTheLastOutcomeIsGivenToTheNextPass(t *testing.T) {
+// Root's record of what it last ran, kept for itself alone, reaches the next
+// pass as a copy: the dependency run's outcome and the rehearsal's walk.
+func TestWhatRootLastRanIsGivenToTheNextPass(t *testing.T) {
 	l := newLaunch(t)
-	if err := os.MkdirAll(filepath.Dir(l.controller.DependencyRun), 0o700); err != nil {
-		t.Fatal(err)
+	kept := map[string]struct{ path, target, env string }{
+		`{"version":1,"runs":[]}`:    {l.controller.DependencyRun, dependencyRunTarget, "SEVERINO_DEPENDENCY_RUN"},
+		`{"revision":"","pages":{}}`: {l.controller.RehearsalPagesPath(), rehearsalPagesTarget, "SEVERINO_REHEARSAL_PAGES"},
 	}
-	outcome := []byte(`{"version":1,"runs":[]}`)
-	if err := os.WriteFile(l.controller.DependencyRun, outcome, 0o600); err != nil {
-		t.Fatal(err)
+	for body, file := range kept {
+		if err := os.MkdirAll(filepath.Dir(file.path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file.path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	l.run(t, Apply)
 
-	if !bytes.Equal(l.mounted[dependencyRunTarget], outcome) || !slices.Contains(l.envs(), "SEVERINO_DEPENDENCY_RUN="+dependencyRunTarget) {
-		t.Errorf("the outcome was not given: %v", l.envs())
-	}
-	for _, arg := range l.args {
-		if strings.Contains(arg, "source="+l.controller.DependencyRun) {
-			t.Error("the outcome itself was mounted, not a copy")
+	for body, file := range kept {
+		if string(l.mounted[file.target]) != body || !slices.Contains(l.envs(), file.env+"="+file.target) {
+			t.Errorf("%s was not given: %v", file.path, l.envs())
+		}
+		for _, arg := range l.args {
+			if strings.Contains(arg, "source="+file.path) {
+				t.Errorf("%s itself was mounted, not a copy", file.path)
+			}
 		}
 	}
 }

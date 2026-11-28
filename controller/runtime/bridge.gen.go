@@ -910,6 +910,7 @@ const (
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
 	ResourceKindHostReboot                   ResourceKind = "host.reboot"
+	ResourceKindHostRehearsal                ResourceKind = "host.rehearsal"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
 	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
@@ -1022,6 +1023,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindHostPerimeter:
 		return true
 	case ResourceKindHostReboot:
+		return true
+	case ResourceKindHostRehearsal:
 		return true
 	case ResourceKindHostRenderStatus:
 		return true
@@ -1234,6 +1237,7 @@ const (
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
 	SweptHostReboot                   SweptKind = "host.reboot"
+	SweptHostRehearsal                SweptKind = "host.rehearsal"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
 	SweptHostTailnetLock              SweptKind = "host.tailnet_lock"
 	SweptHostUnit                     SweptKind = "host.unit"
@@ -1320,6 +1324,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostPerimeter:
 		return true
 	case SweptHostReboot:
+		return true
+	case SweptHostRehearsal:
 		return true
 	case SweptHostRenderStatus:
 		return true
@@ -2594,6 +2600,43 @@ type HostRebootRecord struct {
 
 	// Since When the flag was first written, when one is there; empty when none is.
 	Since string `json:"since,omitempty"`
+}
+
+// HostRehearsalRecord What every page cost in the last release's rehearsal on a copy of production's data: the host.rehearsal reading's one record. Root keeps the walk's document for itself (“controller/host/rehearse.go“) and the launcher gives the controller a copy.
+type HostRehearsalRecord struct {
+	// Pages Each page it walked, by path.
+	Pages []HostRehearsalRehearsedPage `json:"pages,omitempty"`
+
+	// Reason Why the walk measured no page; empty when it measured them.
+	Reason string `json:"reason,omitempty"`
+
+	// Revision The release's commit.
+	Revision string `json:"revision"`
+}
+
+// HostRehearsalRehearsedPage What one page cost to draw in a release's rehearsal, as
+// “manage.py page_costs“ measured it (“hq.platform.core.page_costs“).
+type HostRehearsalRehearsedPage struct {
+	// HTMLBytes The bytes of HTML it answered.
+	HTMLBytes int `json:"html_bytes"`
+
+	// Page The page's path.
+	Page string `json:"page"`
+
+	// Queries Every SQL statement it sent.
+	Queries int `json:"queries"`
+
+	// RepeatedQueries Each repeat of a statement it had already sent.
+	RepeatedQueries int `json:"repeated_queries"`
+
+	// RowHTMLBytes The bytes of HTML its records' rows took.
+	RowHTMLBytes int `json:"row_html_bytes"`
+
+	// Rows The records its tables drew.
+	Rows int `json:"rows"`
+
+	// Status The HTTP status it answered.
+	Status int `json:"status"`
 }
 
 // HostRenderStatusRecord One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.

@@ -219,13 +219,23 @@ func (r *rehearsing) run(ctx context.Context) (said verdict) {
 	return said
 }
 
-// walkedPages is the document `manage.py page_costs` prints: the release's
-// revision, and each page's costs by its address, or why it read none.
-type walkedPages struct {
-	Unread string `json:"unread"`
-	Pages  map[string]struct {
-		Status int `json:"status"`
-	} `json:"pages"`
+// WalkedPages is the document `manage.py page_costs` prints
+// (hq.platform.core.page_costs.walk): the release's revision, and each page's
+// costs by its address, or why it read none.
+type WalkedPages struct {
+	Revision string              `json:"revision"`
+	Unread   string              `json:"unread,omitempty"`
+	Pages    map[string]PageCost `json:"pages"`
+}
+
+// PageCost is what one page cost to draw.
+type PageCost struct {
+	Status          int `json:"status"`
+	Queries         int `json:"queries"`
+	RepeatedQueries int `json:"repeated_queries"`
+	Rows            int `json:"rows"`
+	HTMLBytes       int `json:"html_bytes"`
+	RowHTMLBytes    int `json:"row_html_bytes"`
 }
 
 // pages walks every page the release lists, in its web process on the copy,
@@ -251,7 +261,7 @@ func (r *rehearsing) pages(ctx context.Context) string {
 	}
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	document := lines[len(lines)-1]
-	var walked walkedPages
+	var walked WalkedPages
 	if err := json.Unmarshal([]byte(document), &walked); err != nil || walked.Pages == nil {
 		fmt.Fprintf(r.log, "The walk printed no document: %q\n", document)
 		return "unread"

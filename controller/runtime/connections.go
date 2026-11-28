@@ -73,6 +73,9 @@ type Environment struct {
 	// DependencyRun is root's result of the last dependency update run, given
 	// read-only.
 	DependencyRun string `env:"SEVERINO_DEPENDENCY_RUN"`
+	// RehearsalPages is root's walk of every page in the last release's
+	// rehearsal (host.WalkedPages), given read-only.
+	RehearsalPages string `env:"SEVERINO_REHEARSAL_PAGES"`
 	// Backup is the host's newest backup archive, its ciphertext alone, given
 	// read-only to an applying pass for the off-site copy.
 	Backup string `env:"SEVERINO_BACKUP_ARCHIVE"`

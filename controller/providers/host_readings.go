@@ -24,8 +24,9 @@ import (
 // Readings of the host the controller runs on: its firewall, its perimeter,
 // what its secret renderers say about their own runs, in host_tailnet_lock.go
 // its daemon's tailnet lock status, in host_units.go the state of its systemd
-// units, in host_filesystem.go the space on its filesystems and, in
-// host_reboot.go, whether it and each edge wait on a restart.
+// units, in host_filesystem.go the space on its filesystems, in
+// host_reboot.go whether it and each edge wait on a restart and, in
+// host_rehearsal.go, what each page cost in the last release's rehearsal.
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
 // Host is the environment's connection ref, HostAddress its address.
@@ -70,6 +71,8 @@ func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostReboot, r.hostReboot)
 	r.readsHeld(runtime.ResourceKindHostReboot, func() bool { return r.Env.HostReboot != "" })
 	r.reader(runtime.ResourceKindHostEdgeReboot, r.hostEdgeReboot)
+	r.reader(runtime.ResourceKindHostRehearsal, r.hostRehearsal)
+	r.readsHeld(runtime.ResourceKindHostRehearsal, func() bool { return r.Env.RehearsalPages != "" })
 }
 
 var rendererName = api.MustPattern("HostRenderStatusRecord", "properties", "renderer")

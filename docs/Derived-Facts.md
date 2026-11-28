@@ -341,6 +341,13 @@ It says since when, for which packages, and when the restart is scheduled.
 Its step schedules the restart with `shutdown -r 03:00`, or, when one is
 scheduled, cancels it with `shutdown -c`.
 
+`host.rehearsal` is what every page cost in the last release's rehearsal on a
+copy of production's data (`SEVERINO_REHEARSAL_PAGES`): one record naming the
+release's commit, with each page's status, queries, records and HTML bytes.
+Root keeps the walk's document for itself, and the launcher gives each pass a
+copy once a rehearsal has written one. A release's snapshot
+(`release_snapshots`) keeps the pages when the record names that release.
+
 ## Facts about a subject
 
 `hq.platform.application.facts` is the join engine. Every page that attaches a

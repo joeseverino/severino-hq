@@ -135,6 +135,9 @@ const (
 	// the next controller pass is given read-only.
 	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
 	dependencyRunTarget = hostcore.RunDir + "/dependency-run.json"
+	// rehearsalPagesTarget is where a pass finds its copy of the last
+	// rehearsal's walk (Machine.RehearsalPagesPath).
+	rehearsalPagesTarget = hostcore.RunDir + "/rehearsal-pages.json"
 
 	// AutomationUnit runs the automation worker until no run is queued. Its
 	// path unit starts it when HQ rings AutomationDoorbell, beside the
