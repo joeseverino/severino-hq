@@ -51,9 +51,11 @@ class ControllerPage:
     swept_at: datetime | None
     sweep_due: bool
     next_sweep_at: datetime | None
-    # How often everything is read, in words; a reading on a clock of its own
-    # says its clock on its row.
+    # How often a sweep runs, in words; a reading on a clock of its own says
+    # its clock on its row.
     sweep_every: str
+    # Every reading HQ's page lists, which the cadence counts.
+    readings: tuple[Standing, ...]
     # Of what every sweep reads, the reading tried longest ago: the one that
     # decides when the next sweep is due, and the one to look at when it is late.
     oldest: Standing | None
@@ -75,6 +77,15 @@ class ControllerPage:
         return get_text_list([counted(count, noun) for count, noun in counts if count], "and")
 
     @property
+    def cadence(self) -> str:
+        """How many of the readings every sweep reads, and how often."""
+
+        every = sum(every_sweep(row.sight.kind) for row in self.readings)
+        if every == len(self.readings):
+            return f"Every reading is read every {self.sweep_every}"
+        return f"{every:,} of {counted(len(self.readings), 'reading')} are read every {self.sweep_every}"
+
+    @property
     def overdue_tone(self) -> str:
         return Tone.SERIOUS if self.overdue else ""
 
@@ -87,7 +98,8 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
     now = now or timezone.now()
     verdict: dict[str, Any] = sweep_due()
     # Every reading tried, as HQ's page lists them, with when.
-    tried = tuple((row, at) for row in sight().rows if (at := row.sight.tried_at) is not None)
+    readings = sight().rows
+    tried = tuple((row, at) for row in readings if (at := row.sight.tried_at) is not None)
     age = verdict.get("age_seconds")
     interval = int(verdict.get("interval_seconds") or 0)
     due = bool(verdict.get("due"))
@@ -114,6 +126,7 @@ def controller_page(now: datetime | None = None) -> ControllerPage:
         sweep_due=due,
         next_sweep_at=(None if due or age is None else now + timedelta(seconds=max(0, interval - int(age)))),
         sweep_every=duration(every),
+        readings=readings,
         oldest=oldest[0] if oldest else None,
         overdue=oldest is not None and freshness(oldest[0].sight.kind, oldest[1], now).stale,
         queue=queue,
